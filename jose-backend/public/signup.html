@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Crear cuenta — Jose</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <h1>Crear cuenta</h1>
+    <p class="lede">Para conectar tus apps con Jose, primero necesitas una cuenta.</p>
+    <form id="form">
+      <label for="email">Correo</label>
+      <input id="email" type="email" required />
+      <label for="password">Contraseña (mínimo 8 caracteres)</label>
+      <input id="password" type="password" required minlength="8" />
+      <button type="submit">Crear cuenta</button>
+      <p class="error" id="error"></p>
+    </form>
+    <p class="switch">¿Ya tienes cuenta? <a href="login.html">Inicia sesión</a></p>
+  </div>
+  <script>
+    document.getElementById('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      const res = await fetch('/api/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const body = await res.json();
+      if (res.ok) {
+        window.location.href = 'dashboard.html';
+      } else {
+        document.getElementById('error').textContent = body.error;
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "name": "jose-backend",
+  "version": "1.0.0",
+  "description": "Jose account + plugin/OAuth backend — WhatsApp Business, WeChat, Mercado Libre",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "license": "MIT"
+}

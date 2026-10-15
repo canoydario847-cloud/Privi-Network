@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tus apps — Jose</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <span class="wordmark">Jose</span>
+      <button class="signout" id="signout">Cerrar sesión</button>
+    </div>
+    <h1>Tus apps</h1>
+    <p class="lede">Conecta las cuentas que quieres que Jose use. La conexión es real: cada botón inicia el inicio de sesión oficial de esa plataforma, no una simulación.</p>
+
+    <div id="banner"></div>
+    <div id="plugin-list">Cargando…</div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const banner = document.getElementById('banner');
+    if (params.get('connected')) {
+      banner.innerHTML = `<div class="banner ok">Conectado correctamente.</div>`;
+    } else if (params.get('error')) {
+      banner.innerHTML = `<div class="banner err">No se pudo conectar: ${params.get('error')}</div>`;
+    }
+
+    async function load() {
+      const res = await fetch('/api/me');
+      if (res.status === 401) {
+        window.location.href = 'login.html?next=dashboard.html';
+        return;
+      }
+      const data = await res.json();
+      const list = document.getElementById('plugin-list');
+      list.innerHTML = data.plugins.map((p) => {
+        let statusText, statusClass, actionHtml;
+        if (!p.configured) {
+          statusText = `No configurado en el servidor (faltan: ${p.missingEnvVars.join(', ')})`;
+          statusClass = 'unconfigured';
+          actionHtml = `<span class="btn" style="opacity:0.5;cursor:not-allowed;">Conectar</span>`;
+        } else if (p.connected) {
+          statusText = 'Conectado';
+          statusClass = 'connected';
+          actionHtml = `<button class="btn danger" data-disconnect="${p.id}">Desconectar</button>`;
+        } else {
+          statusText = 'No conectado';
+          statusClass = '';
+          actionHtml = `<a class="btn primary" href="/connect/${p.id}">Conectar</a>`;
+        }
+        return `
+          <div class="plugin-row">
+            <div>
+              <div class="plugin-name">${p.name}</div>
+              <div class="plugin-status ${statusClass}">${statusText}</div>
+            </div>
+            ${actionHtml}
+          </div>`;
+      }).join('');
+
+      list.querySelectorAll('[data-disconnect]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          await fetch('/api/disconnect/' + btn.getAttribute('data-disconnect'), { method: 'POST' });
+          load();
+        });
+      });
+    }
+
+    document.getElementById('signout').addEventListener('click', async () => {
+      await fetch('/api/logout', { method: 'POST' });
+      window.location.href = 'login.html';
+    });
+
+    load();
+  </script>
+</body>
+</html>
