@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Jose — un asistente entre Sudamérica y China</title>
+<meta name="description" content="Jose es un asistente que entiende español, portugués, chino e inglés, pensado para el comercio y la vida diaria entre Sudamérica y China." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <header class="top">
+    <div class="wrap">
+      <span class="wordmark">Jose</span>
+      <nav class="lang-switch" aria-label="Idioma / Language">
+        <button type="button" data-set-lang="es" class="active">ES</button>
+        <button type="button" data-set-lang="pt">PT</button>
+        <button type="button" data-set-lang="zh">中文</button>
+        <button type="button" data-set-lang="en">EN</button>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero wrap" style="border-top:none;">
+      <div class="hero-intro">
+        <p class="kicker" data-i18n="hero.kicker"></p>
+        <h1 class="hero-headline" data-i18n-html="hero.headline"></h1>
+        <p class="hero-body" data-i18n="hero.body"></p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="#demo" data-i18n="hero.cta_primary"></a>
+          <a class="btn btn-ghost" href="#nota" data-i18n="hero.cta_ghost"></a>
+        </div>
+      </div>
+
+      <div class="demo-card" id="demo">
+        <p class="demo-label" data-i18n="demo.label"></p>
+        <div class="demo-thread" id="demo-thread"></div>
+        <div class="demo-picker" id="demo-picker">
+          <button type="button" data-scenario="trade" class="active"></button>
+          <button type="button" data-scenario="logistics"></button>
+          <button type="button" data-scenario="service"></button>
+        </div>
+      </div>
+    </section>
+
+    <section id="usecases">
+      <div class="wrap">
+        <h2 class="section-title" data-i18n="usecases.title"></h2>
+        <p class="section-lede" data-i18n="usecases.lede"></p>
+
+        <div class="usecase-row">
+          <div class="usecase-name" data-i18n="usecases.row1.name"></div>
+          <div class="usecase-desc" data-i18n="usecases.row1.desc"></div>
+        </div>
+        <div class="usecase-row">
+          <div class="usecase-name" data-i18n="usecases.row2.name"></div>
+          <div class="usecase-desc" data-i18n="usecases.row2.desc"></div>
+        </div>
+        <div class="usecase-row">
+          <div class="usecase-name" data-i18n="usecases.row3.name"></div>
+          <div class="usecase-desc" data-i18n="usecases.row3.desc"></div>
+        </div>
+        <div class="usecase-row">
+          <div class="usecase-name" data-i18n="usecases.row4.name"></div>
+          <div class="usecase-desc" data-i18n="usecases.row4.desc"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="idiomas">
+      <div class="wrap">
+        <h2 class="section-title" data-i18n="langsection.title"></h2>
+        <p class="section-lede" data-i18n="langsection.lede"></p>
+
+        <div class="lang-strip">
+          <div class="lang-cell"><span class="greeting">Hola</span><span class="lang-name">Español</span></div>
+          <div class="lang-cell"><span class="greeting">Olá</span><span class="lang-name">Português</span></div>
+          <div class="lang-cell"><span class="greeting">你好</span><span class="lang-name">中文</span></div>
+          <div class="lang-cell"><span class="greeting">Hello</span><span class="lang-name">English</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="como-funciona">
+      <div class="wrap">
+        <h2 class="section-title" data-i18n="steps.title"></h2>
+        <p class="section-lede" data-i18n="steps.lede"></p>
+
+        <div class="steps">
+          <div class="step">
+            <span class="step-num">1</span>
+            <div>
+              <div class="step-title" data-i18n="steps.s1.title"></div>
+              <div class="step-desc" data-i18n="steps.s1.desc"></div>
+            </div>
+          </div>
+          <div class="step">
+            <span class="step-num">2</span>
+            <div>
+              <div class="step-title" data-i18n="steps.s2.title"></div>
+              <div class="step-desc" data-i18n="steps.s2.desc"></div>
+            </div>
+          </div>
+          <div class="step">
+            <span class="step-num">3</span>
+            <div>
+              <div class="step-title" data-i18n="steps.s3.title"></div>
+              <div class="step-desc" data-i18n="steps.s3.desc"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="nota">
+      <div class="wrap">
+        <p class="note" data-i18n="note.text"></p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <span class="footer-wordmark">Jose</span>
+      <p class="footer-disclaimer" data-i18n="footer.disclaimer"></p>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
