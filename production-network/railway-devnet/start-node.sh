@@ -10,8 +10,18 @@ if [ "$PORT" -lt 1024 ] || [ "$PORT" -gt 65535 ]; then
   echo "PORT must be 1024-65535" >&2; exit 1
 fi
 if [ ! -f "$NODE_HOME/config/genesis.json" ]; then
-  if [ -n "$(ls -A /data)" ]; then
-    echo "Existing /data without expected genesis: refusing to replace persistent chain" >&2
+  # A freshly formatted ext4 Railway volume may contain an empty lost+found
+  # directory. That is filesystem metadata, NOT previous chain state.
+  # Refuse to overwrite any other files, including partially initialized nodes.
+  if [ -e /data/lost+found ]; then
+    if [ ! -d /data/lost+found ] || [ -n "$(ls -A /data/lost+found)" ]; then
+      echo "Volume lost+found is not an empty directory; refusing initialization" >&2
+      exit 1
+    fi
+  fi
+  if [ -n "$(find /data -mindepth 1 -maxdepth 1 ! -name lost+found -print -quit)" ]; then
+    echo "Unrecognized persistent /data contents; refusing to overwrite chain" >&2
+    find /data -mindepth 1 -maxdepth 1 -printf '%f\n' >&2
     exit 1
   fi
   echo "Initializing SINGLE new valueless developer validator"
