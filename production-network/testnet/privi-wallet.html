@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Privi EVM Test Wallet</title>
+<style>
+body{background:#091c2d;color:#eaf9ff;font:16px system-ui;margin:0;padding:24px}
+main{max-width:690px;margin:auto}h1{color:#65efba}.card{padding:20px;border-radius:14px;background:#153048;margin:16px 0;border:1px solid #345b71}
+label{display:block;margin:12px 0 6px}input{box-sizing:border-box;width:100%;padding:12px;background:#061927;border:1px solid #52768b;border-radius:8px;color:white}
+button{background:#5ce8c1;padding:12px;border:0;border-radius:8px;margin:8px 8px 8px 0;cursor:pointer;font-weight:bold}
+pre{white-space:pre-wrap;overflow-wrap:anywhere}.warning{color:#ffdb96}
+</style></head><body><main>
+<h1>Privi EVM Developer Wallet</h1><p class="warning">Valueless LOCAL testnet only. This is NOT the Railway Privi NOTE network or the BNB Chain PRIV token. Use a disposable test wallet.</p>
+<section class="card"><label>Local EVM RPC URL</label><input id="rpc" value="http://127.0.0.1:8545">
+<button id="probe">Check actual EVM chain</button><button id="connect">Connect MetaMask</button><pre id="status">Not connected</pre></section>
+<section class="card"><h2>Transfer native test coins</h2>
+<label>Recipient 0x address</label><input id="to" placeholder="0x...">
+<label>Amount (TEST, 18 decimals)</label><input id="amount" value="0.001">
+<button id="send">Send signed test transaction</button><pre id="tx">No transaction yet</pre>
+</section></main>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+let activeRpc=null,activeChain=null,account=null;
+function endpoint(){
+ const url=$('rpc').value.trim(),p=new URL(url);
+ if(p.protocol!=='https:'&&!(p.protocol==='http:'&&['localhost','127.0.0.1'].includes(p.hostname)))throw Error('Use HTTPS or local loopback HTTP');
+ return url;
+}
+async function eth(method,params=[]){
+ const result=await fetch(endpoint(),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})});
+ if(!result.ok)throw Error('RPC HTTP '+result.status);
+ const reply=await result.json();
+ if(reply.error)throw Error(JSON.stringify(reply.error));
+ if(typeof reply.result==='undefined')throw Error('Missing Ethereum JSON-RPC result');
+ return reply.result;
+}
+async function probe(){
+ const url=endpoint(),id=await eth('eth_chainId'),height=await eth('eth_blockNumber');
+ const n=Number(BigInt(id));
+ if(!Number.isSafeInteger(n)||n<=0||[1,56,97].includes(n))throw Error('Refusing a production or ambiguous chain ID');
+ activeRpc=url;activeChain=id;
+ $('status').textContent='EVM chain ID '+n+' | block '+Number(BigInt(height))+'\nRPC '+url;
+ return id;
+}
+async function connect(){
+ if(!window.ethereum)throw Error('MetaMask not found');
+ const id=await probe();
+ try{await window.ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:id}]});}
+ catch(e){
+   if(e.code!==4902)throw e;
+   await window.ethereum.request({method:'wallet_addEthereumChain',params:[{
+     chainId:id,chainName:'Privi EVM Developer Demo (upstream evmd)',
+     rpcUrls:[activeRpc],nativeCurrency:{name:'Test Coin',symbol:'TEST',decimals:18}
+   }]});
+   await window.ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:id}]});
+ }
+ const accounts=await window.ethereum.request({method:'eth_requestAccounts'});
+ if(!accounts.length)throw Error('No wallet account selected');
+ account=accounts[0];
+ const balance=BigInt(await window.ethereum.request({method:'eth_getBalance',params:[account,'latest']}));
+ $('status').textContent+='\nAccount: '+account+'\nNative test balance (whole TEST): '+(balance/10n**18n).toString();
+}
+function toWei(text){
+ if(!/^(?:0|[1-9]\d*)(?:\.\d{1,18})?$/.test(text))throw Error('Enter a positive decimal with at most 18 places');
+ const [whole,fraction='']=text.split('.');
+ const amount=BigInt(whole)*10n**18n+BigInt((fraction+'0'.repeat(18)).slice(0,18));
+ if(amount<=0n)throw Error('Amount must be positive');
+ return '0x'+amount.toString(16);
+}
+async function send(){
+ if(!account||!activeChain||!window.ethereum)throw Error('Connect MetaMask first');
+ if(endpoint()!==activeRpc)throw Error('RPC URL changed, reconnect');
+ const selected=await window.ethereum.request({method:'eth_chainId'});
+ if(BigInt(selected)!==BigInt(activeChain))throw Error('MetaMask is on a different chain');
+ const to=$('to').value.trim();
+ if(!/^0x[0-9a-fA-F]{40}$/.test(to))throw Error('Recipient must be a 0x address');
+ const value=toWei($('amount').value.trim());
+ const tx=await window.ethereum.request({method:'eth_sendTransaction',params:[{from:account,to,value}]});
+ $('tx').textContent='Submitted: '+tx+'\nCheck eth_getTransactionReceipt to confirm; submission is not settlement.';
+}
+$('probe').onclick=()=>probe().catch(e=>$('status').textContent=e.message);
+$('connect').onclick=()=>connect().catch(e=>$('status').textContent=e.message);
+$('send').onclick=()=>send().catch(e=>$('tx').textContent=e.message);
+</script></body></html>
