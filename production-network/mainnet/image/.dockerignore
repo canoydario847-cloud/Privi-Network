@@ -1,0 +1,7 @@
+# Release input is supplied only after independent code review and ID approval.
+release.patch
+*.pem
+*.key
+*.json
+**/data/
+**/config/
