@@ -20,7 +20,7 @@ class RPC:
 def check(rpc,expected=None,address=None):
     chain=int(rpc.call('eth_chainId'),16)
     if chain<=0 or chain in (1,56,97):raise ValueError('Unsafe/production EVM chain ID')
-    if expected is not None and chain!=expected:raise ValueError('EVM chain ID mismatch')
+    if expected is not None and chain!=expected:raise ValueError(f'EVM chain ID mismatch: got {chain}, expected {expected}')
     height=int(rpc.call('eth_blockNumber'),16)
     if height<1:raise ValueError('No blocks available yet')
     block=rpc.call('eth_getBlockByNumber',[hex(height),False])
