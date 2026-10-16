@@ -36,7 +36,7 @@ def check(nodes, expected_chain):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--rpc', action='append', required=True)
-    p.add_argument('--chain-id', default='privi-testnet-1')
+    p.add_argument('--chain-id', default='local-4221')
     args = p.parse_args()
     try:
         nodes = [status(url) for url in args.rpc]
