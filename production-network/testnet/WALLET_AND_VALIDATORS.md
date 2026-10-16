@@ -1,6 +1,6 @@
 # Privi EVM developer demo (not mainnet)
 
-Four-node Cosmos EVM reference chain via pinned upstream evmd. **This is separate from the deployed Railway NOTE chain `privi-dev-1`** and the BNB Chain PRIV token. The demo chain ID is **Cosmos `local-4221`, expected EVM numeric `4221`**; verify the number over JSON-RPC rather than trusting a label.
+Four-node Cosmos EVM reference chain via pinned upstream evmd. **This is separate from the deployed Railway NOTE chain `privi-dev-1`** and the BNB Chain PRIV token. The demo chain ID is **Cosmos `local-4221`, expected EVM numeric `262144`**; verify the number over JSON-RPC rather than trusting a label.
 
 ## Start local testnet
 
@@ -13,7 +13,7 @@ python3 production-network/testnet/consensus_audit.py \
   --rpc http://127.0.0.1:26657 --rpc http://127.0.0.1:26667 \
   --rpc http://127.0.0.1:26677 --rpc http://127.0.0.1:26687
 python3 production-network/testnet/evm_smoke.py \
-  --rpc http://127.0.0.1:8545 --expect-chain 4221
+  --rpc http://127.0.0.1:8545 --expect-chain 262144
 ```
 
 The consensus audit checks identical blocks, four distinct voting validator addresses, and >2/3 signed voting power. Four processes running on one machine are NOT independent production operators. Generated keys are disposable.
@@ -36,7 +36,7 @@ Enter a recipient 0x address and send valueless **TEST** coins with MetaMask. Th
 | Network | Privi EVM Developer Demo (upstream evmd) |
 | RPC | http://127.0.0.1:8545 |
 | Cosmos chain ID | local-4221 |
-| EVM chain ID | 4221 (verify RPC) |
+| EVM chain ID | 262144 / 0x40000 (verify RPC) |
 | Display/test token | TEST (valueless, 18 decimals) |
 | Block explorer | Not yet deployed for this EVM chain |
 
