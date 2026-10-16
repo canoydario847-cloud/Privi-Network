@@ -48,7 +48,7 @@ class MainnetPreflightTests(unittest.TestCase):
         self.assertTrue(any("public_vesting_schedule_url" in e for e in errors))
 
     def test_no_signature_approval_by_script(self):
-        self.assertIn("manual verification", m.__doc__.lower())
+        self.assertIn("independent audits", m.__doc__.lower())
 
 
 if __name__ == "__main__":
