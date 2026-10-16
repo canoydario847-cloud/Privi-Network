@@ -83,7 +83,10 @@ def source_overlay(files, evm_chain_id):
     x=checked_replace(x,'erc20GenState.NativePrecompiles = []string{testconstants.WEVMOSContractMainnet}',
                       'erc20GenState.NativePrecompiles = nil',p)
     x=checked_replace(x,'mintGenState.Params.MintDenom = testconstants.ExampleAttoDenom',
-                      'mintGenState.Params.MintDenom = "aprvi"',p)
+                      'mintGenState.Params.MintDenom = "aprvi"\n\tmintGenState.Minter.Inflation = sdkmath.LegacyZeroDec()',p)
+    x=checked_replace(x, '\t"encoding/json"\n', '\t"encoding/json"\n\tsdkmath "cosmossdk.io/math"\n',p)
+    x=checked_replace(x,'feeMarketGenState.Params.NoBaseFee = true',
+                      'feeMarketGenState.Params.NoBaseFee = false',p)
     x=checked_replace(x,'\ttestconstants "github.com/cosmos/evm/testutil/constants"\n','',p)
     result[p]=x
 
