@@ -20,6 +20,27 @@ fi
   echo "Existing state detected. Refusing to overwrite validator keys." >&2; exit 1;
 }
 cd "$UPSTREAM"
+# Upstream v0.7.3 requires Go 1.25.9 in BOTH Go modules, but its
+# example Dockerfile still uses golang:1.24-alpine.
+# Patch only the ephemeral ignored upstream checkout, never our live Railway app.
+GO_VERSION="1.25.9"
+DOCKERFILE="contrib/images/evmd-env/Dockerfile"
+for module in go.mod evmd/go.mod; do
+  if ! grep -Fxq "go $GO_VERSION" "$module"; then
+    echo "Unexpected Go requirement in $module. Review upstream before building." >&2
+    exit 1
+  fi
+done
+OLD_IMAGE="FROM golang:1.24-alpine AS evmd-builder"
+NEW_IMAGE="FROM golang:${GO_VERSION}-alpine AS evmd-builder"
+if grep -Fxq "$OLD_IMAGE" "$DOCKERFILE"; then
+  sed -i "s/^FROM golang:1\\.24-alpine AS evmd-builder\\$/FROM golang:${GO_VERSION}-alpine AS evmd-builder/" "$DOCKERFILE"
+fi
+if ! grep -Fxq "$NEW_IMAGE" "$DOCKERFILE"; then
+  echo "Builder Dockerfile changed unexpectedly. Refusing unreviewed build." >&2
+  exit 1
+fi
+echo "Using Go $GO_VERSION builder for Cosmos EVM $TAG"
 make localnet-build-env
 mkdir -m 700 .testnets
 docker run --rm -v "$PWD/.testnets:/data" cosmos/evmd \
