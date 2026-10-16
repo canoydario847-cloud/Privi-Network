@@ -13,3 +13,7 @@ mainnet/operator-kit/sentry-state/
 mainnet/image/release.patch
 mainnet/**/*.secret
 mainnet/**/*.signer
+
+# Completely isolated seven-validator self-operated staging directory and keys
+.upstream-seven-evm/
+.seven-validator-state/
