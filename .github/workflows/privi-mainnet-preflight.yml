@@ -1,4 +1,4 @@
-name: Privi mainnet release preflight (no deployment)
+name: Privi mainnet design checks (no deployment)
 
 on:
   pull_request:
@@ -16,9 +16,9 @@ jobs:
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
-      - name: Static preflight rejection tests
+      - name: Run PRVI configuration and genesis validation unit tests
         run: python3 -m unittest discover -s production-network/mainnet -p "test_*.py" -v
-      - name: Verify unapproved mainnet manifest is BLOCKED
+      - name: Confirm incomplete mainnet manifest is rejected
         run: |
           set -eu
           if python3 production-network/mainnet/mainnet_preflight.py \
@@ -26,9 +26,62 @@ jobs:
             echo "ERROR: Incomplete Privi mainnet manifest incorrectly passed." >&2
             exit 1
           fi
-          echo "PASS: incomplete mainnet manifest is blocked."
-      - name: Verify GitHub permissions are read-only
+          echo "PASS: mainnet release remains BLOCKED."
+      - name: Confirm source overlay refuses unselected production chain IDs
         run: |
-          grep -Fq "contents: read" .github/workflows/privi-mainnet-preflight.yml
+          set -eu
+          if python3 production-network/mainnet/privi_source_overlay.py \
+              --upstream /tmp/not-a-checkout \
+              --output /tmp/privi-unreviewed.patch; then
+            echo "ERROR: Source patcher ignored incomplete config" >&2
+            exit 1
+          fi
+          echo "PASS: default unapproved chain IDs BLOCKED."
 
-# Read-only readiness checks. Passing does not authorize mainnet launch.
+  upstream-overlay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.9"
+      - name: Check out exact known upstream Cosmos EVM code
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch v0.7.3 https://github.com/cosmos/evm.git /tmp/cosmos-evm
+          actual="$(git -C /tmp/cosmos-evm rev-parse HEAD)"
+          test "$actual" = "c3ae9067a7eadcdea55a5192226916deb44c71c4"
+      - name: Create ephemeral CI-only non-production chain IDs
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("production-network/mainnet/privi_chain_config.json")
+          c=json.loads(p.read_text())
+          c["network"]["cosmos_chain_id"]="privi-ci-nonproduction-999"
+          c["network"]["evm_chain_id"]=999991
+          Path("/tmp/privi-ci-config.json").write_text(json.dumps(c))
+          PY
+      - name: Generate, verify, and apply UNREVIEWED source overlay in CI only
+        run: |
+          set -euo pipefail
+          python3 production-network/mainnet/privi_source_overlay.py \
+              --upstream /tmp/cosmos-evm \
+              --config /tmp/privi-ci-config.json \
+              --output /tmp/privi-unreviewed.patch
+          git -C /tmp/cosmos-evm apply --check /tmp/privi-unreviewed.patch
+          git -C /tmp/cosmos-evm apply /tmp/privi-unreviewed.patch
+          gofmt -w /tmp/cosmos-evm/evmd/app.go \
+              /tmp/cosmos-evm/evmd/genesis.go \
+              /tmp/cosmos-evm/evmd/config/bech32.go \
+              /tmp/cosmos-evm/evmd/cmd/evmd/cmd/root.go
+      - name: Compile patched Cosmos EVM candidate node (never deploy)
+        working-directory: /tmp/cosmos-evm/evmd
+        run: |
+          set -euo pipefail
+          go build -o /tmp/privi-ci-nonproduction ./cmd/evmd
+          test -s /tmp/privi-ci-nonproduction
+          echo "Candidate Go binary compiled for CI. It is NOT mainnet approved and will NOT be uploaded or deployed."
+
+# READ-ONLY workflow: no wallet keys, contracts, node launch, token creation, deployment or release publication.
