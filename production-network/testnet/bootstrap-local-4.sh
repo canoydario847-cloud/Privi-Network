@@ -43,6 +43,12 @@ fi
 echo "Using Go $GO_VERSION builder for Cosmos EVM $TAG"
 make localnet-build-env
 mkdir -m 700 .testnets
+# The upstream image runs as uid/gid 1025:1025. A host-created directory
+# belongs to the invoking user and is otherwise inaccessible with mode 0700.
+# Fix ownership only for this NEW local developer directory before init-files.
+docker run --rm --user 0:0 --entrypoint /bin/sh \
+  -v "$PWD/.testnets:/data" cosmos/evmd \
+  -c 'chown 1025:1025 /data && chmod 700 /data'
 docker run --rm -v "$PWD/.testnets:/data" cosmos/evmd \
   testnet init-files --validator-count 4 -o /data \
   --starting-ip-address 192.168.10.2 --keyring-backend=test \
