@@ -1,0 +1,47 @@
+name: Read-only Privi EVM wallet balance
+
+on:
+  push:
+    branches:
+      - test/privi-wallet-balance-1990589-20261016
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - name: Check public wallet account and RPC chain without signing
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,urllib.request,decimal
+          URL="https://privi-evm-devnet-development.up.railway.app/"
+          WALLET="0x1990589FD200E043b8C6FD9ec5956c61b3071048"
+          def call(method,params=None):
+              body=json.dumps({"jsonrpc":"2.0","method":method,"params":params or [],"id":1}).encode()
+              request=urllib.request.Request(URL,body,headers={"Content-Type":"application/json"},method="POST")
+              with urllib.request.urlopen(request,timeout=20) as r:
+                  answer=json.load(r)
+              if "error" in answer: raise RuntimeError(f"{method}: {answer['error']}")
+              if "result" not in answer: raise RuntimeError(f"{method}: missing result")
+              return answer["result"]
+          chain_id=int(call("eth_chainId"),16)
+          assert chain_id==262144, f"Unexpected Ethereum chain ID {chain_id}, refusing wallet check"
+          height=int(call("eth_blockNumber"),16)
+          wei=int(call("eth_getBalance",[WALLET,"latest"]),16)
+          nonce=int(call("eth_getTransactionCount",[WALLET,"latest"]),16)
+          code=call("eth_getCode",[WALLET,"latest"])
+          print(json.dumps({
+              "network":"Privi EVM Devnet","address":WALLET,
+              "chainId":chain_id,"blockHeight":height,
+              "balanceWei":str(wei),
+              "balanceTEST":str(decimal.Decimal(wei)/decimal.Decimal(10**18)),
+              "confirmedTransactionCount":nonce,
+              "accountHasContractCode":code!="0x",
+              "readOnly":True
+          },indent=2))
+          PY
