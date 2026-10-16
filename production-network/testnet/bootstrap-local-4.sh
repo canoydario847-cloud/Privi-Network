@@ -34,7 +34,7 @@ done
 OLD_IMAGE="FROM golang:1.24-alpine AS evmd-builder"
 NEW_IMAGE="FROM golang:${GO_VERSION}-alpine AS evmd-builder"
 if grep -Fxq "$OLD_IMAGE" "$DOCKERFILE"; then
-  sed -i "s/^FROM golang:1\\.24-alpine AS evmd-builder\\$/FROM golang:${GO_VERSION}-alpine AS evmd-builder/" "$DOCKERFILE"
+  sed -i "s|^FROM golang:1[.]24-alpine AS evmd-builder$|$NEW_IMAGE|" "$DOCKERFILE"
 fi
 if ! grep -Fxq "$NEW_IMAGE" "$DOCKERFILE"; then
   echo "Builder Dockerfile changed unexpectedly. Refusing unreviewed build." >&2
