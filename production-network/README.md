@@ -7,7 +7,7 @@ This project adds a Cosmos SDK + CometBFT + Cosmos EVM foundation **alongside** 
 ## Components
 
 - Upstream `cosmos/evm` `v0.7.3`, running the **evmd reference implementation**. This is not yet a Privi-customized audited binary; upstream Cosmos EVM is pre-1.0.
-- Four-validator Docker **local testnet** bootstrap using upstream's `testnet init-files`, a proposed Cosmos chain ID `privi-testnet-1`, and a health-check script.
+- Four-validator Docker **local testnet** bootstrap using upstream's `testnet init-files`, a proposed Cosmos chain ID `local-4221`, and a health-check script.
 - A public multi-host testnet *launch runbook* in [ops/PUBLIC_TESTNET.md](ops/PUBLIC_TESTNET.md). Four containers on one machine are not independent validators. No public testnet is deployed by this PR.
 - A conservative read-only BNB Chain PRIV ERC-20 Transfer event snapshot tool and migration planning document. It creates **no bridge, claim, lock, burn or mint**.
 
@@ -39,3 +39,4 @@ Reported BNB Chain token: `0xbf154Ff2577F4B85db7B2ee910Db5880D06e0f64` (chain ID
 - [ ] External code and infrastructure audit, independent validators and incident runbooks before **any** financial mainnet.
 
 Do not deploy this directory over the current Railway JavaScript prototype. Docker localnet secrets, mnemonics and chain state must never be committed. See upstream https://github.com/cosmos/evm/tree/v0.7.3.
+> **Important:** the local demo uses upstream Cosmos ID `local-4221` and expected EVM numeric chain ID `4221`. This is **not** a custom Privi-denominated network or an RPC endpoint for the existing Railway `privi-dev-1` server. See [testnet/WALLET_AND_VALIDATORS.md](testnet/WALLET_AND_VALIDATORS.md) and [ops/LEGACY_PERSISTENCE.md](ops/LEGACY_PERSISTENCE.md).
