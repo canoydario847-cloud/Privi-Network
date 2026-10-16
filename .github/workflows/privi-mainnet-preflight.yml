@@ -1,0 +1,34 @@
+name: Privi mainnet release preflight (no deployment)
+
+on:
+  pull_request:
+    paths:
+      - "production-network/mainnet/**"
+      - ".github/workflows/privi-mainnet-preflight.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fail-closed:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Static preflight rejection tests
+        run: python3 -m unittest discover -s production-network/mainnet -p "test_*.py" -v
+      - name: Verify unapproved mainnet manifest is BLOCKED
+        run: |
+          set -eu
+          if python3 production-network/mainnet/mainnet_preflight.py \
+              --manifest production-network/mainnet/manifest.example.json; then
+            echo "ERROR: Incomplete Privi mainnet manifest incorrectly passed." >&2
+            exit 1
+          fi
+          echo "PASS: incomplete mainnet manifest is blocked."
+      - name: Assert workflow cannot launch or mint
+        run: |
+          set -eu
+          ! grep -Ei 'railway (up|deploy)|eth_sendRawTransaction|genesis add-genesis-account|privi mainnet start' .github/workflows/privi-mainnet-preflight.yml
+# Read-only readiness checks. Passing this workflow NEVER approves launch.
