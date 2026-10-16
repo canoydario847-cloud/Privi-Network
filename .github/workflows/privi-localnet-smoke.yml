@@ -1,0 +1,84 @@
+name: Privi EVM four-validator smoke test
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/privi-localnet-smoke.yml"
+      - "production-network/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: privi-localnet-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline:
+    name: Offline checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate local tools and tests
+        run: bash production-network/testnet/run_offline_checks.sh
+
+  four-validator:
+    name: Build and verify four ephemeral EVM validators
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Docker environment
+        run: |
+          docker version
+          docker compose version
+          df -h .
+      - name: Build Cosmos EVM v0.7.3 and initialize four local nodes
+        run: bash production-network/testnet/bootstrap-local-4.sh
+      - name: Verify four-validator consensus
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 48); do
+            if python3 production-network/testnet/consensus_audit.py \
+              --chain-id local-4221 \
+              --rpc http://127.0.0.1:26657 \
+              --rpc http://127.0.0.1:26667 \
+              --rpc http://127.0.0.1:26677 \
+              --rpc http://127.0.0.1:26687; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Four validator consensus check did not succeed" >&2
+          exit 1
+      - name: Verify actual Ethereum JSON-RPC chain
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 24); do
+            if python3 production-network/testnet/evm_smoke.py \
+              --rpc http://127.0.0.1:8545 --expect-chain 4221; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "EVM RPC did not pass smoke checks" >&2
+          exit 1
+      - name: Inspect container status on failure
+        if: failure()
+        run: |
+          cd production-network/.upstream-evm
+          docker compose -f docker-compose.localhost.yml ps || true
+          docker compose -f docker-compose.localhost.yml logs --no-color --tail=60 || true
+      - name: Remove ephemeral validators
+        if: always()
+        run: |
+          if [ -f production-network/.upstream-evm/docker-compose.localhost.yml ]; then
+            cd production-network/.upstream-evm
+            docker compose -f docker-compose.localhost.yml down --remove-orphans || true
+          fi
+
+# This checks upstream valueless developer nodes on a disposable runner.
+# It neither deploys a public testnet nor touches the Railway Privi prototype,
+# real BNB Chain PRIV balances, staking contracts, or migration tools.
