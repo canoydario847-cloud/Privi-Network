@@ -53,7 +53,7 @@ def validate_input(template, ledger, config, genesis_unix):
         raise NotReady("Proposed native PRVI supply cap mismatch")
     if template.get("chain_id") not in ("",None,cid):
         raise NotReady("Base genesis is for a different chain; refuse conversion")
-    if not isinstance(genesis_unix,int) or genesis_unix<1_800_000_000:
+    if not isinstance(genesis_unix,int) or genesis_unix<1_700_000_000:
         raise NotReady("Explicit future, independently approved genesis Unix time required")
     app=template.get("app_state")
     if not isinstance(app,dict):
@@ -116,8 +116,7 @@ def assemble(template,ledger,config,genesis_unix):
     for row in sorted(ledger["allocations"],key=lambda x:x["address"]):
         addr=row["address"]
         amt=row["amount_base_units"]
-        base={"@type":"/cosmos.auth.v1beta1.BaseAccount","address":addr,
-              "pub_key":None,"account_number":"0","sequence":"0"}
+        base={"address":addr,"pub_key":None,"account_number":"0","sequence":"0"}
         if row["category"] in PROTECTED:
             start=int(row["vesting_start_unix"])
             periods=[{"length":str(p["length_seconds"]),"amount":coin(p["amount_base_units"])}
@@ -135,7 +134,7 @@ def assemble(template,ledger,config,genesis_unix):
                "start_time":str(start),
                "vesting_periods":periods
             }
-        else:account=base
+        else:account={"@type":"/cosmos.auth.v1beta1.BaseAccount",**base}
         auth.append(account)
         balances.append({"address":addr,"coins":coin(amt)})
     state["auth"]["accounts"]=auth
@@ -154,7 +153,7 @@ def assemble(template,ledger,config,genesis_unix):
     state["staking"].setdefault("params",{}).update({
        "bond_denom":"aprvi",
        "unbonding_time":"1814400s",
-       "max_validators":str(config["staking"]["max_validators"]),
+       "max_validators":config["staking"]["max_validators"],
        "min_commission_rate":config["staking"]["min_commission_rate"]
     })
     state["slashing"].setdefault("params",{}).update({
