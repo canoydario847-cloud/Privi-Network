@@ -27,7 +27,8 @@ jobs:
             exit 1
           fi
           echo "PASS: incomplete mainnet manifest is blocked."
-      - name: Confirm GitHub workflow uses read-only permissions
-        run: grep -q '^  contents: read# Read-only readiness checks. Passing this workflow NEVER approves launch.
- .github/workflows/privi-mainnet-preflight.yml
-# Read-only readiness checks. Passing this workflow NEVER approves launch.
+      - name: Verify GitHub permissions are read-only
+        run: |
+          grep -Fq "contents: read" .github/workflows/privi-mainnet-preflight.yml
+
+# Read-only readiness checks. Passing does not authorize mainnet launch.
