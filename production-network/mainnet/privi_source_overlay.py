@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+"""Emit a REVIEW-ONLY Cosmos EVM v0.7.3 Privi source patch from a clean pinned checkout.
+
+This does not change source, mint coins, generate genesis, run nodes or deploy.
+The suggested code requires independent audit and real build/integration tests.
+"""
+import argparse
+import difflib
+import hashlib
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+PIN = "c3ae9067a7eadcdea55a5192226916deb44c71c4"
+MAX_BASE = "1000000000000000000000000000"
+DEMO_IDS = {262144, 4221, 56, 97, 1}
+
+class UnsafeInput(ValueError):
+    pass
+
+def checked_replace(data, old, new, path):
+    n = data.count(old)
+    if n != 1:
+        raise UnsafeInput(f"{path}: expected ONE source anchor {old!r}, found {n}; upstream changed")
+    return data.replace(old, new, 1)
+
+def validated_settings(config):
+    if config.get("status") != "DESIGN_ONLY_NOT_A_GENESIS":
+        raise UnsafeInput("Only design-stage input is accepted")
+    if config.get("source",{}).get("commit") != PIN:
+        raise UnsafeInput("Pinned Cosmos EVM upstream commit mismatch")
+    coin = config.get("coin",{})
+    evm = config.get("evm",{})
+    info = evm.get("coin_info",{})
+    if (coin.get("display_denom") != "PRVI" or coin.get("base_denom") != "aprvi"
+            or coin.get("decimals") != 18 or coin.get("max_supply_base_units") != MAX_BASE
+            or coin.get("inflation_enabled") is not False
+            or coin.get("mint_module_begin_block_enabled") is not False
+            or info != {"denom":"aprvi","extended_denom":"aprvi","display_denom":"prvi","decimals":18}):
+        raise UnsafeInput("Only approved PRVI fixed-supply atto-denom design is allowed")
+    n = config.get("network",{})
+    cid = n.get("cosmos_chain_id")
+    eid = n.get("evm_chain_id")
+    if not isinstance(cid,str) or not re.fullmatch("[a-z][a-z0-9-]{2,63}",cid) or cid in ("local-4221","privi-dev-1"):
+        raise UnsafeInput("Fresh reviewed production Cosmos chain ID is REQUIRED")
+    if type(eid) is not int or eid < 1000 or eid in DEMO_IDS or eid > 4294967295:
+        raise UnsafeInput("Fresh reviewed EVM numeric chain ID is REQUIRED; no default/test/BNB IDs")
+    if n.get("demo_genesis_reuse_permitted") is not False:
+        raise UnsafeInput("Demo genesis re-use prohibited")
+    if config.get("constraints",{}).get("no_mainnet_deploy_or_mint") is not True:
+        raise UnsafeInput("Design stage must prohibit launch")
+    return cid,eid
+
+def source_overlay(files, evm_chain_id):
+    """Pure in-memory source patch; each anchor must match exact reviewed upstream code."""
+    required = ("evmd/config/bech32.go","evmd/genesis.go",
+                "evmd/cmd/evmd/cmd/root.go","evmd/app.go")
+    for path in required:
+        if path not in files:
+            raise UnsafeInput(f"Missing upstream source {path}")
+    result=dict(files)
+    p="evmd/config/bech32.go"
+    result[p] = checked_replace(result[p], 'Bech32Prefix = "cosmos"',
+                                'Bech32Prefix = "privi"', p)
+    p="evmd/cmd/evmd/cmd/root.go"
+    x=result[p]
+    x=checked_replace(x,'\t"github.com/cosmos/evm/x/vm/types"\n','',p)
+    x=checked_replace(x,'config.InitAppConfig(types.DefaultEVMExtendedDenom, types.DefaultEVMChainID)',
+                      f'config.InitAppConfig("aprvi", {evm_chain_id})',p)
+    result[p]=x
+
+    p="evmd/genesis.go"
+    x=result[p]
+    x=checked_replace(x,
+        "evmGenState := evmtypes.DefaultGenesisState()",
+        'evmGenState := evmtypes.DefaultGenesisState()\n'
+        '\tevmGenState.Params.EvmDenom = "aprvi"\n'
+        '\tevmGenState.Params.ExtendedDenomOptions = &evmtypes.ExtendedDenomOptions{ExtendedDenom: "aprvi"}',p)
+    x=checked_replace(x,'erc20GenState.TokenPairs = testconstants.ExampleTokenPairs',
+                      'erc20GenState.TokenPairs = nil',p)
+    x=checked_replace(x,'erc20GenState.NativePrecompiles = []string{testconstants.WEVMOSContractMainnet}',
+                      'erc20GenState.NativePrecompiles = nil',p)
+    x=checked_replace(x,'mintGenState.Params.MintDenom = testconstants.ExampleAttoDenom',
+                      'mintGenState.Params.MintDenom = "aprvi"',p)
+    x=checked_replace(x,'\ttestconstants "github.com/cosmos/evm/testutil/constants"\n','',p)
+    result[p]=x
+
+    # Disables the *periodic minting path* in the example app (no inflation
+    # even if mutable x/mint Genesis default inflation params are nonzero).
+    # A production review MUST still audit all module mint authority pathways.
+    p="evmd/app.go"
+    x=result[p]
+    x=checked_replace(x,'\t"errors"\n','\t"errors"\n\tsdkmath "cosmossdk.io/math"\n',p)
+    x=checked_replace(x,
+        "app.ModuleManager.SetOrderBeginBlockers(\n\t\tminttypes.ModuleName,",
+        "app.ModuleManager.SetOrderBeginBlockers(\n\t\t// Privi fixed-supply: no x/mint BeginBlocker (reward payouts must use escrow).",p)
+    x=checked_replace(x,
+        "func (app *EVMD) EndBlocker(ctx sdk.Context) (sdk.EndBlock, error) {\n"
+        "\treturn app.ModuleManager.EndBlock(ctx)\n}",
+        "func (app *EVMD) EndBlocker(ctx sdk.Context) (sdk.EndBlock, error) {\n"
+        "\tresult, err := app.ModuleManager.EndBlock(ctx)\n"
+        "\tif err != nil {\n\t\treturn result, err\n\t}\n"
+        f'\tcap, ok := sdkmath.NewIntFromString("{MAX_BASE}")\n'
+        '\tif !ok {\n\t\treturn result, fmt.Errorf("invalid Privi native supply cap")\n\t}\n'
+        '\tif app.BankKeeper.GetSupply(ctx, "aprvi").Amount.GT(cap) {\n'
+        '\t\treturn result, fmt.Errorf("PRVI supply above fixed maximum")\n\t}\n'
+        '\treturn result, nil\n}',p)
+    result[p]=x
+    return result
+
+def check_checkout(upstream):
+    if not (upstream/"go.mod").is_file() or not (upstream/"evmd"/"go.mod").is_file():
+        raise UnsafeInput("Not a complete upstream Cosmos EVM checkout")
+    rev = subprocess.check_output(["git","-C",str(upstream),"rev-parse","HEAD"],text=True).strip()
+    if rev != PIN:
+        raise UnsafeInput(f"Upstream commit changed: {rev}")
+    status=subprocess.check_output(["git","-C",str(upstream),"status","--porcelain"],text=True).strip()
+    if status:
+        raise UnsafeInput("Upstream checkout has uncommitted changes; use a CLEAN checkout")
+
+def create_patch(upstream, chain_config):
+    _, eid=validated_settings(chain_config)
+    check_checkout(upstream)
+    paths=["evmd/config/bech32.go","evmd/genesis.go","evmd/cmd/evmd/cmd/root.go","evmd/app.go"]
+    old={p:(upstream/p).read_text(encoding="utf8") for p in paths}
+    new=source_overlay(old,eid)
+    segments=[]
+    for path in paths:
+        diff=list(difflib.unified_diff(old[path].splitlines(True),new[path].splitlines(True),
+          fromfile="a/"+path,tofile="b/"+path))
+        if not diff: raise UnsafeInput(f"Patch unexpectedly empty for {path}")
+        segments.extend(["diff --git a/"+path+" b/"+path+"\n",*diff])
+    return "".join(segments)
+
+def main():
+    a=argparse.ArgumentParser(description=__doc__)
+    a.add_argument("--upstream",required=True,type=Path,help="Clean pinned local cosmos/evm checkout; NEVER deployed state")
+    a.add_argument("--config",type=Path,default=Path(__file__).with_name("privi_chain_config.json"))
+    a.add_argument("--output",required=True,type=Path,help="New patch file only; file must not already exist")
+    args=a.parse_args()
+    if args.output.exists():
+        raise UnsafeInput("Patch output already exists: refusing overwrite")
+    data=json.loads(args.config.read_text(encoding="utf8"))
+    patch=create_patch(args.upstream,data)
+    args.output.parent.mkdir(parents=True,exist_ok=True)
+    with args.output.open("x",encoding="utf8") as f:
+        f.write(patch)
+    print("Created UNREVIEWED source patch, SHA-256:",hashlib.sha256(patch.encode()).hexdigest())
+    print("NOT a deployable binary, complete PRVI genesis, audit, or launch permission.")
+    return 0
+
+if __name__=="__main__":
+    try:
+        raise SystemExit(main())
+    except (UnsafeInput, OSError, subprocess.CalledProcessError, ValueError) as exc:
+        print("BLOCKED:",exc,file=sys.stderr)
+        raise SystemExit(1) from exc
