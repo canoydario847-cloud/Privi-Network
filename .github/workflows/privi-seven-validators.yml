@@ -1,0 +1,91 @@
+name: Privi seven self-operated validator staging CI
+
+on:
+  pull_request:
+    paths:
+      - "production-network/seven-validator/**"
+      - ".github/workflows/privi-seven-validators.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: privi-seven-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline-seven:
+    name: Seven-validator configuration and negative tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check syntax of seven-node bootstrap and verifier
+        run: |
+          bash -n production-network/seven-validator/bootstrap-seven.sh
+          bash -n production-network/seven-validator/verify-seven.sh
+      - name: Run seven-validator isolation and Comet consensus tests
+        run: python3 -m unittest discover -s production-network/seven-validator -p "test_*.py" -v
+      - name: Validate generated Compose structure, without starting
+        run: |
+          python3 production-network/seven-validator/generate_compose.py --output /tmp/privi-seven-compose.yml
+          docker compose -f /tmp/privi-seven-compose.yml config --quiet
+          echo "Seven isolated validator services configured; no chain started."
+
+  real-seven:
+    name: Build seven ephemeral CometBFT validators and verify actual signatures
+    needs: offline-seven
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect Docker runner resources
+        run: |
+          docker version
+          docker compose version
+          free -m
+          df -h .
+      - name: Build pinned upstream Cosmos EVM and boot exactly seven staging validators
+        run: bash production-network/seven-validator/bootstrap-seven.sh
+      - name: Audit seven Comet consensus nodes and ALL seven validator signatures
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            if python3 production-network/seven-validator/audit_seven.py >/tmp/privi-seven-audit.txt 2>&1; then
+              cat /tmp/privi-seven-audit.txt
+              echo "Seven Comet consensus validators confirmed"
+              exit 0
+            fi
+            sleep 5
+          done
+          cat /tmp/privi-seven-audit.txt
+          docker compose -f production-network/.upstream-seven-evm/docker-compose.privi-seven.yml ps
+          exit 1
+      - name: Verify real Ethereum JSON-RPC on isolated seven-node staging
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            if python3 production-network/testnet/evm_smoke.py \
+                --rpc http://127.0.0.1:8545 --expect-chain 262144; then
+              echo "Staging EVM JSON-RPC confirmed"
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+      - name: Show ephemeral validator service state on failure
+        if: failure()
+        run: |
+          if [ -f production-network/.upstream-seven-evm/docker-compose.privi-seven.yml ]; then
+            docker compose -f production-network/.upstream-seven-evm/docker-compose.privi-seven.yml ps || true
+          fi
+      - name: Stop disposable nodes without deleting any private validator state
+        if: always()
+        run: |
+          if [ -f production-network/.upstream-seven-evm/docker-compose.privi-seven.yml ]; then
+            docker compose -f production-network/.upstream-seven-evm/docker-compose.privi-seven.yml down --remove-orphans || true
+          fi
+
+# Workflow is entirely ephemeral and valueless: no PRVI tokens, payment, Railway
+# service changes, public genesis, public signing keys, or mainnet activation.
