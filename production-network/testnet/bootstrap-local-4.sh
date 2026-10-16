@@ -53,6 +53,27 @@ docker run --rm -v "$PWD/.testnets:/data" cosmos/evmd \
   testnet init-files --validator-count 4 -o /data \
   --starting-ip-address 192.168.10.2 --keyring-backend=test \
   --chain-id="$CHAIN_ID" --use-docker=true
+# evmd v0.7.3 enables the EVM application mempool. The upstream
+# init-files generator writes CometBFT mempool.type=flood, which evmd refuses.
+# Make a strict, test-only configuration change for EACH freshly generated node.
+# Run as the image's nonroot user so validator files remain owned by uid 1025.
+docker run --rm --entrypoint /bin/sh \
+  -v "$PWD/.testnets:/data" cosmos/evmd -ec '
+  for n in 0 1 2 3; do
+    cfg="/data/node${n}/evmd/config/config.toml"
+    [ -f "$cfg" ] || { echo "Missing CometBFT config for validator $n" >&2; exit 1; }
+    grep -q "^\\[mempool\\]" "$cfg" || { echo "Missing mempool section in $cfg" >&2; exit 1; }
+    sed -i "/^\\[mempool\\]/,/^\\[/ s/^[[:space:]]*type[[:space:]]*=[[:space:]]*\\\"flood\\\"/type = \\"app\\"/" "$cfg"
+    awk '"'"'/^\\[mempool\\]/ { section=1; next }
+         /^\\[/ { section=0 }
+         section && /^[[:space:]]*type[[:space:]]*=[[:space:]]*"app"/ { ok=1 }
+         END { exit !ok }'"'"' "$cfg" || {
+       echo "CometBFT mempool configuration not compatible: $cfg" >&2
+       exit 1
+    }
+    echo "Validator $n CometBFT mempool.type=app"
+  done
+'
 # The upstream Compose file exposes all RPC/P2P ports on every host interface.
 # For a local developer demo, rewrite published port bindings to loopback only.
 # This generated file is never committed and must never overwrite an existing file.
