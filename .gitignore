@@ -1,0 +1,5 @@
+node_modules/
+privi-data/
+.env
+.env.*
+*.pem
