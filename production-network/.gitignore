@@ -1,0 +1,8 @@
+.upstream-evm/
+.testnets/
+migration/out/
+__pycache__/
+*.pem
+*.key
+.env
+.env.*
