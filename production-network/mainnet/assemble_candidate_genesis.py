@@ -26,6 +26,35 @@ PROTECTED={"contributors","ecosystem_development","protocol_treasury"}
 ADDRESS=re.compile(r"^privi1[023456789acdefghjklmnpqrstuvwxyz]{38,80}$")
 DEMO_CHAINS={"local-4221","privi-dev-1"}
 DEMO_EVM_IDS={262144,4221,56,97,1}
+
+BECH32_CHARS="qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+def bech32_polymod(values):
+    result=1
+    for value in values:
+        top=result>>25
+        result=((result&0x1ffffff)<<5)^value
+        for j,gen in enumerate((0x3b6a57b2,0x26508e6d,0x1ea119fa,0x3d4233dd,0x2a1462b3)):
+            if (top>>j)&1:result^=gen
+    return result
+
+def valid_privi_account(address):
+    """Validate a 20-byte Privi Bech32 (not Bech32m) account checksum."""
+    if not isinstance(address,str) or len(address)!=(len("privi1")+38) or not address.startswith("privi1"):
+        return False
+    try:data=[BECH32_CHARS.index(char) for char in address[6:]]
+    except ValueError:return False
+    if bech32_polymod([ord(x)>>5 for x in "privi"]+[0]+[ord(x)&31 for x in "privi"]+data)!=1:
+        return False
+    # Cosmos EVM public accounts are 20 bytes = 32 5-bit groups plus 6 checksum symbols.
+    acc=0;bits=0;out=[]
+    for x in data[:-6]:
+        acc=(acc<<5)|x
+        bits+=5
+        if bits>=8:
+            bits-=8
+            out.append((acc>>bits)&255)
+    return len(out)==20 and (bits==0 or (acc&((1<<bits)-1))==0)
+
 EXPECTED_CATEGORIES=set(CATEGORIES)
 
 class NotReady(ValueError):
@@ -78,7 +107,7 @@ def validate_input(template, ledger, config, genesis_unix):
         if cat not in EXPECTED_CATEGORIES:
             raise NotReady(f"Unknown allocation category: {cat}")
         address=row.get("address")
-        if not isinstance(address,str) or not ADDRESS.fullmatch(address):
+        if not valid_privi_account(address):
             raise NotReady("Expected reviewed privi1 public address (no private key)")
         if address in owners:
             raise NotReady("Repeated allocation recipient; consolidate BEFORE signing")
