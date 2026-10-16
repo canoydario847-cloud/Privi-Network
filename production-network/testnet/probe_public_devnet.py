@@ -62,19 +62,26 @@ def main():
     from eth_account import Account
     Account.enable_unaudited_hdwallet_features()
     sender = Account.from_mnemonic(PUBLIC_DEMO_MNEMONIC)
-    receiver = Account.create(secrets.token_bytes(32))
+    from eth_utils import to_checksum_address
+    receiver_address = to_checksum_address("0x1990589FD200E043b8C6FD9ec5956c61b3071048")
+    already_funded = int(rpc("eth_getBalance", [receiver_address, "latest"]), 16)
+    amount = 10**18  # exactly 1 TEST on this valueless 18-decimal devnet
+    if already_funded >= amount:
+        print(json.dumps({"result":"ALREADY_FUNDED","receiver":receiver_address,
+                          "balanceWei":str(already_funded)}),flush=True)
+        return
     balance = int(rpc("eth_getBalance", [sender.address,"latest"]),16)
     gas_price = max(int(rpc("eth_gasPrice"),16), 10**9)
     nonce = int(rpc("eth_getTransactionCount",[sender.address,"pending"]),16)
-    cost = (gas_price * 21000) + 1
-    print(json.dumps({"sender":sender.address,"receiver":receiver.address,
+    cost = (gas_price * 21000) + amount
+    print(json.dumps({"sender":sender.address,"receiver":receiver_address,
                       "balanceWei":str(balance),"gasPriceWei":str(gas_price),
-                      "nonce":nonce,"valueWei":"1"}),flush=True)
+                      "nonce":nonce,"valueWei":str(amount)}),flush=True)
     if balance < cost:
         raise RuntimeError("Public upstream demo account not funded; no transaction broadcast")
 
-    tx = {"type":0, "chainId":chain_id, "nonce":nonce, "to":receiver.address,
-          "value":1, "gas":21000, "gasPrice":gas_price}
+    tx = {"chainId":chain_id, "nonce":nonce, "to":receiver_address,
+          "value":amount, "gas":21000, "gasPrice":gas_price}
     signed = sender.sign_transaction(tx)
     # Do NOT display private keys, mnemonic-derived signing objects or raw transactions in logs.
     raw = signed.raw_transaction.hex()
@@ -93,14 +100,14 @@ def main():
         raise RuntimeError("Test transaction submitted but no receipt within timeout")
     if int(receipt.get("status","0x0"),16)!=1:
         raise RuntimeError("Test transaction reverted: "+json.dumps(receipt))
-    if receipt.get("to","").lower()!=receiver.address.lower():
+    if receipt.get("to","").lower()!=receiver_address.lower():
         raise RuntimeError("Transaction receipt recipient mismatch")
-    if int(rpc("eth_getBalance",[receiver.address,"latest"]),16)<1:
+    if int(rpc("eth_getBalance",[receiver_address,"latest"]),16)<amount:
         raise RuntimeError("Destination did not receive expected valueless wei")
     print(json.dumps({"result":"PASS","txHash":txhash,
                       "receiptBlock":int(receipt["blockNumber"],16),
                       "gasUsed":int(receipt["gasUsed"],16),
-                      "recipient":receiver.address,"testValueWei":1},indent=2),flush=True)
+                      "recipient":receiver_address,"testValueWei":amount},indent=2),flush=True)
 
 if __name__=="__main__":
     try:main()
