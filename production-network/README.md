@@ -23,7 +23,7 @@ python3 production-network/testnet/health_check.py \
   --rpc http://localhost:26677 --rpc http://localhost:26687
 ```
 
-The script pins upstream release `v0.7.3`, builds upstream's environment and generates **developer-only** keys under `.upstream-evm/.testnets`. It refuses to overwrite existing state. Stop with `cd production-network/.upstream-evm && docker compose down`. Test RPC at `http://localhost:8545`, CometBFT RPC at `http://localhost:26657`; verify both `eth_chainId` and Cosmos chain ID. The numeric EVM chain ID and mainnet native denomination remain **unfinalized**.
+The script pins upstream release `v0.7.3`, builds upstream's environment and generates **developer-only** keys under `.upstream-evm/.testnets`. It refuses to overwrite existing state. Stop with `cd production-network/.upstream-evm && docker compose down`. Test RPC at `http://localhost:8545`, CometBFT RPC at `http://localhost:26657`; verify both `eth_chainId` and Cosmos chain ID. The final Privi public EVM chain ID and native denomination remain **unfinalized**.
 
 ## Source PRIV asset
 
@@ -39,4 +39,4 @@ Reported BNB Chain token: `0xbf154Ff2577F4B85db7B2ee910Db5880D06e0f64` (chain ID
 - [ ] External code and infrastructure audit, independent validators and incident runbooks before **any** financial mainnet.
 
 Do not deploy this directory over the current Railway JavaScript prototype. Docker localnet secrets, mnemonics and chain state must never be committed. See upstream https://github.com/cosmos/evm/tree/v0.7.3.
-> **Important:** the local demo uses upstream Cosmos ID `local-4221` and expected EVM numeric chain ID `4221`. This is **not** a custom Privi-denominated network or an RPC endpoint for the existing Railway `privi-dev-1` server. See [testnet/WALLET_AND_VALIDATORS.md](testnet/WALLET_AND_VALIDATORS.md) and [ops/LEGACY_PERSISTENCE.md](ops/LEGACY_PERSISTENCE.md).
+> **Important:** the local demo uses upstream Cosmos ID `local-4221` and expected EVM numeric chain ID `262144`. The local EVM numeric chain ID is 262144 (0x40000); this is **not** a custom Privi-denominated network or an RPC endpoint for the existing Railway `privi-dev-1` server. See [testnet/WALLET_AND_VALIDATORS.md](testnet/WALLET_AND_VALIDATORS.md) and [ops/LEGACY_PERSISTENCE.md](ops/LEGACY_PERSISTENCE.md).
