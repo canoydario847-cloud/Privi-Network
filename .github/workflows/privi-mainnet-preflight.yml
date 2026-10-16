@@ -7,6 +7,10 @@ on:
       - ".github/workflows/privi-mainnet-preflight.yml"
   workflow_dispatch:
 
+concurrency:
+  group: privi-mainnet-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
