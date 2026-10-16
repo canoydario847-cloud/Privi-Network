@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privi Network — Block Explorer</title>
+<style>
+*{box-sizing:border-box}body{background:#071524;color:#e9f5ff;font:16px Arial,sans-serif;margin:0}
+main{max-width:1100px;margin:auto;padding:32px 18px}h1{color:#47ecb9;margin-bottom:8px}p,.muted{color:#b5c9d5}
+.panels{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:22px 0}.card{background:#142a40;border:1px solid #2c5064;border-radius:13px;padding:16px;min-width:0}
+.card strong{display:block;color:#45eaba;font-size:23px;overflow-wrap:anywhere;margin-top:7px}
+input{width:100%;background:#10273d;color:white;border:1px solid #456a80;border-radius:8px;padding:14px}button{padding:12px 18px;border:0;border-radius:8px;background:#45eaba;color:#063029;font-weight:700;cursor:pointer;margin-top:8px}
+table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:12px;border-bottom:1px solid #2b475d;overflow-wrap:anywhere}th{color:#9bbaca}.scroll{overflow:auto}a{color:#7feaff;cursor:pointer;text-decoration:none}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0a1c2d;padding:16px;border-radius:9px}#detail{margin-top:15px}
+@media(max-width:680px){.panels{grid-template-columns:1fr}}
+</style></head><body><main>
+<h1>PRIVI NETWORK</h1><p>Independent signed-record blockchain explorer · Single-validator developer prototype · Not BNB Chain or the PRIV token ledger</p>
+<div class="panels"><div class="card">Block height<strong id="height">—</strong></div><div class="card">Confirmed records<strong id="txs">—</strong></div><div class="card">Pending records<strong id="pending">—</strong></div></div>
+<div class="card"><p>Find a block height, transaction hash, or Privi record address</p><input id="q" placeholder="0, transaction hash, or prv_ address"><button id="search">Search</button><p id="network" class="muted"></p></div>
+<h2>Latest Blocks</h2><div class="card scroll"><table><thead><tr><th>Height</th><th>Hash</th><th>Records</th><th>Timestamp</th></tr></thead><tbody id="blocks"></tbody></table></div>
+<div class="card" id="detail" hidden><h2>Details</h2><pre id="json"></pre></div>
+<p class="muted">Only signed NOTE records are supported. No native token transfers, validators distributed across peers, or PRIV/BNB bridging.</p>
+</main><script>
+const el=id=>document.getElementById(id);
+const short=s=>String(s).length>23?String(s).slice(0,18)+"…"+String(s).slice(-7):String(s);
+const fetchJSON=async p=>{let r=await fetch(p,{cache:"no-store"});if(!r.ok)throw Error("No matching on-chain record");return r.json();};
+const show=obj=>{el("detail").hidden=false;el("json").textContent=JSON.stringify(obj,null,2);};
+async function latest(){try{const s=await fetchJSON("/api/status"),list=await fetchJSON("/api/blocks");el("height").textContent=s.height;el("txs").textContent=s.transactions;el("pending").textContent=s.pending;el("network").textContent=s.chainId+" · Validator: "+s.validator;const body=el("blocks");body.textContent="";for(const b of list){let row=document.createElement("tr");let n=document.createElement("td"),link=document.createElement("a");link.textContent=b.index;link.onclick=()=>lookup(String(b.index));n.append(link);let hash=document.createElement("td");hash.textContent=short(b.hash);let count=document.createElement("td");count.textContent=b.transactions.length;let date=document.createElement("td");date.textContent=b.timestamp?new Date(b.timestamp).toLocaleString():"Genesis";row.append(n,hash,count,date);body.append(row);}}catch(e){el("network").textContent=e.message;}}
+async function lookup(value){try{value=value.trim();if(/^\d+$/.test(value))return show(await fetchJSON("/api/block/"+value));if(/^[a-f0-9]{64}$/i.test(value))return show(await fetchJSON("/api/tx/"+value.toLowerCase()));if(/^prv_[a-f0-9]{40}$/.test(value))return show(await fetchJSON("/api/account/"+value));throw Error("Enter a block height, 64-character transaction hash, or prv_ address.");}catch(e){show({error:e.message});}}
+el("search").onclick=()=>lookup(el("q").value);el("q").onkeydown=e=>{if(e.key==="Enter")lookup(el("q").value);};latest();setInterval(latest,8000);
+</script></body></html>
