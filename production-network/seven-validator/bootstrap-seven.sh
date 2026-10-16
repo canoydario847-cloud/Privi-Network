@@ -93,7 +93,13 @@ docker run --rm --user 0:0 --entrypoint /bin/sh \
     chmod 0600 "/data/node${n}/evmd/config/priv_validator_key.json"
     chmod 0600 "/data/node${n}/evmd/config/node_key.json"
   done
-  rmdir /data/staging
+  # Upstream init-files leaves unsigned development gentxs in a shared
+  # staging/gentxs directory. Keep it PRIVATE and unchanged for audit.
+  [ -d /data/staging/gentxs ] || { echo "Missing upstream gentx archive" >&2; exit 1; }
+  [ -z "$(find /data/staging -mindepth 1 -maxdepth 1 ! -name gentxs -print -quit)" ] || {
+    echo "Unrecognized residual staging state" >&2; exit 1;
+  }
+  chmod 0700 /data/staging /data/staging/gentxs
   chown -R 1025:1025 /data
 '
 python3 "$HERE/generate_compose.py" --output "$COMPOSE"
