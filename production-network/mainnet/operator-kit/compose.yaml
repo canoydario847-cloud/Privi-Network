@@ -5,6 +5,7 @@
 name: privi-operator
 services:
   validator:
+    profiles: ["approved-mainnet-launch"]
     image: "${PRIVI_NODE_IMAGE:?REQUIRED_DOCKER_IMAGE_WITH_SHA256_DIGEST}"
     entrypoint: ["/usr/local/bin/evmd"]
     command: ["start", "--home=/state", "--json-rpc.enable=false"]
@@ -24,6 +25,7 @@ services:
     # Do not expose its consensus signer, RPC, pprof, gRPC or administrative API.
 
   sentry:
+    profiles: ["approved-mainnet-launch"]
     image: "${PRIVI_NODE_IMAGE:?REQUIRED_DOCKER_IMAGE_WITH_SHA256_DIGEST}"
     entrypoint: ["/usr/local/bin/evmd"]
     command: ["start", "--home=/state", "--json-rpc.enable=false"]
