@@ -1,5 +1,5 @@
-# Release input is supplied only after independent code review and ID approval.
-release.patch
+# Include ONLY release.patch (reviewed source diff), Dockerfile and metadata.
+# Never put keys, wallets, genesis state or operator files into a build context.
 *.pem
 *.key
 *.json
