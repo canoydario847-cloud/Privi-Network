@@ -19,7 +19,9 @@ existing Railway Cosmos EVM devnet or Privi NOTE service.
 - No public domains, no TCP proxies. Railway's `*.railway.internal` private
   network carries P2P and the HTTPS-independent, private HTTP bundle transfer.
   Each validator requires its own >=32-character random bearer secret shared
-  only with the bootstrap coordinator. Railway private networking encrypts
+  only with the bootstrap coordinator. Railway environment variables are not automatically
+  sealed by the connector; restrict access, and mark secrets sealed in the dashboard
+  where available. Railway private networking encrypts
   traffic; the coordinator must **never** have a public domain.
 - The cluster uses Cosmos chain `local-privi-seven-4221` and the upstream demo
   Ethereum chain ID `262144`. Both are disposable; all TEST units valueless.
@@ -34,7 +36,7 @@ existing Railway Cosmos EVM devnet or Privi NOTE service.
 2. Create EIGHT services named exactly as listed above. Give each ONE
    independent persistent volume mounted at `/data`. Put them all in the
    same Railway region; keep one replica per service.
-3. Set `PRIVI_RAILWAY_ROLE=bootstrap` on `privi-bootstrap` and a sealed
+3. Set `PRIVI_RAILWAY_ROLE=bootstrap` on `privi-bootstrap` and a private
    `PRIVI_BOOTSTRAP_TOKENS_JSON` mapping the keys `"0"` through `"6"` to
    seven **different cryptographically random secrets** of at least 32 chars.
 4. On each validator set `PRIVI_RAILWAY_ROLE=validator`, `PRIVI_NODE_INDEX`
