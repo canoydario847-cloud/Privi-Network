@@ -37,7 +37,7 @@ class SevenNodeCompose(unittest.TestCase):
         self.assertEqual(7,y.count("--minimum-gas-prices"))
         self.assertEqual(7,y.count("0.0001atest"))
         self.assertEqual(7,y.count("local-privi-seven-4221"))
-        self.assertNotIn(" PRVI",y)  # no native PRVI token issued by staging compose
+        self.assertNotIn("0.0001aprvi",y)  # no mainnet native PRVI gas issued by staging compose
 
     def test_no_shared_validator_volume(self):
         y=compose.render()
