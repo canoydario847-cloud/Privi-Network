@@ -21,7 +21,7 @@ if [ ! -f "$NODE_HOME/config/genesis.json" ]; then
   fi
   if [ -n "$(find /data -mindepth 1 -maxdepth 1 ! -name lost+found -print -quit)" ]; then
     echo "Unrecognized persistent /data contents; refusing to overwrite chain" >&2
-    find /data -mindepth 1 -maxdepth 1 -printf '%f\n' >&2
+    find /data -mindepth 1 -maxdepth 1 -print >&2
     exit 1
   fi
   echo "Initializing SINGLE new valueless developer validator"
