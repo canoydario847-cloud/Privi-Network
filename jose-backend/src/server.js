@@ -80,6 +80,8 @@ function publicPluginList(user) {
       missingEnvVars: p.isConfigured() ? [] : p.missingEnvVars(),
       connected: Boolean(connection),
       connectedAt: connection ? connection.connectedAt : null,
+      setup: p.setup,
+      redirectUri: `${BASE_URL}/callback/${p.id}`,
     };
   });
 }

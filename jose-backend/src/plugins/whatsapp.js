@@ -18,6 +18,19 @@ const GRAPH_VERSION = 'v19.0';
 export const whatsapp = {
   id: 'whatsapp',
   name: 'WhatsApp Business',
+  setup: {
+    registerUrl: 'https://developers.facebook.com/apps/',
+    envVars: [
+      { key: 'WHATSAPP_CLIENT_ID', label: 'App ID de tu app de Meta' },
+      { key: 'WHATSAPP_CLIENT_SECRET', label: 'App Secret de tu app de Meta' },
+    ],
+    steps: [
+      'Crea una cuenta de Meta for Developers y una app de tipo "Business".',
+      'Dentro de la app, agrega el producto "WhatsApp".',
+      'En Configuración básica, copia el App ID y el App Secret.',
+      'Pide a Meta la revisión de los permisos whatsapp_business_messaging y whatsapp_business_management — sin esta revisión, solo funciona con usuarios de prueba de tu propia app.',
+    ],
+  },
   isConfigured() {
     return Boolean(process.env.WHATSAPP_CLIENT_ID && process.env.WHATSAPP_CLIENT_SECRET);
   },

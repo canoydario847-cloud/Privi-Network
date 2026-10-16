@@ -11,6 +11,19 @@ import { getJson } from '../http-client.js';
 export const wechat = {
   id: 'wechat',
   name: 'WeChat',
+  setup: {
+    registerUrl: 'https://mp.weixin.qq.com',
+    envVars: [
+      { key: 'WECHAT_APP_ID', label: 'AppID de tu Cuenta Oficial' },
+      { key: 'WECHAT_APP_SECRET', label: 'AppSecret de tu Cuenta Oficial' },
+    ],
+    steps: [
+      'Registra una Cuenta Oficial (Official Account) en la plataforma de WeChat para desarrolladores.',
+      'Completa la verificación de la cuenta — normalmente requiere una entidad de negocio registrada en China.',
+      'En Configuración básica de desarrollo, copia el AppID y el AppSecret.',
+      'Agrega el dominio de este sitio a la lista blanca de "Dominios de callback de red" de la cuenta.',
+    ],
+  },
   isConfigured() {
     return Boolean(process.env.WECHAT_APP_ID && process.env.WECHAT_APP_SECRET);
   },

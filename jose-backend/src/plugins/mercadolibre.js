@@ -18,6 +18,19 @@ function authHost() {
 export const mercadolibre = {
   id: 'mercadolibre',
   name: 'Mercado Libre',
+  setup: {
+    registerUrl: 'https://developers.mercadolibre.com.ar/devcenter',
+    envVars: [
+      { key: 'MERCADOLIBRE_CLIENT_ID', label: 'App ID de tu aplicación' },
+      { key: 'MERCADOLIBRE_CLIENT_SECRET', label: 'Secret Key de tu aplicación' },
+    ],
+    steps: [
+      'Entra al DevCenter de Mercado Libre con tu cuenta de vendedor.',
+      'Crea una nueva aplicación y configura su "Redirect URI" apuntando a este servidor.',
+      'Copia el App ID y el Secret Key de la aplicación creada.',
+      'Opcional: define MERCADOLIBRE_SITE si tu negocio opera en un país distinto a Argentina (ej. "com.br", "com.mx").',
+    ],
+  },
   isConfigured() {
     return Boolean(process.env.MERCADOLIBRE_CLIENT_ID && process.env.MERCADOLIBRE_CLIENT_SECRET);
   },

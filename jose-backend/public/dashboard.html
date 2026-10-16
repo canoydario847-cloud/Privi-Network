@@ -7,15 +7,16 @@
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="wrap">
+  <div class="wrap dashboard">
     <div class="topbar">
       <span class="wordmark">Jose</span>
       <button class="signout" id="signout">Cerrar sesión</button>
     </div>
     <h1>Tus apps</h1>
-    <p class="lede">Conecta las cuentas que quieres que Jose use. La conexión es real: cada botón inicia el inicio de sesión oficial de esa plataforma, no una simulación.</p>
+    <p class="lede">Conecta las cuentas que quieres que Jose use. Cada botón "Conectar" inicia el inicio de sesión oficial de esa plataforma — no es una simulación.</p>
 
     <div id="banner"></div>
+    <div id="progress-summary"></div>
     <div id="plugin-list">Cargando…</div>
   </div>
 
@@ -28,6 +29,41 @@
       banner.innerHTML = `<div class="banner err">No se pudo conectar: ${params.get('error')}</div>`;
     }
 
+    function progressRingSvg(done, total) {
+      const r = 20, c = 2 * Math.PI * r;
+      const frac = total ? done / total : 0;
+      return `
+        <svg class="progress-ring" width="52" height="52" viewBox="0 0 52 52">
+          <circle cx="26" cy="26" r="${r}" fill="none" stroke="var(--rule)" stroke-width="5"/>
+          <circle cx="26" cy="26" r="${r}" fill="none" stroke="var(--jade)" stroke-width="5"
+            stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - frac)}"
+            stroke-linecap="round" transform="rotate(-90 26 26)"/>
+        </svg>`;
+    }
+
+    function setupPanelHtml(plugin) {
+      const steps = plugin.setup.steps.map((s) => `<li>${s}</li>`).join('');
+      const envRows = plugin.setup.envVars.map((v) => `
+        <div class="envvar-row">
+          <div>
+            <code>${v.key}</code>
+            <span class="envvar-label">${v.label}</span>
+          </div>
+          <button class="btn small" type="button" data-copy="${v.key}">Copiar nombre</button>
+        </div>`).join('');
+      return `
+        <div class="setup-panel" hidden>
+          <a class="register-link" href="${plugin.setup.registerUrl}" target="_blank" rel="noopener">Registrarte como desarrollador en ${plugin.name} ↗</a>
+          <ol>${steps}</ol>
+          <div class="envvar-row">
+            <div><code>Redirect URI</code><span class="envvar-label">Úsala al registrar la app en ${plugin.name}</span></div>
+            <button class="btn small" type="button" data-copy-value="${plugin.redirectUri}">Copiar URL</button>
+          </div>
+          <p style="margin:14px 0 6px; color: var(--ink-soft); font-size:0.82rem;">Una vez que tengas estas claves, pásaselas a quien administra este servidor para activarlas:</p>
+          ${envRows}
+        </div>`;
+    }
+
     async function load() {
       const res = await fetch('/api/me');
       if (res.status === 401) {
@@ -35,11 +71,22 @@
         return;
       }
       const data = await res.json();
+      const connectedCount = data.plugins.filter((p) => p.connected).length;
+
+      document.getElementById('progress-summary').innerHTML = `
+        <div class="progress-summary">
+          ${progressRingSvg(connectedCount, data.plugins.length)}
+          <div class="progress-summary-text">
+            <strong>${connectedCount} de ${data.plugins.length} apps conectadas</strong>
+            Conecta las que uses para que Jose pueda leer y responder ahí.
+          </div>
+        </div>`;
+
       const list = document.getElementById('plugin-list');
       list.innerHTML = data.plugins.map((p) => {
         let statusText, statusClass, actionHtml;
         if (!p.configured) {
-          statusText = `No configurado en el servidor (faltan: ${p.missingEnvVars.join(', ')})`;
+          statusText = 'Todavía no está activa en este servidor';
           statusClass = 'unconfigured';
           actionHtml = `<span class="btn" style="opacity:0.5;cursor:not-allowed;">Conectar</span>`;
         } else if (p.connected) {
@@ -51,13 +98,18 @@
           statusClass = '';
           actionHtml = `<a class="btn primary" href="/connect/${p.id}">Conectar</a>`;
         }
+        const toggleLabel = p.configured ? 'Detalles técnicos' : 'Cómo activar esta app';
         return `
-          <div class="plugin-row">
-            <div>
-              <div class="plugin-name">${p.name}</div>
-              <div class="plugin-status ${statusClass}">${statusText}</div>
+          <div class="plugin-card">
+            <div class="plugin-row">
+              <div>
+                <div class="plugin-name">${p.name}</div>
+                <div class="plugin-status ${statusClass}">${statusText}</div>
+              </div>
+              ${actionHtml}
             </div>
-            ${actionHtml}
+            <button class="setup-toggle" data-toggle="${p.id}" type="button">${toggleLabel}</button>
+            ${setupPanelHtml(p)}
           </div>`;
       }).join('');
 
@@ -66,6 +118,34 @@
           await fetch('/api/disconnect/' + btn.getAttribute('data-disconnect'), { method: 'POST' });
           load();
         });
+      });
+
+      list.querySelectorAll('[data-toggle]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const panel = btn.nextElementSibling;
+          const willOpen = panel.hidden;
+          panel.hidden = !willOpen;
+          btn.classList.toggle('open', willOpen);
+        });
+      });
+
+      list.querySelectorAll('[data-copy]').forEach((btn) => {
+        btn.addEventListener('click', () => copyText(btn, btn.getAttribute('data-copy')));
+      });
+      list.querySelectorAll('[data-copy-value]').forEach((btn) => {
+        btn.addEventListener('click', () => copyText(btn, btn.getAttribute('data-copy-value')));
+      });
+    }
+
+    function copyText(btn, text) {
+      const original = btn.textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = 'Copiado';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = original;
+          btn.classList.remove('copied');
+        }, 1500);
       });
     }
 
