@@ -31,7 +31,7 @@ docker run --rm -v "$PWD/.testnets:/data" cosmos/evmd \
 # This generated file is never committed and must never overwrite an existing file.
 SAFE_COMPOSE="$UPSTREAM/docker-compose.localhost.yml"
 [[ ! -e "$SAFE_COMPOSE" ]] || { echo "Local Compose override already exists" >&2; exit 1; }
-sed -E 's/^([[:space:]]*- )"([0-9]+(-[0-9]+)?):/\\1"127.0.0.1:\\2:/' docker-compose.yml > "$SAFE_COMPOSE"
+sed -E 's/^([[:space:]]*- )"([0-9]+(-[0-9]+)?):/\1"127.0.0.1:\2:/' docker-compose.yml > "$SAFE_COMPOSE"
 if grep -E '^[[:space:]]*- "[0-9]+(-[0-9]+)?:' "$SAFE_COMPOSE"; then
   echo "Unsafe published port detected" >&2; exit 1
 fi
