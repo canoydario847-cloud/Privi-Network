@@ -67,6 +67,16 @@ header.top .wrap {
   font-weight: 600;
   letter-spacing: -0.01em;
 }
+.apps-link {
+  margin-right: auto;
+  margin-left: 24px;
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+  text-decoration: none;
+  border-bottom: 1px solid var(--rule);
+}
+.apps-link:hover { color: var(--ink); border-color: var(--ink); }
+@media (max-width: 560px) { .apps-link { display: none; } }
 .lang-switch {
   display: flex;
   gap: 4px;

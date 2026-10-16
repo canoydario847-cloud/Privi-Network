@@ -4,6 +4,7 @@
 
 const translations = {
   es: {
+    "nav.apps": "Conectar tus apps",
     "hero.kicker": "Un asistente pensado para quienes hacen negocios y vida diaria entre Sudamérica y China.",
     "hero.headline": "Hola, soy <span class=\"accent\">Jose</span>.",
     "hero.body": "Jose entiende español, portugués, chino e inglés, y ayuda a que una conversación en un idioma llegue completa al otro lado — en comercio, logística o una charla cualquiera.",
@@ -37,6 +38,7 @@ const translations = {
     "footer.disclaimer": "Jose es un producto independiente. No está afiliado con Anthropic, con Claude, ni con ninguna otra empresa de inteligencia artificial.",
   },
   pt: {
+    "nav.apps": "Conectar seus apps",
     "hero.kicker": "Um assistente pensado para quem faz negócios e vive o dia a dia entre a América do Sul e a China.",
     "hero.headline": "Olá, eu sou <span class=\"accent\">Jose</span>.",
     "hero.body": "Jose entende português, espanhol, chinês e inglês, e ajuda uma conversa feita num idioma a chegar completa do outro lado — no comércio, na logística ou numa conversa qualquer.",
@@ -70,6 +72,7 @@ const translations = {
     "footer.disclaimer": "Jose é um produto independente. Não tem relação com a Anthropic, com o Claude, nem com qualquer outra empresa de inteligência artificial.",
   },
   zh: {
+    "nav.apps": "连接你的应用",
     "hero.kicker": "专为在南美洲和中国之间做生意、过日子的人设计的助手。",
     "hero.headline": "你好，我是<span class=\"accent\">Jose</span>。",
     "hero.body": "Jose 懂西班牙语、葡萄牙语、中文和英语，能让一种语言里说的话完整地传到另一边——无论是做生意、处理物流，还是普通聊天。",
@@ -103,6 +106,7 @@ const translations = {
     "footer.disclaimer": "Jose 是一个独立产品，与 Anthropic、Claude 或其他任何人工智能公司没有关联。",
   },
   en: {
+    "nav.apps": "Connect your apps",
     "hero.kicker": "An assistant built for people doing business and daily life between South America and China.",
     "hero.headline": "Hi, I'm <span class=\"accent\">Jose</span>.",
     "hero.body": "Jose understands Spanish, Portuguese, Chinese, and English, and helps a conversation that starts in one language arrive whole on the other side — in trade, logistics, or an ordinary chat.",
