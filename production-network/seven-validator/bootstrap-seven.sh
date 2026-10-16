@@ -56,9 +56,13 @@ docker run --rm --user 0:0 --entrypoint /bin/sh \
 '
 # Upstream init creates seven distinct disposable validators with one shared genesis.
 # Suppress output from init-files to prevent printing development mnemonic material.
-docker run --rm \
+# Bypass upstream wrapper: it implicitly selects /data/node0/evmd as its
+# --home and initializes an unrelated node0 directory BEFORE init-files,
+# causing a collision with the isolated seven-node state layout.
+# Use an ephemeral, container-only CLI home outside the shared /data mount.
+docker run --rm --entrypoint /evmd/evmd \
     -v "$STATE:/data" "$IMAGE" \
-    testnet init-files --validator-count 7 --chain-id "$CHAIN" \
+    --home /tmp/privi-seven-init-cli testnet init-files --validator-count 7 --chain-id "$CHAIN" \
     --starting-ip-address 192.168.77.10 --keyring-backend=test \
     --use-docker=true -o /data/staging >/dev/null 2>&1 || {
   echo "Seven-validator initialization failed; state preserved for investigation." >&2
@@ -73,6 +77,10 @@ docker run --rm --user 0:0 --entrypoint /bin/sh \
     [ -s "${home}/config/genesis.json" ] || exit 1
     [ -s "${home}/config/priv_validator_key.json" ] || exit 1
     [ -s "${home}/config/config.toml" ] || exit 1
+  done
+  # Fail closed if upstream created ANY node directory outside staging.
+  for n in 0 1 2 3 4 5 6; do
+    [ ! -e "/data/node${n}" ] || { echo "Unexpected preexisting node root" >&2; exit 1; }
   done
   for n in 0 1 2 3 4 5 6; do
     mkdir -m 0700 "/data/node${n}"
