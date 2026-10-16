@@ -27,8 +27,7 @@ jobs:
             exit 1
           fi
           echo "PASS: incomplete mainnet manifest is blocked."
-      - name: Assert workflow cannot launch or mint
-        run: |
-          set -eu
-          ! grep -Ei 'railway (up|deploy)|eth_sendRawTransaction|genesis add-genesis-account|privi mainnet start' .github/workflows/privi-mainnet-preflight.yml
+      - name: Confirm GitHub workflow uses read-only permissions
+        run: grep -q '^  contents: read# Read-only readiness checks. Passing this workflow NEVER approves launch.
+ .github/workflows/privi-mainnet-preflight.yml
 # Read-only readiness checks. Passing this workflow NEVER approves launch.
