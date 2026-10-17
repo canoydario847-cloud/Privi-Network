@@ -291,6 +291,102 @@ def three_of_four_outage_evidence(keys, target_height):
     }
 
 
+
+def signing_state_snapshot(home):
+    """Hash original key material; guard against state rollback or replacement.
+
+    Never output key bytes or hashes: snapshots are in memory, disposed with CI.
+    """
+    home = Path(home)
+    files = (
+        home / "config" / "priv_validator_key.json",
+        home / "config" / "node_key.json",
+        home / "config" / "genesis.json",
+    )
+    if any(not p.is_file() for p in files):
+        raise ValueError("Missing original validator identity/genesis files")
+    statefile = home / "data" / "priv_validator_state.json"
+    if not statefile.is_file():
+        raise ValueError("Missing original Comet last-sign state; refusing unsafe restart")
+    try:
+        state = json.loads(statefile.read_text(encoding="utf-8"))
+        height = int(state.get("height"))
+        round_value = int(state.get("round"))
+        step = int(state.get("step"))
+    except (ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("Invalid Comet last-sign state") from exc
+    if height < 0 or round_value < 0 or step < 0:
+        raise ValueError("Invalid non-monotonic validator sign state")
+    return {
+        "identity_hashes": tuple(hashlib.sha256(p.read_bytes()).digest() for p in files),
+        "sign_state": (height, round_value, step),
+    }
+
+
+def validate_safe_restart(before, after):
+    """No key replacement, no reset of last-sign state to lower height/round."""
+    if not isinstance(before, dict) or not isinstance(after, dict):
+        raise ValueError("Missing restart safety snapshots")
+    if before.get("identity_hashes") != after.get("identity_hashes"):
+        raise ValueError("A validator key or canonical genesis was altered during restart")
+    prior = before.get("sign_state")
+    current = after.get("sign_state")
+    if not isinstance(prior, tuple) or not isinstance(current, tuple) or len(prior) != 3 or len(current) != 3:
+        raise ValueError("Missing validator last-sign-state triple")
+    if current < prior:
+        raise ValueError("Validator last-sign state rolled backward; restart blocked")
+    return True
+
+
+def four_node_rejoin_evidence(keys, expected_id, min_height):
+    """Stopped validator must rejoin the original 4-signer network and catch up."""
+    if len(keys) != COUNT or not isinstance(expected_id, str) or not expected_id:
+        raise ValueError("Four known signing keys and original node ID are required")
+    if type(min_height) is not int or min_height < BLOCK_HEIGHT + 2:
+        raise ValueError("Rejoin height must follow committed outage blocks")
+    nodes = []
+    hashes = []
+    for i in range(COUNT):
+        status = local_rpc(i, "status")
+        block = local_rpc(i, f"block?height={min_height}")
+        if not status or not block:
+            return None
+        detail = status.get("result") or {}
+        if int((detail.get("sync_info") or {}).get("latest_block_height") or 0) < min_height:
+            return None
+        nodes.append((detail.get("node_info") or {}).get("id"))
+        hashes.append(((block.get("result") or {}).get("block_id") or {}).get("hash"))
+    if len(set(nodes)) != COUNT or not all(nodes) or nodes[-1] != expected_id:
+        return None
+    if len(set(hashes)) != 1 or not all(hashes):
+        return None
+    votes = local_rpc(0, f"validators?height={min_height}")
+    if not votes:
+        return None
+    rows = ((votes.get("result") or {}).get("validators") or [])
+    if len(rows) != COUNT:
+        return None
+    try:
+        power_by_key = {
+            base64.b64decode(row["pub_key"]["value"], validate=True): int(row["voting_power"])
+            for row in rows
+        }
+    except (TypeError, KeyError, ValueError):
+        return None
+    if set(power_by_key) != set(keys) or len(power_by_key) != COUNT or min(power_by_key.values()) <= 0:
+        return None
+    total = sum(power_by_key.values())
+    if max(power_by_key.values()) * 3 >= total:
+        return None
+    return {
+        "validators_rejoined": COUNT,
+        "restarted_node_identity_preserved": True,
+        "post_rejoin_committed_height": min_height,
+        "all_four_same_block_hash": True,
+        "validator_power_keyset_unchanged": True,
+    }
+
+
 def prove(binary):
     binary = Path(binary).resolve(strict=True)
     if not binary.is_file() or not os.access(binary, os.X_OK):
@@ -413,6 +509,39 @@ def prove(binary):
                 time.sleep(1)
             if recovery is None:
                 raise ValueError("Three survivors did not continue 2+ common blocks after CI validator outage")
+
+            # After verifying >2/3 continue without validator #3, start the
+            # SAME node home with unchanged consensus key/last-sign-state.
+            # Never copy signer keys or reset Comet state: avoiding double-sign
+            # is more important than forcefully recovering an ephemeral node.
+            restart_home = homes[-1]
+            before_restart = signing_state_snapshot(restart_home)
+            baseline = max(
+                int(((local_rpc(i, "status") or {}).get("result") or {})
+                    .get("sync_info", {}).get("latest_block_height") or 0)
+                for i in range(COUNT-1)
+            )
+            rejoin_target = max(target, baseline) + 2
+            restarted_log = (root / "validator-3-restart-private.log").open("wb")
+            logs.append(restarted_log)
+            restarted = subprocess.Popen(
+                [str(binary), "--home", str(restart_home), "start",
+                 "--chain-id", CID, "--minimum-gas-prices", "0aprvi"],
+                env=env, stdout=restarted_log, stderr=subprocess.STDOUT)
+            procs[-1] = restarted
+            deadline = time.monotonic() + STARTUP_SECONDS
+            rejoin = None
+            while time.monotonic() < deadline:
+                if any(p.poll() is not None for p in procs):
+                    raise ValueError("CI validator restart/other node exited; private logs withheld")
+                rejoin = four_node_rejoin_evidence(keys, ids[-1], rejoin_target)
+                if rejoin:
+                    break
+                time.sleep(1)
+            if rejoin is None:
+                raise ValueError("Restarted validator did not catch up to four-node common consensus")
+            after_restart = signing_state_snapshot(restart_home)
+            validate_safe_restart(before_restart, after_restart)
         finally:
             for p in procs:
                 if p.poll() is None:
@@ -433,6 +562,8 @@ def prove(binary):
             "category_amounts_prvi": {category: str(coins) for category, coins in DISTRIBUTION},
             "evidence": evidence,
             "single_validator_outage": recovery,
+            "original_validator_restart_rejoin": rejoin,
+            "last_sign_state_non_decreasing": True,
             "keys_and_test_funds_destroyed": True,
             "financial_mainnet_deployed": False,
             "real_PRVI_issued": False
