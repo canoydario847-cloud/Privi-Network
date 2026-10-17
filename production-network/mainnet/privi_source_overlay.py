@@ -15,7 +15,7 @@ from pathlib import Path
 
 PIN = "c3ae9067a7eadcdea55a5192226916deb44c71c4"
 MAX_BASE = "1000000000000000000000000000"
-DEMO_IDS = {262144, 4221, 56, 97, 1}
+DEMO_IDS = {262144, 4221, 56, 97, 1, 31337, 1337}
 
 class UnsafeInput(ValueError):
     pass
@@ -43,7 +43,7 @@ def validated_settings(config):
     n = config.get("network",{})
     cid = n.get("cosmos_chain_id")
     eid = n.get("evm_chain_id")
-    if not isinstance(cid,str) or not re.fullmatch("[a-z][a-z0-9-]{2,63}",cid) or cid in ("local-4221","privi-dev-1"):
+    if not isinstance(cid,str) or not re.fullmatch("[a-z][a-z0-9-]{2,63}",cid) or cid.startswith(("local-","privi-dev")):
         raise UnsafeInput("Fresh reviewed production Cosmos chain ID is REQUIRED")
     if type(eid) is not int or eid < 1000 or eid in DEMO_IDS or eid > 4294967295:
         raise UnsafeInput("Fresh reviewed EVM numeric chain ID is REQUIRED; no default/test/BNB IDs")
