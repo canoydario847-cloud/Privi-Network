@@ -30,7 +30,7 @@ def valid_amount(raw):
     return int(raw)
 
 def plan(ledger, genesis_unix, months_cliff=12, months_unlock=36):
-    if type(genesis_unix) is not int or not (1_750_000_000 <= genesis_unix <= 4_102_444_800):
+    if type(genesis_unix) is not int or not (int(datetime.now(timezone.utc).timestamp()) < genesis_unix <= 4_102_444_800):
         raise ValueError("independently reviewed future genesis Unix timestamp required")
     if months_cliff!=12 or months_unlock!=36:
         raise ValueError("approved contributor schedule is 12-month cliff plus 36 monthly unlocks")
