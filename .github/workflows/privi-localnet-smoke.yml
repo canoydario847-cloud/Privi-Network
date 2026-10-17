@@ -67,6 +67,20 @@ jobs:
           done
           echo "EVM RPC did not pass smoke checks" >&2
           exit 1
+      - name: Verify read-only wallet RPC compatibility against local EVM
+        run: |
+          set -euo pipefail
+          # Queries use a fixed public probe address: no wallet, private key,
+          # signing, financial tokens, or value-changing transactions.
+          for i in $(seq 1 18); do
+            if python3 production-network/testnet/wallet_rpc_smoke.py \
+              --rpc http://127.0.0.1:8545 --expect-chain 262144; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Wallet read-only RPC smoke checks did not pass" >&2
+          exit 1
       - name: Inspect container status on failure
         if: failure()
         run: |
