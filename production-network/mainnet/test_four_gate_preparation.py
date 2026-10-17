@@ -3,6 +3,7 @@
 import importlib.util
 import json
 from pathlib import Path
+from test_bech32_accounts import test_address
 import unittest
 from unittest.mock import patch
 
@@ -25,7 +26,7 @@ ceremony = load("operator-kit/ceremony_verify.py", "ceremony_review")
 
 def ledger():
     return {"allocations": [
-        {"category": k, "address": "privi1" + "q" * 37 + "acdef"[i],
+        {"category": k, "address": test_address(i),
          "amount_base_units": str(v),
          **({"schedule": "contributor_12_plus_36_months" if k == "contributors"
              else "monthly_36_months"} if k in vesting.SENSITIVE else {})}
