@@ -23,7 +23,8 @@ import re
 import stat
 
 from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
 MAX_JSON_BYTES = 65536
 MAX_AGE = timedelta(hours=24)
@@ -177,6 +178,22 @@ def check_recovery(home, bundle, trusted_operator_key, *,
         raise ValueError("Restored validator signing key has incorrect curve/type")
     if decode_pub(pub.get("value")) != trusted_consensus_key:
         raise ValueError("Restored signer does not match trusted public consensus key")
+    # Validate in-memory that the local private seed is paired with the
+    # independently approved public identity; never output key material.
+    secret = keydata.get("priv_key")
+    if not isinstance(secret, dict) or secret.get("type") not in (
+            "tendermint/PrivKeyEd25519", "cometbft/PrivKeyEd25519"):
+        raise ValueError("Unsupported local Ed25519 validator signing key")
+    try:
+        private_bytes = base64.b64decode(secret["value"], validate=True)
+    except (TypeError, KeyError, ValueError, binascii.Error) as exc:
+        raise ValueError("Invalid local signer key encoding") from exc
+    if len(private_bytes) != 64:
+        raise ValueError("Unexpected local validator Ed25519 signing-key length")
+    derived = Ed25519PrivateKey.from_private_bytes(private_bytes[:32]).public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    if derived != trusted_consensus_key or private_bytes[32:] != trusted_consensus_key:
+        raise ValueError("Restored validator private signer material does not match approved identity")
 
     statefile = home / "data" / "priv_validator_state.json"
     sign_state = state_tuple(strict_json_file(statefile, sensitive=True))
