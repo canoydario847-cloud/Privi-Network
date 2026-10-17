@@ -5,6 +5,7 @@ import importlib.util
 import json
 import unittest
 from pathlib import Path
+from test_bech32_accounts import test_address
 
 ROOT=Path(__file__).parent
 
@@ -27,8 +28,8 @@ def demo_genesis():
     bank=[]
     accounts=[]
     for i,(category,amount) in enumerate(cats.items()):
-        # Synthetic invalid-check fixture identities, NOT accounts or keys.
-        addr="privi1"+str(i)*38
+        # Synthetic checksum-valid fixture identifiers, NOT owned accounts or keys.
+        addr=test_address(i)
         ledger.append({"address":addr,"category":category,"amount_base_units":str(amount)})
         bank.append({"address":addr,"coins":[{"denom":"aprvi","amount":str(amount)}]})
         if category in ("contributors","protocol_treasury","ecosystem_development"):
@@ -60,6 +61,24 @@ class CandidateGenesisTest(unittest.TestCase):
     def test_reference_fixture_valid_only_structurally(self):
         doc,alloc,c=demo_genesis()
         self.assertEqual([],gen.errors_for(doc,alloc,c))
+
+    def test_typoed_genesis_recipient_checksum_blocks_release(self):
+        doc, alloc, config = demo_genesis()
+        old = alloc["allocations"][0]["address"]
+        typo = old[:-1] + ("q" if old[-1] != "q" else "p")
+        doc["app_state"]["bank"]["balances"][0]["address"] = typo
+        doc["app_state"]["auth"]["accounts"][0]["address"] = typo
+        alloc["allocations"][0]["address"] = typo
+        errors = gen.errors_for(doc, alloc, config)
+        self.assertTrue(any("bech32" in e.lower() or "checksum" in e.lower()
+                            for e in errors), errors)
+
+    def test_unreviewed_genesis_wallets_cannot_use_demo_prefix(self):
+        doc, alloc, config = demo_genesis()
+        for row in doc["app_state"]["bank"]["balances"]:
+            row["address"] = "cosmos" + row["address"][5:]
+        errors = gen.errors_for(doc, alloc, config)
+        self.assertTrue(any("bech32" in e.lower() for e in errors), errors)
 
     def test_extra_genesis_supply_rejected(self):
         doc,alloc,c=demo_genesis()

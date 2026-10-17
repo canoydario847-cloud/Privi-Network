@@ -31,6 +31,18 @@ class MainnetPreflightTests(unittest.TestCase):
         self.assertTrue(any("Cosmos chain" in e for e in errors))
         self.assertTrue(any("EVM numeric" in e for e in errors))
 
+    def test_railway_staging_and_demo_ids_are_never_financial_mainnet(self):
+        doc = copy.deepcopy(self.template)
+        doc["network"]["cosmos_chain_id"] = "local-privi-seven-4221"
+        doc["network"]["evm_chain_id"] = 262144
+        errors = m.check_manifest(doc)
+        self.assertTrue(any("Cosmos chain" in error for error in errors))
+        self.assertTrue(any("EVM numeric" in error for error in errors))
+        doc["network"]["cosmos_chain_id"] = "privi-mainnet-proposed-1"
+        doc["network"]["evm_chain_id"] = 56
+        errors = m.check_manifest(doc)
+        self.assertTrue(any("EVM numeric" in error for error in errors))
+
     def test_token_supply_cannot_be_changed(self):
         doc = copy.deepcopy(self.template)
         doc["asset"]["max_supply"] = "10000000000"

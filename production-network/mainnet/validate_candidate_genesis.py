@@ -10,6 +10,7 @@ import json
 import sys
 from collections import Counter
 from pathlib import Path
+from bech32_accounts import valid_privi_address
 
 D=decimal.Decimal
 CAP=10**27
@@ -76,7 +77,7 @@ def errors_for(genesis, allocations, config):
         actual={}
         for row in bals if isinstance(bals,list) else []:
             addr=row.get("address")
-            if not isinstance(addr,str) or not addr.startswith("privi1") or addr in actual:
+            if not valid_privi_address(addr) or addr in actual:
                 raise ValueError("missing, malformed, or duplicated privi bech32 account address")
             amount=coin_amount(row.get("coins",[]))
             need(amount>0,f"Genesis zero balance for {addr}")
@@ -100,7 +101,7 @@ def errors_for(genesis, allocations, config):
                 addr=((a.get("base_vesting_account") or {}).get("base_account") or {}).get("address")
             else:
                 errors.append(f"Unapproved account type at index {i}: {kind}");continue
-            if addr in auth_by_address or not isinstance(addr,str):
+            if addr in auth_by_address or not valid_privi_address(addr):
                 errors.append(f"Missing or duplicate auth address {addr}");continue
             auth_by_address[addr]=a
     need(set(actual)==set(auth_by_address),"Bank allocation recipients and auth accounts differ")
@@ -115,7 +116,7 @@ def errors_for(genesis, allocations, config):
         group=row.get("category")
         addr=row.get("address")
         if group not in CATEGORIES:errors.append(f"Unapproved allocation category: {group}")
-        if not isinstance(addr,str) or addr in seen:
+        if not valid_privi_address(addr) or addr in seen:
             errors.append(f"Duplicate or invalid allocation recipient: {addr}");continue
         seen.add(addr)
         try:

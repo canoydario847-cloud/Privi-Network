@@ -15,7 +15,7 @@ from pathlib import Path
 
 PIN = "c3ae9067a7eadcdea55a5192226916deb44c71c4"
 MAX_BASE = "1000000000000000000000000000"
-DEMO_IDS = {262144, 4221, 56, 97, 1}
+DEMO_IDS = {262144, 4221, 56, 97, 1, 31337, 1337}
 
 class UnsafeInput(ValueError):
     pass
@@ -43,7 +43,7 @@ def validated_settings(config):
     n = config.get("network",{})
     cid = n.get("cosmos_chain_id")
     eid = n.get("evm_chain_id")
-    if not isinstance(cid,str) or not re.fullmatch("[a-z][a-z0-9-]{2,63}",cid) or cid in ("local-4221","privi-dev-1"):
+    if not isinstance(cid,str) or not re.fullmatch("[a-z][a-z0-9-]{2,63}",cid) or cid.startswith(("local-","privi-dev")):
         raise UnsafeInput("Fresh reviewed production Cosmos chain ID is REQUIRED")
     if type(eid) is not int or eid < 1000 or eid in DEMO_IDS or eid > 4294967295:
         raise UnsafeInput("Fresh reviewed EVM numeric chain ID is REQUIRED; no default/test/BNB IDs")
@@ -69,6 +69,47 @@ def source_overlay(files, evm_chain_id):
     x=checked_replace(x,'\t"github.com/cosmos/evm/x/vm/types"\n','',p)
     x=checked_replace(x,'config.InitAppConfig(types.DefaultEVMExtendedDenom, types.DefaultEVMChainID)',
                       f'config.InitAppConfig("aprvi", {evm_chain_id})',p)
+    # SDK genutil InitCmd consumes BasicModuleManager.DefaultGenesis,
+    # not EVMD.DefaultGenesis(). Without this adapter 'evmd init' silently
+    # regenerates upstream denominations and inflation despite source patches.
+    x=checked_replace(x,'\t"errors"\n','\t"encoding/json"\n\t"errors"\n',p)
+    x=checked_replace(x,'\t"github.com/cosmos/cosmos-sdk/baseapp"\n',
+                      '\t"github.com/cosmos/cosmos-sdk/baseapp"\n'
+                      '\t"github.com/cosmos/cosmos-sdk/codec"\n'
+                      '\t"github.com/cosmos/cosmos-sdk/types/module"\n',p)
+    x=checked_replace(x,'// NewRootCmd creates a new root command for evmd. It is called once in the',
+        'type priviInitGenesisBasic struct {\n'
+        '\tmodule.AppModuleBasic\n'
+        '\tmodule.HasGenesisBasics\n'
+        '\tgenesis json.RawMessage\n'
+        '}\n'
+        'func (b priviInitGenesisBasic) DefaultGenesis(_ codec.JSONCodec) json.RawMessage { return b.genesis }\n'
+        '// priviInitBasics makes the init CLI use the SAME reviewed genesis as EVMD.DefaultGenesis.\n'
+        'func priviInitBasics(app *evmd.EVMD) module.BasicManager {\n'
+        '\tdefaults := app.DefaultGenesis()\n'
+        '\tresult := make(module.BasicManager, len(app.BasicModuleManager))\n'
+        '\tfor name, basic := range app.BasicModuleManager {\n'
+        '\t\t// SDK genutil InitCmd asserts concrete genutil.AppModuleBasic; do not wrap it.\n'
+        '\t\tif name != "mint" && name != "staking" && name != "evm" && name != "erc20" && name != "feemarket" {\n'
+        '\t\t\tresult[name] = basic; continue\n'
+        '\t\t}\n'
+        '\t\tgen, ok := defaults[name]\n'
+        '\t\tif !ok { result[name] = basic; continue }\n'
+        '\t\thas, ok := basic.(module.HasGenesisBasics)\n'
+        '\t\tif !ok { panic("Privi genesis module default mismatch: " + name) }\n'
+        '\t\tresult[name] = priviInitGenesisBasic{AppModuleBasic: basic, HasGenesisBasics: has, genesis: gen}\n'
+        '\t}\n'
+        '\treturn result\n'
+        '}\n\n'
+        '// NewRootCmd creates a new root command for evmd. It is called once in the',p)
+    x=checked_replace(x,'defaultNodeHome := config.MustGetDefaultNodeHome()\n',
+       'defaultNodeHome := config.MustGetDefaultNodeHome()\n\tpriviBasics := priviInitBasics(evmApp)\n',p)
+    x=checked_replace(x,
+       'genutilcli.InitCmd(evmApp.BasicModuleManager, defaultNodeHome)',
+       'genutilcli.InitCmd(priviBasics, defaultNodeHome)',p)
+    x=checked_replace(x,
+       'genutilcli.Commands(evmApp.TxConfig(), evmApp.BasicModuleManager, defaultNodeHome)',
+       'genutilcli.Commands(evmApp.TxConfig(), priviBasics, defaultNodeHome)',p)
     result[p]=x
 
     p="evmd/genesis.go"
@@ -96,9 +137,32 @@ def source_overlay(files, evm_chain_id):
     p="evmd/app.go"
     x=result[p]
     x=checked_replace(x,'\t"errors"\n','\t"errors"\n\tsdkmath "cosmossdk.io/math"\n',p)
+    # Cosmos SDK v0.54.3 requires each registered module to appear in the
+    # BeginBlock ordering. DO NOT remove x/mint from SetOrderBeginBlockers:
+    # doing so panics before the node can even run the 'init' command.
+    # Instead embed the upstream x/mint module and override ONLY BeginBlock,
+    # preserving genesis, services, migrations, codec and module ordering.
+    x=checked_replace(x,'\t"encoding/json"\n','\t"context"\n\t"encoding/json"\n',p)
     x=checked_replace(x,
-        "app.ModuleManager.SetOrderBeginBlockers(\n\t\tminttypes.ModuleName,",
-        "app.ModuleManager.SetOrderBeginBlockers(\n\t\t// Privi fixed-supply: no x/mint BeginBlocker (reward payouts must use escrow).",p)
+        'const appName = "evmd"',
+        'type priviNoMintAppModule struct { mint.AppModule }\n'
+        'func (priviNoMintAppModule) BeginBlock(_ context.Context) error { return nil }\n\n'
+        'const appName = "evmd"',p)
+    x=checked_replace(x,
+        'mint.NewAppModule(appCodec, app.MintKeeper, app.AccountKeeper, nil, nil)',
+        'priviNoMintAppModule{AppModule: mint.NewAppModule(appCodec, app.MintKeeper, app.AccountKeeper, nil, nil)}',p)
+    # Patch the actual DefaultGenesis method: NewFeeMarketGenesisState
+    # was defined upstream but never invoked, and x/staking otherwise
+    # defaults to the SDK 'stake' denom instead of Privi's native aprvi.
+    x=checked_replace(x,
+        '\tgenesis[erc20types.ModuleName] = app.appCodec.MustMarshalJSON(erc20GenState)\n\n\treturn genesis',
+        '\tgenesis[erc20types.ModuleName] = app.appCodec.MustMarshalJSON(erc20GenState)\n'
+        '\tstakingGenesis := stakingtypes.DefaultGenesisState()\n'
+        '\tstakingGenesis.Params.BondDenom = "aprvi"\n'
+        '\tgenesis[stakingtypes.ModuleName] = app.appCodec.MustMarshalJSON(stakingGenesis)\n'
+        '\tfeeGenesis := NewFeeMarketGenesisState()\n'
+        '\tgenesis[feemarkettypes.ModuleName] = app.appCodec.MustMarshalJSON(feeGenesis)\n\n'
+        '\treturn genesis',p)
     x=checked_replace(x,
         "func (app *EVMD) EndBlocker(ctx sdk.Context) (sdk.EndBlock, error) {\n"
         "\treturn app.ModuleManager.EndBlock(ctx)\n}",

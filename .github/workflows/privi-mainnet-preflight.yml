@@ -1,4 +1,4 @@
-name: Privi mainnet design checks (no deployment)
+name: Privi mainnet candidate build (no deployment)
 
 on:
   pull_request:
@@ -20,6 +20,8 @@ jobs:
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
+      - name: Install pinned crypto signature verification dependency
+        run: python3 -m pip install 'cryptography==46.0.4'
       - name: Run PRVI configuration and genesis validation unit tests
         run: python3 -m unittest discover -s production-network/mainnet -p "test_*.py" -v
       - name: Confirm incomplete mainnet manifest is rejected
@@ -41,6 +43,26 @@ jobs:
             exit 1
           fi
           echo "PASS: default unapproved chain IDs BLOCKED."
+
+      - name: Prove production deployment gate refuses unsigned template inputs
+        run: |
+          set -euo pipefail
+          echo '{"chain_id":"local-privi-seven-4221","app_state":{}}' > /tmp/privi-incomplete-genesis.json
+          echo '{"allocations":[]}' > /tmp/privi-incomplete-allocations.json
+          printf 'NOT_A_PRODUCTION_BINARY' > /tmp/privi-incomplete-bin
+          if python3 production-network/mainnet/deployment_readiness.py \
+              --manifest production-network/mainnet/manifest.example.json \
+              --config production-network/mainnet/privi_chain_config.json \
+              --genesis /tmp/privi-incomplete-genesis.json \
+              --allocations /tmp/privi-incomplete-allocations.json \
+              --binary /tmp/privi-incomplete-bin \
+              --release production-network/mainnet/operator-kit/release.template.json \
+              --roster production-network/mainnet/operator_roster.template.json \
+              --attestations production-network/mainnet/operator-kit/attestations.template.json; then
+            echo "ERROR: financial mainnet gate incorrectly accepted empty documents" >&2
+            exit 1
+          fi
+          echo "PASS: financial mainnet deployment remains BLOCKED until independently reviewed inputs exist."
 
   upstream-overlay:
     runs-on: ubuntu-24.04
@@ -87,5 +109,37 @@ jobs:
           go build -o /tmp/privi-ci-nonproduction ./cmd/evmd
           test -s /tmp/privi-ci-nonproduction
           echo "Candidate Go binary compiled for CI. It is NOT mainnet approved and will NOT be uploaded or deployed."
+      - name: Initialize synthetic unfunded PRVI node and verify real genesis defaults
+        run: |
+          set -euo pipefail
+          python3 production-network/mainnet/ci_runtime_init.py \
+            --binary /tmp/privi-ci-nonproduction \
+            --report /tmp/privi-ci-init-report.json
+          test -s /tmp/privi-ci-init-report.json
+          echo "Actual candidate initialization verified; throwaway genesis and keys destroyed."
+      - name: Produce hash-only nonproduction build receipt
+        run: |
+          set -euo pipefail
+          python3 production-network/mainnet/candidate_build_report.py \
+            --binary /tmp/privi-ci-nonproduction \
+            --patch /tmp/privi-unreviewed.patch \
+            --config /tmp/privi-ci-config.json \
+            --output /tmp/privi-ci-build-receipt.json
+          cat /tmp/privi-ci-build-receipt.json
+          {
+            echo "### Privi nonproduction candidate compilation"
+            echo "Compiled pinned Cosmos EVM source with PRVI-denom review overlay."
+            echo "Binary SHA-256 (candidate only):"
+            python3 -c 'import json; print(json.load(open("/tmp/privi-ci-build-receipt.json"))["binary_sha256"])'
+            echo ""
+            echo "NOT a production release, funded genesis, audited binary, or chain activation."
+          } >> "${GITHUB_STEP_SUMMARY}"
+      - name: Publish build receipt only (NO binary, keys, genesis or coins)
+        uses: actions/upload-artifact@v4
+        with:
+          name: privi-nonproduction-build-receipt
+          path: /tmp/privi-ci-build-receipt.json
+          retention-days: 7
+          if-no-files-found: error
 
 # READ-ONLY workflow: no wallet keys, contracts, node launch, token creation, deployment or release publication.
