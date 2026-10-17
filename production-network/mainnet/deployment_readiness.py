@@ -30,6 +30,7 @@ preflight = mod("mainnet_preflight.py", "privi_release_preflight")
 gencheck = mod("validate_candidate_genesis.py", "privi_release_gencheck")
 operators = mod("independent_operator_roster.py", "privi_release_operators")
 ceremony = mod("operator-kit/ceremony_verify.py", "privi_release_signatures")
+genesis_binding = mod("genesis_operator_binding.py", "privi_release_genesis_operator_binding")
 
 
 def check_consistency(manifest, config, release, roster):
@@ -123,6 +124,7 @@ def assess(manifest, config, genesis, allocations, binary, release, roster, atte
         genesis_document = json.loads(genesis.read_text(encoding="utf-8"))
         ledger_document = json.loads(allocations.read_text(encoding="utf-8"))
         errors += gencheck.errors_for(genesis_document, ledger_document, config)
+        errors += genesis_binding.validate_binding(genesis_document, roster)
     except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
         errors.append("Reviewed full genesis and allocations required: " + str(exc))
     try:
