@@ -20,6 +20,7 @@ ids = load("network_id_check.py", "id_review")
 vesting = load("vesting_plan.py", "vesting_review")
 operators = load("independent_operator_roster.py", "operator_review")
 rehearsal = load("rehearsal_audit.py", "rehearsal_review")
+ceremony = load("operator-kit/ceremony_verify.py", "ceremony_review")
 
 
 def ledger():
@@ -114,6 +115,38 @@ class MainnetFourGatesTests(unittest.TestCase):
         errs = operators.screen(doc)
         self.assertTrue(any("duplicated legal_controller_id" in s for s in errs))
         self.assertTrue(any("signed_genesis_attestation_url" in s for s in errs))
+
+    def test_cryptographic_genesis_attestations_and_tampering(self):
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        from cryptography.hazmat.primitives import serialization
+        release = {
+            "cosmos_chain_id": "privi-review-1", "evm_chain_id": 100001,
+            "canonical_genesis_sha256": "a"*64,
+            "binary_sha256": "b"*64, "allocations_sha256": "c"*64,
+        }
+        roster = valid_roster()
+        signed = {"attestations": []}
+        for row in roster["operators"]:
+            key = Ed25519PrivateKey.generate()  # ephemeral unit-test key, never stored
+            message = ceremony.canonical_payload(release, row["operator_id"],
+                                                  row["consensus_pubkey"])
+            pub = key.public_key().public_bytes(
+                encoding=serialization.Encoding.Raw,
+                format=serialization.PublicFormat.Raw)
+            signed["attestations"].append({
+                "operator_id": row["operator_id"],
+                "consensus_pubkey": row["consensus_pubkey"],
+                "attestation_public_key": pub.hex(),
+                "signature": key.sign(message).hex(),
+            })
+        self.assertEqual(ceremony.verify_release(release, roster, signed)
+                         ["valid_operator_signatures"], 7)
+        signed["attestations"][0]["signature"] = "0"*128
+        with self.assertRaisesRegex(ValueError, "signature invalid"):
+            ceremony.verify_release(release, roster, signed)
+        release["evm_chain_id"] = 262144
+        with self.assertRaisesRegex(ValueError, "unreviewed"):
+            ceremony.check_release(release)
 
     def test_rehearsal_requires_all_seven_signatures(self):
         urls = [f"http://private-{i}:26657" for i in range(7)]
