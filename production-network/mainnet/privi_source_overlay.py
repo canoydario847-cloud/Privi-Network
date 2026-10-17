@@ -90,7 +90,7 @@ def source_overlay(files, evm_chain_id):
         '\tresult := make(module.BasicManager, len(app.BasicModuleManager))\n'
         '\tfor name, basic := range app.BasicModuleManager {\n'
         '\t\t// SDK genutil InitCmd asserts concrete genutil.AppModuleBasic; do not wrap it.\n'
-        '\t\tif name != "mint" && name != "staking" && name != "evm" && name != "erc20" && name != "feemarket" {\n'
+        '\t\tif name != "bank" && name != "mint" && name != "staking" && name != "evm" && name != "erc20" && name != "feemarket" {\n'
         '\t\t\tresult[name] = basic; continue\n'
         '\t\t}\n'
         '\t\tgen, ok := defaults[name]\n'
@@ -176,6 +176,13 @@ def source_overlay(files, evm_chain_id):
     x=checked_replace(x,
         '\tgenesis[erc20types.ModuleName] = app.appCodec.MustMarshalJSON(erc20GenState)\n\n\treturn genesis',
         '\tgenesis[erc20types.ModuleName] = app.appCodec.MustMarshalJSON(erc20GenState)\n'
+        '\tbankGenesis := banktypes.DefaultGenesisState()\n'
+        '\tbankGenesis.DenomMetadata = []banktypes.Metadata{{\n'
+        '\t\tDescription: "Privi native utility asset",\n'
+        '\t\tDenomUnits: []*banktypes.DenomUnit{{Denom: "aprvi", Exponent: 0}, {Denom: "prvi", Exponent: 18}},\n'
+        '\t\tBase: "aprvi", Display: "prvi", Name: "Privi", Symbol: "PRVI",\n'
+        '\t}}\n'
+        '\tgenesis[banktypes.ModuleName] = app.appCodec.MustMarshalJSON(bankGenesis)\n'
         '\tstakingGenesis := stakingtypes.DefaultGenesisState()\n'
         '\tstakingGenesis.Params.BondDenom = "aprvi"\n'
         '\tgenesis[stakingtypes.ModuleName] = app.appCodec.MustMarshalJSON(stakingGenesis)\n'
