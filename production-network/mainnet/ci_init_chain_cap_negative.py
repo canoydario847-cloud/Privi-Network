@@ -66,7 +66,7 @@ def prove(binary):
         comet_config = home / "config" / "config.toml"
         text = comet_config.read_text(encoding="utf-8")
         for old, new in (
-            ('laddr = "tcp://0.0.0.0:26656"', 'laddr = "tcp://127.0.0.1:26656"')
+            ('laddr = "tcp://0.0.0.0:26656"', 'laddr = "tcp://127.0.0.1:26656"'),
         ):
             if old in text:
                 text = text.replace(old, new, 1)
