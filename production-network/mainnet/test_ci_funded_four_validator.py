@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from ci_funded_four_validator import (
     COUNT, CAP, synthetic_funded_rows, check_four_funded_genesis,
-    private_four_node_comet_config, consensus_evidence
+    private_four_node_comet_config, consensus_evidence, three_of_four_outage_evidence
 )
 from test_bech32_accounts import test_address
 from test_ci_funded_genesis_positive import synthetic_genesis
@@ -102,6 +102,42 @@ class FourValidatorCIRehearsalTests(unittest.TestCase):
             private_four_node_comet_config(cometcfg().replace('pex = true\n', ''), 0, IDS)
         with self.assertRaises(ValueError):
             private_four_node_comet_config(cometcfg(), 0, [IDS[0]]*4)
+
+    def test_outage_rehearsal_requires_three_survivor_nodes_and_two_new_blocks(self):
+        target = 7
+        def rpc(index, path):
+            if path == "status":
+                return {"result": {"node_info": {"id": IDS[index]},
+                                   "sync_info": {"latest_block_height": "8"}}}
+            if path.startswith("block?"):
+                return {"result": {"block_id": {"hash": "A"*64}}}
+            if path.startswith("validators?"):
+                return {"result": {"validators": [
+                    {"pub_key": {"value": base64.b64encode(k).decode("ascii")},
+                     "voting_power": "1"}
+                    for k in KEYS
+                ]}}
+            return None
+        with patch("ci_funded_four_validator.local_rpc", side_effect=rpc):
+            ev = three_of_four_outage_evidence(KEYS, target)
+        self.assertEqual(ev["live_validators"], 3)
+        self.assertTrue(ev["consensus_live_with_one_offline"])
+        def broken(index, path):
+            obj = rpc(index, path)
+            if index == 1 and path.startswith("block?"):
+                obj["result"]["block_id"]["hash"] = "B"*64
+            return obj
+        with patch("ci_funded_four_validator.local_rpc", side_effect=broken):
+            self.assertIsNone(three_of_four_outage_evidence(KEYS, target))
+        def behind(index, path):
+            obj = rpc(index, path)
+            if index == 2 and path == "status":
+                obj["result"]["sync_info"]["latest_block_height"] = "6"
+            return obj
+        with patch("ci_funded_four_validator.local_rpc", side_effect=behind):
+            self.assertIsNone(three_of_four_outage_evidence(KEYS, target))
+        with self.assertRaises(ValueError):
+            three_of_four_outage_evidence(KEYS, 2)
 
     def test_fake_agreement_requires_all_four_nodes_and_validator_keys(self):
         def fake(index, path):
