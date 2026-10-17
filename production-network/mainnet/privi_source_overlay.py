@@ -148,6 +148,28 @@ def source_overlay(files, evm_chain_id):
         '\t\treturn response, fmt.Errorf("Privi genesis native supply must equal exactly 1 billion PRVI")\n'
         '\t}\n'
         '\treturn response, nil\n}',p)
+    # Enforce the EXACT bank genesis supply from the proposed JSON BEFORE
+    # the Cosmos SDK initializes other modules (staking rejects empty
+    # validator sets before the former post-InitGenesis supply check).
+    # Retain post-initialization bank state check as a second safety barrier.
+    x=checked_replace(x,
+        '\\tif err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap()); err != nil {',
+        '\\trawBankGenesis, present := genesisState[banktypes.ModuleName]\\n'
+        '\\tif !present { return nil, fmt.Errorf("missing Privi bank genesis") }\\n'
+        '\\tvar bankGenesis banktypes.GenesisState\\n'
+        '\\tif err := app.appCodec.UnmarshalJSON(rawBankGenesis, &bankGenesis); err != nil {\\n'
+        '\\t\\treturn nil, fmt.Errorf("invalid Privi bank genesis: %w", err)\\n'
+        '\\t}\\n'
+        f'\\tpreCap, validCap := sdkmath.NewIntFromString("{MAX_BASE}")\\n'
+        '\\tif !validCap { return nil, fmt.Errorf("invalid Privi genesis cap") }\\n'
+        '\\tinitialBalances := sdkmath.ZeroInt()\\n'
+        '\\tfor _, entry := range bankGenesis.Balances {\\n'
+        '\\t\\tinitialBalances = initialBalances.Add(entry.Coins.AmountOf("aprvi"))\\n'
+        '\\t}\\n'
+        '\\tif !bankGenesis.Supply.AmountOf("aprvi").Equal(preCap) || !initialBalances.Equal(preCap) {\\n'
+        '\\t\\treturn nil, fmt.Errorf("Privi genesis native supply must equal exactly 1 billion PRVI")\\n'
+        '\\t}\\n\\n'
+        '\\tif err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap()); err != nil {',p)
     result[p]=x
 
     # Disables the *periodic minting path* in the example app (no inflation
