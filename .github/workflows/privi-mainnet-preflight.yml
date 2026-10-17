@@ -24,6 +24,33 @@ jobs:
         run: python3 -m pip install 'cryptography==46.0.4'
       - name: Run PRVI configuration and genesis validation unit tests
         run: python3 -m unittest discover -s production-network/mainnet -p "test_*.py" -v
+      - name: Publish evidence-only PRVI mainnet NO-GO inventory (no production secrets)
+        run: |
+          set -euo pipefail
+          python3 production-network/mainnet/launch_evidence_inventory.py \
+            --output /tmp/privi-mainnet-template-evidence-gaps.json \
+            --expect-no-go
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path("/tmp/privi-mainnet-template-evidence-gaps.json").read_text())
+          assert r["release_decision"] == "NO_GO"
+          assert r["manual_deployment_authorized_by_this_report"] is False
+          assert len(r["gates"]) == 6
+          assert all(item["status"] == "BLOCKED" for item in r["gates"])
+          with open(__import__("os").environ["GITHUB_STEP_SUMMARY"],"a") as f:
+              f.write("### Privi financial mainnet release inventory — NO GO\\n")
+              f.write("All external production approval, operator and genesis evidence gates remain blocked.\\n")
+              for item in r["gates"]:
+                  f.write("- " + item["key"] + ": " + item["status"] + "\\n")
+          PY
+      - name: Keep public template release evidence gap report (no keys or production data)
+        uses: actions/upload-artifact@v4
+        with:
+          name: privi-no-go-template-evidence-report
+          path: /tmp/privi-mainnet-template-evidence-gaps.json
+          retention-days: 7
+          if-no-files-found: error
       - name: Confirm incomplete mainnet manifest is rejected
         run: |
           set -eu
