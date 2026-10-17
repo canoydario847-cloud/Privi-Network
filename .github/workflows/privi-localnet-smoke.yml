@@ -58,7 +58,8 @@ jobs:
           set -euo pipefail
           for i in $(seq 1 24); do
             if python3 production-network/testnet/evm_smoke.py \
-              --rpc http://127.0.0.1:8545 --expect-chain 4221; then
+              # The pinned upstream evmd v0.7.3 reference node defaults to EVM ID 262144;
+              # Cosmos consensus network ID remains local-4221 (NOT the EVM ID).\n              --rpc http://127.0.0.1:8545 --expect-chain 262144; then
               exit 0
             fi
             sleep 5
