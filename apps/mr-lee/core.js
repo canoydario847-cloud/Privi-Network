@@ -1,5 +1,4 @@
 "use strict";
-const { timingSafeEqual } = require("node:crypto");
 
 // These are NOT production Privi mainnet IDs. Never activate against TEST,
 // BNB PRIV or the throwaway GitHub candidate build.
@@ -8,12 +7,6 @@ const FORBIDDEN_CHAIN_IDS = new Set([
   2026101601 // unreserved proposed candidate is not an approved mainnet ID
 ]);
 const HEX_HASH = /^0x[0-9a-fA-F]{64}$/;
-
-function sameSecret(a, b) {
-  if (typeof a !== "string" || typeof b !== "string") return false;
-  const x = Buffer.from(a), y = Buffer.from(b);
-  return x.length === y.length && timingSafeEqual(x, y);
-}
 
 function getConfig(env = process.env) {
   const enabled = env.MR_LEE_ENABLED === "true";
@@ -62,19 +55,6 @@ function getConfig(env = process.env) {
     enabled, allowedOrigins, chainId: id, genesisHash: genesisHash.toLowerCase(),
     rpc, internalToken, apiKey: key, model
   });
-}
-
-function authorize(config, headers) {
-  if (!config.enabled) return false;
-  // Browser CORS headers are not authentication. Only the authenticated Privi
-  // website server may add the gateway secret; browsers never see this secret.
-  if (headers.origin) return false;
-  const origin = headers["x-privi-website-origin"];
-  const bearer = headers.authorization;
-  return config.allowedOrigins.has(origin)
-      && typeof bearer === "string"
-      && bearer.startsWith("Bearer ")
-      && sameSecret(bearer.slice(7), config.internalToken);
 }
 
 async function rpcCall(config, method, params = [], fetchImpl = globalThis.fetch) {
@@ -165,6 +145,6 @@ async function askMrLee(config, prompt, category, context, fetchImpl = globalThi
 }
 
 module.exports = {
-  FORBIDDEN_CHAIN_IDS, getConfig, sameSecret, authorize,
+  FORBIDDEN_CHAIN_IDS, getConfig,
   rpcCall, checkPriviNetwork, askMrLee, SYSTEM_INSTRUCTIONS
 };
