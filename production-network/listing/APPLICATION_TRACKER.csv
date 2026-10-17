@@ -1,0 +1,8 @@
+venue,type,application_or_info_url,gate,status,evidence_or_reference,owner_notes
+Coinbase,CEX,https://www.coinbase.com/exchange/asset-listings,Complete issuer/security/network facts,DRAFT_NOT_SUBMITTED,,Asset Hub evaluation at venue discretion
+Kraken,CEX,https://www.kraken.com/get-listed,Complete disclosures/security/network facts,DRAFT_NOT_SUBMITTED,,Official application may evaluate pre-TGE assets
+Binance,CEX,https://www.binance.com/en/support/announcement/detail/305c55a531004eb094b838ba7740c98a,Founder-led verified application and KYB,DRAFT_NOT_SUBMITTED,,Check jurisdictional eligibility
+CoinGecko,Coin data index,https://support.coingecko.com/articles/9489827481-how-to-list-a-new-cryptocurrency-on-coingecko,Normally live trading on supported market and working explorer,NOT_ELIGIBLE_ACTIVE_YET,,Preview requires verified public TGE plan
+CoinMarketCap,Coin data index,https://support.coinmarketcap.com/hc/en-us/articles/360043659351-Listings-Criteria,Online form and independently verified asset/market evidence,DRAFT_NOT_SUBMITTED,,Do not claim unverified live market data
+DEX on Privi,DEX,TBD,Live audited native chain and valid AMM infrastructure,NOT_AVAILABLE,,No liquidity pool or prices created
+Other centralized exchanges,CEX,TBD,Venue-specific custody/chain integration and legal review,NOT_STARTED,,No automatic all-markets listing

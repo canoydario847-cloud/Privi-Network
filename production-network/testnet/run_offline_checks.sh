@@ -7,6 +7,7 @@ command -v node >/dev/null
 python3 -m py_compile "$ROOT"/testnet/*.py "$ROOT"/migration/*.py "$ROOT"/ops/*.py
 (cd "$ROOT/testnet" && python3 -m unittest discover -v -p 'test_*.py')
 (cd "$ROOT/migration" && python3 -m unittest discover -v -p 'test_*.py')
+(cd "$ROOT/ops" && python3 -m unittest discover -v -p 'test_*.py')
 node --check "$ROOT/ops/legacy_state_copy.js"
 node --test "$ROOT/ops/test_legacy_state_copy.js"
 bash -n "$ROOT/testnet/bootstrap-local-4.sh"
