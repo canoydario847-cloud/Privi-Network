@@ -131,6 +131,25 @@ def source_overlay(files, evm_chain_id):
     x=checked_replace(x,'\ttestconstants "github.com/cosmos/evm/testutil/constants"\n','',p)
     result[p]=x
 
+    # Fail the ACTUAL financial chain InitChain if PRVI is not exactly the
+    # one-billion-coin genesis allocation. The synthetic CI 'evmd init'
+    # command only writes unfunded JSON and does not call InitChainer.
+    # Post-genesis burns are allowed, but any supply above cap remains
+    # independently rejected in EndBlocker.
+    p="evmd/app.go"
+    x=result[p]
+    x=checked_replace(x,
+        '\treturn app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)\n}',
+        '\tresponse, err := app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)\n'
+        '\tif err != nil { return response, err }\n'
+        f'\tgenesisCap, ok := sdkmath.NewIntFromString("{MAX_BASE}")\n'
+        '\tif !ok { return response, fmt.Errorf("invalid Privi genesis cap") }\n'
+        '\tif !app.BankKeeper.GetSupply(ctx, "aprvi").Amount.Equal(genesisCap) {\n'
+        '\t\treturn response, fmt.Errorf("Privi genesis native supply must equal exactly 1 billion PRVI")\n'
+        '\t}\n'
+        '\treturn response, nil\n}',p)
+    result[p]=x
+
     # Disables the *periodic minting path* in the example app (no inflation
     # even if mutable x/mint Genesis default inflation params are nonzero).
     # A production review MUST still audit all module mint authority pathways.
