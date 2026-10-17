@@ -66,14 +66,14 @@ class PositiveGenesisRehearsalTests(unittest.TestCase):
         self.assertTrue(any("gentx" in err for err in check_funded_genesis(doc, self.rows)))
 
     def test_disabled_http_api_grpc_and_json_rpc_only(self):
-        config = ('[api]\\nenable = false\\n'
-                  '[grpc]\\nenable = false\\n'
-                  '[json-rpc]\\nenable = false\\n'
-                  '[pruning]\\nenable = true\\n')
+        config = ('[api]\nenable = false\n'
+                  '[grpc]\nenable = false\n'
+                  '[json-rpc]\nenable = false\n'
+                  '[pruning]\nenable = true\n')
         self.assertTrue(require_private_app_listeners(config))
         for service in ("api", "grpc", "json-rpc"):
             with self.subTest(service=service):
-                bad = '[%s]\\nenable = true\\n' % service
+                bad = '[%s]\nenable = true\n' % service
                 with self.assertRaises(ValueError):
                     require_private_app_listeners(bad)
 
