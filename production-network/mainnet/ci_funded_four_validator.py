@@ -234,6 +234,56 @@ def consensus_evidence(keys):
             "no_operator_exceeds_one_third_power": True}
 
 
+def three_of_four_outage_evidence(keys, target_height):
+    """After validator #3 is stopped, remaining 3 must COMMIT two new blocks.
+
+    Do not mistake blocks committed before the outage for post-outage
+    liveness. Require a target height captured strictly before stopping.
+    """
+    if len(keys) != COUNT or not isinstance(target_height, int) or target_height < BLOCK_HEIGHT + 2:
+        raise ValueError("Need four expected keys and valid post-outage target height")
+    ids = []
+    hashes = []
+    for i in range(COUNT-1):
+        st = local_rpc(i, "status")
+        block = local_rpc(i, f"block?height={target_height}")
+        if not st or not block:
+            return None
+        info = st.get("result") or {}
+        if int((info.get("sync_info") or {}).get("latest_block_height") or 0) < target_height:
+            return None
+        ids.append((info.get("node_info") or {}).get("id"))
+        hashes.append(((block.get("result") or {}).get("block_id") or {}).get("hash"))
+    if len(set(ids)) != COUNT-1 or not all(ids):
+        return None
+    if len(set(hashes)) != 1 or not all(hashes):
+        return None
+    result = local_rpc(0, f"validators?height={target_height}")
+    if not result:
+        return None
+    rows = ((result.get("result") or {}).get("validators") or [])
+    if len(rows) != COUNT:
+        return None
+    try:
+        live_keys = {base64.b64decode(r["pub_key"]["value"], validate=True) for r in rows}
+        powers = [int(r["voting_power"]) for r in rows]
+    except (ValueError, TypeError, KeyError):
+        return None
+    if live_keys != set(keys) or len(powers) != COUNT or min(powers) <= 0:
+        return None
+    # Ensure 3/4 of power remains online and no single signer holds 1/3.
+    if max(powers) * 3 >= sum(powers) or sum(powers[:COUNT-1]) * 3 <= sum(powers) * 2:
+        return None
+    return {
+        "outage_validator_count": 1,
+        "live_validators": 3,
+        "genesis_validator_count": COUNT,
+        "post_outage_committed_height": target_height,
+        "same_hash_across_survivors": True,
+        "consensus_live_with_one_offline": True,
+    }
+
+
 def prove(binary):
     binary = Path(binary).resolve(strict=True)
     if not binary.is_file() or not os.access(binary, os.X_OK):
@@ -328,6 +378,34 @@ def prove(binary):
                 time.sleep(1)
             if evidence is None:
                 raise ValueError("Four synthetic PRVI validators did not reach common block quorum")
+
+            # Capture all current heights BEFORE stopping any validator.
+            pre_outage = []
+            for idx in range(COUNT):
+                status = local_rpc(idx, "status")
+                if not status:
+                    raise ValueError("Missing pre-outage Comet status")
+                pre_outage.append(int(((status.get("result") or {}).get("sync_info") or {})
+                                      .get("latest_block_height") or 0))
+            target = max(pre_outage) + 2
+            offline = procs[-1]
+            offline.terminate()
+            try:
+                offline.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                offline.kill()
+                offline.wait(timeout=5)
+            deadline = time.monotonic() + 55
+            recovery = None
+            while time.monotonic() < deadline:
+                if any(p.poll() is not None for p in procs[:-1]):
+                    raise ValueError("CI remaining validators exited during single-node outage")
+                recovery = three_of_four_outage_evidence(keys, target)
+                if recovery:
+                    break
+                time.sleep(1)
+            if recovery is None:
+                raise ValueError("Three survivors did not continue 2+ common blocks after CI validator outage")
         finally:
             for p in procs:
                 if p.poll() is None:
@@ -347,6 +425,7 @@ def prove(binary):
             "validators": COUNT,
             "category_amounts_prvi": {category: str(coins) for category, coins in DISTRIBUTION},
             "evidence": evidence,
+            "single_validator_outage": recovery,
             "keys_and_test_funds_destroyed": True,
             "financial_mainnet_deployed": False,
             "real_PRVI_issued": False
