@@ -20,13 +20,25 @@ def genesis():
                 "minter":{"inflation":"0.000000000000000000"}},
         "feemarket":{"params":{"no_base_fee":False}},
         "erc20":{"token_pairs":[]},
-        "bank":{"supply":[]}
+        "bank":{"supply":[],"denom_metadata":[{
+            "description":"Privi native utility asset",
+            "denom_units":[{"denom":"aprvi","exponent":0},{"denom":"prvi","exponent":18}],
+            "base":"aprvi","display":"prvi","name":"Privi","symbol":"PRVI"
+        }]}
     }}
 
 
 class InitInspectionTests(unittest.TestCase):
     def test_clean_unfunded_prvi_init_can_pass_synthetic_inspection(self):
         self.assertEqual(m.inspect(genesis()),[])
+
+    def test_missing_or_wrong_bank_metadata_rejected(self):
+        doc=genesis()
+        doc["app_state"]["bank"]["denom_metadata"]=[]
+        self.assertTrue(any("denomination metadata" in x for x in m.inspect(doc)))
+        doc=genesis()
+        doc["app_state"]["bank"]["denom_metadata"][0]["symbol"]="WRONG"
+        self.assertTrue(any("Native metadata" in x for x in m.inspect(doc)))
 
     def test_demo_gas_and_staking_denom_are_rejected(self):
         g=genesis()
