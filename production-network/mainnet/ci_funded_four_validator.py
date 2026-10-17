@@ -32,6 +32,7 @@ from genesis_operator_binding import parse_gentxs
 COUNT = 4
 COMET_RPC = 26657
 COMET_P2P = 26656
+PORT_STRIDE = 10  # No overlap between adjacent nodes' RPC and P2P ports
 BALANCE_PER_SECONDARY = ONE  # Each validator self-bonds exactly 1 test PRVI
 BLOCK_HEIGHT = 2
 STARTUP_SECONDS = 95
@@ -117,13 +118,13 @@ def private_four_node_comet_config(text, index, peer_ids):
     if len(set(peer_ids)) != COUNT or not all(re.fullmatch(r"[a-f0-9]{40}", p) for p in peer_ids):
         raise ValueError("Four unique Comet node identities required")
     peers = ",".join(
-        f"{peer_ids[i]}@{LOCALHOST}:{COMET_P2P+i}"
+        f"{peer_ids[i]}@{LOCALHOST}:{COMET_P2P+PORT_STRIDE*i}"
         for i in range(COUNT) if i != index
     )
     replacements = {
-        "rpc": {"laddr": f'"tcp://{LOCALHOST}:{COMET_RPC+index}"'},
+        "rpc": {"laddr": f'"tcp://{LOCALHOST}:{COMET_RPC+PORT_STRIDE*index}"'},
         "p2p": {
-            "laddr": f'"tcp://{LOCALHOST}:{COMET_P2P+index}"',
+            "laddr": f'"tcp://{LOCALHOST}:{COMET_P2P+PORT_STRIDE*index}"',
             "persistent_peers": f'"{peers}"',
             "addr_book_strict": "false",
             "allow_duplicate_ip": "true",
@@ -182,7 +183,7 @@ def consensus_pubkey(home):
 def local_rpc(index, path):
     try:
         with urllib.request.urlopen(
-            f"http://{LOCALHOST}:{COMET_RPC+index}/{path}", timeout=1.2
+            f"http://{LOCALHOST}:{COMET_RPC+PORT_STRIDE*index}/{path}", timeout=1.2
         ) as conn:
             if conn.status != 200:
                 return None
