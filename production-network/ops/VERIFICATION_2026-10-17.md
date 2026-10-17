@@ -29,3 +29,11 @@ Do **not** change the expected EVM ID to whatever appears merely to turn CI gree
 No approved mainnet genesis, proven cap enforcement, independent validator infrastructure, multi-host public testnet, end-to-end EVM acceptance, completed external audit, verified counsel opinion, signed final hashes or venue asset integrations have been demonstrated.
 
 **This review does not launch, mint, bridge, trade, or list PRVI.**
+
+## Additional CI evidence: run #143
+
+- [Workflow run #143](https://github.com/canoydario847-cloud/Privi-Network/actions/runs/39067107019) also ended **failure** with **offline unit tests PASS**, four local validators reaching consensus, and the EVM RPC probe failing on the same chain ID mismatch.
+- Improved diagnostics captured **observed EVM ID 262144 vs wrongly expected 4221** (24 attempts).
+- The upstream Cosmos EVM example-chain documentation and default EVM parameter confirm **262144 is the reference evmd numeric EVM chain ID** (separate from the local CometBFT Cosmos network string `local-4221`): https://cosmos.chaindev.net/evm/latest/documentation/getting-started/build-a-chain/quick-start and https://github.com/cosmos/evm/blob/main/x/vm/types/params.go.
+- Correcting the **development-only smoke test expectation and wallet demo docs** to 262144 aligns with upstream's documented reference default, but does NOT choose or approve an EVM ID for the future custom PRVI chain.
+- A passing four-validator developer smoke test would still NOT prove mainnet supply invariants, public validator independence, audited consensus code, wallet transfer / receipt functionality, or exchange readiness.
