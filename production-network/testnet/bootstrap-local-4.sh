@@ -53,6 +53,21 @@ docker run --rm -v "$PWD/.testnets:/data" cosmos/evmd \
   testnet init-files --validator-count 4 -o /data \
   --starting-ip-address 192.168.10.2 --keyring-backend=test \
   --chain-id="$CHAIN_ID" --use-docker=true
+# ONLY in an opt-in disposable GitHub Actions workflow: increase the funded
+# upstream account0 atest genesis balance so it can afford EVM gas to sign
+# and mine one real valueless TEST transfer. No PRVI or BNB PRIV funds.
+if [[ "${CI:-}" == "true" && "${PRIVI_EPHEMERAL_TRANSFER_TEST:-}" == "1" ]]; then
+  command -v sudo >/dev/null || { echo "Missing sudo for CI-only developer genesis fixture" >&2; exit 1; }
+  DEV_HOME="$PWD/.testnets/node0/evmd"
+  ACCOUNT0_ADDRESS="$(docker run --rm -v "$DEV_HOME:/data:ro" cosmos/evmd \
+    keys show account0 -a --keyring-backend test --home /data)"
+  [[ "$ACCOUNT0_ADDRESS" =~ ^cosmos1[a-z0-9]{35,}$ ]] || {
+    echo "Unexpected disposable test account address" >&2; exit 1;
+  }
+  sudo -E python3 "$ROOT/testnet/fund_ephemeral_dev_fixture.py" \
+    --root "$PWD/.testnets" --address "$ACCOUNT0_ADDRESS"
+  echo "Extra atest was allocated solely to the disposable CI-local account0 fixture."
+fi
 # evmd v0.7.3 enables the EVM application mempool. The upstream
 # init-files generator sets CometBFT mempool.type=flood, which evmd refuses.
 # Amend ONLY these four fresh developer validator configs before booting.
