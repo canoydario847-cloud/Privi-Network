@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "status": "PROPOSED_UNRESERVED_NOT_FOR_GENESIS",
+  "cosmos_chain_id": "privi-mainnet-1",
+  "evm_chain_id": 2026101601,
+  "coin": {
+    "symbol": "PRVI",
+    "base_denom": "aprvi",
+    "decimals": 18,
+    "max_supply_base_units": "1000000000000000000000000000"
+  },
+  "notes": "Candidate IDs only. Must be independently checked and accepted by relevant registries, wallets, and operators before use. This file does not authorize launch."
+}

@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "project": "Privi Mainnet",
+  "status": "NOT_READY",
+  "asset": {
+    "symbol": "PRVI",
+    "max_supply": "1000000000",
+    "decimals": 18,
+    "base_denom": "aprvi",
+    "inflation_enabled": false
+  },
+  "network": {
+    "cosmos_chain_id": "",
+    "evm_chain_id": 0,
+    "upstream_development_genesis_reused": false,
+    "cosmos_evm_binary_sha256": "",
+    "canonical_genesis_sha256": ""
+  },
+  "distribution": {
+    "allocations_sha256": "",
+    "total_allocations_base_units": "",
+    "public_vesting_schedule_url": "",
+    "cap_invariant_audit_url": ""
+  },
+  "assessments": {
+    "chain_security_audit_url": "",
+    "tokenomics_vesting_audit_url": "",
+    "independent_legal_review_url": "",
+    "signed_release_approval_url": ""
+  },
+  "resilience": {
+    "independent_operator_review_url": "",
+    "rpc_gateway_review_url": "",
+    "backup_and_double_sign_rehearsal_url": "",
+    "public_rehearsal_evidence_url": "",
+    "monitoring_and_incident_runbook_url": ""
+  },
+  "validators": [],
+  "launch_authorization": {
+    "genesis_ceremony_complete": false,
+    "operators_verified": false,
+    "critical_findings_remediated": false,
+    "manual_release_gate_open": false
+  }
+}
