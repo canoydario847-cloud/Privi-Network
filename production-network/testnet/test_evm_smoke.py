@@ -21,9 +21,9 @@ class SmokeTests(unittest.TestCase):
     def test_reports_observed_and_expected_chain_id(self):
         with self.assertRaisesRegex(ValueError,r"expected 4221, observed 7777"):
             mod.check(StubRPC(),expected=4221)
-    def test_matching_chain_and_block(self):
-        outcome=mod.check(StubRPC(),expected=7777)
-        self.assertEqual(outcome["chainId"],7777)
+    def test_matching_upstream_demo_chain_and_block(self):
+        outcome=mod.check(StubRPC(chain=262144),expected=262144)
+        self.assertEqual(outcome["chainId"],262144)
         self.assertEqual(outcome["blockHeight"],2)
     def test_refuses_eth_mainnet(self):
         with self.assertRaisesRegex(ValueError,"Unsafe/production"):
