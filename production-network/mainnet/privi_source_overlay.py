@@ -69,6 +69,43 @@ def source_overlay(files, evm_chain_id):
     x=checked_replace(x,'\t"github.com/cosmos/evm/x/vm/types"\n','',p)
     x=checked_replace(x,'config.InitAppConfig(types.DefaultEVMExtendedDenom, types.DefaultEVMChainID)',
                       f'config.InitAppConfig("aprvi", {evm_chain_id})',p)
+    # SDK genutil InitCmd consumes BasicModuleManager.DefaultGenesis,
+    # not EVMD.DefaultGenesis(). Without this adapter 'evmd init' silently
+    # regenerates upstream denominations and inflation despite source patches.
+    x=checked_replace(x,'\t"errors"\n','\t"encoding/json"\n\t"errors"\n',p)
+    x=checked_replace(x,'\t"github.com/cosmos/cosmos-sdk/baseapp"\n',
+                      '\t"github.com/cosmos/cosmos-sdk/baseapp"\n'
+                      '\t"github.com/cosmos/cosmos-sdk/codec"\n'
+                      '\t"github.com/cosmos/cosmos-sdk/types/module"\n',p)
+    x=checked_replace(x,'// NewRootCmd creates a new root command for evmd. It is called once in the',
+        'type priviInitGenesisBasic struct {\n'
+        '\tmodule.AppModuleBasic\n'
+        '\tmodule.HasGenesisBasics\n'
+        '\tgenesis json.RawMessage\n'
+        '}\n'
+        'func (b priviInitGenesisBasic) DefaultGenesis(_ codec.JSONCodec) json.RawMessage { return b.genesis }\n'
+        '// priviInitBasics makes the init CLI use the SAME reviewed genesis as EVMD.DefaultGenesis.\n'
+        'func priviInitBasics(app *evmd.EVMD) module.BasicManager {\n'
+        '\tdefaults := app.DefaultGenesis()\n'
+        '\tresult := make(module.BasicManager, len(app.BasicModuleManager))\n'
+        '\tfor name, basic := range app.BasicModuleManager {\n'
+        '\t\tgen, ok := defaults[name]\n'
+        '\t\tif !ok { result[name] = basic; continue }\n'
+        '\t\thas, ok := basic.(module.HasGenesisBasics)\n'
+        '\t\tif !ok { panic("Privi genesis module default mismatch: " + name) }\n'
+        '\t\tresult[name] = priviInitGenesisBasic{AppModuleBasic: basic, HasGenesisBasics: has, genesis: gen}\n'
+        '\t}\n'
+        '\treturn result\n'
+        '}\n\n'
+        '// NewRootCmd creates a new root command for evmd. It is called once in the',p)
+    x=checked_replace(x,'defaultNodeHome := config.MustGetDefaultNodeHome()\n',
+       'defaultNodeHome := config.MustGetDefaultNodeHome()\n\tpriviBasics := priviInitBasics(evmApp)\n',p)
+    x=checked_replace(x,
+       'genutilcli.InitCmd(evmApp.BasicModuleManager, defaultNodeHome)',
+       'genutilcli.InitCmd(priviBasics, defaultNodeHome)',p)
+    x=checked_replace(x,
+       'genutilcli.Commands(evmApp.TxConfig(), evmApp.BasicModuleManager, defaultNodeHome)',
+       'genutilcli.Commands(evmApp.TxConfig(), priviBasics, defaultNodeHome)',p)
     result[p]=x
 
     p="evmd/genesis.go"
