@@ -29,6 +29,28 @@ class DeploymentSafetyTests(unittest.TestCase):
         self.assertTrue(any("operator" in v for v in failures))
         self.assertTrue(any("chain IDs" in v for v in failures))
 
+    def test_synthetic_ci_candidate_identifiers_can_never_authorize_financial_release(self):
+        m = load("manifest.example.json")
+        c = load("privi_chain_config.json")
+        r = load("operator-kit/release.template.json")
+        c["status"] = gate.RELEASE_STATUS
+        c["network"]["cosmos_chain_id"] = "privi-ci-nonproduction-999"
+        c["network"]["evm_chain_id"] = 999991
+        m["network"]["cosmos_chain_id"] = c["network"]["cosmos_chain_id"]
+        m["network"]["evm_chain_id"] = c["network"]["evm_chain_id"]
+        r["cosmos_chain_id"] = c["network"]["cosmos_chain_id"]
+        r["evm_chain_id"] = c["network"]["evm_chain_id"]
+        failures = gate.check_consistency(m, c, r, load("operator_roster.template.json"))
+        self.assertTrue(any("distinct mainnet Cosmos" in e for e in failures))
+        self.assertTrue(any("distinct mainnet EVM" in e for e in failures))
+        manifest_failures = gate.preflight.check_manifest(m)
+        self.assertTrue(any("non-demo Cosmos" in e for e in manifest_failures))
+        self.assertTrue(any("non-demo EVM" in e for e in manifest_failures))
+        r.update({"canonical_genesis_sha256": "a"*64,
+                  "binary_sha256": "b"*64, "allocations_sha256": "c"*64})
+        with self.assertRaisesRegex(ValueError, "unreviewed Cosmos"):
+            gate.ceremony.check_release(r)
+
     def test_existing_test_chain_identifiers_remain_forbidden(self):
         config=load("privi_chain_config.json")
         config["status"]=gate.RELEASE_STATUS
