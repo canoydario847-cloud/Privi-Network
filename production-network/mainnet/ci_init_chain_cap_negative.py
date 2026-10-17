@@ -13,6 +13,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 
@@ -65,8 +66,7 @@ def prove(binary):
         comet_config = home / "config" / "config.toml"
         text = comet_config.read_text(encoding="utf-8")
         for old, new in (
-            ('laddr = "tcp://127.0.0.1:26657"', 'laddr = "tcp://127.0.0.1:0"'),
-            ('laddr = "tcp://0.0.0.0:26656"', 'laddr = "tcp://127.0.0.1:0"')
+            ('laddr = "tcp://0.0.0.0:26656"', 'laddr = "tcp://127.0.0.1:26656"')
         ):
             if old in text:
                 text = text.replace(old, new, 1)
@@ -82,7 +82,29 @@ def prove(binary):
         except subprocess.TimeoutExpired as exc:
             raise ValueError("Node did not fail startup within 45s; InitChain cap not proven") from exc
         if not is_expected_failure(startup.returncode, startup.stdout, startup.stderr):
-            raise ValueError("Missing exact PRVI InitChainer cap error; startup result redacted")
+            # Startup logs may contain temporary paths or signing-related
+            # information. Expose ONLY a narrow, scrubbed error category.
+            # Never publish raw stdout/stderr or the generated config.
+            source = (startup.stderr + b"\n" + startup.stdout).decode("utf-8", errors="replace")
+            clues = ("invalid", "error", "panic", "missing", "failed", "address",
+                     "validator", "genesis", "stake", "parameter", "chain id",
+                     "consensus", "bind", "cannot", "not found", "permission denied")
+            candidates = [line.strip() for line in source.splitlines()
+                          if any(marker in line.lower() for marker in clues)]
+            note = "unclassified failure"
+            for line in candidates:
+                if any(secret in line.lower() for secret in
+                       ("mnemonic", "private key", "seed phrase", "passphrase",
+                        "recovery phrase", "password", "0x", "secret")):
+                    continue
+                clean = re.sub(r"/tmp/[A-Za-z0-9_./-]+", "<CI_TEMP>", line)
+                clean = re.sub(r"[a-fA-F0-9]{32,}", "<REDACTED>", clean)
+                clean = re.sub(r"\\x1b\\[[0-9;]*m", "", clean)
+                note = clean[:220]
+                break
+            raise ValueError(
+                f"Missing exact PRVI InitChainer cap error (exit {startup.returncode}); "
+                f"sanitized diagnostic: {note}")
     return {
         "result": "EXPECTED_INITCHAIN_REJECTION_VERIFIED",
         "ci_chain_id": CID,
