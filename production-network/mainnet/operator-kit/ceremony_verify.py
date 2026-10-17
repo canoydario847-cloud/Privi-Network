@@ -13,7 +13,7 @@ import sys
 
 HASH = re.compile(r"^[0-9a-f]{64}$")
 COSMOS = re.compile(r"^privi-[a-z0-9-]{5,55}$")
-BAD_EVM = {1, 56, 97, 4221, 262144, 31337, 1337}
+BAD_EVM = {1, 56, 97, 4221, 262144, 31337, 1337, 999991}
 
 
 def check_release(release):
@@ -23,7 +23,7 @@ def check_release(release):
                 "canonical_genesis_sha256", "binary_sha256", "allocations_sha256")
     if any(k not in release for k in expected):
         raise ValueError("reviewed release IDs and three SHA256 artifact digests required")
-    if not isinstance(release["cosmos_chain_id"], str) or not COSMOS.fullmatch(release["cosmos_chain_id"]):
+    if not isinstance(release["cosmos_chain_id"], str) or not COSMOS.fullmatch(release["cosmos_chain_id"]) or release["cosmos_chain_id"] == "privi-ci-nonproduction-999":
         raise ValueError("unreviewed Cosmos chain ID")
     eid = release["evm_chain_id"]
     if type(eid) is not int or eid < 1000 or eid in BAD_EVM or eid > 4294967295:
