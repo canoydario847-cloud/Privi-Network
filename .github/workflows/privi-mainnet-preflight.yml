@@ -44,6 +44,26 @@ jobs:
           fi
           echo "PASS: default unapproved chain IDs BLOCKED."
 
+      - name: Prove production deployment gate refuses unsigned template inputs
+        run: |
+          set -euo pipefail
+          echo '{"chain_id":"local-privi-seven-4221","app_state":{}}' > /tmp/privi-incomplete-genesis.json
+          echo '{"allocations":[]}' > /tmp/privi-incomplete-allocations.json
+          printf 'NOT_A_PRODUCTION_BINARY' > /tmp/privi-incomplete-bin
+          if python3 production-network/mainnet/deployment_readiness.py \
+              --manifest production-network/mainnet/manifest.example.json \
+              --config production-network/mainnet/privi_chain_config.json \
+              --genesis /tmp/privi-incomplete-genesis.json \
+              --allocations /tmp/privi-incomplete-allocations.json \
+              --binary /tmp/privi-incomplete-bin \
+              --release production-network/mainnet/operator-kit/release.template.json \
+              --roster production-network/mainnet/operator_roster.template.json \
+              --attestations production-network/mainnet/operator-kit/attestations.template.json; then
+            echo "ERROR: financial mainnet gate incorrectly accepted empty documents" >&2
+            exit 1
+          fi
+          echo "PASS: financial mainnet deployment remains BLOCKED until independently reviewed inputs exist."
+
   upstream-overlay:
     runs-on: ubuntu-24.04
     timeout-minutes: 24
