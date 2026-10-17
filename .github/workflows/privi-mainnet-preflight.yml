@@ -131,6 +131,12 @@ jobs:
           python3 production-network/mainnet/ci_init_chain_cap_negative.py \
             --binary /tmp/privi-ci-nonproduction
           echo "PASS: real candidate startup rejects zero-funds genesis with exact PRVI InitChain cap error."
+      - name: Rehearse exactly 1 billion synthetic PRVI funded genesis and first local block
+        run: |
+          set -euo pipefail
+          python3 production-network/mainnet/ci_funded_genesis_positive.py \
+            --binary /tmp/privi-ci-nonproduction
+          echo "PASS: CI-only 1B genesis bank/state and first local block; no financial mainnet."
       - name: Produce hash-only nonproduction build receipt
         run: |
           set -euo pipefail
