@@ -106,7 +106,7 @@ def prove(binary):
         # application InitChainer. No other panic/error can satisfy the test.
         try:
             startup = subprocess.run(
-                [str(path), "--home", str(home), "start"],
+                [str(path), "--home", str(home), "start", "--chain-id", CID],
                 env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=45
             )
         except subprocess.TimeoutExpired as exc:
