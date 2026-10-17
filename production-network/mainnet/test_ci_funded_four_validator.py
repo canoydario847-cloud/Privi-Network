@@ -8,7 +8,8 @@ from unittest.mock import patch
 
 from ci_funded_four_validator import (
     COUNT, CAP, synthetic_funded_rows, check_four_funded_genesis,
-    private_four_node_comet_config, consensus_evidence, three_of_four_outage_evidence
+    private_four_node_comet_config, consensus_evidence, three_of_four_outage_evidence,
+    four_node_rejoin_evidence, signing_state_snapshot, validate_safe_restart
 )
 from test_bech32_accounts import test_address
 from test_ci_funded_genesis_positive import synthetic_genesis
@@ -138,6 +139,83 @@ class FourValidatorCIRehearsalTests(unittest.TestCase):
             self.assertIsNone(three_of_four_outage_evidence(KEYS, target))
         with self.assertRaises(ValueError):
             three_of_four_outage_evidence(KEYS, 2)
+
+    def test_original_validator_rejoin_requires_four_shared_post_restart_blocks(self):
+        def rpc(i, path):
+            if path == "status":
+                return {"result": {"node_info": {"id": IDS[i]},
+                                   "sync_info": {"latest_block_height": "12"}}}
+            if path.startswith("block?"):
+                return {"result": {"block_id": {"hash": "A"*64}}}
+            if path.startswith("validators?"):
+                return {"result": {"validators": [
+                    {"pub_key": {"value": base64.b64encode(k).decode()},
+                     "voting_power": "1"}
+                    for k in KEYS
+                ]}}
+            return None
+        with patch("ci_funded_four_validator.local_rpc", side_effect=rpc):
+            evidence = four_node_rejoin_evidence(KEYS, IDS[3], 9)
+        self.assertTrue(evidence["all_four_same_block_hash"])
+        self.assertTrue(evidence["restarted_node_identity_preserved"])
+        self.assertEqual(evidence["post_rejoin_committed_height"], 9)
+
+        def stalled(i, path):
+            response = rpc(i, path)
+            if i == 3 and path == "status":
+                response["result"]["sync_info"]["latest_block_height"] = "8"
+            return response
+        with patch("ci_funded_four_validator.local_rpc", side_effect=stalled):
+            self.assertIsNone(four_node_rejoin_evidence(KEYS, IDS[3], 9))
+
+        def changed_node(i, path):
+            response = rpc(i, path)
+            if i == 3 and path == "status":
+                response["result"]["node_info"]["id"] = IDS[0]
+            return response
+        with patch("ci_funded_four_validator.local_rpc", side_effect=changed_node):
+            self.assertIsNone(four_node_rejoin_evidence(KEYS, IDS[3], 9))
+
+        def diverged(i, path):
+            response = rpc(i, path)
+            if i == 3 and path.startswith("block?"):
+                response["result"]["block_id"]["hash"] = "B"*64
+            return response
+        with patch("ci_funded_four_validator.local_rpc", side_effect=diverged):
+            self.assertIsNone(four_node_rejoin_evidence(KEYS, IDS[3], 9))
+
+        with self.assertRaises(ValueError):
+            four_node_rejoin_evidence(KEYS, IDS[3], 2)
+
+    def test_last_sign_state_rollback_or_key_change_blocks_restart(self):
+        base = {"identity_hashes": (b"X", b"Y", b"Z"), "sign_state": (7, 0, 2)}
+        latest = {"identity_hashes": (b"X", b"Y", b"Z"), "sign_state": (8, 0, 0)}
+        self.assertTrue(validate_safe_restart(base, latest))
+        rollback = {"identity_hashes": (b"X", b"Y", b"Z"), "sign_state": (6, 99, 99)}
+        with self.assertRaisesRegex(ValueError, "rolled backward"):
+            validate_safe_restart(base, rollback)
+        replaced = {"identity_hashes": (b"other", b"Y", b"Z"), "sign_state": (8, 0, 0)}
+        with self.assertRaisesRegex(ValueError, "altered"):
+            validate_safe_restart(base, replaced)
+
+    def test_signing_state_snapshot_requires_persisted_state(self):
+        from pathlib import Path
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            (home / "config").mkdir()
+            (home / "data").mkdir()
+            for filename in ("priv_validator_key.json", "node_key.json", "genesis.json"):
+                (home / "config" / filename).write_text("test-stub", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "last-sign"):
+                signing_state_snapshot(home)
+            state = home / "data" / "priv_validator_state.json"
+            state.write_text(json.dumps({"height": "7", "round": 0, "step": 2}))
+            snapshot = signing_state_snapshot(home)
+            self.assertEqual(snapshot["sign_state"], (7, 0, 2))
+            state.write_text(json.dumps({"height": "-1", "round": 0, "step": 2}))
+            with self.assertRaisesRegex(ValueError, "non-monotonic"):
+                signing_state_snapshot(home)
 
     def test_fake_agreement_requires_all_four_nodes_and_validator_keys(self):
         def fake(index, path):
