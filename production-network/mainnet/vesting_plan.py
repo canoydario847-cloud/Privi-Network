@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import re
+from bech32_accounts import valid_privi_address
 
 CAP=10**27
 BUCKETS={"community_adoption":40*10**25,"ecosystem_development":20*10**25,
@@ -48,9 +49,9 @@ def plan(ledger, genesis_unix, months_cliff=12, months_unlock=36):
         addr=row.get("address")
         if category not in BUCKETS:
             raise ValueError(f"unrecognized allocation category at index {i}")
-        # This is syntax only, NOT Bech32 checksum verification.
-        if not isinstance(addr,str) or not re.fullmatch(r"privi1[023456789acdefghjklmnpqrstuvwxyz]{38,80}",addr):
-            raise ValueError(f"address at row {i} requires external Bech32 checksum verification")
+        # Check canonical lowercase Bech32 checksum and 20-byte account payload.
+        if not isinstance(addr,str) or not valid_privi_address(addr):
+            raise ValueError(f"address at row {i} failed Bech32 checksum validation")
         if addr in seen:
             raise ValueError("recipient duplicated across category ledger")
         seen.add(addr)
