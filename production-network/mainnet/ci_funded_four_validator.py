@@ -265,14 +265,21 @@ def three_of_four_outage_evidence(keys, target_height):
     if len(rows) != COUNT:
         return None
     try:
-        live_keys = {base64.b64decode(r["pub_key"]["value"], validate=True) for r in rows}
-        powers = [int(r["voting_power"]) for r in rows]
+        power_by_key = {
+            base64.b64decode(r["pub_key"]["value"], validate=True): int(r["voting_power"])
+            for r in rows
+        }
     except (ValueError, TypeError, KeyError):
         return None
-    if live_keys != set(keys) or len(powers) != COUNT or min(powers) <= 0:
+    if set(power_by_key) != set(keys) or len(power_by_key) != COUNT:
         return None
-    # Ensure 3/4 of power remains online and no single signer holds 1/3.
-    if max(powers) * 3 >= sum(powers) or sum(powers[:COUNT-1]) * 3 <= sum(powers) * 2:
+    powers = list(power_by_key.values())
+    if min(powers) <= 0:
+        return None
+    total = sum(powers)
+    # Survivor power bound uses exact key identity, not arbitrary RPC row order.
+    survivor_power = sum(power_by_key[key] for key in keys[:COUNT-1])
+    if max(powers) * 3 >= total or survivor_power * 3 <= total * 2:
         return None
     return {
         "outage_validator_count": 1,
