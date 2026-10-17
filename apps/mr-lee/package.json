@@ -10,6 +10,6 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test mr-lee.test.js",
-    "check": "node --check core.js && node --check server.js && node --check paper-trade.js && node --check website-adapter.js && node --check website/mr-lee-widget.js && node --test mr-lee.test.js"
+    "check": "node --check security.js && node --check core.js && node --check server.js && node --check paper-trade.js && node --check website-adapter.js && node --check website/mr-lee-widget.js && node --test mr-lee.test.js"
   }
 }
