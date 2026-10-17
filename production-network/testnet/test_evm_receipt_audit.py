@@ -1,0 +1,63 @@
+"""Mock only; these tests do not send transactions or use real funds."""
+import importlib.util
+import sys
+import unittest
+from pathlib import Path
+here=Path(__file__).resolve().parent
+sys.path.insert(0,str(here))
+spec=importlib.util.spec_from_file_location("evm_receipt_audit",here/"evm_receipt_audit.py")
+mod=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+
+HASH="0x"+"1"*64
+BHASH="0x"+"2"*64
+FROM="0x"+"a"*40
+TO="0x"+"b"*40
+
+class FakeRPC:
+    def __init__(self):
+        self.values={
+          "eth_chainId":"0x40000",
+          "eth_getTransactionByHash":{"hash":HASH,"from":FROM,"to":TO,"value":"0x64","input":"0x","blockHash":BHASH,"chainId":"0x40000"},
+          "eth_getTransactionReceipt":{"transactionHash":HASH,"status":"0x1","blockNumber":"0x8","blockHash":BHASH},
+          "eth_blockNumber":"0x9",
+          "eth_getBlockByNumber":{"hash":BHASH,"transactions":[HASH]}
+        }
+    def call(self,method,params=None):
+        return self.values[method]
+
+class EVMReceiptTests(unittest.TestCase):
+    def setUp(self):self.rpc=FakeRPC()
+    def verify(self,confirmations=2):
+        return mod.check(self.rpc,HASH,262144,FROM,TO,100,confirmations)
+    def test_valid_native_receipt(self):
+        out=self.verify()
+        self.assertEqual(out["confirmations"],2)
+        self.assertEqual(out["evm_chain_id"],262144)
+    def test_wrong_network(self):
+        with self.assertRaisesRegex(ValueError,"EVM chain ID mismatch"):
+            mod.check(self.rpc,HASH,4221,FROM,TO,100)
+    def test_failed_receipt(self):
+        self.rpc.values["eth_getTransactionReceipt"]["status"]="0x0"
+        with self.assertRaisesRegex(ValueError,"failed"):
+            self.verify()
+    def test_too_few_confirmations(self):
+        with self.assertRaisesRegex(ValueError,"insufficient"):
+            self.verify(3)
+    def test_different_block(self):
+        self.rpc.values["eth_getBlockByNumber"]["hash"]="0x"+"4"*64
+        with self.assertRaisesRegex(ValueError,"block hash disagreement"):
+            self.verify()
+    def test_wrong_value(self):
+        with self.assertRaisesRegex(ValueError,"amount"):
+            mod.check(self.rpc,HASH,262144,FROM,TO,200)
+    def test_contract_calldata_rejected(self):
+        self.rpc.values["eth_getTransactionByHash"]["input"]="0x1234"
+        with self.assertRaisesRegex(ValueError,"nonempty calldata"):
+            self.verify()
+    def test_missing_receipt(self):
+        self.rpc.values["eth_getTransactionReceipt"]=None
+        with self.assertRaisesRegex(ValueError,"receipt missing"):
+            self.verify()
+
+if __name__=="__main__":unittest.main()
