@@ -1,4 +1,4 @@
-name: Privi mainnet design checks (no deployment)
+name: Privi mainnet candidate build (no deployment)
 
 on:
   pull_request:
@@ -89,5 +89,29 @@ jobs:
           go build -o /tmp/privi-ci-nonproduction ./cmd/evmd
           test -s /tmp/privi-ci-nonproduction
           echo "Candidate Go binary compiled for CI. It is NOT mainnet approved and will NOT be uploaded or deployed."
+      - name: Produce hash-only nonproduction build receipt
+        run: |
+          set -euo pipefail
+          python3 production-network/mainnet/candidate_build_report.py \
+            --binary /tmp/privi-ci-nonproduction \
+            --patch /tmp/privi-unreviewed.patch \
+            --config /tmp/privi-ci-config.json \
+            --output /tmp/privi-ci-build-receipt.json
+          cat /tmp/privi-ci-build-receipt.json
+          {
+            echo "### Privi nonproduction candidate compilation"
+            echo "Compiled pinned Cosmos EVM source with PRVI-denom review overlay."
+            echo "Binary SHA-256 (candidate only):"
+            python3 -c 'import json; print(json.load(open("/tmp/privi-ci-build-receipt.json"))["binary_sha256"])'
+            echo ""
+            echo "NOT a production release, funded genesis, audited binary, or chain activation."
+          } >> "${GITHUB_STEP_SUMMARY}"
+      - name: Publish build receipt only (NO binary, keys, genesis or coins)
+        uses: actions/upload-artifact@v4
+        with:
+          name: privi-nonproduction-build-receipt
+          path: /tmp/privi-ci-build-receipt.json
+          retention-days: 7
+          if-no-files-found: error
 
 # READ-ONLY workflow: no wallet keys, contracts, node launch, token creation, deployment or release publication.
