@@ -14,7 +14,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import shutil
+import re
 import subprocess
 import tempfile
 
@@ -83,7 +83,23 @@ def smoke(binary, destination):
         out=subprocess.run(cmd, env=env, stdout=subprocess.PIPE,
                            stderr=subprocess.PIPE, timeout=60)
         if out.returncode != 0:
-            raise ValueError("Nonproduction node genesis init command failed (output intentionally redacted)")
+            # Only report a small allowlisted diagnostic, not raw CLI output
+            # (some future CLI versions may print disposable key material).
+            message=out.stderr.decode("utf-8",errors="replace")
+            markers=("error:", "panic:", "unknown command", "unknown flag",
+                     "failed", "invalid", "permission denied")
+            candidates=[line.strip() for line in message.splitlines()
+                        if any(word in line.lower() for word in markers)]
+            reason="unclassified CLI failure (stderr intentionally redacted)"
+            if candidates:
+                safe=candidates[0]
+                sensitive=("mnemonic","seed phrase","private key","password",
+                           "passphrase","recovery phrase","secret key","0x")
+                if not any(word in safe.lower() for word in sensitive):
+                    safe=re.sub(r"/tmp/[A-Za-z0-9_./-]+","<CI_TEMP_PATH>",safe)
+                    safe=re.sub(r"[0-9a-fA-F]{32,}","<REDACTED_HASH>",safe)
+                    reason=safe[:350]
+            raise ValueError(f"Nonproduction node init failed (exit {out.returncode}): {reason}")
         file=home/"config"/"genesis.json"
         if not file.is_file():
             raise ValueError("Initialized candidate did not create config/genesis.json")
