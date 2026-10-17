@@ -55,12 +55,20 @@
         event.preventDefault();
         const message = box.value.trim();
         if (!message) return;
+        // Website must render a CSRF token bound to the authenticated session.
+        // This is NOT an OpenAI key, private chain key, or backend HMAC secret.
+        const csrfToken = this.getAttribute("csrf-token");
+        if (!csrfToken || csrfToken.length < 16 || csrfToken.length > 256) {
+          status.className = "status error";
+          status.textContent = "Privi secure session setup is required before chat can activate.";
+          return;
+        }
         btn.disabled = true; status.textContent = "Checking Privi and contacting Mr. Lee…";
         bubble(message, true); box.value = "";
         try {
           const response = await fetch("/api/mr-lee/chat", {
             method: "POST", credentials: "same-origin",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
             body: JSON.stringify({ category: select.value, message })
           });
           if (!response.ok) {
