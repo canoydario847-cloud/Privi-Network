@@ -10,5 +10,6 @@ python3 -m py_compile "$ROOT"/testnet/*.py "$ROOT"/migration/*.py "$ROOT"/ops/*.
 (cd "$ROOT/ops" && python3 -m unittest discover -v -p 'test_*.py')
 node --check "$ROOT/ops/legacy_state_copy.js"
 node --test "$ROOT/ops/test_legacy_state_copy.js"
+node --test "$ROOT/ops/test_verify_operator_attestations.cjs"
 bash -n "$ROOT/testnet/bootstrap-local-4.sh"
 echo "Offline checks passed. Live EVM / CometBFT testing still required."
