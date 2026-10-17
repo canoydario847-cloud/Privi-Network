@@ -123,23 +123,22 @@ def read_local_height():
 
 
 def hardened_local_app_config(text):
-    """Disable network services in the ephemeral CI node's app.toml.
+    """Turn off only real HTTP/gRPC/JSON-RPC service switches.
 
-    Go examples can ship with grpc.enable=true even if REST/JSON-RPC are off.
-    Parse & edit only exact TOML sections/keys; then parse-check the output.
+    Cosmos EVM default app.toml can enable gRPC. We safely disable these
+    network services before running the disposable CI node.
     """
     if not isinstance(text, str):
-        raise ValueError("Expected app TOML content")
-    lines = text.splitlines(keepends=True)
-    section = ""
+        raise ValueError("Invalid CI app TOML")
     networks = {"api", "grpc", "grpc-web", "json-rpc", "rosetta"}
+    section = None
     result = []
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("[") and stripped.endswith("]"):
-            section = stripped.strip("[]")
+    for line in text.splitlines(keepends=True):
+        heading = re.fullmatch(r'\[([A-Za-z0-9-]+)\]', line.strip())
+        if heading:
+            section = heading.group(1)
         if section in networks:
-            match = re.match(r'^(\\s*)(enabled?)(\\s*=\\s*)(true|false)(\\s*(?:#.*)?)
+            line = re.sub(r'^(\s*enabled?\s*=\s*)true(\s*(?:#.*)?\r?\n?)
     """Only inspect actual network services, not unrelated enable flags."""
     if not isinstance(text, str):
         raise ValueError("Invalid CI app config content")
@@ -201,8 +200,8 @@ def prove(binary):
         # No external listeners, no relay, no Ethereum RPC or P2P network.
         app = home / "config" / "app.toml"
         contents = app.read_text(encoding="utf-8")
-        # Explicitly turn off default-enabled gRPC, REST, JSON-RPC,
-        # Rosetta and gRPC-Web before starting the isolated test node.
+        # This is an ephemeral runner with all real wallet access excluded.
+        # Default JSON RPC is disabled, and only Comet local RPC is used.
         app.write_text(hardened_local_app_config(contents), encoding="utf-8")
         log = root / "discarded-private-node-output.log"
         with log.open("wb") as output:
@@ -258,10 +257,7 @@ def main():
 
 if __name__ == "__main__":
     main()
-, line.rstrip("\\r\\n"))
-            if match:
-                newline = "\\n" if line.endswith("\\n") else ""
-                line = match.group(1) + match.group(2) + match.group(3) + "false" + match.group(5) + newline
+, r'\1false\2', line)
         result.append(line)
     output = "".join(result)
     require_private_app_listeners(output)
