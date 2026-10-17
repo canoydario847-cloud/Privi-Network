@@ -77,3 +77,7 @@ test("only off-chain fields, never private signing keys, exist in fixtures",()=>
   const m=data();
   assert.equal("private_key" in m.operators[0],false);
 });
+test("rejects secret fields in public manifest",()=>{
+  const m=data();m.operators[0].attestation_private_key_pem="never-commit-private-key";
+  assert.throws(()=>verifier.verify(m),/manifest may not contain secrets/);
+});
