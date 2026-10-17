@@ -89,8 +89,8 @@ class FourValidatorCIRehearsalTests(unittest.TestCase):
         from ci_funded_four_validator import strict_toml
         for i in range(COUNT):
             doc = strict_toml(private_four_node_comet_config(cometcfg(), i, IDS))
-            self.assertEqual(doc["p2p"]["laddr"], f"tcp://127.0.0.1:{26656+i}")
-            self.assertEqual(doc["rpc"]["laddr"], f"tcp://127.0.0.1:{26657+i}")
+            self.assertEqual(doc["p2p"]["laddr"], f"tcp://127.0.0.1:{26656+10*i}")
+            self.assertEqual(doc["rpc"]["laddr"], f"tcp://127.0.0.1:{26657+10*i}")
             self.assertEqual(doc["mempool"]["type"], "app")
             self.assertFalse(doc["p2p"]["addr_book_strict"])
             self.assertTrue(doc["p2p"]["allow_duplicate_ip"])
