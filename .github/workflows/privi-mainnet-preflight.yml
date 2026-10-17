@@ -102,6 +102,14 @@ jobs:
               /tmp/cosmos-evm/evmd/genesis.go \
               /tmp/cosmos-evm/evmd/config/bech32.go \
               /tmp/cosmos-evm/evmd/cmd/evmd/cmd/root.go
+      - name: Assert PRVI InitChain supply equal-cap and EndBlock upper-cap guards exist
+        run: |
+          set -euo pipefail
+          app=/tmp/cosmos-evm/evmd/app.go
+          grep -Fq 'Privi genesis native supply must equal exactly 1 billion PRVI' "$app"
+          grep -Fq 'PRVI supply above fixed maximum' "$app"
+          grep -Fq 'priviNoMintAppModule' "$app"
+          echo "Verified all three independent native-supply code guards."
       - name: Compile patched Cosmos EVM candidate node (never deploy)
         working-directory: /tmp/cosmos-evm/evmd
         run: |
