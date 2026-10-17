@@ -33,7 +33,9 @@ class OfflineRecoverySafetyTests(unittest.TestCase):
         self.operator = Ed25519PrivateKey.generate()
         self.operator_public = self.operator.public_key().public_bytes(
             serialization.Encoding.Raw, serialization.PublicFormat.Raw)
-        self.consensus_key = bytes(range(32))
+        self.consensus_seed = bytes(range(32))  # ephemeral synthetic unit-test material
+        self.consensus_key = Ed25519PrivateKey.from_private_bytes(self.consensus_seed).public_key().public_bytes(
+            serialization.Encoding.Raw, serialization.PublicFormat.Raw)
         self.genesis = self.home / "config" / "genesis.json"
         self.genesis.write_text(json.dumps({"chain_id": CID, "app_state": {}}))
         self.keyfile = self.home / "config" / "priv_validator_key.json"
@@ -41,7 +43,7 @@ class OfflineRecoverySafetyTests(unittest.TestCase):
             "pub_key": {"type": "tendermint/PubKeyEd25519",
                         "value": base64.b64encode(self.consensus_key).decode()},
             "priv_key": {"type": "tendermint/PrivKeyEd25519",
-                         "value": "<fake non-cryptographic test fixture only>"}
+                         "value": base64.b64encode(self.consensus_seed + self.consensus_key).decode()}
         }))
         self.keyfile.chmod(0o600)
         self.statefile = self.home / "data" / "priv_validator_state.json"
@@ -123,6 +125,14 @@ class OfflineRecoverySafetyTests(unittest.TestCase):
         row["pub_key"]["value"] = base64.b64encode(bytes([255]) * 32).decode()
         self.keyfile.write_text(json.dumps(row))
         with self.assertRaisesRegex(ValueError, "signer does not match"):
+            self.check()
+
+    def test_private_signer_must_match_signed_and_trusted_public_identity(self):
+        key = json.loads(self.keyfile.read_text())
+        bogus = bytes([42])*64
+        key["priv_key"]["value"] = base64.b64encode(bogus).decode()
+        self.keyfile.write_text(json.dumps(key))
+        with self.assertRaisesRegex(ValueError, "does not match approved identity"):
             self.check()
 
     def test_claims_do_not_substitute_for_signature(self):
