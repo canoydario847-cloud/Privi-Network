@@ -5,6 +5,7 @@ import importlib.util
 import json
 import unittest
 from pathlib import Path
+from test_bech32_accounts import test_address
 
 ROOT=Path(__file__).parent
 
@@ -27,8 +28,8 @@ def demo_genesis():
     bank=[]
     accounts=[]
     for i,(category,amount) in enumerate(cats.items()):
-        # Synthetic invalid-check fixture identities, NOT accounts or keys.
-        addr="privi1"+str(i)*38
+        # Synthetic checksum-valid fixture identifiers, NOT owned accounts or keys.
+        addr=test_address(i)
         ledger.append({"address":addr,"category":category,"amount_base_units":str(amount)})
         bank.append({"address":addr,"coins":[{"denom":"aprvi","amount":str(amount)}]})
         if category in ("contributors","protocol_treasury","ecosystem_development"):
