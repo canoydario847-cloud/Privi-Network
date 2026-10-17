@@ -74,3 +74,82 @@ The upstream source overlay build job clones the pinned example and compiles a t
 6. Complete independent external security audits and appropriate legal review and obtain manual release authorization.
 
 **No deployment, no real PRVI minting, no copying TEST genesis or demo mnemonics, no changes to BNB PRIV, and no changes to the existing Railway network.**
+
+
+## Four-gate preparation workstream (details from operators may arrive later)
+
+Everything here is **source-only, fail-closed and offline**. It does not mint
+PRVI, choose final registered IDs, fund genesis, verify real operator ownership,
+run a mainnet signer or initiate a financial launch. The current one-owner
+seven-node Railway TEST staging network is not changed by this branch.
+
+1. **IDs and supply policy**: `candidate_network_ids.json` proposes the *unreserved*
+   Cosmos/EVM IDs; check snapshots with `network_id_check.py`. IDs remain
+   **unapproved** in the production source-of-truth `privi_chain_config.json`
+   until collision checks, registry reservations and external signoff.
+   `privi_source_overlay.py` produces an unreviewed, non-deployed
+   PRVI-denominated Cosmos EVM source patch from the pinned upstream checkout.
+   Its fixed-supply protections still require independent module-level audit.
+2. **Genesis, 1B cap, staking, vesting**: `allocations.template.json`
+   records the exact proposed 40/20/20/10/10 policy buckets but **no real
+   recipients**. Run `vesting_plan.py` only after the real, recipient-reviewed
+   ledger is supplied. Contributor tokens unlock in 36 monthly installments
+   **following** the proposed 12-month cliff; treasury and ecosystem drafts
+   use 36 monthly increments. All are review-only Cosmos vesting account
+   JSON fragments, **not** a funded or Cosmos-validated genesis. The separate
+   `validate_candidate_genesis.py` must validate an actual downstream
+   candidate, plus upstream binary integration and code audit.
+3. **Seven independent operators**: `operator_roster.template.json` is
+   deliberately empty until the owner supplies the operators' **public**
+   details and evidence. `independent_operator_roster.py` screens unique
+   legal control, signing custody, infrastructure, regions, independent
+   attestations and individual voting-power concentration. Every signer
+   remains in an operator's exclusive custody. **Do not provide private
+   consensus keys, seed phrases, or server credentials.**
+4. **Audit, recovery, rehearsal, launch**: `rehearsal_audit.py`
+   reads seven separate private Comet RPCs and one EVM RPC and checks the
+   seven commit signatures against the voting set. See
+   `SECURITY_REVIEW_AND_RECOVERY.md` for source-audit scope,
+   H/R/S fencing, backup safety, slashing, governance and incident drills.
+   The original `mainnet_preflight.py` requires actual audited
+   binary/genesis/ledger hashes, outside signoffs, seven genuine operators,
+   resilient services and a **manual** launch authorization. A script passing
+   does not replace independent review.
+
+### Offline commands (not a financial deployment)
+
+```bash
+python3 -m unittest discover -s production-network/mainnet -p "test_*.py" -v
+
+# Both commands are EXPECTED TO FAIL because details are deliberately absent.
+python3 production-network/mainnet/independent_operator_roster.py \
+    --roster production-network/mainnet/operator_roster.template.json
+
+python3 production-network/mainnet/mainnet_preflight.py \
+    --manifest production-network/mainnet/manifest.example.json
+
+# Once independently reviewed allocations and a FUTURE genesis time exist:
+python3 production-network/mainnet/vesting_plan.py \
+    --approved-ledger /secure/approved-allocations.json \
+    --genesis-time <APPROVED_FUTURE_UNIX_TIMESTAMP> \
+    --output /secure/vesting-draft-for-auditor.json
+
+# Mainnet rehearsal only, from authorized non-public RPC access:
+python3 production-network/mainnet/rehearsal_audit.py \
+    --cosmos-chain-id <REVIEWED_COSMOS_ID> \
+    --evm-chain-id <REVIEWED_EVM_ID> \
+    --rpc http://validator-0.internal:26657 \
+    --rpc http://validator-1.internal:26657 \
+    --rpc http://validator-2.internal:26657 \
+    --rpc http://validator-3.internal:26657 \
+    --rpc http://validator-4.internal:26657 \
+    --rpc http://validator-5.internal:26657 \
+    --rpc http://validator-6.internal:26657 \
+    --evm-rpc http://reviewed-evm-gateway.internal:8545
+```
+
+**Guardrails:** all operators' real details can be added later. Their absence
+does not block writing and testing code, but it blocks final genesis and
+release approval. Never merge these files onto a branch that Railway
+auto-deploys. Neither existing TEST nor BNB PRIV is PRVI mainnet.
+
