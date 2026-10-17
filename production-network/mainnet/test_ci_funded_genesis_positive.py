@@ -2,7 +2,7 @@
 """Offline positive and tamper-negative checks for unfunded CI allocations."""
 import copy
 import unittest
-from ci_funded_genesis_positive import allocations, check_funded_genesis, CAP, DISTRIBUTION
+from ci_funded_genesis_positive import allocations, check_funded_genesis, require_private_app_listeners, CAP, DISTRIBUTION
 from test_bech32_accounts import test_address
 
 
@@ -64,6 +64,18 @@ class PositiveGenesisRehearsalTests(unittest.TestCase):
         doc = copy.deepcopy(self.genesis)
         doc["app_state"]["genutil"]["gen_txs"] = []
         self.assertTrue(any("gentx" in err for err in check_funded_genesis(doc, self.rows)))
+
+    def test_disabled_http_api_grpc_and_json_rpc_only(self):
+        config = ('[api]\\nenable = false\\n'
+                  '[grpc]\\nenable = false\\n'
+                  '[json-rpc]\\nenable = false\\n'
+                  '[pruning]\\nenable = true\\n')
+        self.assertTrue(require_private_app_listeners(config))
+        for service in ("api", "grpc", "json-rpc"):
+            with self.subTest(service=service):
+                bad = '[%s]\\nenable = true\\n' % service
+                with self.assertRaises(ValueError):
+                    require_private_app_listeners(bad)
 
     def test_real_wallet_never_used_as_synthetic_fixture(self):
         self.assertNotIn("0x1990589FD200E043b8C6FD9ec5956c61b3071048",
