@@ -110,6 +110,18 @@ def source_overlay(files, evm_chain_id):
     x=checked_replace(x,
         'mint.NewAppModule(appCodec, app.MintKeeper, app.AccountKeeper, nil, nil)',
         'priviNoMintAppModule{AppModule: mint.NewAppModule(appCodec, app.MintKeeper, app.AccountKeeper, nil, nil)}',p)
+    # Patch the actual DefaultGenesis method: NewFeeMarketGenesisState
+    # was defined upstream but never invoked, and x/staking otherwise
+    # defaults to the SDK 'stake' denom instead of Privi's native aprvi.
+    x=checked_replace(x,
+        '\tgenesis[erc20types.ModuleName] = app.appCodec.MustMarshalJSON(erc20GenState)\n\n\treturn genesis',
+        '\tgenesis[erc20types.ModuleName] = app.appCodec.MustMarshalJSON(erc20GenState)\n'
+        '\tstakingGenesis := stakingtypes.DefaultGenesisState()\n'
+        '\tstakingGenesis.Params.BondDenom = "aprvi"\n'
+        '\tgenesis[stakingtypes.ModuleName] = app.appCodec.MustMarshalJSON(stakingGenesis)\n'
+        '\tfeeGenesis := NewFeeMarketGenesisState()\n'
+        '\tgenesis[feemarkettypes.ModuleName] = app.appCodec.MustMarshalJSON(feeGenesis)\n\n'
+        '\treturn genesis',p)
     x=checked_replace(x,
         "func (app *EVMD) EndBlocker(ctx sdk.Context) (sdk.EndBlock, error) {\n"
         "\treturn app.ModuleManager.EndBlock(ctx)\n}",
