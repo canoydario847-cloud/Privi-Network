@@ -32,6 +32,41 @@ def is_expected_failure(returncode, stdout, stderr, marker=CAP_GUARD):
     return marker.encode("ascii") in stdout + stderr
 
 
+def hardened_local_comet_config(text):
+    """For CI-only startup, enforce EVM mempool and loopback-only gossip.
+
+    The executable requires Comet [mempool].type=app; stock evmd init may
+    generate flood. Reject uncertain configuration instead of silently
+    accepting a node bound to external interfaces.
+    """
+    if type(text) is not str:
+        raise ValueError("Comet config.toml must be text")
+    lines = text.splitlines(keepends=True)
+    in_mempool = False
+    found_mempool_type = False
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped == "[mempool]":
+            in_mempool = True
+            continue
+        if stripped.startswith("[") and stripped.endswith("]"):
+            in_mempool = False
+        if in_mempool and re.fullmatch(r'type\s*=\s*"(?:flood|app)"(?:\s*#.*)?', stripped):
+            if found_mempool_type:
+                raise ValueError("Duplicate Comet mempool type")
+            found_mempool_type = True
+            lines[i] = line.replace('"flood"', '"app"')
+    if not found_mempool_type:
+        raise ValueError("Expected [mempool] type=flood/app setting absent")
+    output = "".join(lines)
+    if 'laddr = "tcp://0.0.0.0:26656"' in output:
+        output = output.replace('laddr = "tcp://0.0.0.0:26656"',
+                                'laddr = "tcp://127.0.0.1:26656"', 1)
+    if 'laddr = "tcp://0.0.0.0:26656"' in output:
+        raise ValueError("Public Comet P2P binding not allowed")
+    return output
+
+
 def prove(binary):
     path = Path(binary).resolve(strict=True)
     if not path.is_file() or not os.access(path, os.X_OK):
@@ -65,12 +100,7 @@ def prove(binary):
         # accepting external connections in ephemeral config.toml.
         comet_config = home / "config" / "config.toml"
         text = comet_config.read_text(encoding="utf-8")
-        for old, new in (
-            ('laddr = "tcp://0.0.0.0:26656"', 'laddr = "tcp://127.0.0.1:26656"'),
-        ):
-            if old in text:
-                text = text.replace(old, new, 1)
-        comet_config.write_text(text, encoding="utf-8")
+        comet_config.write_text(hardened_local_comet_config(text), encoding="utf-8")
 
         # Default no-funds genesis MUST fail with CAP_GUARD from actual Go
         # application InitChainer. No other panic/error can satisfy the test.
@@ -99,7 +129,7 @@ def prove(binary):
                     continue
                 clean = re.sub(r"/tmp/[A-Za-z0-9_./-]+", "<CI_TEMP>", line)
                 clean = re.sub(r"[a-fA-F0-9]{32,}", "<REDACTED>", clean)
-                clean = re.sub(r"\\x1b\\[[0-9;]*m", "", clean)
+                clean = re.sub(r"\x1b\[[0-9;]*m", "", clean)
                 note = clean[:220]
                 break
             raise ValueError(
