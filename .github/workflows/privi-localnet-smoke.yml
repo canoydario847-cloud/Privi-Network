@@ -27,6 +27,8 @@ jobs:
   four-validator:
     name: Build and verify four ephemeral EVM validators
     runs-on: ubuntu-24.04
+    env:
+      PRIVI_EPHEMERAL_TRANSFER_TEST: "1"
     timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
@@ -81,6 +83,17 @@ jobs:
           done
           echo "Wallet read-only RPC smoke checks did not pass" >&2
           exit 1
+      - name: Send actual valueless atest and independently audit mined EVM receipt
+        run: |
+          set -euo pipefail
+          # Dependency is confined to a disposable GitHub runner, never
+          # installed on validator hosts, wallets, or live PRVI servers.
+          TMP_ETHERS="$RUNNER_TEMP/privi-test-ethers"
+          mkdir -p "$TMP_ETHERS"
+          npm install --prefix "$TMP_ETHERS" --no-save --ignore-scripts --no-audit --no-fund --silent ethers@6.15.0
+          PRIVI_ETHERS_MODULE_PATH="$TMP_ETHERS/node_modules/ethers" \
+            node production-network/testnet/send_disposable_test_transfer.cjs
+          rm -rf "$TMP_ETHERS"
       - name: Inspect container status on failure
         if: failure()
         run: |
