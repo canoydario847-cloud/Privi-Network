@@ -82,5 +82,5 @@ fi
 docker compose -f "$SAFE_COMPOSE" up -d
 echo "LOCAL four-validator developer cluster starting."
 echo "Comet RPC: http://127.0.0.1:26657"
-echo "EVM RPC: http://127.0.0.1:8545"
+echo "EVM RPC: http://127.0.0.1:8545 (upstream evmd default EVM chain ID 262144; Cosmos ID $CHAIN_ID)"
 echo "Do not copy these keys into a public network."
