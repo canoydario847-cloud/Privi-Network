@@ -109,6 +109,14 @@ jobs:
           go build -o /tmp/privi-ci-nonproduction ./cmd/evmd
           test -s /tmp/privi-ci-nonproduction
           echo "Candidate Go binary compiled for CI. It is NOT mainnet approved and will NOT be uploaded or deployed."
+      - name: Initialize synthetic unfunded PRVI node and verify real genesis defaults
+        run: |
+          set -euo pipefail
+          python3 production-network/mainnet/ci_runtime_init.py \
+            --binary /tmp/privi-ci-nonproduction \
+            --report /tmp/privi-ci-init-report.json
+          test -s /tmp/privi-ci-init-report.json
+          echo "Actual candidate initialization verified; throwaway genesis and keys destroyed."
       - name: Produce hash-only nonproduction build receipt
         run: |
           set -euo pipefail
