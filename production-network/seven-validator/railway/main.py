@@ -238,6 +238,9 @@ def validator():
     if not (HOME / "data/priv_validator_state.json").is_file():
         die("missing consensus signing state; refusing to start")
     run("chown", "-R", "1025:1025", str(HOME))
+    # The pinned evmd binary initializes a relative data/ upgrade directory.
+    # Keep its working directory on the writable per-validator persistent volume.
+    os.chdir(str(HOME))
     args = ["su-exec", "1025:1025", "/usr/local/bin/evmd", "start",
             "--home", str(HOME), "--log_format", "plain",
             "--minimum-gas-prices", "0.0001atest",
