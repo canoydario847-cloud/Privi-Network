@@ -25,8 +25,17 @@ function httpsUrl(s) {
       !u.hash && !u.search;
   } catch (_) { return false; }
 }
+function hasForbiddenSecretField(obj) {
+  const names = new Set(["private_key", "secret_key", "mnemonic", "seed_phrase",
+    "password", "api_key", "attestation_private_key_pem", "consensus_private_key"]);
+  if (Array.isArray(obj)) return obj.some(hasForbiddenSecretField);
+  if (!obj || typeof obj !== "object") return false;
+  return Object.entries(obj).some(([key, value]) =>
+    names.has(key.toLowerCase()) || hasForbiddenSecretField(value));
+}
 function validateHeader(m) {
   checked(m && typeof m === "object" && !Array.isArray(m), "manifest must be object");
+  checked(!hasForbiddenSecretField(m), "manifest may not contain secrets or private-key fields");
   checked(m.network_type === "public_testnet" && m.asset_symbol === "TEST" &&
           m.valueless_asset === true && m.financial_mainnet_live === false &&
           m.bnb_priv_separate === true, "strict valueless TEST network metadata required");
