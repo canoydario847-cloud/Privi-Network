@@ -16,7 +16,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 CAP = str(10**27)
 RELEASE_STATUS = "AUDITED_MAINNET_RELEASE_CANDIDATE"
-TEST_CHAIN_IDS = {"local-4221", "local-privi-seven-4221", "privi-dev-1"}
+TEST_CHAIN_IDS = {"local-4221", "local-privi-seven-4221", "privi-dev-1", "privi-ci-nonproduction-999"}
 
 
 def mod(filename, name):
@@ -52,7 +52,7 @@ def check_consistency(manifest, config, release, roster):
             or network["cosmos_chain_id"].startswith(("local-", "privi-dev"))):
         errors.append("Reviewed, distinct mainnet Cosmos chain ID required")
     if (type(network.get("evm_chain_id")) is not int
-            or network.get("evm_chain_id") in {1,56,97,4221,262144,31337,1337}):
+            or network.get("evm_chain_id") in {1,56,97,4221,262144,31337,1337,999991}):
         errors.append("Reviewed, distinct mainnet EVM chain ID required")
     if network.get("cosmos_chain_id") != mnet.get("cosmos_chain_id") or network.get("cosmos_chain_id") != release.get("cosmos_chain_id"):
         errors.append("Cosmos chain IDs must agree across config, manifest and signed release")
