@@ -135,7 +135,7 @@ def private_four_node_comet_config(text, index, peer_ids):
     section = ""
     updated = []
     for line in text.splitlines(keepends=True):
-        match = re.fullmatch(r"\[([a-z_]+)\]", line.strip())
+        match = re.fullmatch(r"\[([a-z0-9_]+)\]", line.strip())
         if match:
             section = match.group(1)
         m = re.fullmatch(r"(\s*)([a-z_]+)(\s*=\s*)([^#\r\n]*)(\s*(?:#.*)?)(\r?\n?)", line)
