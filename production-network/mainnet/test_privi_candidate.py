@@ -62,6 +62,24 @@ class CandidateGenesisTest(unittest.TestCase):
         doc,alloc,c=demo_genesis()
         self.assertEqual([],gen.errors_for(doc,alloc,c))
 
+    def test_typoed_genesis_recipient_checksum_blocks_release(self):
+        doc, alloc, config = demo_genesis()
+        old = alloc["allocations"][0]["address"]
+        typo = old[:-1] + ("q" if old[-1] != "q" else "p")
+        doc["app_state"]["bank"]["balances"][0]["address"] = typo
+        doc["app_state"]["auth"]["accounts"][0]["address"] = typo
+        alloc["allocations"][0]["address"] = typo
+        errors = gen.errors_for(doc, alloc, config)
+        self.assertTrue(any("bech32" in e.lower() or "checksum" in e.lower()
+                            for e in errors), errors)
+
+    def test_unreviewed_genesis_wallets_cannot_use_demo_prefix(self):
+        doc, alloc, config = demo_genesis()
+        for row in doc["app_state"]["bank"]["balances"]:
+            row["address"] = "cosmos" + row["address"][5:]
+        errors = gen.errors_for(doc, alloc, config)
+        self.assertTrue(any("bech32" in e.lower() for e in errors), errors)
+
     def test_extra_genesis_supply_rejected(self):
         doc,alloc,c=demo_genesis()
         doc["app_state"]["bank"]["supply"][0]["amount"]=str(gen.CAP+1)
