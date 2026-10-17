@@ -96,9 +96,20 @@ def source_overlay(files, evm_chain_id):
     p="evmd/app.go"
     x=result[p]
     x=checked_replace(x,'\t"errors"\n','\t"errors"\n\tsdkmath "cosmossdk.io/math"\n',p)
+    # Cosmos SDK v0.54.3 requires each registered module to appear in the
+    # BeginBlock ordering. DO NOT remove x/mint from SetOrderBeginBlockers:
+    # doing so panics before the node can even run the 'init' command.
+    # Instead embed the upstream x/mint module and override ONLY BeginBlock,
+    # preserving genesis, services, migrations, codec and module ordering.
+    x=checked_replace(x,'\t"encoding/json"\n','\t"context"\n\t"encoding/json"\n',p)
     x=checked_replace(x,
-        "app.ModuleManager.SetOrderBeginBlockers(\n\t\tminttypes.ModuleName,",
-        "app.ModuleManager.SetOrderBeginBlockers(\n\t\t// Privi fixed-supply: no x/mint BeginBlocker (reward payouts must use escrow).",p)
+        'const appName = "evmd"',
+        'type priviNoMintAppModule struct { mint.AppModule }\\n'
+        'func (priviNoMintAppModule) BeginBlock(_ context.Context) error { return nil }\\n\\n'
+        'const appName = "evmd"',p)
+    x=checked_replace(x,
+        'mint.NewAppModule(appCodec, app.MintKeeper, app.AccountKeeper, nil, nil)',
+        'priviNoMintAppModule{AppModule: mint.NewAppModule(appCodec, app.MintKeeper, app.AccountKeeper, nil, nil)}',p)
     x=checked_replace(x,
         "func (app *EVMD) EndBlocker(ctx sdk.Context) (sdk.EndBlock, error) {\n"
         "\treturn app.ModuleManager.EndBlock(ctx)\n}",
