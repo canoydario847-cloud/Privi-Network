@@ -20,6 +20,8 @@ jobs:
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
+      - name: Install pinned crypto signature verification dependency
+        run: python3 -m pip install 'cryptography==46.0.4'
       - name: Run PRVI configuration and genesis validation unit tests
         run: python3 -m unittest discover -s production-network/mainnet -p "test_*.py" -v
       - name: Confirm incomplete mainnet manifest is rejected
