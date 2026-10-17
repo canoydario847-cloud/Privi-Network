@@ -15,8 +15,8 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 SUPPLY = 1_000_000_000 * 10**18
-DEV_COSMOS_IDS = {"local-4221", "privi-dev-1", "local-privi-seven-4221"}
-DEV_EVM_IDS = {262144, 4221, 56, 97, 1, 31337, 1337}
+DEV_COSMOS_IDS = {"local-4221", "privi-dev-1", "local-privi-seven-4221", "privi-ci-nonproduction-999"}
+DEV_EVM_IDS = {262144, 4221, 56, 97, 1, 31337, 1337, 999991}
 SHA = re.compile(r"^[a-fA-F0-9]{64}$")
 CHAIN = re.compile(r"^[a-z][a-z0-9_-]{2,63}$")
 

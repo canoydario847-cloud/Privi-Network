@@ -16,7 +16,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 CAP = str(10**27)
 RELEASE_STATUS = "AUDITED_MAINNET_RELEASE_CANDIDATE"
-TEST_CHAIN_IDS = {"local-4221", "local-privi-seven-4221", "privi-dev-1"}
+TEST_CHAIN_IDS = {"local-4221", "local-privi-seven-4221", "privi-dev-1", "privi-ci-nonproduction-999"}
 
 
 def mod(filename, name):
@@ -30,6 +30,7 @@ preflight = mod("mainnet_preflight.py", "privi_release_preflight")
 gencheck = mod("validate_candidate_genesis.py", "privi_release_gencheck")
 operators = mod("independent_operator_roster.py", "privi_release_operators")
 ceremony = mod("operator-kit/ceremony_verify.py", "privi_release_signatures")
+genesis_binding = mod("genesis_operator_binding.py", "privi_release_genesis_operator_binding")
 
 
 def check_consistency(manifest, config, release, roster):
@@ -51,7 +52,7 @@ def check_consistency(manifest, config, release, roster):
             or network["cosmos_chain_id"].startswith(("local-", "privi-dev"))):
         errors.append("Reviewed, distinct mainnet Cosmos chain ID required")
     if (type(network.get("evm_chain_id")) is not int
-            or network.get("evm_chain_id") in {1,56,97,4221,262144,31337,1337}):
+            or network.get("evm_chain_id") in {1,56,97,4221,262144,31337,1337,999991}):
         errors.append("Reviewed, distinct mainnet EVM chain ID required")
     if network.get("cosmos_chain_id") != mnet.get("cosmos_chain_id") or network.get("cosmos_chain_id") != release.get("cosmos_chain_id"):
         errors.append("Cosmos chain IDs must agree across config, manifest and signed release")
@@ -123,6 +124,7 @@ def assess(manifest, config, genesis, allocations, binary, release, roster, atte
         genesis_document = json.loads(genesis.read_text(encoding="utf-8"))
         ledger_document = json.loads(allocations.read_text(encoding="utf-8"))
         errors += gencheck.errors_for(genesis_document, ledger_document, config)
+        errors += genesis_binding.validate_binding(genesis_document, roster)
     except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
         errors.append("Reviewed full genesis and allocations required: " + str(exc))
     try:

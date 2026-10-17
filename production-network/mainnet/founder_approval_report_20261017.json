@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "title": "Privi mainnet founder approval report",
+  "project": "Privi World Corp.",
+  "founder": "Dario Canoy",
+  "founder_designation": "Owner and Founder",
+  "statement_as_received": "all approved",
+  "statement_received_date": "2026-10-17",
+  "record_type": "FOUNDER_REPORTED_APPROVAL",
+  "founder_intent": "Founder reports approval to continue Privi launch-readiness work",
+  "founder_cryptographic_signature_verified": false,
+  "independent_counsel_signed_evidence_verified": false,
+  "independent_security_audit_signed_evidence_verified": false,
+  "seven_independent_validator_operator_signatures_verified": false,
+  "approved_real_genesis_recipients_verified": false,
+  "regulatory_release_scope_verified": false,
+  "production_release_gate_open": false,
+  "financial_mainnet_activated": false,
+  "notes": "The founder's affirmative message is recorded in good faith. It cannot be substituted for independent legal counsel's signed scope, security audit, recipient custody proof, independently operated validator consensus signatures, or verified production release attestation. Draft software/CI development may proceed; no mainnet mint, coin distribution, or launch is authorized by this file."
+}

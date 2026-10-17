@@ -53,6 +53,18 @@ def inspect(genesis, expected_chain=CID):
     expect(fee.get("no_base_fee") is False, "EVM fee market must be enabled")
     expect(not erc.get("token_pairs"), "Upstream example ERC20 pairs must be removed")
     bank=state.get("bank") or {}
+    md = bank.get("denom_metadata") or []
+    native = [x for x in md if isinstance(x,dict) and x.get("base") == "aprvi"] if isinstance(md,list) else []
+    expect(len(native) == 1, "Exactly one PRVI native bank denomination metadata entry required")
+    if len(native) == 1:
+        unit = native[0].get("denom_units") or []
+        pairs = {(u.get("denom"), u.get("exponent")) for u in unit if isinstance(u,dict)}
+        # JSON proto encoders may omit the zero exponent for the base denom.
+        expect(native[0].get("display") == "prvi" and native[0].get("symbol") == "PRVI",
+               "Native metadata must show prvi and PRVI")
+        expect(("aprvi", 0) in {(name, int(exp or 0)) for name,exp in pairs}
+               and ("prvi", 18) in {(name, int(exp or 0)) for name,exp in pairs},
+               "Bank denom metadata must encode native 18-decimal PRVI")
     initial_supply=bank.get("supply") or []
     expect(isinstance(initial_supply,list), "Bank supply must be a list")
     if isinstance(initial_supply,list):

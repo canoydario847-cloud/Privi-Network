@@ -90,7 +90,7 @@ def source_overlay(files, evm_chain_id):
         '\tresult := make(module.BasicManager, len(app.BasicModuleManager))\n'
         '\tfor name, basic := range app.BasicModuleManager {\n'
         '\t\t// SDK genutil InitCmd asserts concrete genutil.AppModuleBasic; do not wrap it.\n'
-        '\t\tif name != "mint" && name != "staking" && name != "evm" && name != "erc20" && name != "feemarket" {\n'
+        '\t\tif name != "bank" && name != "mint" && name != "staking" && name != "evm" && name != "erc20" && name != "feemarket" {\n'
         '\t\t\tresult[name] = basic; continue\n'
         '\t\t}\n'
         '\t\tgen, ok := defaults[name]\n'
@@ -131,6 +131,47 @@ def source_overlay(files, evm_chain_id):
     x=checked_replace(x,'\ttestconstants "github.com/cosmos/evm/testutil/constants"\n','',p)
     result[p]=x
 
+    # Fail the ACTUAL financial chain InitChain if PRVI is not exactly the
+    # one-billion-coin genesis allocation. The synthetic CI 'evmd init'
+    # command only writes unfunded JSON and does not call InitChainer.
+    # Post-genesis burns are allowed, but any supply above cap remains
+    # independently rejected in EndBlocker.
+    p="evmd/app.go"
+    x=result[p]
+    x=checked_replace(x,
+        '\treturn app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)\n}',
+        '\tresponse, err := app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)\n'
+        '\tif err != nil { return response, err }\n'
+        f'\tgenesisCap, ok := sdkmath.NewIntFromString("{MAX_BASE}")\n'
+        '\tif !ok { return response, fmt.Errorf("invalid Privi genesis cap") }\n'
+        '\tif !app.BankKeeper.GetSupply(ctx, "aprvi").Amount.Equal(genesisCap) {\n'
+        '\t\treturn response, fmt.Errorf("Privi genesis native supply must equal exactly 1 billion PRVI")\n'
+        '\t}\n'
+        '\treturn response, nil\n}',p)
+    # Enforce the EXACT bank genesis supply from the proposed JSON BEFORE
+    # the Cosmos SDK initializes other modules (staking rejects empty
+    # validator sets before the former post-InitGenesis supply check).
+    # Retain post-initialization bank state check as a second safety barrier.
+    x=checked_replace(x,
+        '\tif err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap()); err != nil {',
+        '\trawBankGenesis, present := genesisState[banktypes.ModuleName]\n'
+        '\tif !present { return nil, fmt.Errorf("missing Privi bank genesis") }\n'
+        '\tvar bankGenesis banktypes.GenesisState\n'
+        '\tif err := app.appCodec.UnmarshalJSON(rawBankGenesis, &bankGenesis); err != nil {\n'
+        '\t\treturn nil, fmt.Errorf("invalid Privi bank genesis: %w", err)\n'
+        '\t}\n'
+        f'\tpreCap, validCap := sdkmath.NewIntFromString("{MAX_BASE}")\n'
+        '\tif !validCap { return nil, fmt.Errorf("invalid Privi genesis cap") }\n'
+        '\tinitialBalances := sdkmath.ZeroInt()\n'
+        '\tfor _, entry := range bankGenesis.Balances {\n'
+        '\t\tinitialBalances = initialBalances.Add(entry.Coins.AmountOf("aprvi"))\n'
+        '\t}\n'
+        '\tif !bankGenesis.Supply.AmountOf("aprvi").Equal(preCap) || !initialBalances.Equal(preCap) {\n'
+        '\t\treturn nil, fmt.Errorf("Privi genesis native supply must equal exactly 1 billion PRVI")\n'
+        '\t}\n\n'
+        '\tif err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap()); err != nil {',p)
+    result[p]=x
+
     # Disables the *periodic minting path* in the example app (no inflation
     # even if mutable x/mint Genesis default inflation params are nonzero).
     # A production review MUST still audit all module mint authority pathways.
@@ -157,6 +198,13 @@ def source_overlay(files, evm_chain_id):
     x=checked_replace(x,
         '\tgenesis[erc20types.ModuleName] = app.appCodec.MustMarshalJSON(erc20GenState)\n\n\treturn genesis',
         '\tgenesis[erc20types.ModuleName] = app.appCodec.MustMarshalJSON(erc20GenState)\n'
+        '\tbankGenesis := banktypes.DefaultGenesisState()\n'
+        '\tbankGenesis.DenomMetadata = []banktypes.Metadata{{\n'
+        '\t\tDescription: "Privi native utility asset",\n'
+        '\t\tDenomUnits: []*banktypes.DenomUnit{{Denom: "aprvi", Exponent: 0}, {Denom: "prvi", Exponent: 18}},\n'
+        '\t\tBase: "aprvi", Display: "prvi", Name: "Privi", Symbol: "PRVI",\n'
+        '\t}}\n'
+        '\tgenesis[banktypes.ModuleName] = app.appCodec.MustMarshalJSON(bankGenesis)\n'
         '\tstakingGenesis := stakingtypes.DefaultGenesisState()\n'
         '\tstakingGenesis.Params.BondDenom = "aprvi"\n'
         '\tgenesis[stakingtypes.ModuleName] = app.appCodec.MustMarshalJSON(stakingGenesis)\n'

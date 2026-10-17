@@ -1,0 +1,585 @@
+#!/usr/bin/env python3
+"""CI-ONLY Privi 1B PRVI four-validator funded/genesis/consensus rehearsal.
+
+All four genesis keyrings, consensus/Comet node keys, gentxs, signing files,
+bank accounts and logs are temporary synthetic CI assets. No operator owns a
+production key. No production authority, user wallet, mainnet issuance, remote
+RPC or Railway deployment is involved. Everything is deleted on exit.
+
+Do NOT use this to declare the seven-INDEPENDENT-operator release gate passed.
+"""
+import argparse
+import base64
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import tempfile
+import time
+import tomllib
+import urllib.error
+import urllib.request
+
+from ci_runtime_init import CID, CAP, inspect
+from ci_funded_genesis_positive import (
+    DENOM, ONE, DISTRIBUTION, hardened_local_app_config, run
+)
+from genesis_operator_binding import parse_gentxs
+
+COUNT = 4
+COMET_RPC = 26657
+COMET_P2P = 26656
+PORT_STRIDE = 10  # No overlap between adjacent nodes' RPC and P2P ports
+BALANCE_PER_SECONDARY = ONE  # Each validator self-bonds exactly 1 test PRVI
+BLOCK_HEIGHT = 2
+STARTUP_SECONDS = 95
+LOCALHOST = "127.0.0.1"
+
+
+def synthetic_funded_rows(addresses):
+    """Five budget categories, split only COMMUNITY among four validators."""
+    if len(addresses) != COUNT or len(set(addresses)) != COUNT:
+        raise ValueError("Four unique ephemeral accounts required")
+    # Do not import or use a user's external EVM wallet in any genesis.
+    from bech32_accounts import valid_privi_address
+    if not all(valid_privi_address(a) for a in addresses):
+        raise ValueError("Validator addresses must be valid Privi native accounts")
+    from test_bech32_accounts import test_address
+    rows = [
+        {"address": addresses[0], "category": "community",
+         "amount": 400_000_000 * ONE - (COUNT-1) * BALANCE_PER_SECONDARY}
+    ]
+    rows.extend({
+        "address": a, "category": "community",
+        "amount": BALANCE_PER_SECONDARY
+    } for a in addresses[1:])
+    for i, (category, coins) in enumerate(DISTRIBUTION[1:]):
+        rows.append({
+            "address": test_address(80+i),
+            "category": category, "amount": coins * ONE
+        })
+    if len({r["address"] for r in rows}) != len(rows):
+        raise ValueError("Duplicate synthetic bank addresses")
+    if sum(r["amount"] for r in rows) != CAP:
+        raise ValueError("Synthetic allocation must total exact 1B PRVI")
+    subtotals = {}
+    for row in rows:
+        subtotals[row["category"]] = subtotals.get(row["category"], 0) + row["amount"]
+    for category, coins in DISTRIBUTION:
+        if subtotals.get(category) != coins * ONE:
+            raise ValueError("Privi category total differs from proposal: " + category)
+    return rows
+
+
+def check_four_funded_genesis(genesis, rows, consensus_keys):
+    """Structural review of REAL CLI-created SDK genesis, not fabricated txs."""
+    errors = inspect(genesis)
+    bank = (genesis.get("app_state") or {}).get("bank") or {}
+    actual = {}
+    for b in bank.get("balances", []):
+        if not isinstance(b, dict) or not isinstance(b.get("coins"), list) or len(b["coins"]) != 1:
+            errors.append("Unexpected bank balance object")
+            continue
+        c = b["coins"][0]
+        if c.get("denom") != DENOM or not re.fullmatch(r"[1-9][0-9]*", str(c.get("amount"))):
+            errors.append("Wrong/zero/invalid denomination in bank balances")
+            continue
+        if b.get("address") in actual:
+            errors.append("Duplicate account in bank genesis")
+        actual[b.get("address")] = int(c["amount"])
+    if actual != {r["address"]: r["amount"] for r in rows}:
+        errors.append("Funded genesis bank ledger differs from exact 1B synthetic allocations")
+    supply = bank.get("supply") or []
+    if len(supply) != 1 or supply[0] != {"denom": DENOM, "amount": str(CAP)}:
+        errors.append("Funded genesis declared native supply is not exactly 10^27 aprvi")
+    try:
+        signed = parse_gentxs(genesis)
+        if set(signed) != set(consensus_keys) or len(signed) != COUNT:
+            errors.append("Four signed genesis validator keys differ from actual local consensus keys")
+    except (ValueError, TypeError, KeyError) as exc:
+        errors.append("Four genesis gentx validation failed: " + str(exc))
+    return errors
+
+
+def strict_toml(config):
+    try:
+        return tomllib.loads(config)
+    except (ValueError, tomllib.TOMLDecodeError) as exc:
+        raise ValueError("Invalid disposable CometBFT TOML") from exc
+
+
+def private_four_node_comet_config(text, index, peer_ids):
+    """Configures loopback-only RPC/P2P, four distinct ports, app mempool."""
+    if not isinstance(text, str) or index not in range(COUNT) or len(peer_ids) != COUNT:
+        raise ValueError("Bad disposable consensus network configuration")
+    if len(set(peer_ids)) != COUNT or not all(re.fullmatch(r"[a-f0-9]{40}", p) for p in peer_ids):
+        raise ValueError("Four unique Comet node identities required")
+    peers = ",".join(
+        f"{peer_ids[i]}@{LOCALHOST}:{COMET_P2P+PORT_STRIDE*i}"
+        for i in range(COUNT) if i != index
+    )
+    replacements = {
+        "rpc": {"laddr": f'"tcp://{LOCALHOST}:{COMET_RPC+PORT_STRIDE*index}"'},
+        "p2p": {
+            "laddr": f'"tcp://{LOCALHOST}:{COMET_P2P+PORT_STRIDE*index}"',
+            "persistent_peers": f'"{peers}"',
+            "addr_book_strict": "false",
+            "allow_duplicate_ip": "true",
+            "pex": "false",
+        },
+        "mempool": {"type": '"app"'},
+    }
+    found = {sec: set() for sec in replacements}
+    section = ""
+    updated = []
+    for line in text.splitlines(keepends=True):
+        match = re.fullmatch(r"\[([a-z0-9_]+)\]", line.strip())
+        if match:
+            section = match.group(1)
+        m = re.fullmatch(r"(\s*)([a-z_]+)(\s*=\s*)([^#\r\n]*)(\s*(?:#.*)?)(\r?\n?)", line)
+        if m and section in replacements and m.group(2) in replacements[section]:
+            field = m.group(2)
+            if field in found[section]:
+                raise ValueError("Duplicate Comet key: " + section + "." + field)
+            found[section].add(field)
+            new = replacements[section][field]
+            line = m.group(1) + field + m.group(3) + new + m.group(5) + m.group(6)
+        updated.append(line)
+    for sec, options in replacements.items():
+        if found[sec] != set(options):
+            raise ValueError("Comet config missing required " + sec + " keys")
+    value = "".join(updated)
+    parsed = strict_toml(value)
+    for sec, options in replacements.items():
+        for key, raw in options.items():
+            expected = (raw.strip('"') if raw.startswith('"') else raw == "true")
+            if parsed[sec][key] != expected:
+                raise ValueError("Comet section rewrite did not take effect")
+    if any(parsed["p2p"].get("seeds", "") for _ in range(1)):
+        raise ValueError("Seeds forbidden in CI isolated consensus")
+    return value
+
+
+def node_id(home):
+    """Derived from Comet node_key.json in isolated key material, never logged."""
+    raw = json.loads((home / "config" / "node_key.json").read_text(encoding="utf-8"))
+    secret = base64.b64decode(raw["priv_key"]["value"], validate=True)
+    if len(secret) != 64:
+        raise ValueError("Unexpected local Comet node key format")
+    return hashlib.sha256(secret[-32:]).digest()[:20].hex()
+
+
+def consensus_pubkey(home):
+    data = json.loads((home / "config" / "priv_validator_key.json").read_text(encoding="utf-8"))
+    raw = base64.b64decode(data["pub_key"]["value"], validate=True)
+    if len(raw) != 32:
+        raise ValueError("Unexpected Comet consensus public key")
+    return raw
+
+
+def local_rpc(index, path):
+    try:
+        with urllib.request.urlopen(
+            f"http://{LOCALHOST}:{COMET_RPC+PORT_STRIDE*index}/{path}", timeout=1.2
+        ) as conn:
+            if conn.status != 200:
+                return None
+            return json.loads(conn.read(250000))
+    except (OSError, ValueError, urllib.error.URLError):
+        return None
+
+
+def consensus_evidence(keys):
+    """All four must commit the exact same height-2 hash, with 4 keyset."""
+    statuses = []
+    block_hashes = []
+    for i in range(COUNT):
+        status = local_rpc(i, "status")
+        block = local_rpc(i, f"block?height={BLOCK_HEIGHT}")
+        if not status or not block:
+            return None
+        result = status.get("result") or {}
+        height = int((result.get("sync_info") or {}).get("latest_block_height") or 0)
+        if height < BLOCK_HEIGHT:
+            return None
+        statuses.append((result.get("node_info") or {}).get("id"))
+        block_hashes.append(((block.get("result") or {}).get("block_id") or {}).get("hash"))
+    if len(set(statuses)) != COUNT or not all(statuses):
+        return None
+    if len(set(block_hashes)) != 1 or not all(block_hashes):
+        return None
+    votes = local_rpc(0, f"validators?height={BLOCK_HEIGHT}")
+    if not votes:
+        return None
+    valrows = ((votes.get("result") or {}).get("validators") or [])
+    pubkeys = set()
+    powers = []
+    for row in valrows:
+        try:
+            key = base64.b64decode(row["pub_key"]["value"], validate=True)
+            power = int(row["voting_power"])
+        except (KeyError, ValueError, TypeError):
+            return None
+        pubkeys.add(key)
+        powers.append(power)
+    if len(pubkeys) != COUNT or pubkeys != set(keys) or len(powers) != COUNT:
+        return None
+    if min(powers) <= 0 or max(powers) * 3 >= sum(powers):
+        return None
+    return {"height": BLOCK_HEIGHT, "validators": COUNT,
+            "equal_hash": True, "distinct_comet_nodes": True,
+            "no_operator_exceeds_one_third_power": True}
+
+
+def three_of_four_outage_evidence(keys, target_height):
+    """After validator #3 is stopped, remaining 3 must COMMIT two new blocks.
+
+    Do not mistake blocks committed before the outage for post-outage
+    liveness. Require a target height captured strictly before stopping.
+    """
+    if len(keys) != COUNT or not isinstance(target_height, int) or target_height < BLOCK_HEIGHT + 2:
+        raise ValueError("Need four expected keys and valid post-outage target height")
+    ids = []
+    hashes = []
+    for i in range(COUNT-1):
+        st = local_rpc(i, "status")
+        block = local_rpc(i, f"block?height={target_height}")
+        if not st or not block:
+            return None
+        info = st.get("result") or {}
+        if int((info.get("sync_info") or {}).get("latest_block_height") or 0) < target_height:
+            return None
+        ids.append((info.get("node_info") or {}).get("id"))
+        hashes.append(((block.get("result") or {}).get("block_id") or {}).get("hash"))
+    if len(set(ids)) != COUNT-1 or not all(ids):
+        return None
+    if len(set(hashes)) != 1 or not all(hashes):
+        return None
+    result = local_rpc(0, f"validators?height={target_height}")
+    if not result:
+        return None
+    rows = ((result.get("result") or {}).get("validators") or [])
+    if len(rows) != COUNT:
+        return None
+    try:
+        power_by_key = {
+            base64.b64decode(r["pub_key"]["value"], validate=True): int(r["voting_power"])
+            for r in rows
+        }
+    except (ValueError, TypeError, KeyError):
+        return None
+    if set(power_by_key) != set(keys) or len(power_by_key) != COUNT:
+        return None
+    powers = list(power_by_key.values())
+    if min(powers) <= 0:
+        return None
+    total = sum(powers)
+    # Survivor power bound uses exact key identity, not arbitrary RPC row order.
+    survivor_power = sum(power_by_key[key] for key in keys[:COUNT-1])
+    if max(powers) * 3 >= total or survivor_power * 3 <= total * 2:
+        return None
+    return {
+        "outage_validator_count": 1,
+        "live_validators": 3,
+        "genesis_validator_count": COUNT,
+        "post_outage_committed_height": target_height,
+        "same_hash_across_survivors": True,
+        "consensus_live_with_one_offline": True,
+    }
+
+
+
+def signing_state_snapshot(home):
+    """Hash original key material; guard against state rollback or replacement.
+
+    Never output key bytes or hashes: snapshots are in memory, disposed with CI.
+    """
+    home = Path(home)
+    files = (
+        home / "config" / "priv_validator_key.json",
+        home / "config" / "node_key.json",
+        home / "config" / "genesis.json",
+    )
+    if any(not p.is_file() for p in files):
+        raise ValueError("Missing original validator identity/genesis files")
+    statefile = home / "data" / "priv_validator_state.json"
+    if not statefile.is_file():
+        raise ValueError("Missing original Comet last-sign state; refusing unsafe restart")
+    try:
+        state = json.loads(statefile.read_text(encoding="utf-8"))
+        height = int(state.get("height"))
+        round_value = int(state.get("round"))
+        step = int(state.get("step"))
+    except (ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("Invalid Comet last-sign state") from exc
+    if height < 0 or round_value < 0 or step < 0:
+        raise ValueError("Invalid non-monotonic validator sign state")
+    return {
+        "identity_hashes": tuple(hashlib.sha256(p.read_bytes()).digest() for p in files),
+        "sign_state": (height, round_value, step),
+    }
+
+
+def validate_safe_restart(before, after):
+    """No key replacement, no reset of last-sign state to lower height/round."""
+    if not isinstance(before, dict) or not isinstance(after, dict):
+        raise ValueError("Missing restart safety snapshots")
+    if before.get("identity_hashes") != after.get("identity_hashes"):
+        raise ValueError("A validator key or canonical genesis was altered during restart")
+    prior = before.get("sign_state")
+    current = after.get("sign_state")
+    if not isinstance(prior, tuple) or not isinstance(current, tuple) or len(prior) != 3 or len(current) != 3:
+        raise ValueError("Missing validator last-sign-state triple")
+    if current < prior:
+        raise ValueError("Validator last-sign state rolled backward; restart blocked")
+    return True
+
+
+def four_node_rejoin_evidence(keys, expected_id, min_height):
+    """Stopped validator must rejoin the original 4-signer network and catch up."""
+    if len(keys) != COUNT or not isinstance(expected_id, str) or not expected_id:
+        raise ValueError("Four known signing keys and original node ID are required")
+    if type(min_height) is not int or min_height < BLOCK_HEIGHT + 2:
+        raise ValueError("Rejoin height must follow committed outage blocks")
+    nodes = []
+    hashes = []
+    for i in range(COUNT):
+        status = local_rpc(i, "status")
+        block = local_rpc(i, f"block?height={min_height}")
+        if not status or not block:
+            return None
+        detail = status.get("result") or {}
+        if int((detail.get("sync_info") or {}).get("latest_block_height") or 0) < min_height:
+            return None
+        nodes.append((detail.get("node_info") or {}).get("id"))
+        hashes.append(((block.get("result") or {}).get("block_id") or {}).get("hash"))
+    if len(set(nodes)) != COUNT or not all(nodes) or nodes[-1] != expected_id:
+        return None
+    if len(set(hashes)) != 1 or not all(hashes):
+        return None
+    votes = local_rpc(0, f"validators?height={min_height}")
+    if not votes:
+        return None
+    rows = ((votes.get("result") or {}).get("validators") or [])
+    if len(rows) != COUNT:
+        return None
+    try:
+        power_by_key = {
+            base64.b64decode(row["pub_key"]["value"], validate=True): int(row["voting_power"])
+            for row in rows
+        }
+    except (TypeError, KeyError, ValueError):
+        return None
+    if set(power_by_key) != set(keys) or len(power_by_key) != COUNT or min(power_by_key.values()) <= 0:
+        return None
+    total = sum(power_by_key.values())
+    if max(power_by_key.values()) * 3 >= total:
+        return None
+    return {
+        "validators_rejoined": COUNT,
+        "restarted_node_identity_preserved": True,
+        "post_rejoin_committed_height": min_height,
+        "all_four_same_block_hash": True,
+        "validator_power_keyset_unchanged": True,
+    }
+
+
+def prove(binary):
+    binary = Path(binary).resolve(strict=True)
+    if not binary.is_file() or not os.access(binary, os.X_OK):
+        raise ValueError("CI-only executable node required")
+    with tempfile.TemporaryDirectory(prefix="privi-ci-four-funded-") as tmp:
+        root = Path(tmp)
+        os.chmod(root, 0o700)
+        env = os.environ.copy()
+        env["HOME"] = str(root)
+        homes = [root / f"validator-{i}" for i in range(COUNT)]
+        # Init four separate actual Comet identities and four wallet keyrings.
+        addresses = []
+        for i, home in enumerate(homes):
+            base = [str(binary), "--home", str(home)]
+            run(base + ["init", "CI-Ephemeral-Privi-" + str(i), "--chain-id", CID],
+                env=env, label="Initialize ephemeral validator home")
+            name = "ci-validator-" + str(i)
+            run(base + ["keys", "add", name, "--keyring-backend", "test"],
+                env=env, label="Generate disposable validator signing identity")
+            address = run(base + ["keys", "show", name, "-a",
+                                 "--keyring-backend", "test"], env=env,
+                          label="Retrieve synthetic signer account").decode("utf-8").strip()
+            addresses.append(address)
+        rows = synthetic_funded_rows(addresses)
+        primary = [str(binary), "--home", str(homes[0])]
+        for row in rows:
+            run(primary + ["genesis", "add-genesis-account", row["address"],
+                           str(row["amount"]) + DENOM, "--keyring-backend", "test"],
+                env=env, label="Add CI-only synthetic funded recipient")
+        # Every signer must sign on precisely the same shared funded genesis.
+        source = homes[0] / "config" / "genesis.json"
+        for home in homes[1:]:
+            shutil.copy2(source, home / "config" / "genesis.json")
+        for i, home in enumerate(homes):
+            base = [str(binary), "--home", str(home)]
+            run(base + ["genesis", "gentx", "ci-validator-" + str(i),
+                        str(ONE) + DENOM, "--chain-id", CID,
+                        "--keyring-backend", "test"],
+                env=env, label="Sign distinct disposable validator gentx")
+            if i:
+                directory = home / "config" / "gentx"
+                files = list(directory.glob("*.json"))
+                if len(files) != 1:
+                    raise ValueError("Unexpected disposable gentx output")
+                target = homes[0] / "config" / "gentx" / files[0].name
+                if target.exists():
+                    raise ValueError("Duplicate gentx filename")
+                shutil.copy2(files[0], target)
+        run(primary + ["genesis", "collect-gentxs"], env=env,
+            label="Collect four disposable validator gentxs")
+        run(primary + ["genesis", "validate-genesis"], env=env,
+            label="SDK validate four-validator PRVI funded genesis")
+        genesis_bytes = source.read_bytes()
+        genesis = json.loads(genesis_bytes)
+        keys = [consensus_pubkey(home) for home in homes]
+        if len(set(keys)) != COUNT:
+            raise ValueError("Four independently generated CI consensus keys required")
+        problems = check_four_funded_genesis(genesis, rows, keys)
+        if problems:
+            raise ValueError("Four-validator exact-cap bank/genesis check blocked: " + "; ".join(problems))
+        # Same canonical genesis, but never share local node/validator keys.
+        for home in homes[1:]:
+            (home / "config" / "genesis.json").write_bytes(genesis_bytes)
+        ids = [node_id(home) for home in homes]
+        for i, home in enumerate(homes):
+            comet = home / "config" / "config.toml"
+            comet.write_text(
+                private_four_node_comet_config(comet.read_text(encoding="utf-8"), i, ids),
+                encoding="utf-8")
+            app = home / "config" / "app.toml"
+            app.write_text(hardened_local_app_config(app.read_text(encoding="utf-8")),
+                           encoding="utf-8")
+        procs = []
+        logs = []
+        try:
+            for i, home in enumerate(homes):
+                outfile = (root / f"validator-{i}-private.log").open("wb")
+                logs.append(outfile)
+                proc = subprocess.Popen(
+                    [str(binary), "--home", str(home), "start",
+                     "--chain-id", CID, "--minimum-gas-prices", "0aprvi"],
+                    env=env, stdout=outfile, stderr=subprocess.STDOUT)
+                procs.append(proc)
+            deadline = time.monotonic() + STARTUP_SECONDS
+            evidence = None
+            while time.monotonic() < deadline:
+                if any(p.poll() is not None for p in procs):
+                    raise ValueError("One or more CI validators exited before block quorum; logs redacted")
+                evidence = consensus_evidence(keys)
+                if evidence:
+                    break
+                time.sleep(1)
+            if evidence is None:
+                raise ValueError("Four synthetic PRVI validators did not reach common block quorum")
+
+            # Capture all current heights BEFORE stopping any validator.
+            pre_outage = []
+            for idx in range(COUNT):
+                status = local_rpc(idx, "status")
+                if not status:
+                    raise ValueError("Missing pre-outage Comet status")
+                pre_outage.append(int(((status.get("result") or {}).get("sync_info") or {})
+                                      .get("latest_block_height") or 0))
+            target = max(pre_outage) + 2
+            offline = procs[-1]
+            offline.terminate()
+            try:
+                offline.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                offline.kill()
+                offline.wait(timeout=5)
+            deadline = time.monotonic() + 55
+            recovery = None
+            while time.monotonic() < deadline:
+                if any(p.poll() is not None for p in procs[:-1]):
+                    raise ValueError("CI remaining validators exited during single-node outage")
+                recovery = three_of_four_outage_evidence(keys, target)
+                if recovery:
+                    break
+                time.sleep(1)
+            if recovery is None:
+                raise ValueError("Three survivors did not continue 2+ common blocks after CI validator outage")
+
+            # After verifying >2/3 continue without validator #3, start the
+            # SAME node home with unchanged consensus key/last-sign-state.
+            # Never copy signer keys or reset Comet state: avoiding double-sign
+            # is more important than forcefully recovering an ephemeral node.
+            restart_home = homes[-1]
+            before_restart = signing_state_snapshot(restart_home)
+            baseline = max(
+                int(((local_rpc(i, "status") or {}).get("result") or {})
+                    .get("sync_info", {}).get("latest_block_height") or 0)
+                for i in range(COUNT-1)
+            )
+            rejoin_target = max(target, baseline) + 2
+            restarted_log = (root / "validator-3-restart-private.log").open("wb")
+            logs.append(restarted_log)
+            restarted = subprocess.Popen(
+                [str(binary), "--home", str(restart_home), "start",
+                 "--chain-id", CID, "--minimum-gas-prices", "0aprvi"],
+                env=env, stdout=restarted_log, stderr=subprocess.STDOUT)
+            procs[-1] = restarted
+            deadline = time.monotonic() + STARTUP_SECONDS
+            rejoin = None
+            while time.monotonic() < deadline:
+                if any(p.poll() is not None for p in procs):
+                    raise ValueError("CI validator restart/other node exited; private logs withheld")
+                rejoin = four_node_rejoin_evidence(keys, ids[-1], rejoin_target)
+                if rejoin:
+                    break
+                time.sleep(1)
+            if rejoin is None:
+                raise ValueError("Restarted validator did not catch up to four-node common consensus")
+            after_restart = signing_state_snapshot(restart_home)
+            validate_safe_restart(before_restart, after_restart)
+        finally:
+            for p in procs:
+                if p.poll() is None:
+                    p.terminate()
+            for p in procs:
+                if p.poll() is None:
+                    try:
+                        p.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        p.kill()
+                        p.wait(timeout=5)
+            for f in logs:
+                f.close()
+        return {
+            "status": "FOUR_DISPOSABLE_VALIDATORS_1B_PRVI_CONSENSUS_PASSED",
+            "synthetic_genesis_supply_aprvi": str(CAP),
+            "validators": COUNT,
+            "category_amounts_prvi": {category: str(coins) for category, coins in DISTRIBUTION},
+            "evidence": evidence,
+            "single_validator_outage": recovery,
+            "original_validator_restart_rejoin": rejoin,
+            "last_sign_state_non_decreasing": True,
+            "keys_and_test_funds_destroyed": True,
+            "financial_mainnet_deployed": False,
+            "real_PRVI_issued": False
+        }
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--binary", type=Path, required=True)
+    opts = parser.parse_args()
+    try:
+        result = prove(opts.binary)
+    except (OSError, ValueError, TypeError, KeyError, subprocess.TimeoutExpired) as err:
+        parser.exit(1, "PRVI FOUR VALIDATOR CI BLOCKED: " + str(err) + "\n")
+    print(json.dumps(result, indent=2))
+
+
+if __name__ == "__main__":
+    main()

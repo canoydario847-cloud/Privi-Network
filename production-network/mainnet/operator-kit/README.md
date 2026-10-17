@@ -6,6 +6,8 @@ This kit is for an **independently controlled validator operator** joining a fut
 
 The existing Railway TEST chain is untouched and forever valueless. This kit cannot operate that chain; never reuse `local-4221`, numeric `262144`, or any devnet genesis or secret.
 
+**Validator recovery safety:** Before any operator-managed cold restore, read [RECOVERY_SECURITY.md](RECOVERY_SECURITY.md). The read-only `recovery_preflight.py` checks operator-signed evidence, the reviewed genesis and Ed25519 key identity, and monotonic Comet signing state. Passing these checks **never authorizes signer startup**; fencing of the prior signer still requires independent human verification. Never upload production recovery material to this repository.
+
 ## 1. Before accepting a contract
 
 Operator and launch coordinator agree upon:

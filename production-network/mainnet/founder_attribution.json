@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "project": "Privi",
+  "organization": {
+    "name": "Privi World Corp.",
+    "stated_owner_and_founder": {
+      "full_name": "Dario Canoy",
+      "public_title": "Owner and Founder",
+      "attribution_basis": "founder_self_declaration",
+      "corporate_registry_verified": false
+    }
+  },
+  "founder_wallet": {
+    "address": "0x1990589FD200E043b8C6FD9ec5956c61b3071048",
+    "address_format": "EVM_20_BYTE",
+    "attributed_to": "Dario Canoy",
+    "association_basis": "previously_supplied_by_founder",
+    "cryptographic_control_proof_verified": false,
+    "approved_for_financial_mainnet_genesis": false,
+    "treasury_multisig_or_validator_key": false,
+    "note": "Public attribution is not a genesis allocation, treasury authority, proof of corporate title or proof of wallet control."
+  },
+  "legal_review": {
+    "firm_name_as_reported": "Sigal Law",
+    "source": "reported_by_founder",
+    "claimed_signoff": true,
+    "status": "REPORTED_SIGNOFF_DOCUMENTARY_VERIFICATION_PENDING",
+    "verified_signed_legal_opinion_sha256": null,
+    "reviewer_identity_and_scope_verified": false,
+    "independent_legal_release_gate_satisfied": false
+  },
+  "financial_mainnet_activated": false,
+  "publication_scope": "public_project_attribution_not_a_financial_release"
+}

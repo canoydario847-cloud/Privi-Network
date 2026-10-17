@@ -24,6 +24,33 @@ jobs:
         run: python3 -m pip install 'cryptography==46.0.4'
       - name: Run PRVI configuration and genesis validation unit tests
         run: python3 -m unittest discover -s production-network/mainnet -p "test_*.py" -v
+      - name: Publish evidence-only PRVI mainnet NO-GO inventory (no production secrets)
+        run: |
+          set -euo pipefail
+          python3 production-network/mainnet/launch_evidence_inventory.py \
+            --output /tmp/privi-mainnet-template-evidence-gaps.json \
+            --expect-no-go
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path("/tmp/privi-mainnet-template-evidence-gaps.json").read_text())
+          assert r["release_decision"] == "NO_GO"
+          assert r["manual_deployment_authorized_by_this_report"] is False
+          assert len(r["gates"]) == 6
+          assert all(item["status"] == "BLOCKED" for item in r["gates"])
+          with open(__import__("os").environ["GITHUB_STEP_SUMMARY"],"a") as f:
+              f.write("### Privi financial mainnet release inventory — NO GO\\n")
+              f.write("All external production approval, operator and genesis evidence gates remain blocked.\\n")
+              for item in r["gates"]:
+                  f.write("- " + item["key"] + ": " + item["status"] + "\\n")
+          PY
+      - name: Keep public template release evidence gap report (no keys or production data)
+        uses: actions/upload-artifact@v4
+        with:
+          name: privi-no-go-template-evidence-report
+          path: /tmp/privi-mainnet-template-evidence-gaps.json
+          retention-days: 7
+          if-no-files-found: error
       - name: Confirm incomplete mainnet manifest is rejected
         run: |
           set -eu
@@ -102,6 +129,14 @@ jobs:
               /tmp/cosmos-evm/evmd/genesis.go \
               /tmp/cosmos-evm/evmd/config/bech32.go \
               /tmp/cosmos-evm/evmd/cmd/evmd/cmd/root.go
+      - name: Assert PRVI InitChain supply equal-cap and EndBlock upper-cap guards exist
+        run: |
+          set -euo pipefail
+          app=/tmp/cosmos-evm/evmd/app.go
+          grep -Fq 'Privi genesis native supply must equal exactly 1 billion PRVI' "$app"
+          grep -Fq 'PRVI supply above fixed maximum' "$app"
+          grep -Fq 'priviNoMintAppModule' "$app"
+          echo "Verified all three independent native-supply code guards."
       - name: Compile patched Cosmos EVM candidate node (never deploy)
         working-directory: /tmp/cosmos-evm/evmd
         run: |
@@ -117,6 +152,24 @@ jobs:
             --report /tmp/privi-ci-init-report.json
           test -s /tmp/privi-ci-init-report.json
           echo "Actual candidate initialization verified; throwaway genesis and keys destroyed."
+      - name: Verify real InitChain refuses empty PRVI supply (ephemeral, local, no deployment)
+        run: |
+          set -euo pipefail
+          python3 production-network/mainnet/ci_init_chain_cap_negative.py \
+            --binary /tmp/privi-ci-nonproduction
+          echo "PASS: real candidate startup rejects zero-funds genesis with exact PRVI InitChain cap error."
+      - name: Rehearse exactly 1 billion synthetic PRVI funded genesis and first local block
+        run: |
+          set -euo pipefail
+          python3 production-network/mainnet/ci_funded_genesis_positive.py \
+            --binary /tmp/privi-ci-nonproduction
+          echo "PASS: CI-only 1B genesis bank/state and first local block; no financial mainnet."
+      - name: Rehearse four isolated PRVI validators on one exact-cap synthetic funded genesis
+        run: |
+          set -euo pipefail
+          python3 production-network/mainnet/ci_funded_four_validator.py \
+            --binary /tmp/privi-ci-nonproduction
+          echo "PASS: Four temporary PRVI signers agree on common blocks and exact 1B genesis."
       - name: Produce hash-only nonproduction build receipt
         run: |
           set -euo pipefail
