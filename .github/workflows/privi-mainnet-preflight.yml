@@ -137,6 +137,12 @@ jobs:
           python3 production-network/mainnet/ci_funded_genesis_positive.py \
             --binary /tmp/privi-ci-nonproduction
           echo "PASS: CI-only 1B genesis bank/state and first local block; no financial mainnet."
+      - name: Rehearse four isolated PRVI validators on one exact-cap synthetic funded genesis
+        run: |
+          set -euo pipefail
+          python3 production-network/mainnet/ci_funded_four_validator.py \
+            --binary /tmp/privi-ci-nonproduction
+          echo "PASS: Four temporary PRVI signers agree on common blocks and exact 1B genesis."
       - name: Produce hash-only nonproduction build receipt
         run: |
           set -euo pipefail
