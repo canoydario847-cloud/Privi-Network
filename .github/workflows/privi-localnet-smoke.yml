@@ -56,10 +56,11 @@ jobs:
       - name: Verify actual Ethereum JSON-RPC chain
         run: |
           set -euo pipefail
+          # evmd v0.7.3 developer reference defaults to EVM chain ID 262144,
+          # distinct from the CometBFT Cosmos network string local-4221.
           for i in $(seq 1 24); do
             if python3 production-network/testnet/evm_smoke.py \
-              # The pinned upstream evmd v0.7.3 reference node defaults to EVM ID 262144;
-              # Cosmos consensus network ID remains local-4221 (NOT the EVM ID).\n              --rpc http://127.0.0.1:8545 --expect-chain 262144; then
+              --rpc http://127.0.0.1:8545 --expect-chain 262144; then
               exit 0
             fi
             sleep 5
