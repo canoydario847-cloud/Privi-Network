@@ -1,0 +1,41 @@
+name: Mr Lee Privi AI security and interface checks (no deployment)
+
+on:
+  pull_request:
+    paths:
+      - "apps/mr-lee/**"
+      - ".github/workflows/privi-mr-lee.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mr-lee-tests:
+    name: Disabled-by-default, paper-only, site/network gating and API tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check JavaScript syntax and run Mr Lee integration tests
+        working-directory: apps/mr-lee
+        run: npm run check
+      - name: Ensure no real server secrets are committed or run in CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -REn 'sk[-]proj-[A-Za-z0-9_-]{16,}|sk[-]svcacct-[A-Za-z0-9_-]{16,}' \
+              apps/mr-lee --exclude='*.md' --exclude='*.yml' --exclude='*.yaml'; then
+            echo "FAIL: possible real OpenAI key material in Mr Lee source" >&2
+            exit 1
+          fi
+          if grep -Eq '^MR_LEE_ENABLED=true$' apps/mr-lee/.env.example; then
+            echo "FAIL: Mr Lee must remain disabled by default" >&2
+            exit 1
+          fi
+          echo "PASS: no active secrets or activation configured in source."
+# This workflow NEVER starts Mr Lee, calls OpenAI, runs a trading bot,
+# deploys to Railway/IONOS or activates PRVI financial mainnet.
