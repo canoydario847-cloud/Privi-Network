@@ -35,7 +35,7 @@ def cometcfg():
 
 def genesis():
     rows = synthetic_funded_rows(ADDRESSES)
-    raw = synthetic_genesis(rows)
+    raw = synthetic_genesis([{**row, "amount_base_units": row["amount"]} for row in rows])
     raw["app_state"]["bank"]["balances"] = [
         {"address": x["address"], "coins": [{"denom":"aprvi","amount":str(x["amount"])}]}
         for x in rows
