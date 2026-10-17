@@ -21,6 +21,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import time
+import tomllib
 import urllib.error
 import urllib.request
 
@@ -120,6 +121,21 @@ def read_local_height():
         return 0
 
 
+def require_private_app_listeners(text):
+    """Only inspect actual network services, not unrelated enable flags."""
+    if not isinstance(text, str):
+        raise ValueError("Invalid CI app config content")
+    try:
+        settings = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise ValueError("Invalid app TOML") from exc
+    for section in ("api", "grpc", "grpc-web", "json-rpc", "rosetta"):
+        cfg = settings.get(section) or {}
+        if not isinstance(cfg, dict) or cfg.get("enable") is True or cfg.get("enabled") is True:
+            raise ValueError("CI network service must remain disabled: " + section)
+    return True
+
+
 def prove(binary):
     binary = Path(binary).resolve(strict=True)
     if not binary.is_file() or not os.access(binary, os.X_OK):
@@ -169,8 +185,7 @@ def prove(binary):
         contents = app.read_text(encoding="utf-8")
         # This is an ephemeral runner with all real wallet access excluded.
         # Default JSON RPC is disabled, and only Comet local RPC is used.
-        if 'enable = true' in contents:
-            raise ValueError("Unexpected enabled listener in default app config")
+        require_private_app_listeners(contents)
         log = root / "discarded-private-node-output.log"
         with log.open("wb") as output:
             proc = subprocess.Popen(
