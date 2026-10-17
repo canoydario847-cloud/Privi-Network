@@ -21,3 +21,68 @@ The 4-node upstream Docker quickstart is a **single-machine developer example**.
 - `status-testnet.priviflow.us`
 
 DNS and TLS must be configured **after** real infrastructure exists. Existing JavaScript prototype Railway service stays separate. Production mainnet is prohibited until code/infrastructure audits and independent validator acceptance.
+
+
+## Offline and live acceptance evidence (new)
+
+This runbook is preparatory. The default manifest file at
+[public_testnet_manifest.template.json](../testnet/public_testnet_manifest.template.json)
+contains **no** validator identities, URLs, genesis or binary hash, and
+**will fail validation** until independently completed. Do not assume that
+a template is a deployed network.
+
+The fail-closed acceptance script [public_testnet_acceptance.py](../testnet/public_testnet_acceptance.py)
+requires at least four *attested* operators with distinct consensus
+addresses, fault domains and signed-control-evidence URLs; at least four
+distinct secured HTTPS CometBFT RPC observers; and two independent HTTPS
+Ethereum JSON-RPC gateways. The public JSON must not contain secrets.
+
+Operator attestation **URLs alone do not prove independence**. Verify those
+signatures/organizations separately. Operator signing endpoints must **not**
+be publicly exposed merely to satisfy the read-only RPC test: provide
+dedicated monitored read-only RPC observers accessible to the authorized
+reviewer, with TLS and abuse controls.
+
+### Offline manifest and genesis review
+
+After operators have agreed on a review-only public-testnet chain ID and
+valueless TEST genesis, create a **separate private working copy** of the
+template with the actual evidence (no secrets). Run:
+
+```bash
+python3 production-network/testnet/public_testnet_acceptance.py \
+  --manifest /secure/review/public-testnet-manifest.json \
+  --genesis /secure/review/unsigned-testnet-genesis.json
+```
+
+This checks required fields and hashes; a successful result is **static
+metadata only**. It never verifies individual signatures or runs any chain.
+
+### Live network acceptance after *real* multi-host deployment
+
+```bash
+python3 production-network/testnet/public_testnet_acceptance.py \
+  --manifest /secure/review/public-testnet-manifest.json \
+  --genesis /secure/review/unsigned-testnet-genesis.json \
+  --check-live
+```
+
+This read-only run independently checks:
+- >=4 unique observer nodes agree on the CometBFT network, recent block
+  hash, positive voting-power validator set and >2/3 commit signatures;
+- all four submitted operator consensus addresses are in the observed
+  positive-power validator set;
+- >=2 Ethereum RPC gateways report the reviewed non-demo EVM chain ID and
+  agree on a historical EVM block hash;
+- reviewed genesis file chain ID and SHA-256 match the evidence manifest.
+
+**This script does not test wallet-signed TEST transfers or their receipts.**
+After live acceptance, run a real valueless signed wallet transaction and
+[the independent receipt verifier](../testnet/DEV_TRANSFER_VERIFICATION.md),
+then test smart contracts, slashing, infrastructure failure recovery and
+upgrades. Retain redacted logs, external audit results and immutable
+binary/genesis hashes with the final readiness review.
+
+**NO-GO for financial mainnet**, even if these read-only public-testnet checks
+pass. Separate full audited PRVI genesis, issuance cap, operator/counsel
+approval and infrastructure runbooks must be completed first.
