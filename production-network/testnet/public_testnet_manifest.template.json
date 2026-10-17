@@ -1,0 +1,16 @@
+{
+  "_status": "TEMPLATE ONLY — NOT A CONFIGURED OR DEPLOYED NETWORK. Intentionally FAILS the readiness verifier until independently completed.",
+  "_instructions": "Only publish verified public key / node endpoint metadata. Do not put mnemonic, passwords, private keys, API tokens or signer addresses in this file. Replace nulls with reviewed data, and obtain independent operator signatures outside this declaration.",
+  "network_type": "public_testnet",
+  "valueless_asset": true,
+  "asset_symbol": "TEST",
+  "bnb_priv_separate": true,
+  "financial_mainnet_live": false,
+  "cosmos_chain_id": null,
+  "evm_chain_id": null,
+  "genesis_sha256": null,
+  "binary_sha256": null,
+  "operators": [],
+  "comet_rpc": [],
+  "evm_rpc": []
+}
