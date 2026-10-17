@@ -92,3 +92,40 @@ A vendor is ready for payment only after giving a written quote with:
 ## What remains deliberately NOT provided
 
 This package does not contain funded accounts, a usable production genesis, real validator keys, an audited node release, a configured public RPC, a working multisig vault, rewards escrow, an active network or a real PRVI coin. Provisioning or paying operators before those are finalized would create unnecessary expense and security risk.
+
+
+## Release attestation automation (operator details can come later)
+
+The mainnet-preparation branch now includes `ceremony_verify.py`.
+No operator information or real signing keys are required to prepare the
+software. The template `release.template.json` contains no final IDs
+or hashes and is intentionally rejected until completed. The
+`attestations.template.json` file is unsigned and must fail.
+
+Once the **audited final** genesis, allocation ledger and binary are frozen,
+publish their three real SHA-256 hashes and the externally accepted chain IDs
+in a separate reviewed release JSON. Only then, operators work locally:
+
+```bash
+# The private signing operation is performed OFFLINE by the operator, using
+# their OWN unrelated Ed25519 attestation private key.
+python3 ceremony_verify.py --release /secure/reviewed-release.json \
+  --operator-id OPERATOR_PUBLIC_ID \
+  --consensus-pubkey OPERATOR_PUBLIC_CONSENSUS_KEY_HEX \
+  --write-signing-payload /secure/my-genesis-approval.payload.json
+
+# Coordinator gets public signed attestations ONLY (never signing secrets),
+# and verifies their cryptography against the reviewed public operator roster.
+python3 ceremony_verify.py --release /secure/reviewed-release.json \
+  --roster /secure/reviewed-public-operator-roster.json \
+  --attestations /secure/all-signed-operator-attestations.json
+```
+
+`ceremony_verify.py` uses the \`cryptography\` Ed25519 verifier and
+refuses altered hashes, duplicated public attestation keys, malformed operator
+IDs, mismatched consensus public keys and missing signatures. It DOES NOT
+certify operator independence, release audits, or on-chain deployment.
+
+**No real operator private signing keys, recovery mnemonics or Railway TEST
+bootstrap keys should ever be shared or committed to GitHub.**
+
