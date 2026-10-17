@@ -104,8 +104,8 @@ def source_overlay(files, evm_chain_id):
     x=checked_replace(x,'\t"encoding/json"\n','\t"context"\n\t"encoding/json"\n',p)
     x=checked_replace(x,
         'const appName = "evmd"',
-        'type priviNoMintAppModule struct { mint.AppModule }\\n'
-        'func (priviNoMintAppModule) BeginBlock(_ context.Context) error { return nil }\\n\\n'
+        'type priviNoMintAppModule struct { mint.AppModule }\n'
+        'func (priviNoMintAppModule) BeginBlock(_ context.Context) error { return nil }\n\n'
         'const appName = "evmd"',p)
     x=checked_replace(x,
         'mint.NewAppModule(appCodec, app.MintKeeper, app.AccountKeeper, nil, nil)',
