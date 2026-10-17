@@ -89,7 +89,7 @@ test("OpenAI Responses API invoked only server side; no tools, no storage", asyn
   assert.equal(body.tools, undefined);
   assert.equal(body.model, "gpt-4.1-mini");
   assert.match(body.instructions, /PAPER-TRADE/);
-  assert.throws(() => askMrLee(cfg, "x", "trade_live", {}, modelMock));
+  await assert.rejects(askMrLee(cfg, "x", "trade_live", {}, modelMock));
 });
 
 test("paper trade is precise, nonexecuting and uses user-supplied prices", () => {
