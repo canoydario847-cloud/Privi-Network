@@ -20,12 +20,12 @@ public testnet. These steps do not activate or create financial PRVI.
    cloud control, private keys, signing hosts or a single on-call dependency.
 3. Agree on distinct, reviewed **public-testnet-only** Cosmos and EIP-155
    chain identifiers. Both must be separate from the local developer IDs
-   \`local-4221\` (Cosmos) and \`262144\` (EVM) and from the future PRVI financial
+   `local-4221` (Cosmos) and `262144` (EVM) and from the future PRVI financial
    mainnet. Choose the valueless native TEST denomination, economics and
    genesis parameters after review; do **not** use PRVI or bridge BNB PRIV.
 4. Freeze a reproducible public-testnet binary digest. Upstream reference
-   \`evmd\` v0.7.3 is a starting point, NOT an audited custom PRVI network.
-   Do not copy the disposable \`.testnets\` developer private keys.
+   `evmd` v0.7.3 is a starting point, NOT an audited custom PRVI network.
+   Do not copy the disposable `.testnets` developer private keys.
 5. Distribute the proposed TESTnet genesis securely to each operator for
    independent review. Operators inspect chain IDs, supply, fee/staking
    denominators, validator pubkeys, staking state and any privileged module
@@ -41,7 +41,7 @@ public testnet. These steps do not activate or create financial PRVI.
 - [ ] I have independently reviewed the frozen binary SHA-256, unsigned TEST
       genesis, chain IDs and token denomination; **only public data** leaves
       my workstation.
-- [ ] My CometBFT **consensus address** (40 hexadecimal characters, no \`0x\`)
+- [ ] My CometBFT **consensus address** (40 hexadecimal characters, no `0x`)
       and my off-chain attestation public key are present in the coordinator's
       review manifest. My signing key is **not** a validator consensus key.
 - [ ] I have independently confirmed P2P peer details with other operators
@@ -71,8 +71,8 @@ openssl pkey -in operator-attestation-private.pem -pubout -out operator-attestat
 
 The private PEM remains solely under operator control. In a protected copy
 of the coordinator manifest, fill in **only** your operator's following
-fields after inspecting the common \`cosmos_chain_id\`, \`evm_chain_id\`,
-\`genesis_sha256\` and \`binary_sha256\`:
+fields after inspecting the common `cosmos_chain_id`, `evm_chain_id`,
+`genesis_sha256` and `binary_sha256`:
 
 ```json
 {
@@ -110,7 +110,7 @@ openssl base64 -A -in /secure/review/operator-signature.bin
 ```
 
 The operator enters the resulting Base64 text into their public
-\`attestation_signature_base64\` field. Do not disclose the private PEM,
+`attestation_signature_base64` field. Do not disclose the private PEM,
 contents of other keys, CLI history containing passwords, validator state,
 mnemonics, or secret remote-signer data.
 
@@ -135,7 +135,7 @@ that these are *their actual deployed* consensus addresses, or that the
 validator signing keys are in independent custody.
 
 Also run the separate genesis and node-state checker from
-[PUBLIC_TESTNET.md](../ops/PUBLIC_TESTNET.md). Its \`--check-live\` mode reads
+[PUBLIC_TESTNET.md](../ops/PUBLIC_TESTNET.md). Its `--check-live` mode reads
 the network after the independently controlled nodes and endpoints actually
 exist. Both checks and an independent human operator review must pass.
 
