@@ -125,6 +125,12 @@ jobs:
             --report /tmp/privi-ci-init-report.json
           test -s /tmp/privi-ci-init-report.json
           echo "Actual candidate initialization verified; throwaway genesis and keys destroyed."
+      - name: Verify real InitChain refuses empty PRVI supply (ephemeral, local, no deployment)
+        run: |
+          set -euo pipefail
+          python3 production-network/mainnet/ci_init_chain_cap_negative.py \
+            --binary /tmp/privi-ci-nonproduction
+          echo "PASS: real candidate startup rejects zero-funds genesis with exact PRVI InitChain cap error."
       - name: Produce hash-only nonproduction build receipt
         run: |
           set -euo pipefail
