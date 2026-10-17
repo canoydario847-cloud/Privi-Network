@@ -45,8 +45,17 @@ def assess(manifest, genesis_path):
         try:
             genesis = json.loads(genesis_path.read_text())
             require(isinstance(genesis, dict) and genesis.get("chain_id") == chain_id, "genesis chain_id mismatch")
-            # The PRVI supply cap is NOT proven by a manifest declaration alone.
-            errors.append("genesis native balances, staking distributions and enforced issuance cap require independent chain-specific verification")
+            # Confirm only INITIAL supply: ongoing mint/issuance cap enforcement
+            # still needs audited custom chain logic and external sign-off.
+            if isinstance(chain_id, str) and isinstance(denom, str):
+                from genesis_supply_audit import audit as audit_genesis_bank
+                try:
+                    audit_genesis_bank(genesis, denom, chain_id)
+                except (ValueError, AttributeError, TypeError) as exc:
+                    errors.append("initial PRVI bank supply audit: " + str(exc))
+            else:
+                errors.append("initial PRVI bank supply cannot be audited without a valid chain ID and denomination")
+            errors.append("ongoing issuance cap, staking and vesting require independent audited chain-specific verification")
         except (ValueError, UnicodeError):
             errors.append("genesis must be valid UTF-8 JSON")
     for key in ("binary_sha256", "security_audit_url", "public_testnet_evidence_url", "incident_runbook_url", "signoff_record_url"):
