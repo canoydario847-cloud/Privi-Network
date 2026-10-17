@@ -123,145 +123,22 @@ def read_local_height():
 
 
 def hardened_local_app_config(text):
-    """Turn off only real HTTP/gRPC/JSON-RPC service switches.
-
-    Cosmos EVM default app.toml can enable gRPC. We safely disable these
-    network services before running the disposable CI node.
-    """
+    """Disable enabled network endpoints before synthetic local chain start."""
     if not isinstance(text, str):
-        raise ValueError("Invalid CI app TOML")
+        raise ValueError("Invalid app config TOML")
     networks = {"api", "grpc", "grpc-web", "json-rpc", "rosetta"}
-    section = None
-    result = []
+    section = ""
+    output = []
     for line in text.splitlines(keepends=True):
         heading = re.fullmatch(r'\[([A-Za-z0-9-]+)\]', line.strip())
         if heading:
             section = heading.group(1)
         if section in networks:
-            line = re.sub(r'^(\s*enabled?\s*=\s*)true(\s*(?:#.*)?\r?\n?)
-    """Only inspect actual network services, not unrelated enable flags."""
-    if not isinstance(text, str):
-        raise ValueError("Invalid CI app config content")
-    try:
-        settings = tomllib.loads(text)
-    except tomllib.TOMLDecodeError as exc:
-        raise ValueError("Invalid app TOML") from exc
-    for section in ("api", "grpc", "grpc-web", "json-rpc", "rosetta"):
-        cfg = settings.get(section) or {}
-        if not isinstance(cfg, dict) or cfg.get("enable") is True or cfg.get("enabled") is True:
-            raise ValueError("CI network service must remain disabled: " + section)
-    return True
-
-
-def prove(binary):
-    binary = Path(binary).resolve(strict=True)
-    if not binary.is_file() or not os.access(binary, os.X_OK):
-        raise ValueError("Executable CI-only node required")
-    with tempfile.TemporaryDirectory(prefix="privi-ci-funded-positive-") as tmp:
-        root = Path(tmp)
-        os.chmod(root, 0o700)
-        home = root / "disposable-testnet"
-        env = os.environ.copy()
-        env["HOME"] = str(root)
-        env["DAEMON_HOME"] = str(home)
-        base = [str(binary), "--home", str(home)]
-
-        run(base + ["init", "ci-only-funded-genesis", "--chain-id", CID],
-            env=env, label="Disposable Privi node init")
-        # Key generation is allowed ONLY for isolated synthetic CI. No recovery
-        # phrases or private keys are printed, copied or persisted outside tmp.
-        run(base + ["keys", "add", VALIDATOR_KEY_NAME, "--keyring-backend", "test"],
-            env=env, label="Ephemeral validator identity generation")
-        address = run(base + ["keys", "show", VALIDATOR_KEY_NAME, "-a",
-                              "--keyring-backend", "test"],
-                      env=env, label="Ephemeral validator account retrieval").decode().strip()
-        ledger = allocations(address)
-        for entry in ledger:
-            run(base + ["genesis", "add-genesis-account", entry["address"],
-                        str(entry["amount_base_units"]) + DENOM,
-                        "--keyring-backend", "test"],
-                env=env, label="Synthetic " + entry["category"] + " genesis allocation")
-        run(base + ["genesis", "gentx", VALIDATOR_KEY_NAME, str(ONE) + DENOM,
-                    "--chain-id", CID, "--keyring-backend", "test"],
-            env=env, label="Synthetic single validator gentx")
-        run(base + ["genesis", "collect-gentxs"], env=env,
-            label="Synthetic genesis signed gentx collection")
-        run(base + ["genesis", "validate-genesis"], env=env,
-            label="Synthetic genesis SDK validation")
-
-        path = home / "config" / "genesis.json"
-        document = json.loads(path.read_text(encoding="utf-8"))
-        failures = check_funded_genesis(document, ledger)
-        if failures:
-            raise ValueError("Synthetic 1B PRVI genesis check failed: " + "; ".join(failures))
-        config = home / "config" / "config.toml"
-        config.write_text(hardened_local_comet_config(config.read_text(encoding="utf-8")),
-                          encoding="utf-8")
-        # No external listeners, no relay, no Ethereum RPC or P2P network.
-        app = home / "config" / "app.toml"
-        contents = app.read_text(encoding="utf-8")
-        # This is an ephemeral runner with all real wallet access excluded.
-        # Default JSON RPC is disabled, and only Comet local RPC is used.
-        app.write_text(hardened_local_app_config(contents), encoding="utf-8")
-        log = root / "discarded-private-node-output.log"
-        with log.open("wb") as output:
-            proc = subprocess.Popen(
-                base + ["start", "--chain-id", CID, "--minimum-gas-prices", "0aprvi"],
-                env=env, stdout=output, stderr=subprocess.STDOUT
-            )
-            try:
-                deadline = time.monotonic() + 40
-                height = 0
-                while time.monotonic() < deadline:
-                    if proc.poll() is not None:
-                        raise ValueError("Synthetic funded validator node exited before first block; logs redacted")
-                    height = read_local_height()
-                    if height >= 1:
-                        break
-                    time.sleep(0.5)
-                if height < 1:
-                    raise ValueError("Synthetic funded validator did not commit block within 40 seconds")
-            finally:
-                if proc.poll() is None:
-                    proc.terminate()
-                    try:
-                        proc.wait(timeout=5)
-                    except subprocess.TimeoutExpired:
-                        proc.kill()
-                        proc.wait(timeout=5)
-        result = {
-            "status": "SYNTHETIC_FUNDED_1B_PRVI_POSITIVE_INITCHAIN_PASSED",
-            "synthetic_chain_id": CID,
-            "synthetic_wallet_categories": [row["category"] for row in ledger],
-            "synthetic_total_prvi": "1000000000",
-            "synthetic_supply_aprvi": str(CAP),
-            "validated_one_disposable_validator_gentx": True,
-            "first_block_committed": True,
-            "financial_mainnet_deployed": False,
-            "real_coins_or_operator_keys_created": False,
-            "ephemeral_genesis_and_keys_deleted": True
-        }
+            line = re.sub(r'^(\s*enabled?\s*=\s*)true(\s*(?:#.*)?\r?\n?)$', r'\1false\2', line)
+        output.append(line)
+    result = "".join(output)
+    require_private_app_listeners(result)
     return result
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--binary", type=Path, required=True)
-    args = parser.parse_args()
-    try:
-        result = prove(args.binary)
-    except (ValueError, OSError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
-        parser.exit(1, "PRVI FUNDED GENESIS CI FAILED: " + str(exc) + "\n")
-    print(json.dumps(result, indent=2))
-
-
-if __name__ == "__main__":
-    main()
-, r'\1false\2', line)
-        result.append(line)
-    output = "".join(result)
-    require_private_app_listeners(output)
-    return output
 
 
 def require_private_app_listeners(text):
@@ -328,7 +205,7 @@ def prove(binary):
         contents = app.read_text(encoding="utf-8")
         # This is an ephemeral runner with all real wallet access excluded.
         # Default JSON RPC is disabled, and only Comet local RPC is used.
-        require_private_app_listeners(contents)
+        app.write_text(hardened_local_app_config(contents), encoding="utf-8")
         log = root / "discarded-private-node-output.log"
         with log.open("wb") as output:
             proc = subprocess.Popen(
