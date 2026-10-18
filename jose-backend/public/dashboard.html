@@ -8,26 +8,129 @@
 </head>
 <body>
   <div class="wrap dashboard">
-    <div class="topbar">
-      <span class="wordmark">Jose</span>
+    <div id="nav"></div>
+    <div id="banner"></div>
+
+    <h1 id="wallet">Billetera y créditos</h1>
+    <p class="lede">Vincula tu billetera para pagar Hey Jose con JOSE y publicar NFTs en el mercado.</p>
+    <div class="card">
+      <div class="row" style="justify-content:space-between;">
+        <div>
+          <h2>Tu billetera</h2>
+          <div id="wallet-state" class="muted">Cargando…</div>
+        </div>
+        <div class="row" id="wallet-actions"></div>
+      </div>
+      <div class="status-line" id="wallet-status"></div>
+    </div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between;">
+        <div>
+          <h2><span id="credit-count">…</span> créditos de Hey Jose</h2>
+          <div class="muted" id="credit-desc">1 mensaje = 1 crédito.</div>
+        </div>
+        <a class="btn primary" href="chat.html">Abrir Hey Jose</a>
+      </div>
+      <div id="payments" style="margin-top:10px;"></div>
+    </div>
+    <div class="card">
+      <h2>Agregar a MetaMask</h2>
+      <p id="mm-desc">Agrega la red y el token JOSE a tu MetaMask con un clic.</p>
+      <div class="row">
+        <button class="btn" type="button" id="add-network">Agregar red</button>
+        <button class="btn" type="button" id="add-token">Agregar token JOSE</button>
+      </div>
+      <div class="status-line" id="mm-status"></div>
+    </div>
+
+    <div class="row" style="justify-content:space-between; margin-top:36px;">
+      <h1 style="margin:0;">Tus apps</h1>
       <button class="signout" id="signout">Cerrar sesión</button>
     </div>
-    <h1>Tus apps</h1>
     <p class="lede">Conecta las cuentas que quieres que Jose use. Cada botón "Conectar" inicia el inicio de sesión oficial de esa plataforma — no es una simulación.</p>
 
-    <div id="banner"></div>
     <div id="progress-summary"></div>
     <div id="plugin-list">Cargando…</div>
   </div>
 
+  <script src="jose-wallet.js"></script>
   <script>
+    document.getElementById('nav').innerHTML = Jose.nav('dashboard.html');
     const params = new URLSearchParams(window.location.search);
     const banner = document.getElementById('banner');
-    if (params.get('connected')) {
-      banner.innerHTML = `<div class="banner ok">Conectado correctamente.</div>`;
-    } else if (params.get('error')) {
-      banner.innerHTML = `<div class="banner err">No se pudo conectar: ${params.get('error')}</div>`;
+    // Built with textContent: the error text comes from the URL, so it must
+    // never be parsed as HTML.
+    function showBanner(kind, text) {
+      const div = document.createElement('div');
+      div.className = 'banner ' + kind;
+      div.textContent = text;
+      banner.replaceChildren(div);
     }
+    if (params.get('connected')) {
+      showBanner('ok', 'Conectado correctamente.');
+    } else if (params.get('error')) {
+      showBanner('err', 'No se pudo conectar: ' + params.get('error'));
+    }
+
+    function setLine(id, text, kind = '') {
+      const el = document.getElementById(id);
+      el.textContent = text || '';
+      el.className = 'status-line ' + kind;
+    }
+
+    async function renderWallet(data) {
+      const cfg = await Jose.getConfig();
+      const state = document.getElementById('wallet-state');
+      const actions = document.getElementById('wallet-actions');
+      if (data.wallet) {
+        const explorer = cfg.chain.explorerUrl.replace(/\/$/, '');
+        state.innerHTML = `<a class="mono" target="_blank" rel="noopener" href="${Jose.escapeHtml(explorer)}/address/${Jose.escapeHtml(data.wallet)}">${Jose.escapeHtml(data.wallet)}</a> <span class="pill ok">Vinculada</span>`;
+        actions.innerHTML = '<button class="btn" type="button" id="unlink">Desvincular</button>';
+        document.getElementById('unlink').addEventListener('click', async () => {
+          if (!confirm('¿Desvincular esta billetera de tu cuenta?')) return;
+          await Jose.api('/api/wallet/unlink', { method: 'POST' });
+          load();
+        });
+      } else {
+        state.textContent = 'Ninguna billetera vinculada. Firmarás un mensaje en MetaMask (no cuesta nada ni envía fondos).';
+        actions.innerHTML = '<button class="btn primary" type="button" id="link">Vincular con MetaMask</button>';
+        document.getElementById('link').addEventListener('click', async () => {
+          try {
+            setLine('wallet-status', 'Firma el mensaje en MetaMask…');
+            await Jose.linkWallet();
+            setLine('wallet-status', 'Billetera vinculada.', 'ok');
+            load();
+          } catch (err) {
+            setLine('wallet-status', err.message || 'Cancelado.', 'err');
+          }
+        });
+      }
+
+      document.getElementById('credit-count').textContent = data.credits;
+      document.getElementById('credit-desc').textContent = cfg.payments.enabled
+        ? `1 mensaje = ${cfg.ai.creditsPerMessage} crédito · 1 crédito = ${cfg.payments.josePerCredit} ${cfg.token.symbol}`
+        : '1 mensaje = 1 crédito. El pago con JOSE se activará pronto.';
+      document.getElementById('mm-desc').textContent = cfg.token.address
+        ? `Red ${cfg.chain.chainName} (ID ${cfg.chain.chainId}) y token ${cfg.token.symbol} (${Jose.shortAddr(cfg.token.address)}).`
+        : `Red ${cfg.chain.chainName} (ID ${cfg.chain.chainId}). El botón del token se activa cuando se publique la dirección de JOSE.`;
+      document.getElementById('add-token').disabled = !cfg.token.address;
+
+      const pays = await Jose.api('/api/credits');
+      const list = pays.ok ? pays.body.payments : [];
+      document.getElementById('payments').innerHTML = list.length
+        ? '<div class="muted" style="margin-bottom:4px;">Pagos recientes</div>' + list.slice(0, 5).map((p) =>
+            `<div class="muted mono"><a target="_blank" rel="noopener" href="${Jose.escapeHtml(cfg.chain.explorerUrl.replace(/\/$/, ''))}/tx/${Jose.escapeHtml(p.txHash)}">${Jose.escapeHtml(Jose.shortAddr(p.txHash))}</a> · +${Number(p.credits)} créditos · ${new Date(p.claimedAt).toLocaleDateString()}</div>`).join('')
+        : '';
+    }
+
+    document.getElementById('add-network').addEventListener('click', async () => {
+      try { await Jose.addNetwork(); setLine('mm-status', 'Red agregada en MetaMask.', 'ok'); }
+      catch (err) { setLine('mm-status', err.message || 'Cancelado.', 'err'); }
+    });
+    document.getElementById('add-token').addEventListener('click', async () => {
+      try { const ok = await Jose.addToken(); setLine('mm-status', ok ? 'Token JOSE agregado.' : 'Cancelado.', ok ? 'ok' : ''); }
+      catch (err) { setLine('mm-status', err.message || 'Cancelado.', 'err'); }
+    });
 
     function progressRingSvg(done, total) {
       const r = 20, c = 2 * Math.PI * r;
@@ -71,6 +174,7 @@
         return;
       }
       const data = await res.json();
+      renderWallet(data);
       const connectedCount = data.plugins.filter((p) => p.connected).length;
 
       document.getElementById('progress-summary').innerHTML = `

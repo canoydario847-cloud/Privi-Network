@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hey Jose</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="wrap chat">
+    <div id="nav"></div>
+    <div class="chat-head">
+      <h1>Hey Jose</h1>
+      <span class="muted"><span id="credits">…</span> créditos · <a href="#" id="buy-toggle">Comprar con JOSE</a></span>
+    </div>
+    <p class="muted" style="margin:6px 0 0;">Jose responde en español, portugués, chino o inglés. Cada mensaje usa 1 crédito. Las respuestas las genera un modelo de IA de un proveedor externo y pueden contener errores.</p>
+
+    <div class="card" id="buy-panel" hidden style="margin-top:16px;">
+      <h2>Comprar créditos con JOSE</h2>
+      <p id="buy-desc">Cargando…</p>
+      <div class="row">
+        <input id="buy-qty" type="number" min="1" step="1" value="50" style="width:110px;" aria-label="Créditos" />
+        <button class="btn primary" type="button" id="buy-btn">Pagar con MetaMask</button>
+      </div>
+      <details style="margin-top:12px;">
+        <summary class="muted">¿Ya enviaste JOSE? Reclama con el hash de la transacción</summary>
+        <div class="row" style="margin-top:8px;">
+          <input id="claim-hash" class="mono" placeholder="0x…" style="flex:1; min-width:200px;" />
+          <button class="btn" type="button" id="claim-btn">Reclamar</button>
+        </div>
+      </details>
+      <div class="status-line" id="buy-status"></div>
+    </div>
+
+    <div class="chat-thread" id="thread">
+      <div class="chat-empty" id="empty">
+        <div>¿En qué te ayudo hoy?</div>
+        <div class="suggestions">
+          <button class="btn small" type="button" data-suggest="Traduce al chino: El contenedor sale el jueves, no el martes. El costo no cambia.">Traducir un aviso de envío</button>
+          <button class="btn small" type="button" data-suggest="¿Qué documentos necesito para importar repuestos de China a Chile?">Importar de China</button>
+          <button class="btn small" type="button" data-suggest="Escreva uma resposta educada para um cliente que pergunta onde está o pedido #4521.">Responder a un cliente (PT)</button>
+        </div>
+      </div>
+    </div>
+
+    <form class="chat-form" id="form">
+      <div class="row">
+        <textarea id="input" rows="1" placeholder="Escribe a Jose…" aria-label="Mensaje"></textarea>
+        <button class="btn primary" type="submit" id="send">Enviar</button>
+      </div>
+      <div class="status-line" id="chat-status"></div>
+    </form>
+  </div>
+
+  <script src="jose-wallet.js"></script>
+  <script>
+    const { api, escapeHtml, getConfig } = window.Jose;
+    document.getElementById('nav').innerHTML = Jose.nav('chat.html');
+
+    const thread = document.getElementById('thread');
+    const input = document.getElementById('input');
+    const sendBtn = document.getElementById('send');
+    const chatStatus = document.getElementById('chat-status');
+    const creditsEl = document.getElementById('credits');
+    const buyStatus = document.getElementById('buy-status');
+    let me = null;
+    let history = [];
+    try { history = JSON.parse(sessionStorage.getItem('jose-chat') || '[]'); } catch { history = []; }
+
+    function setStatus(el, text, kind = '') { el.textContent = text || ''; el.className = 'status-line ' + kind; }
+    function save() { try { sessionStorage.setItem('jose-chat', JSON.stringify(history.slice(-40))); } catch {} }
+
+    function render() {
+      document.getElementById('empty').hidden = history.length > 0;
+      thread.querySelectorAll('.msg').forEach((n) => n.remove());
+      for (const m of history) {
+        const div = document.createElement('div');
+        div.className = 'msg ' + m.role;
+        div.textContent = m.content;
+        thread.appendChild(div);
+      }
+    }
+
+    async function init() {
+      const r = await api('/api/me');
+      if (r.status === 401) { location.href = 'login.html?next=chat.html'; return; }
+      me = r.body;
+      creditsEl.textContent = me.credits;
+      const cfg = await getConfig();
+      if (!cfg.ai.enabled) {
+        setStatus(chatStatus, 'Hey Jose todavía no está activado en este servidor (falta la clave de IA).', 'err');
+        sendBtn.disabled = true;
+      }
+      const desc = document.getElementById('buy-desc');
+      if (cfg.payments.enabled) {
+        desc.innerHTML = `1 crédito = ${escapeHtml(cfg.payments.josePerCredit)} ${escapeHtml(cfg.token.symbol)} en ${escapeHtml(cfg.chain.chainName)}. ` +
+          (me.wallet ? `Pagas desde tu billetera vinculada <span class="mono">${escapeHtml(Jose.shortAddr(me.wallet))}</span>.`
+                     : `Primero <a href="dashboard.html#wallet">vincula tu billetera</a> en Mi cuenta.`);
+      } else {
+        desc.textContent = 'Pagar con JOSE todavía no está activado en este servidor. Mientras tanto puedes usar tus créditos de bienvenida.';
+        document.getElementById('buy-btn').disabled = true;
+        document.getElementById('claim-btn').disabled = true;
+      }
+      render();
+    }
+
+    async function send(text) {
+      text = text.trim();
+      if (!text || sendBtn.disabled) return;
+      history.push({ role: 'user', content: text });
+      render(); save();
+      input.value = '';
+      sendBtn.disabled = true;
+      const thinking = document.createElement('div');
+      thinking.className = 'msg assistant thinking';
+      thinking.textContent = 'Jose está escribiendo…';
+      thread.appendChild(thinking);
+      thinking.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      setStatus(chatStatus, '');
+
+      const r = await api('/api/chat', { body: { messages: history } });
+      thinking.remove();
+      sendBtn.disabled = false;
+      if (r.body.credits !== undefined) creditsEl.textContent = r.body.credits;
+      if (r.ok) {
+        history.push({ role: 'assistant', content: r.body.reply });
+        save(); render();
+        thread.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      } else {
+        history.pop(); // let them retry the same message
+        input.value = text;
+        render(); save();
+        if (r.status === 402) {
+          setStatus(chatStatus, 'Te quedaste sin créditos. Compra más con JOSE.', 'err');
+          document.getElementById('buy-panel').hidden = false;
+        } else {
+          setStatus(chatStatus, r.body.error || 'Algo salió mal. Intenta de nuevo.', 'err');
+        }
+      }
+      input.focus();
+    }
+
+    document.getElementById('form').addEventListener('submit', (e) => { e.preventDefault(); send(input.value); });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(input.value); }
+    });
+    input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 200) + 'px'; });
+    document.querySelectorAll('[data-suggest]').forEach((b) => b.addEventListener('click', () => send(b.dataset.suggest)));
+
+    document.getElementById('buy-toggle').addEventListener('click', (e) => {
+      e.preventDefault();
+      const p = document.getElementById('buy-panel');
+      p.hidden = !p.hidden;
+    });
+
+    async function finishClaim(txHash) {
+      setStatus(buyStatus, 'Esperando la confirmación en la red…');
+      const result = await Jose.claimPayment(txHash, (msg) => setStatus(buyStatus, msg));
+      creditsEl.textContent = result.credits;
+      setStatus(buyStatus, `Listo: +${result.added} créditos.`, 'ok');
+    }
+
+    document.getElementById('buy-btn').addEventListener('click', async () => {
+      const qty = parseInt(document.getElementById('buy-qty').value, 10);
+      if (!qty || qty < 1) return setStatus(buyStatus, 'Elige al menos 1 crédito.', 'err');
+      if (!me.wallet) return setStatus(buyStatus, 'Primero vincula tu billetera en Mi cuenta.', 'err');
+      try {
+        setStatus(buyStatus, 'Confirma el pago en MetaMask…');
+        const txHash = await Jose.payForCredits(qty, me.wallet);
+        await finishClaim(txHash);
+      } catch (err) {
+        setStatus(buyStatus, err.message || 'Pago cancelado.', 'err');
+      }
+    });
+
+    document.getElementById('claim-btn').addEventListener('click', async () => {
+      const txHash = document.getElementById('claim-hash').value.trim();
+      try { await finishClaim(txHash); } catch (err) { setStatus(buyStatus, err.message, 'err'); }
+    });
+
+    init();
+  </script>
+</body>
+</html>

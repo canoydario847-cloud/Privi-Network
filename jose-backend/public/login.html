@@ -33,7 +33,9 @@
       });
       const body = await res.json();
       if (res.ok) {
-        window.location.href = params.get('next') || 'dashboard.html';
+        // Only follow same-site relative paths, never a full URL to elsewhere.
+        const next = params.get('next') || '';
+        window.location.href = /^\/?[A-Za-z0-9_\-\/.]+(\?[^#]*)?$/.test(next) && !next.startsWith('//') ? next : 'dashboard.html';
       } else {
         document.getElementById('error').textContent = body.error;
       }

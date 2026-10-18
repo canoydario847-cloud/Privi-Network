@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mercado NFT — Jose</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="wrap market">
+    <div id="nav"></div>
+    <div class="chat-head">
+      <h1>Mercado NFT</h1>
+      <div class="row">
+        <button class="btn" type="button" id="filter-mine" hidden>Mis publicaciones</button>
+        <button class="btn primary" type="button" id="list-toggle">Publicar un NFT</button>
+      </div>
+    </div>
+    <p class="lede">NFTs en <span id="chain-name">Base</span> con precio en JOSE. Cada publicación se verifica: solo puede publicar quien tiene el NFT en su billetera vinculada. La compra directa en la página se abre cuando se lance el contrato del mercado; por ahora puedes ver precios y contactar al vendedor.</p>
+
+    <div class="card list-form" id="list-panel" hidden>
+      <h2>Publicar un NFT</h2>
+      <p id="list-hint">Necesitas iniciar sesión y vincular tu billetera.</p>
+      <form id="list-form">
+        <div class="grid2">
+          <div>
+            <label for="contract">Contrato del NFT (ERC-721)</label>
+            <input id="contract" class="mono" placeholder="0x…" required />
+          </div>
+          <div>
+            <label for="tokenId">ID del token</label>
+            <input id="tokenId" inputmode="numeric" placeholder="1" required />
+          </div>
+        </div>
+        <div class="grid2">
+          <div>
+            <label for="title">Título (opcional)</label>
+            <input id="title" maxlength="80" placeholder="Si lo dejas vacío usamos el nombre del NFT" />
+          </div>
+          <div>
+            <label for="price">Precio en <span class="sym">JOSE</span></label>
+            <input id="price" type="number" min="0" step="any" placeholder="100" required />
+          </div>
+        </div>
+        <label for="description">Descripción (opcional)</label>
+        <textarea id="description" rows="3" maxlength="1000"></textarea>
+        <div class="row" style="margin-top:14px;">
+          <button class="btn primary" type="submit" id="list-submit">Verificar y publicar</button>
+        </div>
+        <div class="status-line" id="list-status"></div>
+      </form>
+    </div>
+
+    <div class="nft-grid" id="grid"><p class="muted">Cargando…</p></div>
+  </div>
+
+  <script src="jose-wallet.js"></script>
+  <script>
+    const { api, escapeHtml, getConfig, loadMetadata, safeImage } = window.Jose;
+    document.getElementById('nav').innerHTML = Jose.nav('market.html');
+    const grid = document.getElementById('grid');
+    const listStatus = document.getElementById('list-status');
+    let me = null;
+    let onlyMine = false;
+
+    function setStatus(text, kind = '') { listStatus.textContent = text || ''; listStatus.className = 'status-line ' + kind; }
+
+    function cardHtml(l) {
+      return `<a class="nft-card" href="nft.html?id=${encodeURIComponent(l.id)}">
+        <div class="nft-img" data-uri="${escapeHtml(l.tokenURI)}">Sin imagen</div>
+        <div class="nft-meta">
+          <div class="nft-title" data-title-for="${escapeHtml(l.id)}">${escapeHtml(l.title || `#${l.tokenId}`)}</div>
+          <div class="muted mono">${escapeHtml(Jose.shortAddr(l.contract))} · #${escapeHtml(l.tokenId.length > 10 ? l.tokenId.slice(0, 10) + '…' : l.tokenId)}</div>
+          <div class="nft-price">${escapeHtml(l.price)} ${escapeHtml(l.currency)}</div>
+        </div>
+      </a>`;
+    }
+
+    async function hydrate(card, listing) {
+      const meta = await loadMetadata(listing.tokenURI);
+      const img = safeImage(meta.image || meta.image_url);
+      const box = card.querySelector('.nft-img');
+      if (img) {
+        box.textContent = '';
+        const el = document.createElement('img');
+        el.src = img; el.alt = meta.name || ''; el.loading = 'lazy'; el.referrerPolicy = 'no-referrer';
+        el.onerror = () => { box.textContent = 'Sin imagen'; };
+        box.appendChild(el);
+      }
+      if (!listing.title && meta.name) card.querySelector('.nft-title').textContent = String(meta.name).slice(0, 80);
+    }
+
+    async function loadListings() {
+      const q = onlyMine && me?.wallet ? '?seller=' + encodeURIComponent(me.wallet) : '';
+      const r = await api('/api/nfts' + q);
+      const listings = r.body.listings || [];
+      if (!listings.length) {
+        grid.innerHTML = `<p class="muted">${onlyMine ? 'Todavía no publicaste nada.' : 'Todavía no hay NFTs publicados. ¡Sé el primero!'}</p>`;
+        return;
+      }
+      grid.innerHTML = listings.map(cardHtml).join('');
+      [...grid.children].forEach((card, i) => hydrate(card, listings[i]));
+    }
+
+    async function init() {
+      const cfg = await getConfig();
+      document.getElementById('chain-name').textContent = cfg.chain.chainName;
+      document.querySelectorAll('.sym').forEach((s) => (s.textContent = cfg.token.symbol));
+      const r = await api('/api/me');
+      me = r.ok ? r.body : null;
+      const hint = document.getElementById('list-hint');
+      const submit = document.getElementById('list-submit');
+      if (!me) {
+        hint.innerHTML = '<a href="login.html?next=market.html">Inicia sesión</a> y vincula tu billetera para publicar.';
+        submit.disabled = true;
+      } else if (!me.wallet) {
+        hint.innerHTML = 'Primero <a href="dashboard.html#wallet">vincula tu billetera</a> en Mi cuenta: ahí debe estar el NFT.';
+        submit.disabled = true;
+      } else {
+        hint.innerHTML = `Publicarás desde <span class="mono">${escapeHtml(Jose.shortAddr(me.wallet))}</span>. Comprobamos en la red que el NFT esté en esa billetera.`;
+        document.getElementById('filter-mine').hidden = false;
+      }
+      loadListings();
+    }
+
+    document.getElementById('list-toggle').addEventListener('click', () => {
+      const p = document.getElementById('list-panel');
+      p.hidden = !p.hidden;
+    });
+
+    document.getElementById('filter-mine').addEventListener('click', (e) => {
+      onlyMine = !onlyMine;
+      e.target.textContent = onlyMine ? 'Ver todo' : 'Mis publicaciones';
+      loadListings();
+    });
+
+    document.getElementById('list-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      setStatus('Verificando en la red…');
+      const r = await api('/api/nfts', {
+        body: {
+          contract: document.getElementById('contract').value,
+          tokenId: document.getElementById('tokenId').value,
+          title: document.getElementById('title').value,
+          price: document.getElementById('price').value,
+          description: document.getElementById('description').value,
+        },
+      });
+      if (r.ok) {
+        location.href = 'nft.html?id=' + encodeURIComponent(r.body.listing.id);
+      } else {
+        setStatus(r.body.error || 'No se pudo publicar.', 'err');
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>

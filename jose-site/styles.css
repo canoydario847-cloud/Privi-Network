@@ -343,3 +343,29 @@ footer .wrap {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ---------- v3: Hey Jose, wallet, market ---------- */
+header.top .apps-link { margin-right: 0; }
+header.top .apps-link + .apps-link { margin-left: 16px; margin-right: auto; }
+button.btn { font-family: inherit; cursor: pointer; }
+.web3-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-top: 28px; }
+@media (max-width: 860px) { .web3-grid { grid-template-columns: 1fr; } }
+.web3-cell {
+  border: 1px solid var(--rule); border-radius: 14px; padding: 22px;
+  display: flex; flex-direction: column; gap: 10px; align-items: flex-start; background: var(--paper-2);
+}
+.web3-cell .step-desc { flex: 1; margin-bottom: 6px; }
+.web3-cell .cta-row { gap: 8px; }
+.web3-status { font-size: 0.85rem; color: var(--ink-soft); min-height: 1.2em; margin: 0; }
+.web3-status.ok { color: var(--jade); }
+.web3-status.err { color: var(--brick); }
+.hey-jose-fab {
+  position: fixed; right: 20px; bottom: 20px; z-index: 50;
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 12px 18px; border-radius: 999px; text-decoration: none;
+  background: var(--ink); color: var(--paper); font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+.hey-jose-fab:hover { transform: translateY(-1px); }
+.hey-jose-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--jade); box-shadow: 0 0 0 3px rgba(63, 125, 107, 0.3); }
+@media (max-width: 560px) { .hey-jose-fab { right: 14px; bottom: 14px; padding: 11px 15px; } }

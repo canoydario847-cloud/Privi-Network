@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NFT — Jose</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="wrap market">
+    <div id="nav"></div>
+    <p><a href="market.html">← Volver al mercado</a></p>
+    <div id="detail"><p class="muted">Cargando…</p></div>
+  </div>
+
+  <script src="jose-wallet.js"></script>
+  <script>
+    const { api, escapeHtml, getConfig, loadMetadata, safeImage } = window.Jose;
+    document.getElementById('nav').innerHTML = Jose.nav('market.html');
+    const detail = document.getElementById('detail');
+
+    const STATUS = {
+      active: ['ok', 'A la venta'],
+      stale: ['warn', 'El vendedor ya no tiene este NFT'],
+      cancelled: ['warn', 'Retirado por el vendedor'],
+    };
+
+    async function init() {
+      const id = new URLSearchParams(location.search).get('id') || '';
+      const [r, cfg, meR] = await Promise.all([api('/api/nfts/' + encodeURIComponent(id)), getConfig(), api('/api/me')]);
+      if (!r.ok) { detail.innerHTML = `<p class="muted">${escapeHtml(r.body.error || 'No encontrado.')}</p>`; return; }
+      const l = r.body.listing;
+      const me = meR.ok ? meR.body : null;
+      const meta = await loadMetadata(l.tokenURI);
+      const name = l.title || meta.name || `#${l.tokenId}`;
+      const img = safeImage(meta.image || meta.image_url);
+      const [cls, label] = STATUS[l.status] || ['', l.status];
+      const explorer = cfg.chain.explorerUrl.replace(/\/$/, '');
+      const isSeller = me && me.wallet && me.wallet.toLowerCase() === l.seller.toLowerCase();
+      document.title = `${name} — Jose`;
+
+      detail.innerHTML = `
+        <div class="nft-detail">
+          <div class="nft-img" id="img-box">Sin imagen</div>
+          <div>
+            <span class="pill ${cls}">${escapeHtml(label)}</span>
+            <h1 style="margin-top:10px;">${escapeHtml(name)}</h1>
+            <div class="nft-price" style="font-size:1.4rem;">${escapeHtml(l.price)} ${escapeHtml(l.currency)}</div>
+            ${l.description || meta.description ? `<p style="white-space:pre-wrap;">${escapeHtml(l.description || String(meta.description).slice(0, 1000))}</p>` : ''}
+            <dl class="kv">
+              <dt>Vendedor</dt><dd class="mono"><a href="${escapeHtml(explorer)}/address/${escapeHtml(l.seller)}" target="_blank" rel="noopener">${escapeHtml(l.seller)}</a></dd>
+              <dt>Contrato</dt><dd class="mono"><a href="${escapeHtml(explorer)}/token/${escapeHtml(l.contract)}?a=${escapeHtml(l.tokenId)}" target="_blank" rel="noopener">${escapeHtml(l.contract)}</a></dd>
+              <dt>Token ID</dt><dd class="mono">${escapeHtml(l.tokenId)}</dd>
+              <dt>Red</dt><dd>${escapeHtml(cfg.chain.chainName)}</dd>
+              <dt>Publicado</dt><dd>${new Date(l.createdAt).toLocaleString()}</dd>
+            </dl>
+            <div class="card" style="background:var(--paper-2);">
+              <p style="margin:0;">La compra directa se abre cuando se lance el contrato del mercado Jose. Hasta entonces, nada en esta página mueve fondos ni NFTs.</p>
+            </div>
+            <div class="row">
+              <button class="btn" type="button" id="share">Copiar enlace</button>
+              ${isSeller && l.status === 'active' ? '<button class="btn danger" type="button" id="cancel">Retirar publicación</button>' : ''}
+            </div>
+            <div class="status-line" id="status"></div>
+          </div>
+        </div>`;
+
+      if (img) {
+        const box = document.getElementById('img-box');
+        box.textContent = '';
+        const el = document.createElement('img');
+        el.src = img; el.alt = name; el.referrerPolicy = 'no-referrer';
+        el.onerror = () => { box.textContent = 'Sin imagen'; };
+        box.appendChild(el);
+      }
+
+      document.getElementById('share').addEventListener('click', (e) => {
+        navigator.clipboard.writeText(location.href).then(() => { e.target.textContent = 'Copiado'; });
+      });
+      document.getElementById('cancel')?.addEventListener('click', async () => {
+        if (!confirm('¿Retirar esta publicación?')) return;
+        const c = await api(`/api/nfts/${encodeURIComponent(l.id)}/cancel`, { method: 'POST' });
+        if (c.ok) location.reload();
+        else document.getElementById('status').textContent = c.body.error;
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>

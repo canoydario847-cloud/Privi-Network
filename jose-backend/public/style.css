@@ -71,3 +71,64 @@ a { color: var(--jade); }
 .envvar-row code { font-size: 0.82rem; font-weight: 600; }
 .envvar-row .envvar-label { font-size: 0.78rem; color: var(--ink-soft); display: block; margin-top: 1px; }
 .envvar-row .copied { color: var(--jade); }
+
+/* ---------------- v3: shared ---------------- */
+button.btn { width: auto; margin: 0; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.appnav { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 28px; }
+.appnav .wordmark { color: var(--ink); text-decoration: none; }
+.appnav-links { display: flex; gap: 4px; flex-wrap: wrap; }
+.appnav-links a { padding: 6px 10px; border-radius: 999px; color: var(--ink-soft); text-decoration: none; font-size: 0.88rem; }
+.appnav-links a.active { background: var(--ink); color: var(--paper); }
+.card { border: 1px solid var(--rule); border-radius: 12px; padding: 16px 18px; margin-bottom: 18px; }
+.card h2 { font-family: var(--serif); font-weight: 500; font-size: 1.15rem; margin: 0 0 4px; }
+.card p { margin: 4px 0 12px; color: var(--ink-soft); font-size: 0.9rem; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; }
+.muted { color: var(--ink-soft); font-size: 0.85rem; }
+.pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; background: var(--paper-2); border: 1px solid var(--rule); }
+.pill.ok { color: var(--jade); border-color: var(--jade); }
+.pill.warn { color: var(--brick); border-color: var(--brick); }
+.status-line { font-size: 0.85rem; min-height: 1.2em; margin-top: 8px; color: var(--ink-soft); }
+.status-line.err { color: var(--brick); }
+.status-line.ok { color: var(--jade); }
+textarea { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--rule); background: var(--paper-2); color: var(--ink); font: inherit; resize: vertical; }
+
+/* ---------------- v3: Hey Jose chat ---------------- */
+.wrap.chat { max-width: 760px; padding-top: 32px; display: flex; flex-direction: column; min-height: 100vh; }
+.chat-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.chat-head h1 { margin: 0; }
+.chat-thread { flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 20px 0; }
+.msg { max-width: 85%; padding: 11px 14px; border-radius: 14px; white-space: pre-wrap; word-wrap: break-word; font-size: 0.97rem; }
+.msg.user { align-self: flex-end; background: var(--ink); color: var(--paper); border-bottom-right-radius: 4px; }
+.msg.assistant { align-self: flex-start; background: var(--paper-2); border: 1px solid var(--rule); border-bottom-left-radius: 4px; }
+.msg.thinking { color: var(--ink-soft); font-style: italic; }
+.chat-empty { color: var(--ink-soft); text-align: center; padding: 40px 0 10px; }
+.chat-empty .suggestions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 14px; }
+.chat-form { position: sticky; bottom: 0; background: var(--paper); padding: 12px 0 20px; border-top: 1px solid var(--rule); }
+.chat-form .row { align-items: flex-end; flex-wrap: nowrap; }
+.chat-form textarea { min-height: 48px; max-height: 200px; }
+.chat-form .btn { height: 48px; }
+
+/* ---------------- v3: marketplace ---------------- */
+.wrap.market { max-width: 1040px; padding-top: 32px; }
+.nft-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+.nft-card { border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; text-decoration: none; color: inherit; display: flex; flex-direction: column; background: var(--paper); transition: transform 0.12s; }
+.nft-card:hover { transform: translateY(-2px); }
+.nft-img { aspect-ratio: 1; background: var(--paper-2); display: grid; place-items: center; color: var(--ink-soft); font-size: 0.8rem; overflow: hidden; }
+.nft-img img { width: 100%; height: 100%; object-fit: cover; }
+.nft-meta { padding: 12px 14px; }
+.nft-title { font-family: var(--serif); font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nft-price { font-weight: 700; margin-top: 4px; }
+.nft-detail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+.nft-detail .nft-img { border-radius: 12px; border: 1px solid var(--rule); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 0.88rem; margin: 16px 0; }
+.kv dt { color: var(--ink-soft); }
+.kv dd { margin: 0; overflow-wrap: anywhere; }
+.list-form label { margin-top: 12px; }
+.list-form .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 680px) {
+  .nft-detail, .list-form .grid2 { grid-template-columns: 1fr; }
+  .msg { max-width: 92%; }
+}
+.nft-grid > p { grid-column: 1 / -1; }
