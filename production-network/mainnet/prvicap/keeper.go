@@ -49,6 +49,10 @@ var (
 // module account access, staking, or normal bank sends.
 type BankView interface {
     GetSupply(ctx context.Context, denom string) sdk.Coin
+    // Check actual on-ledger account balances, not merely the bank Supply
+    // metadata. UncheckedSetBalance can alter balances without changing
+    // that metadata, bypassing a supply-only reconciliation.
+    IterateAllBalances(ctx context.Context, cb func(address sdk.AccAddress, coin sdk.Coin) (stop bool))
 }
 
 type State struct {
@@ -168,8 +172,10 @@ func (k Keeper) MintRestriction(ctx context.Context, coins sdk.Coins) error {
 
 // Reconcile rejects total bank native supply above the immutable genesis
 // allocation. Burns may decrease outstanding supply but never increase budget.
-// It does not detect unguarded intra-block mint+burn, hence it is NOT a complete
-// substitute for protecting every mint path and unsafe setter.
+// An end-of-block scan detects untracked net balance changes but NOT
+// unauthorized mint+burn that cancels out inside one block. This O(accounts)
+// check is provisional; it requires scale benchmarks and alternative
+// issuance hooks before final financial deployment.
 func (k Keeper) Reconcile(ctx context.Context, bank BankView) error {
     if bank==nil {return ErrUnexpectedSupply}
     _,lifetime,err:=k.read(ctx)
@@ -180,6 +186,25 @@ func (k Keeper) Reconcile(ctx context.Context, bank BankView) error {
     }
     if supply.Amount.BigInt().Cmp(lifetime)>0 || supply.Amount.BigInt().Cmp(capValue())>0 {
         return ErrUnexpectedSupply
+    }
+    // Defense in depth against direct balance mutations that do NOT update
+    // x/bank declared supply (including UncheckedSetBalance from EVM/IBC).
+    // A complete scan is deterministic but O(number of accounts), and must
+    // be benchmarked/optimized before any financial mainnet use.
+    actual := new(big.Int)
+    invalid := false
+    bank.IterateAllBalances(ctx, func(_ sdk.AccAddress, coin sdk.Coin) bool {
+        if coin.Denom != BaseDenom {return false}
+        if coin.Amount.IsNegative() {invalid=true;return true}
+        actual.Add(actual,coin.Amount.BigInt())
+        if actual.Cmp(lifetime)>0 || actual.Cmp(capValue())>0 {
+            invalid=true
+            return true
+        }
+        return false
+    })
+    if invalid || actual.Cmp(supply.Amount.BigInt())!=0 {
+        return fmt.Errorf("%w: native bank supply/balances mismatch or cap exceeded",ErrUnexpectedSupply)
     }
     return nil
 }
