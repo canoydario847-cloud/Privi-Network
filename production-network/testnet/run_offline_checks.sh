@@ -17,5 +17,7 @@ node --test "$ROOT/testnet/test_deploy_disposable_counter.cjs"
 # Cosmos SDK consensus code. Race tests exercise simultaneous candidate mints.
 command -v go >/dev/null
 (cd "$ROOT/mainnet/capmodel" && GOTOOLCHAIN=local go test -race -count=1 ./...)
+# Strict AST baseline for pinned Cosmos EVM v0.7.3 mint entry points.
+(cd "$ROOT/mainnet/mintscan" && GOTOOLCHAIN=local go test -race -count=1 ./...)
 bash -n "$ROOT/testnet/bootstrap-local-4.sh"
 echo "Offline checks passed. Live EVM / CometBFT testing still required."
