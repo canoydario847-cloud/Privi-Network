@@ -32,6 +32,12 @@ func test() {
     app.BankKeeper = app.BankKeeper.WithObjStoreKey(oKeys[banktypes.ObjectStoreKey])
     return app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)
 }
+func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {
+    return app.ModuleManager.BeginBlock(ctx)
+}
+func (app *EVMD) EndBlocker(ctx sdk.Context) (sdk.EndBlock, error) {
+    return app.ModuleManager.EndBlock(ctx)
+}
 '''
 APP = "\n".join(("\t" * ((len(line) - len(line.lstrip(" "))) // 4)) + line.lstrip(" ") for line in APP.split("\n"))
 
@@ -89,6 +95,21 @@ class PatcherTests(unittest.TestCase):
         self.assertIn("PRVI cap genesis initialization denied", app)
         self.assertIn("const StoreKey = \"prvicap\"", (self.upstream/"evmd"/"prvicap"/"store.go").read_text())
         self.assertNotIn("app.BankKeeper = app.BankKeeper.WithObjStoreKey", app)
+        self.assertIn("PRVI beginning-of-block supply check denied", app)
+        self.assertIn("PRVI end-of-block supply check denied", app)
+        self.assertLess(app.index("PriviCapKeeper.Reconcile(ctx, app.BankKeeper)"),
+                        app.index("return app.ModuleManager.BeginBlock(ctx)"))
+        self.assertEqual(app.count("PriviCapKeeper.Reconcile(ctx, app.BankKeeper)"),2)
+
+    def test_changed_end_blocker_is_rejected_without_partial_write(self):
+        changed=APP.replace("return app.ModuleManager.EndBlock(ctx)",
+                            "return app.UnreviewedEndBlock(ctx)")
+        self.app_file.write_text(changed, encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "post-block supply invariant"):
+            module.apply_patch(self.upstream, self.repo, verify_git=False)
+        self.assertEqual(self.app_file.read_text(), changed)
+        self.assertFalse((self.upstream/"evmd"/"prvicap").exists())
+
 
     def test_cannot_overwrite_existing_cap_keeper_files(self):
         (self.upstream/"evmd"/"prvicap").mkdir()
