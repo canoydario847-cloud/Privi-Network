@@ -52,7 +52,7 @@ test("sale status and network differences are accurately disclosed",()=>{
   assert.match(html,/NO FUNDS REQUESTED/);
   assert.match(html,/TEST \/ atest/);
   assert.match(html,/BNB PRIV/);
-  assert.match(html,/not independently audited/i);
+  assert.match(html,/not been independently audited/i);
 });
 test("page uses accessible landmarks and responsive viewport",()=>{
   assert.match(html,/<html lang="en">/);
