@@ -27,6 +27,7 @@ import (
     banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
     stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
     minttypes "github.com/cosmos/cosmos-sdk/x/mint/types"
+    slashingtypes "github.com/cosmos/cosmos-sdk/x/slashing/types"
     "github.com/cosmos/cosmos-sdk/testutil/mock"
 )
 
@@ -93,6 +94,23 @@ func probe() error {
     if err:=app.AppCodec().UnmarshalJSON(genesis[stakingtypes.ModuleName], &stakingGenesis);err!=nil {return err}
     stakingGenesis.Params.BondDenom=prvicap.BaseDenom
     genesis[stakingtypes.ModuleName]=app.AppCodec().MustMarshalJSON(&stakingGenesis)
+    // Running a real FinalizeBlock requires the slashing module to know the
+    // ephemeral validator's signing record, unlike InitChain-only fixtures.
+    // Reuse the exact pinned Cosmos EVM integration network's genesis shape.
+    consAddress, err := app.StakingKeeper.ConsensusAddressCodec().BytesToString(pubKey.Address())
+    if err!=nil {return fmt.Errorf("fixture consensus address: %w",err)}
+    var slashingGenesis slashingtypes.GenesisState
+    if err:=app.AppCodec().UnmarshalJSON(genesis[slashingtypes.ModuleName],&slashingGenesis);err!=nil {return err}
+    slashingGenesis.SigningInfos=[]slashingtypes.SigningInfo{{
+        Address:consAddress,
+        ValidatorSigningInfo:slashingtypes.ValidatorSigningInfo{
+            Address:consAddress,
+            JailedUntil:time.Unix(0,0).UTC(),
+        },
+    }}
+    slashingGenesis.MissedBlocks=[]slashingtypes.ValidatorMissedBlocks{{Address:consAddress}}
+    genesis[slashingtypes.ModuleName]=app.AppCodec().MustMarshalJSON(&slashingGenesis)
+
     var mintGenesis minttypes.GenesisState
     if err:=app.AppCodec().UnmarshalJSON(genesis[minttypes.ModuleName], &mintGenesis);err!=nil {return err}
     mintGenesis.Params.MintDenom=prvicap.BaseDenom
