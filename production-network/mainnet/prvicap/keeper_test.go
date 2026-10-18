@@ -154,3 +154,20 @@ func TestRejectNilStoreOrBank(t *testing.T) {
   if err:=k.InitGenesis(context.Background(),whole(1),nil);!errors.Is(err,ErrBankSupplyMismatch){t.Fatal(err)}
   if err:=k.Reconcile(context.Background(),nil);!errors.Is(err,ErrUnexpectedSupply){t.Fatal(err)}
 }
+
+func TestPureGenesisDeclarationPreflightRejectsInvalidOrAboveCap(t *testing.T) {
+    for _,good:=range []string{"1",whole(1),whole(750_000_000),MaxBase} {
+        if err:=ValidateGenesisBase(good);err!=nil {
+            t.Fatalf("accepted-range declaration %q denied: %v",good,err)
+        }
+    }
+    capPlusOne,ok:=new(big.Int).SetString(MaxBase,10)
+    if !ok {t.Fatal("invalid max PRVI constant")}
+    capPlusOne.Add(capPlusOne,big.NewInt(1))
+    for _,bad:=range []string{"","0","00","01","-1","+1"," 1","1 ","1.0",
+        "1e18",capPlusOne.String(),"1234567890123456789012345678901234567890"} {
+        if err:=ValidateGenesisBase(bad);!errors.Is(err,ErrInvalidGenesis) {
+            t.Fatalf("bad declaration %q not rejected fail-closed: %v",bad,err)
+        }
+    }
+}
