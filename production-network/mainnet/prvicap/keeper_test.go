@@ -35,9 +35,17 @@ func (*fakeKV) ReverseIterator([]byte,[]byte) (corestore.Iterator,error) {return
 
 type fakeService struct {data *fakeKV}
 func (s fakeService) OpenKVStore(context.Context) corestore.KVStore {return s.data}
-type fakeBank struct {base sdkmath.Int}
+type fakeBank struct {
+  base sdkmath.Int
+  actual *sdkmath.Int // absent = matches declared supply for existing cases
+}
 func (b fakeBank) GetSupply(_ context.Context, denom string) sdk.Coin {
   return sdk.NewCoin(denom,b.base)
+}
+func (b fakeBank) IterateAllBalances(_ context.Context, cb func(sdk.AccAddress,sdk.Coin)bool) {
+  amount:=b.base
+  if b.actual!=nil {amount=*b.actual}
+  if amount.IsPositive() {cb(sdk.AccAddress(make([]byte,20)),sdk.NewCoin(BaseDenom,amount))}
 }
 func coins(prvi sdkmath.Int) sdk.Coins {return sdk.NewCoins(sdk.NewCoin(BaseDenom,prvi))}
 func whole(n int64) string {
@@ -170,4 +178,24 @@ func TestPureGenesisDeclarationPreflightRejectsInvalidOrAboveCap(t *testing.T) {
             t.Fatalf("bad declaration %q not rejected fail-closed: %v",bad,err)
         }
     }
+}
+
+
+func TestReconcileRejectsUntrackedDirectBalanceMutations(t *testing.T) {
+  initial:=sdkmath.NewInt(1000)
+  k,_,ctx:=setup(t,initial.String())
+  above:=sdkmath.NewInt(1001)
+  below:=sdkmath.NewInt(999)
+  // These simulate the real SDK's dangerous UncheckedSetBalance, which
+  // changes account records WITHOUT automatically updating x/bank supply.
+  // The declared supply still looks capped, but real balances diverge.
+  for _,actual:=range []sdkmath.Int{above,below} {
+    err:=k.Reconcile(ctx,fakeBank{base:initial,actual:&actual})
+    if !errors.Is(err,ErrUnexpectedSupply) {
+      t.Fatalf("untracked native balance edit (%s) went undetected: %v",actual,err)
+    }
+  }
+  if err:=k.Reconcile(ctx,fakeBank{base:initial});err!=nil {
+    t.Fatalf("normal native supply conservation was falsely rejected: %v",err)
+  }
 }
