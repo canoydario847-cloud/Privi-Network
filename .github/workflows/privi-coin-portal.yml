@@ -19,8 +19,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate JavaScript syntax
         run: node --check coin-portal/app.js
+          node --check coin-portal/server.cjs
       - name: Assert no funds are accepted and all assets resolve
-        run: node --test coin-portal/tests/site.test.cjs
+        run: node --test coin-portal/tests/*.test.cjs
       - name: Package static site for review
         run: |
           mkdir -p dist
