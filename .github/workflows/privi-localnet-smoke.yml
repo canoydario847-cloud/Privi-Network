@@ -60,6 +60,18 @@ jobs:
           sha256sum "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY"
           go version -m "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY"
           # Compile proof only: no genesis, validators, keys or real financial PRVI.
+      - name: Test actual custom Cosmos EVM InitChain refuses unsafe genesis (VALUELESS ONLY)
+        run: |
+          set -euo pipefail
+          PROBE="$RUNNER_TEMP/.upstream-capbuild/evmd/cmd/privi-cap-genesis-probe"
+          mkdir -p "$PROBE"
+          cp production-network/mainnet/custom-app/privi_cap_genesis_probe_main.go "$PROBE/main.go"
+          gofmt -w "$PROBE/main.go"
+          cd "$RUNNER_TEMP/.upstream-capbuild/evmd"
+          GOTOOLCHAIN=local go run -mod=mod -p 2 ./cmd/privi-cap-genesis-probe
+          # 3 negative cases. Fails CI on an accepted atest/demo or cap+1
+          # genesis; does not start nodes, generate keys or issue PRVI.
+
 
   sdk-prvi-capkeeper:
     name: SDK-backed PRVI consensus-store cap keeper unit tests (NOT DEPLOYED)
