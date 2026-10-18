@@ -22,8 +22,16 @@ function exportDevKey(ephemeralRoot) {
   invariant(path.basename(ephemeralRoot) === ".upstream-evm",
     "unsafe export attempted outside disposable upstream directory");
   const home = path.join(ephemeralRoot, ".testnets", "node0", "evmd");
-  invariant(fs.existsSync(path.join(home, "config", "genesis.json")),
-    "disposable dev home not found");
+  // GitHub runner user cannot traverse .testnets (0700, Docker uid 1025).
+  // Check through the disposable container instead; never chmod secrets or
+  // export validator key files to the runner.
+  invariant(fs.existsSync(path.join(ephemeralRoot, ".testnets")),
+    "disposable testnet directory not present");
+  execFileSync("docker",
+    ["run", "--rm", "--entrypoint", "/bin/sh",
+     "-v", home + ":/data:ro", "cosmos/evmd",
+     "-ec", "test -r /data/config/genesis.json"],
+    {encoding:"utf8", timeout:30000, stdio:["ignore","pipe","pipe"]});
   const result = execFileSync("docker",
     ["run", "--rm", "-v", home + ":/data:ro", "cosmos/evmd",
      "keys", "unsafe-export-eth-key", "account0",
