@@ -94,6 +94,58 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \tif err := prvicap.ValidateGenesisBase(initialPRVI.String()); err != nil {
 \t\treturn nil, fmt.Errorf("PRVI cap declared genesis denied before module init: %w", err)
 \t}
+\t// Native PRVI must actually be the EVM gas and staking denomination.
+\t// Do not allow a misleading genesis with capped aprvi but fees/stake in
+\t// upstream stake/atest. All checks precede consensus module writes.
+\tevmJSON, hasEVM := genesisState[evmtypes.ModuleName]
+\tif !hasEVM { return nil, fmt.Errorf("PRVI native genesis: missing EVM module") }
+\tvar evmGenesis evmtypes.GenesisState
+\tif err := app.appCodec.UnmarshalJSON(evmJSON, &evmGenesis); err != nil {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: malformed EVM module: %w", err)
+\t}
+\tif evmGenesis.Params.EvmDenom != prvicap.BaseDenom {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: EVM gas denomination must be aprvi")
+\t}
+\tstakingJSON, hasStaking := genesisState[stakingtypes.ModuleName]
+\tif !hasStaking { return nil, fmt.Errorf("PRVI native genesis: missing staking module") }
+\tvar stakingGenesis stakingtypes.GenesisState
+\tif err := app.appCodec.UnmarshalJSON(stakingJSON, &stakingGenesis); err != nil {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: malformed staking module: %w", err)
+\t}
+\tif stakingGenesis.Params.BondDenom != prvicap.BaseDenom {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: bonded staking denomination must be aprvi")
+\t}
+\tmintJSON, hasMint := genesisState[minttypes.ModuleName]
+\tif !hasMint { return nil, fmt.Errorf("PRVI native genesis: missing mint module") }
+\tvar mintGenesis minttypes.GenesisState
+\tif err := app.appCodec.UnmarshalJSON(mintJSON, &mintGenesis); err != nil {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: malformed mint module: %w", err)
+\t}
+\tif mintGenesis.Params.MintDenom != prvicap.BaseDenom ||
+\t\t!mintGenesis.Params.InflationMin.IsZero() ||
+\t\t!mintGenesis.Params.InflationMax.IsZero() ||
+\t\t!mintGenesis.Params.InflationRateChange.IsZero() ||
+\t\t!mintGenesis.Minter.Inflation.IsZero() ||
+\t\t!mintGenesis.Minter.AnnualProvisions.IsZero() {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: mint must target aprvi with ZERO inflation and provisions")
+\t}
+\tmetadataValid := false
+\tfor _, meta := range bankGenesis.DenomMetadata {
+\t\tif meta.Base != prvicap.BaseDenom { continue }
+\t\tif metadataValid || meta.Display != "PRVI" {
+\t\t\treturn nil, fmt.Errorf("PRVI native genesis: duplicate/invalid aprvi metadata")
+\t\t}
+\t\tbaseFound, displayFound := false, false
+\t\tfor _, unit := range meta.DenomUnits {
+\t\t\tif unit.Denom == prvicap.BaseDenom && unit.Exponent == 0 {baseFound = true}
+\t\t\tif unit.Denom == "PRVI" && unit.Exponent == 18 {displayFound = true}
+\t\t}
+\t\tif !baseFound || !displayFound {
+\t\t\treturn nil, fmt.Errorf("PRVI native genesis: aprvi requires 18 decimal PRVI metadata")
+\t\t}
+\t\tmetadataValid = true
+\t}
+\tif !metadataValid {return nil, fmt.Errorf("PRVI native genesis: missing aprvi/PRVI metadata")}
 \t// Only after validating the cap may the upgrade module version map write.
 \t// Rejecting the proposed genesis must not touch consensus module stores.
 \tif err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap()); err != nil {
