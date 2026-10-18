@@ -57,18 +57,18 @@ func TestExpectedPinnedRoutesPassButLaunchRemainsBlocked(t *testing.T){
 }
 func TestNewMintCallsiteFailsClosed(t *testing.T){
   root:=fixture(t)
-  write(t,root,"x/vm/keeper/new_mint.go","package keeper
+  write(t,root,"x/vm/keeper/new_mint.go",`package keeper
 func mint(){ k.bankKeeper.MintCoins(ctx, "mint", coins) }
-")
+`)
   r,err:=Scan(root)
   if err==nil {t.Fatal("unexpected MintCoins route must be reviewed")}
   if len(r.FoundCalls)!=6 {t.Fatalf("expected added mint path, got %+v",r.FoundCalls)}
 }
 func TestMissingERC20MintCallsiteFailsClosed(t *testing.T){
   root:=fixture(t)
-  write(t,root,"x/erc20/keeper/convert.go","package keeper
+  write(t,root,"x/erc20/keeper/convert.go",`package keeper
 func convert(){}
-")
+`)
   if _,err:=Scan(root);err==nil {t.Fatal("missing mint site needs source review")}
 }
 func TestUnexpectedMinterModuleFailsClosed(t *testing.T){
@@ -86,19 +86,19 @@ func TestMissingMinterPrivilegeFailsClosed(t *testing.T){
 }
 func TestParseSyntaxErrorFailsClosed(t *testing.T) {
   root:=fixture(t)
-  write(t,root,"evmd/app.go","package evmd
+  write(t,root,"evmd/app.go",`package evmd
 func broken( {
-")
+`)
   if _,err:=Scan(root);err==nil {t.Fatal("unparseable source must reject")}
 }
 func TestIgnoresTestOnlyMinting(t *testing.T){
   root:=fixture(t)
-  write(t,root,"x/erc20/keeper/convert_test.go","package keeper
+  write(t,root,"x/erc20/keeper/convert_test.go",`package keeper
 func fake(){k.bankKeeper.MintCoins(ctx,"mint",coins)}
-")
-  write(t,root,"evmd/tests/integration/foo.go","package tests
+`)
+  write(t,root,"evmd/tests/integration/foo.go",`package tests
 func fake(){k.bankKeeper.MintCoins(ctx,"mint",coins)}
-")
+`)
   if _,err:=Scan(root);err!=nil {t.Fatal(err)}
 }
 func TestMissingSourceAndPermissionsFailsClosed(t *testing.T){
