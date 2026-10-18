@@ -1,6 +1,7 @@
 package prvicap
 
 import (
+ "bytes"
  "errors"
  "testing"
  "time"
@@ -201,5 +202,27 @@ func TestActualSDKUninitializedCapPersistsAsUninitializedAcrossCommit(t *testing
  if err:=bank.MintCoins(ctx,"mint",
    sdk.NewCoins(sdk.NewInt64Coin(BaseDenom,1)));!errors.Is(err,ErrNotInitialized) {
    t.Fatalf("missing genesis cap must deny new PRVI after restart: %v",err)
+ }
+}
+
+
+// Real pinned Cosmos SDK bank keeper regression: UncheckedSetBalance writes
+// an aprvi account without updating the declared bank supply. A valid-looking
+// declared genesis must be rejected before persisting any cap state.
+func TestActualSDKGenesisRejectsUntrackedNativeBalanceBeforeCapWrite(t *testing.T) {
+ h:=newRealBankHarness(t)
+ h.genesisFund(t,100)
+ address:=sdk.AccAddress(bytes.Repeat([]byte{0x7a},20))
+ if err:=h.bank.UncheckedSetBalance(h.ctx,address,sdk.NewInt64Coin(BaseDenom,1));err!=nil {
+   t.Fatalf("inject valueless untracked genesis balance: %v",err)
+ }
+ if supply:=h.bank.GetSupply(h.ctx,BaseDenom).Amount.String();supply!="100" {
+   t.Fatalf("expected unmodified declared bank supply, got %s",supply)
+ }
+ if err:=h.cap.InitGenesis(h.ctx,"100",h.bank);!errors.Is(err,ErrBankSupplyMismatch) {
+   t.Fatalf("genesis with undeclared native account balance was accepted: %v",err)
+ }
+ if _,err:=h.cap.Snapshot(h.ctx);!errors.Is(err,ErrNotInitialized) {
+   t.Fatalf("rejected genesis wrote immutable cap record: %v",err)
  }
 }

@@ -120,6 +120,12 @@ func (k Keeper) InitGenesis(ctx context.Context, genesisBase string, bank BankVi
     bankCoins:=bank.GetSupply(ctx,BaseDenom)
     if bankCoins.Denom!=BaseDenom || !bankCoins.Amount.IsPositive() ||
        bankCoins.Amount.String()!=value.String() {return ErrBankSupplyMismatch}
+    // A declared supply is insufficient: unchecked native balance setters
+    // can change real account balances without updating x/bank Supply.
+    // Reject such a genesis BEFORE writing the immutable cap record.
+    if err:=checkNativeBalances(ctx,bank,value);err!=nil {
+        return fmt.Errorf("%w: %v",ErrBankSupplyMismatch,err)
+    }
     // This is for a newly initialized genesis state in an uncommitted cached
     // SDK context: a store write error MUST abort app initialization.
     return kv.Set(keyGenesis,[]byte(value.String()))
@@ -187,24 +193,26 @@ func (k Keeper) Reconcile(ctx context.Context, bank BankView) error {
     if supply.Amount.BigInt().Cmp(lifetime)>0 || supply.Amount.BigInt().Cmp(capValue())>0 {
         return ErrUnexpectedSupply
     }
-    // Defense in depth against direct balance mutations that do NOT update
-    // x/bank declared supply (including UncheckedSetBalance from EVM/IBC).
-    // A complete scan is deterministic but O(number of accounts), and must
-    // be benchmarked/optimized before any financial mainnet use.
-    actual := new(big.Int)
-    invalid := false
-    bank.IterateAllBalances(ctx, func(_ sdk.AccAddress, coin sdk.Coin) bool {
-        if coin.Denom != BaseDenom {return false}
+    // Validate conservation after the immutable cap and bank supply checks.
+    return checkNativeBalances(ctx,bank,supply.Amount.BigInt())
+}
+
+// checkNativeBalances is shared by genesis preflight and block boundaries.
+// Checking the *actual* account sum prevents an unchecked balance mutation
+// from hiding behind unchanged x/bank supply metadata. O(number of accounts)
+// per call; this must be replaced or optimized before financial production.
+func checkNativeBalances(ctx context.Context,bank BankView,declared *big.Int) error {
+    actual:=new(big.Int)
+    invalid:=false
+    bank.IterateAllBalances(ctx,func(_ sdk.AccAddress,coin sdk.Coin) bool {
+        if coin.Denom!=BaseDenom {return false}
         if coin.Amount.IsNegative() {invalid=true;return true}
         actual.Add(actual,coin.Amount.BigInt())
-        if actual.Cmp(lifetime)>0 || actual.Cmp(capValue())>0 {
-            invalid=true
-            return true
-        }
+        if actual.Cmp(declared)>0 {invalid=true;return true}
         return false
     })
-    if invalid || actual.Cmp(supply.Amount.BigInt())!=0 {
-        return fmt.Errorf("%w: native bank supply/balances mismatch or cap exceeded",ErrUnexpectedSupply)
+    if invalid || actual.Cmp(declared)!=0 {
+        return fmt.Errorf("%w: native bank supply/balances mismatch",ErrUnexpectedSupply)
     }
     return nil
 }
