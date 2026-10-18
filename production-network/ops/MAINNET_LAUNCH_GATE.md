@@ -17,6 +17,20 @@ This is an evidence checklist, not a launch authorization. The local Cosmos EVM 
 | 7. Legal and communications | Review of token launch obligations and published user disclosures; claims accurately distinguish PRVI, TEST, BNB PRIV | BLOCKED |
 | 8. Final approval | Named reviewers sign off on immutable binary + genesis hashes; published UTC activation plan and rollback/stop policy | BLOCKED |
 
+## Cap model progress (NOT a production cap implementation)
+
+A separately tested [proposed 1-billion lifetime PRVI cap model](../mainnet/capmodel/cap.go)
+has been implemented in pure Go, with concurrent mint, overflow, burn,
+and malformed-amount tests run in offline CI. This is a **reference accounting
+model only**. It is not registered with the Cosmos SDK, has no consensus
+KV state, is not connected to bank mint authorities and cannot limit any
+currently running or future upstream `evmd` financial chain by itself.
+
+[Production cap integration requirements](PRVI_HARDCAP_INTEGRATION_REQUIREMENTS.md)
+list the still-missing mint-route audit, persisted state enforcement,
+complete governance/vesting/staking/upgrade tests and external review.
+**Gate 2 remains BLOCKED**, even when offline model tests pass.
+
 ## GO / NO-GO
 
 **NO-GO** unless every gate has documented verifiable evidence, each independent operator signs the same genesis, and the final accountable launch approvers explicitly authorize activation. Approval should be recorded with reviewer, date, commit/hash and evidence link. CI passing by itself does not constitute approval.
