@@ -8,6 +8,19 @@ python3 -m py_compile "$ROOT"/testnet/*.py "$ROOT"/migration/*.py "$ROOT"/ops/*.
 (cd "$ROOT/testnet" && python3 -m unittest discover -v -p 'test_*.py')
 (cd "$ROOT/migration" && python3 -m unittest discover -v -p 'test_*.py')
 (cd "$ROOT/ops" && python3 -m unittest discover -v -p 'test_*.py')
+# Owner-operated financial validators are a non-live, secret-free candidate.
+# Accept the four-node draft structure, but prove launch preflight NEVER passes.
+python3 "$ROOT/ops/owner_validator_preflight.py" "$ROOT/ops/owner-operated-validators.candidate.json" --mode draft
+if python3 "$ROOT/ops/owner_validator_preflight.py" "$ROOT/ops/owner-operated-validators.candidate.json" --mode preflight; then
+  echo "FATAL: incomplete owner-operated validator manifest passed production launch preflight" >&2
+  exit 1
+else
+  status=$?
+  if [[ "$status" -ne 3 ]]; then
+    echo "Owner validator preflight returned unexpected status $status" >&2
+    exit 1
+  fi
+fi
 node --check "$ROOT/ops/legacy_state_copy.js"
 node --test "$ROOT/ops/test_legacy_state_copy.js"
 node --test "$ROOT/ops/test_verify_operator_attestations.cjs"
