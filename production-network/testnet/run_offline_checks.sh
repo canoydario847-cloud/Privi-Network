@@ -8,6 +8,8 @@ python3 -m py_compile "$ROOT"/testnet/*.py "$ROOT"/migration/*.py "$ROOT"/ops/*.
 (cd "$ROOT/testnet" && python3 -m unittest discover -v -p 'test_*.py')
 (cd "$ROOT/migration" && python3 -m unittest discover -v -p 'test_*.py')
 (cd "$ROOT/ops" && python3 -m unittest discover -v -p 'test_*.py')
+# Verify the June 2026 Oracle Always Free CPU, RAM, storage and NO-SPEND policy.
+python3 "$ROOT/ops/oracle_free_pilot_preflight.py" "$ROOT/ops/oracle-always-free-pilot.candidate.json"
 # Owner-operated financial validators are a non-live, secret-free candidate.
 # Accept the four-node draft structure, but prove launch preflight NEVER passes.
 python3 "$ROOT/ops/owner_validator_preflight.py" "$ROOT/ops/owner-operated-validators.candidate.json" --mode draft
