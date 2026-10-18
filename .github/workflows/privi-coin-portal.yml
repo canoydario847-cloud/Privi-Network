@@ -1,0 +1,32 @@
+name: Privi coin portal — safe prelaunch checks
+
+on:
+  pull_request:
+    paths:
+      - "coin-portal/**"
+      - ".github/workflows/privi-coin-portal.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  portal:
+    name: Static safety and accessibility checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate JavaScript syntax
+        run: node --check coin-portal/app.js
+      - name: Assert no funds are accepted and all assets resolve
+        run: node --test coin-portal/tests/site.test.cjs
+      - name: Package static site for review
+        run: |
+          mkdir -p dist
+          cp coin-portal/index.html coin-portal/styles.css coin-portal/app.js dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: privi-coin-portal-prelaunch
+          path: dist/
+          retention-days: 30
