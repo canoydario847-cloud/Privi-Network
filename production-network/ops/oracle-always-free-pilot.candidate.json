@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "provider": "oracle-oci",
+  "phase": "valueless-privi-build-and-observation",
+  "resource_tier": "Always Free",
+  "owner": "Privi World Corp",
+  "financial_network_enabled": false,
+  "real_prvi_issuance_enabled": false,
+  "instance_provisioning_enabled": false,
+  "billing_upgrade_authorized": false,
+  "region": "UNASSIGNED",
+  "nodes": [
+    {
+      "id": "privi-free-dev-01",
+      "shape": "VM.Standard.A1.Flex",
+      "architecture": "arm64",
+      "ocpus": 2,
+      "memory_gb": 12,
+      "boot_volume_gb": 100,
+      "operating_system": "Ubuntu arm64 Always Free Eligible",
+      "host_type": "nonproduction-single-vm",
+      "public_rpc_exposed": false,
+      "public_ssh_exposed": false,
+      "fee_denom": "atest",
+      "creates_production_consensus_keys": false
+    }
+  ]
+}
