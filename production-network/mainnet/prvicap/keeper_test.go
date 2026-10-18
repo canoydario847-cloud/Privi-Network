@@ -60,7 +60,7 @@ func TestInitEmptyStoreFailClosed(t *testing.T) {
   ctx:=context.Background()
   if _,err:=k.Snapshot(ctx);!errors.Is(err,ErrNotInitialized){t.Fatal(err)}
   if err:=k.MintRestriction(ctx,coins(sdkmath.NewInt(1)));!errors.Is(err,ErrNotInitialized){t.Fatal(err)}
-  if err:=k.MintRestriction(ctx,sdk.NewCoins(sdk.NewInt64Coin("other",1)));!errors.Is(err,ErrNotInitialized){t.Fatal(err)}
+  if err:=k.MintRestriction(ctx,sdk.NewCoins(sdk.NewInt64Coin("other",1)));err!=nil{t.Fatalf("unrelated genesis denom should follow normal SDK mint checks: %v",err)}
 }
 func TestGenesisAndPersistAcrossKeeperReopen(t *testing.T) {
   initial:=whole(750_000_000)
