@@ -108,6 +108,13 @@ func TestActualSDKBankRefusesNativeMintBeforeCapInit(t *testing.T){
    t.Fatal(err)
  }
  if k.GetSupply(h.ctx,BaseDenom).Amount.IsPositive() {t.Fatal("minted native units without initialized store")}
+ // Legitimate unrelated bank minters can still initialize modules before
+ // the separate native PRVI genesis supply has been reconciled.
+ initialMinter:=authtypes.NewEmptyModuleAccount("genesisother",authtypes.Minter)
+ h.account.EXPECT().GetModuleAccount(h.ctx,"genesisother").Return(initialMinter)
+ if err:=k.MintCoins(h.ctx,"genesisother",sdk.NewCoins(sdk.NewInt64Coin("atest",2)));err!=nil {t.Fatal(err)}
+ if k.GetSupply(h.ctx,"atest").Amount.String()!="2" {t.Fatal("unrelated genesis mint failed")}
+ if k.GetSupply(h.ctx,BaseDenom).Amount.IsPositive() {t.Fatal("other denom mint changed PRVI supply")}
 }
 
 // Unrestricted bank copy could mint PRVI and bypass the restriction. This is
