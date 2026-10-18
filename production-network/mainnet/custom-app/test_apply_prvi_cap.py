@@ -32,7 +32,7 @@ func test() {
     app.BankKeeper = app.BankKeeper.WithObjStoreKey(oKeys[banktypes.ObjectStoreKey])
     return app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)
 }
-'''.replace("    ", "\t")
+'''\nAPP = "\n".join(("\t" * ((len(line) - len(line.lstrip(" "))) // 4)) + line.lstrip(" ") for line in APP.split("\n"))
 
 class PatcherTests(unittest.TestCase):
     def setUp(self):
