@@ -120,7 +120,8 @@ def assess(data):
         if ip not in (None,"",UNASSIGNED):
             try:
                 parsed = ipaddress.ip_address(ip)
-                if not parsed.is_private or parsed.is_loopback or parsed.is_link_local or parsed.is_multicast:
+                if (not parsed.is_private or parsed.is_loopback or parsed.is_link_local or
+                    parsed.is_multicast or parsed.is_unspecified or parsed.is_reserved):
                     errors.append(f"{name}: P2P IP must be a routable, private, non-loopback address")
             except (ValueError,TypeError):
                 errors.append(f"{name}: P2P IP must be a valid private IP")
