@@ -94,6 +94,22 @@ jobs:
           PRIVI_ETHERS_MODULE_PATH="$TMP_ETHERS/node_modules/ethers" \
             node production-network/testnet/send_disposable_test_transfer.cjs
           rm -rf "$TMP_ETHERS"
+      - name: Compile, deploy and transact with a non-financial test Solidity contract
+        run: |
+          set -euo pipefail
+          # Disposable local Cosmos EVM; valueless atest, no user or treasury key.
+          TMP_DEV_DEPS="$RUNNER_TEMP/privi-test-ethers"
+          mkdir -p "$TMP_DEV_DEPS"
+          npm install --prefix "$TMP_DEV_DEPS" --no-save --ignore-scripts --no-audit --no-fund --silent ethers@6.15.0 solc@0.8.26
+          PRIVI_ETHERS_MODULE_PATH="$TMP_DEV_DEPS/node_modules/ethers" \
+          PRIVI_SOLC_MODULE_PATH="$TMP_DEV_DEPS/node_modules/solc" \
+            node production-network/testnet/deploy_disposable_counter.cjs
+          rm -rf "$TMP_DEV_DEPS"
+      - name: Verify controlled one-validator outage and recovery on disposable cluster
+        run: |
+          set -euo pipefail
+          python3 production-network/testnet/fault_recovery.py \
+            --root production-network/.upstream-evm
       - name: Inspect container status on failure
         if: failure()
         run: |
