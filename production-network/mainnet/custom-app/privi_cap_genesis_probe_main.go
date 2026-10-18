@@ -73,5 +73,17 @@ func main() {
     },"PRVI cap: bank genesis absent");err!=nil {
         fmt.Fprintln(os.Stderr,err);os.Exit(1)
     }
-    fmt.Println("ALL PASS: 3 full-app valueless negative genesis cases; no network started")
+    // An aprvi balance or supply declaration alone cannot make a developer
+    // EVM chain with upstream "stake" gas a legitimate Privi-native chain.
+    if err:=runCase("aprvi declaration with wrong EVM gas token",
+        func(app *evmd.EVMD,state map[string]json.RawMessage) error {
+            var bank banktypes.GenesisState
+            if err:=app.AppCodec().UnmarshalJSON(state[banktypes.ModuleName],&bank);err!=nil {return err}
+            bank.Supply=sdk.NewCoins(sdk.NewInt64Coin(prvicap.BaseDenom,1))
+            state[banktypes.ModuleName]=app.AppCodec().MustMarshalJSON(&bank)
+            return nil
+        },"PRVI native genesis: EVM gas denomination must be aprvi");err!=nil {
+        fmt.Fprintln(os.Stderr,err);os.Exit(1)
+    }
+    fmt.Println("ALL PASS: 4 full-app valueless negative genesis cases; no network started")
 }
