@@ -49,6 +49,24 @@ func probe() error {
         []authtypes.GenesisAccount{account}, bal,
     )
     if err!=nil {return fmt.Errorf("build valueless SDK fixture: %w",err)}
+    // Cosmos EVM v0.7.3 requires EVM denomination metadata in bank genesis.
+    // The default upstream "stake" cannot stand in for native Privi PRVI.
+    // This CI-only fixture sets the EVM currency to aprvi with 18 decimals.
+    var bankGenesis banktypes.GenesisState
+    if err:=app.AppCodec().UnmarshalJSON(genesis[banktypes.ModuleName], &bankGenesis);err!=nil {return err}
+    bankGenesis.DenomMetadata=append(bankGenesis.DenomMetadata,banktypes.Metadata{
+        Description: "Privi PRVI (ephemeral developer fixture, not financial token)",
+        DenomUnits: []*banktypes.DenomUnit{
+            {Denom:prvicap.BaseDenom, Exponent:0},
+            {Denom:"PRVI", Exponent:18},
+        },
+        Base:prvicap.BaseDenom, Display:"PRVI", Name:"Privi", Symbol:"PRVI",
+    })
+    genesis[banktypes.ModuleName]=app.AppCodec().MustMarshalJSON(&bankGenesis)
+    var evmGenesis vmtypes.GenesisState
+    if err:=app.AppCodec().UnmarshalJSON(genesis[vmtypes.ModuleName], &evmGenesis);err!=nil {return err}
+    evmGenesis.Params.EvmDenom=prvicap.BaseDenom
+    genesis[vmtypes.ModuleName]=app.AppCodec().MustMarshalJSON(&evmGenesis)
     raw, err := json.Marshal(genesis)
     if err!=nil {return fmt.Errorf("encode custom genesis fixture: %w",err)}
     resp, err := app.InitChain(&abci.RequestInitChain{
