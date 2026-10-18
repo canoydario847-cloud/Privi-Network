@@ -98,6 +98,14 @@ class PatcherTests(unittest.TestCase):
         self.assertIn("bankGenesis.Supply.AmountOf(prvicap.BaseDenom)", app)
         self.assertIn("prvicap.ValidateGenesisBase(initialPRVI.String())", app)
         self.assertIn("PRVI cap declared genesis denied before module init", app)
+        self.assertIn("EVM gas denomination must be aprvi", app)
+        self.assertIn("bonded staking denomination must be aprvi", app)
+        self.assertIn("ZERO inflation and provisions", app)
+        self.assertIn("aprvi requires 18 decimal PRVI metadata", app)
+        for tag in ("EVM gas denomination", "bonded staking denomination",
+                    "ZERO inflation and provisions", "missing aprvi/PRVI metadata"):
+            self.assertLess(app.index(tag),
+                            app.index("app.UpgradeKeeper.SetModuleVersionMap"))
         self.assertLess(app.index("prvicap.ValidateGenesisBase"),
                         app.index("app.UpgradeKeeper.SetModuleVersionMap"))
         self.assertLess(app.index("app.UpgradeKeeper.SetModuleVersionMap"),
