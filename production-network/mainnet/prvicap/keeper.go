@@ -83,6 +83,18 @@ func capValue() *big.Int {
     return value
 }
 
+// ValidateGenesisBase is a *pure* preflight: no KV reads, writes, mint,
+// or transaction effects. Call it before ANY app module InitGenesis work
+// to reject empty/default demo genesis and oversupply without partially
+// initializing modules. InitGenesis independently repeats this validation
+// before persisting the consensus cap to defend against inconsistent callers.
+func ValidateGenesisBase(genesisBase string) error {
+    value,err:=parseCanonical(genesisBase)
+    if err!=nil || value.Cmp(capValue())>0 {return ErrInvalidGenesis}
+    return nil
+}
+
+
 func (k Keeper) kv(ctx context.Context) (corestore.KVStore,error) {
     if k.store == nil { return nil,errors.New("unconfigured cap keeper") }
     if ctx == nil {return nil,errors.New("nil block context")}
