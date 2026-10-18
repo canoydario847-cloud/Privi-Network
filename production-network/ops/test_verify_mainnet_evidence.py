@@ -35,6 +35,32 @@ class MainnetEvidenceTest(unittest.TestCase):
         problems = checker.assess({"max_supply_whole_prvi": True}, Path("/missing"))
         self.assertTrue(any("max supply" in p for p in problems))
 
+    def test_upstream_dev_evm_identity_cannot_be_mainnet(self):
+        base = {
+            "network": "privi-mainnet", "symbol": "PRVI",
+            "test_assets_separate": True, "bnb_priv_separate": True,
+            "max_supply_whole_prvi": 1_000_000_000,
+            "cosmos_chain_id": "privi-candidate-1", "base_denom": "aprvi",
+        }
+        for demo_chain_id in (262144, 4221, 1337, 31337, 56, 1, 97):
+            manifest = dict(base, evm_chain_id=demo_chain_id)
+            problems = checker.assess(manifest, Path("/definitely/missing-genesis.json"))
+            self.assertTrue(any("EVM chain ID" in p for p in problems),
+                            "dev/public chain id should be rejected: %d" % demo_chain_id)
+
+    def test_developer_fee_denom_cannot_be_proposed_financial_prvi(self):
+        base = {
+            "network": "privi-mainnet", "symbol": "PRVI",
+            "test_assets_separate": True, "bnb_priv_separate": True,
+            "max_supply_whole_prvi": 1_000_000_000,
+            "cosmos_chain_id": "privi-candidate-1", "evm_chain_id": 424242,
+        }
+        for dev_denom in ("atest", "test", "stake", "aphotino"):
+            manifest = dict(base, base_denom=dev_denom)
+            problems = checker.assess(manifest, Path("/definitely/missing-genesis.json"))
+            self.assertTrue(any("PRVI base denomination" in p for p in problems),
+                            "developer denom should be rejected: %s" % dev_denom)
+
     def test_initial_genesis_supply_exceeds_cap(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "genesis.json"
