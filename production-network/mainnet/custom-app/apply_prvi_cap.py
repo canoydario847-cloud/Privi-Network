@@ -76,7 +76,11 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \tbaseBank = baseBank.WithObjStoreKey(oKeys[banktypes.ObjectStoreKey])
 \tapp.BankKeeper = prvicap.RestrictedBank(baseBank, app.PriviCapKeeper)'''
     app = replace_once(app, old_bank, new_bank, "apply restriction before bank injection")
-    old_chainer = '\treturn app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)'
+    old_chainer = '''\tif err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap()); err != nil {
+\t\tpanic(err)
+\t}
+
+\treturn app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)'''
     new_chainer = '''\t// Validate the declared genesis supply BEFORE any module initializes.
 \t// The default upstream atest demo is always refused (no aprvi supply).
 \t// This has no native minting, signing, or chain activation effect.
@@ -89,6 +93,11 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \tinitialPRVI := bankGenesis.Supply.AmountOf(prvicap.BaseDenom)
 \tif err := prvicap.ValidateGenesisBase(initialPRVI.String()); err != nil {
 \t\treturn nil, fmt.Errorf("PRVI cap declared genesis denied before module init: %w", err)
+\t}
+\t// Only after validating the cap may the upgrade module version map write.
+\t// Rejecting the proposed genesis must not touch consensus module stores.
+\tif err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap()); err != nil {
+\t\treturn nil, fmt.Errorf("PRVI cap: module version map write failed: %w", err)
 \t}
 \t// Bank GenesisState.Supply is merely a declaration. Its actual minted
 \t// supply is checked against the mounted bank state after module InitGenesis.
