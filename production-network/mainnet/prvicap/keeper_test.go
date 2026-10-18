@@ -59,7 +59,7 @@ func setup(t *testing.T, genesis string) (Keeper,*fakeKV,context.Context) {
   ctx:=context.Background()
   amount,ok:=new(big.Int).SetString(genesis,10)
   if !ok {t.Fatal("invalid test value")}
-  if err:=keeper.InitGenesis(ctx,genesis,fakeBank{sdkmath.NewIntFromBigInt(amount)});err!=nil{t.Fatal(err)}
+  if err:=keeper.InitGenesis(ctx,genesis,fakeBank{base:sdkmath.NewIntFromBigInt(amount)});err!=nil{t.Fatal(err)}
   return keeper,data,ctx
 }
 func TestInitEmptyStoreFailClosed(t *testing.T) {
@@ -100,7 +100,7 @@ func TestAllNewNativePrviMintingProhibited(t *testing.T){
 }
 func TestBurnDoesNotUnlockNewMint(t *testing.T) {
   k,_,ctx:=setup(t,MaxBase)
-  if err:=k.Reconcile(ctx,fakeBank{sdkmath.NewIntFromBigInt(big.NewInt(100))});err!=nil {
+  if err:=k.Reconcile(ctx,fakeBank{base:sdkmath.NewIntFromBigInt(big.NewInt(100))});err!=nil {
     t.Fatal("burned supply below cap should remain valid",err)
   }
   if err:=k.MintRestriction(ctx,coins(sdkmath.NewInt(1)));!errors.Is(err,ErrMintForbidden){
@@ -114,28 +114,28 @@ func TestGenesisMismatchesFailWithoutStoreMutation(t *testing.T) {
   for _,value:=range values {
     data:=newFakeKV()
     k,_:=New(fakeService{data})
-    err:=k.InitGenesis(context.Background(),value,fakeBank{sdkmath.NewInt(1)})
+    err:=k.InitGenesis(context.Background(),value,fakeBank{base:sdkmath.NewInt(1)})
     if !errors.Is(err,ErrInvalidGenesis) {t.Fatalf("%q: %v",value,err)}
     if len(data.content)!=0 {t.Fatal("invalid genesis wrote consensus state")}
   }
   data:=newFakeKV()
   k,_:=New(fakeService{data})
-  err:=k.InitGenesis(context.Background(),whole(5),fakeBank{sdkmath.NewInt(4)})
+  err:=k.InitGenesis(context.Background(),whole(5),fakeBank{base:sdkmath.NewInt(4)})
   if !errors.Is(err,ErrBankSupplyMismatch){t.Fatal(err)}
   if len(data.content)!=0{t.Fatal("bank mismatch wrote state")}
 }
 func TestRepeatedGenesisInitializationFails(t *testing.T) {
   k,data,ctx:=setup(t,whole(100))
   before:=string(data.content[string(keyGenesis)])
-  if err:=k.InitGenesis(ctx,whole(10),fakeBank{sdkmath.NewIntFromBigInt(big.NewInt(10))});!errors.Is(err,ErrAlreadyInitialized){t.Fatal(err)}
+  if err:=k.InitGenesis(ctx,whole(10),fakeBank{base:sdkmath.NewIntFromBigInt(big.NewInt(10))});!errors.Is(err,ErrAlreadyInitialized){t.Fatal(err)}
   if got:=string(data.content[string(keyGenesis)]);got!=before {t.Fatal("reset counter")}
 }
 func TestReconcileDetectsOverIssuance(t *testing.T){
   k,_,ctx:=setup(t,whole(700))
   amount,_:=new(big.Int).SetString(whole(700),10)
   amount.Add(amount,big.NewInt(1))
-  if err:=k.Reconcile(ctx,fakeBank{sdkmath.NewIntFromBigInt(amount)});!errors.Is(err,ErrUnexpectedSupply){t.Fatal(err)}
-  if err:=k.Reconcile(ctx,fakeBank{sdkmath.NewIntFromBigInt(big.NewInt(1))});err!=nil {t.Fatal(err)}
+  if err:=k.Reconcile(ctx,fakeBank{base:sdkmath.NewIntFromBigInt(amount)});!errors.Is(err,ErrUnexpectedSupply){t.Fatal(err)}
+  if err:=k.Reconcile(ctx,fakeBank{base:sdkmath.NewIntFromBigInt(big.NewInt(1))});err!=nil {t.Fatal(err)}
 }
 func TestStorageCorruptionAlwaysFailsClosed(t *testing.T){
   k,data,ctx:=setup(t,whole(1))
@@ -153,7 +153,7 @@ func TestStoreFailuresFailClosed(t *testing.T){
   if err:=k.MintRestriction(ctx,coins(sdkmath.NewInt(1)));err==nil {t.Fatal("store read error ignored")}
   data.readErr=nil
   data.writeErr=errors.New("disk failure")
-  if err:=k.InitGenesis(ctx,whole(1),fakeBank{sdkmath.NewInt(1_000_000_000_000_000_000)});err==nil {t.Fatal("ignored disk failure")}
+  if err:=k.InitGenesis(ctx,whole(1),fakeBank{base:sdkmath.NewInt(1_000_000_000_000_000_000)});err==nil {t.Fatal("ignored disk failure")}
   if len(data.content)!=0 {t.Fatal("failed store write mutated state")}
 }
 func TestRejectNilStoreOrBank(t *testing.T) {
