@@ -161,6 +161,26 @@ func probe() error {
         return fmt.Errorf("SECURITY: customized bank keeper allowed native mint: %v",err)
     }
     fmt.Println("PASS: mounted native lifetime cap equals bank supply; actual injected bank keeper refuses mint")
+    // Simulate a dangerous direct x/bank UncheckedSetBalance write: this
+    // bypasses MintCoins and changes a real aprvi account WITHOUT changing
+    // bank.Supply metadata. The cap's full balance-conservation check must
+    // catch it. Restore the fixture before processing any block.
+    original:=app.BankKeeper.GetBalance(ctx,address,prvicap.BaseDenom)
+    if err:=app.BankKeeper.UncheckedSetBalance(ctx,address,
+        sdk.NewCoin(prvicap.BaseDenom,original.Amount.Add(sdkmath.NewInt(1))));err!=nil {
+        return fmt.Errorf("inject disposable untracked balance edit: %w",err)
+    }
+    if err:=app.PriviCapKeeper.Reconcile(ctx,app.BankKeeper); !errors.Is(err,prvicap.ErrUnexpectedSupply) {
+        return fmt.Errorf("SECURITY: bank supply-vs-balances spoof not detected: %v",err)
+    }
+    if err:=app.BankKeeper.UncheckedSetBalance(ctx,address,original);err!=nil {
+        return fmt.Errorf("restore disposable native account: %w",err)
+    }
+    if err:=app.PriviCapKeeper.Reconcile(ctx,app.BankKeeper);err!=nil {
+        return fmt.Errorf("native balance not restored after adversarial probe: %w",err)
+    }
+    fmt.Println("PASS: native balance-conservation guard rejects actual unchecked +1 balance tampering")
+
 
     // Execute real Cosmos SDK Begin/EndBlock via ABCI FinalizeBlock on the
     // modified app; a compilation-only test cannot prove this. The ephemeral
