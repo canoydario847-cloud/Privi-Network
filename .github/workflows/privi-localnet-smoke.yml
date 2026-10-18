@@ -51,8 +51,156 @@ jobs:
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/.upstream-capbuild/evmd"
-          GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^$' -timeout 20m . ./prvicap
-          # Compile proof only: no genesis, validators, keys or real financial PRVI.
+          GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^
+
+  sdk-prvi-capkeeper:
+    name: SDK-backed PRVI consensus-store cap keeper unit tests (NOT DEPLOYED)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up exact Go toolchain for Cosmos SDK v0.54.3
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25.9'
+          cache: false
+      - name: Test PRVI cap keeper with pinned Cosmos SDK type signatures
+        run: |
+          set -euo pipefail
+          cd production-network/mainnet/prvicap
+          GOTOOLCHAIN=local go test -mod=mod -p 2 -count=1 -timeout=20m ./...
+          # No actual PRVI or TEST tokens are issued by this job.
+
+  upstream-mint-inventory:
+    name: Audit pinned upstream minting routes (NO-GO until real keeper)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone exact pinned upstream Cosmos EVM tag
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch v0.7.3 https://github.com/cosmos/evm.git "$RUNNER_TEMP/privi-evm-v073"
+          test "$(git -C "$RUNNER_TEMP/privi-evm-v073" describe --tags --exact-match)" = "v0.7.3"
+      - name: Fail if mint sites or minter authorities drift
+        run: |
+          set -euo pipefail
+          cd production-network/mainnet/mintscan
+          GOTOOLCHAIN=local go run ./cmd/mintscan --root "$RUNNER_TEMP/privi-evm-v073"
+
+  four-validator:
+    name: Build and verify four ephemeral EVM validators
+    runs-on: ubuntu-24.04
+    env:
+      PRIVI_EPHEMERAL_TRANSFER_TEST: "1"
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Docker environment
+        run: |
+          docker version
+          docker compose version
+          df -h .
+      - name: Build Cosmos EVM v0.7.3 and initialize four local nodes
+        run: bash production-network/testnet/bootstrap-local-4.sh
+      - name: Verify four-validator consensus
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 48); do
+            if python3 production-network/testnet/consensus_audit.py \
+              --chain-id local-4221 \
+              --rpc http://127.0.0.1:26657 \
+              --rpc http://127.0.0.1:26667 \
+              --rpc http://127.0.0.1:26677 \
+              --rpc http://127.0.0.1:26687; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Four validator consensus check did not succeed" >&2
+          exit 1
+      - name: Verify actual Ethereum JSON-RPC chain
+        run: |
+          set -euo pipefail
+          # evmd v0.7.3 developer reference defaults to EVM chain ID 262144,
+          # distinct from the CometBFT Cosmos network string local-4221.
+          for i in $(seq 1 24); do
+            if python3 production-network/testnet/evm_smoke.py \
+              --rpc http://127.0.0.1:8545 --expect-chain 262144; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "EVM RPC did not pass smoke checks" >&2
+          exit 1
+      - name: Verify read-only wallet RPC compatibility against local EVM
+        run: |
+          set -euo pipefail
+          # Queries use a fixed public probe address: no wallet, private key,
+          # signing, financial tokens, or value-changing transactions.
+          for i in $(seq 1 18); do
+            if python3 production-network/testnet/wallet_rpc_smoke.py \
+              --rpc http://127.0.0.1:8545 --expect-chain 262144; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Wallet read-only RPC smoke checks did not pass" >&2
+          exit 1
+      - name: Send actual valueless atest and independently audit mined EVM receipt
+        run: |
+          set -euo pipefail
+          # Dependency is confined to a disposable GitHub runner, never
+          # installed on validator hosts, wallets, or live PRVI servers.
+          TMP_ETHERS="$RUNNER_TEMP/privi-test-ethers"
+          mkdir -p "$TMP_ETHERS"
+          npm install --prefix "$TMP_ETHERS" --no-save --ignore-scripts --no-audit --no-fund --silent ethers@6.15.0
+          PRIVI_ETHERS_MODULE_PATH="$TMP_ETHERS/node_modules/ethers" \
+            node production-network/testnet/send_disposable_test_transfer.cjs
+          rm -rf "$TMP_ETHERS"
+      - name: Compile, deploy and transact with a non-financial test Solidity contract
+        run: |
+          set -euo pipefail
+          # Disposable local Cosmos EVM; valueless atest, no user or treasury key.
+          TMP_DEV_DEPS="$RUNNER_TEMP/privi-test-ethers"
+          mkdir -p "$TMP_DEV_DEPS"
+          npm install --prefix "$TMP_DEV_DEPS" --no-save --ignore-scripts --no-audit --no-fund --silent ethers@6.15.0 solc@0.8.26
+          PRIVI_ETHERS_MODULE_PATH="$TMP_DEV_DEPS/node_modules/ethers" \
+          PRIVI_SOLC_MODULE_PATH="$TMP_DEV_DEPS/node_modules/solc" \
+            node production-network/testnet/deploy_disposable_counter.cjs
+          rm -rf "$TMP_DEV_DEPS"
+      - name: Verify controlled one-validator outage and recovery on disposable cluster
+        run: |
+          set -euo pipefail
+          python3 production-network/testnet/fault_recovery.py \
+            --root production-network/.upstream-evm
+      - name: Inspect container status on failure
+        if: failure()
+        run: |
+          cd production-network/.upstream-evm
+          docker compose -f docker-compose.localhost.yml ps || true
+          docker compose -f docker-compose.localhost.yml logs --no-color --tail=60 || true
+      - name: Remove ephemeral validators
+        if: always()
+        run: |
+          if [ -f production-network/.upstream-evm/docker-compose.localhost.yml ]; then
+            cd production-network/.upstream-evm
+            docker compose -f docker-compose.localhost.yml down --remove-orphans || true
+          fi
+
+# This checks upstream valueless developer nodes on a disposable runner.
+# It neither deploys a public testnet nor touches the Railway Privi prototype,
+# real BNB Chain PRIV balances, staking contracts, or migration tools.
+ -timeout 20m . ./prvicap
+          # Produce a non-distributed, NON-DEPLOYABLE candidate binary strictly
+          # inside the disposable CI runner. It contains no PRVI genesis.
+          GOTOOLCHAIN=local go build -mod=mod -p 2 -trimpath \
+            -o "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY" ./cmd/evmd
+          test -s "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY"
+          sha256sum "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY"
+          go version -m "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY"
+          # Evidence of isolated compilation ONLY: no mainnet genesis,
+          # no operator signatures, no production chain start or PRVI issued.
 
   sdk-prvi-capkeeper:
     name: SDK-backed PRVI consensus-store cap keeper unit tests (NOT DEPLOYED)
