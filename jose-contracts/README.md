@@ -25,7 +25,7 @@ Choose the numbers first:
 
 | Setting | Meaning | Example |
 |---|---|---|
-| `JOSE_SUPPLY` | Total coins, ever. Can't be changed after deploy. | `1000000000` |
+| `JOSE_SUPPLY` | Total coins, ever. Can't be changed after deploy. | `5000000000` (5 billion) |
 | `JOSE_TREASURY` | Wallet that receives the whole supply and all payments. Use a multisig (e.g. Safe) for real funds. | `0x1990…1048` |
 | `JOSE_OWNER` | Admin of JosePayments (price, fee, pause). Defaults to the treasury. | |
 | `JOSE_CREDIT_PRICE` | JOSE per AI credit, in base units (18 decimals). | `500000000000000000` = 0.5 JOSE |
@@ -34,7 +34,7 @@ Choose the numbers first:
 **1. Base Sepolia (free test network) first.** Get test ETH from a Base Sepolia faucet, then:
 
 ```bash
-export JOSE_SUPPLY=1000000000 JOSE_TREASURY=0xYourWallet JOSE_CREDIT_PRICE=500000000000000000
+export JOSE_SUPPLY=5000000000 JOSE_TREASURY=0xYourWallet JOSE_CREDIT_PRICE=500000000000000000
 forge script script/Deploy.s.sol --rpc-url base_sepolia --broadcast --ledger
 ```
 

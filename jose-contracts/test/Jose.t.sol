@@ -17,7 +17,7 @@ contract JoseTest is Test {
     address alice = makeAddr("alice");
     address seller = makeAddr("seller");
 
-    uint256 constant SUPPLY = 1_000_000_000;
+    uint256 constant SUPPLY = 5_000_000_000;
     uint256 constant PRICE = 0.5 ether; // 0.5 JOSE per credit
     uint16 constant FEE = 250; // 2.5%
 
