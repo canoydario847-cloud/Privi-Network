@@ -140,13 +140,18 @@ func (k Keeper) Snapshot(ctx context.Context) (State,error) {
 // *provided every module's bank keeper uses the same restricted bank instance*.
 // Other denominations are unaffected by this specific asset guard.
 func (k Keeper) MintRestriction(ctx context.Context, coins sdk.Coins) error {
-    if _,_,err:=k.read(ctx);err!=nil {return err}
+    // Before and after InitGenesis, deny every native PRVI mint.
+    // Allow ONLY unrelated denominations to follow ordinary SDK rules,
+    // including during modules' genesis initialization. SDK's underlying
+    // account/mint permission checks still apply to these unrelated coins.
+    // This never permits PRVI minting when its cap store is unavailable.
+    hasNative := false
     for _,coin:=range coins {
-        if coin.Denom==BaseDenom {
-            return ErrMintForbidden
-        }
+        if coin.Denom==BaseDenom {hasNative=true;break}
     }
-    return nil
+    if !hasNative {return nil}
+    if _,_,err:=k.read(ctx);err!=nil {return err}
+    return ErrMintForbidden
 }
 
 // Reconcile rejects total bank native supply above the immutable genesis
