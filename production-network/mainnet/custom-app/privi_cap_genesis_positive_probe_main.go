@@ -22,6 +22,8 @@ import (
     sdk "github.com/cosmos/cosmos-sdk/types"
     authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
     banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
+    stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
+    minttypes "github.com/cosmos/cosmos-sdk/x/mint/types"
     "github.com/cosmos/cosmos-sdk/testutil/mock"
 )
 
@@ -40,8 +42,7 @@ func probe() error {
     address := sdk.AccAddress(bytes.Repeat([]byte{0x42},20))
     account := authtypes.NewBaseAccount(address,nil,0,0)
     allocation := sdk.NewCoins(
-        sdk.NewCoin(prvicap.BaseDenom,sdkmath.NewInt(1_000_000_000_000_000_000)),
-        sdk.NewCoin(vmtypes.DefaultEVMExtendedDenom,sdkmath.NewInt(100_000_000_000_000_000)),
+        sdk.NewCoin(prvicap.BaseDenom,sdkmath.NewInt(2_000_000_000_000_000_000)),
     )
     bal := banktypes.Balance{Address: account.GetAddress().String(), Coins: allocation}
     genesis, err = simtestutil.GenesisStateWithValSet(
@@ -54,6 +55,21 @@ func probe() error {
     // This CI-only fixture sets the EVM currency to aprvi with 18 decimals.
     var bankGenesis banktypes.GenesisState
     if err:=app.AppCodec().UnmarshalJSON(genesis[banktypes.ModuleName], &bankGenesis);err!=nil {return err}
+    // The fixture library injects one SDK default bonded-pool "stake" coin.
+    // Replace that DISPOSABLE fixture with native aprvi and rederive its
+    // declared bank supply before initialization of our cap keeper.
+    bondedPool := authtypes.NewModuleAddress(stakingtypes.BondedPoolName).String()
+    poolFound:=false
+    for i:=range bankGenesis.Balances {
+        if bankGenesis.Balances[i].Address==bondedPool {
+            bankGenesis.Balances[i].Coins = sdk.NewCoins(
+                sdk.NewCoin(prvicap.BaseDenom,sdkmath.NewInt(1_000_000_000_000_000_000)))
+            poolFound=true
+        }
+    }
+    if !poolFound {return fmt.Errorf("fixture bonded pool balance missing")}
+    bankGenesis.Supply=sdk.NewCoins(sdk.NewCoin(
+        prvicap.BaseDenom,sdkmath.NewInt(3_000_000_000_000_000_000)))
     bankGenesis.DenomMetadata=append(bankGenesis.DenomMetadata,banktypes.Metadata{
         Description: "Privi PRVI (ephemeral developer fixture, not financial token)",
         DenomUnits: []*banktypes.DenomUnit{
@@ -67,6 +83,22 @@ func probe() error {
     if err:=app.AppCodec().UnmarshalJSON(genesis[vmtypes.ModuleName], &evmGenesis);err!=nil {return err}
     evmGenesis.Params.EvmDenom=prvicap.BaseDenom
     genesis[vmtypes.ModuleName]=app.AppCodec().MustMarshalJSON(&evmGenesis)
+    // Proof of a native chain: PRVI powers EVM, validator bonds and mint
+    // module. Post-genesis APRVI issuance is permanently forbidden; the
+    // module fixture must not schedule nonzero inflation.
+    var stakingGenesis stakingtypes.GenesisState
+    if err:=app.AppCodec().UnmarshalJSON(genesis[stakingtypes.ModuleName], &stakingGenesis);err!=nil {return err}
+    stakingGenesis.Params.BondDenom=prvicap.BaseDenom
+    genesis[stakingtypes.ModuleName]=app.AppCodec().MustMarshalJSON(&stakingGenesis)
+    var mintGenesis minttypes.GenesisState
+    if err:=app.AppCodec().UnmarshalJSON(genesis[minttypes.ModuleName], &mintGenesis);err!=nil {return err}
+    mintGenesis.Params.MintDenom=prvicap.BaseDenom
+    mintGenesis.Params.InflationRateChange=sdkmath.LegacyZeroDec()
+    mintGenesis.Params.InflationMax=sdkmath.LegacyZeroDec()
+    mintGenesis.Params.InflationMin=sdkmath.LegacyZeroDec()
+    mintGenesis.Minter.Inflation=sdkmath.LegacyZeroDec()
+    mintGenesis.Minter.AnnualProvisions=sdkmath.LegacyZeroDec()
+    genesis[minttypes.ModuleName]=app.AppCodec().MustMarshalJSON(&mintGenesis)
     raw, err := json.Marshal(genesis)
     if err!=nil {return fmt.Errorf("encode custom genesis fixture: %w",err)}
     resp, err := app.InitChain(&abci.RequestInitChain{
