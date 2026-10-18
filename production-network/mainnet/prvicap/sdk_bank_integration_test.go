@@ -13,7 +13,6 @@ import (
  "github.com/cosmos/cosmos-sdk/runtime"
  "github.com/cosmos/cosmos-sdk/store/v2"
  storetypes "github.com/cosmos/cosmos-sdk/store/v2/types"
- "github.com/cosmos/cosmos-sdk/testutil"
  sdk "github.com/cosmos/cosmos-sdk/types"
  moduletestutil "github.com/cosmos/cosmos-sdk/types/module/testutil"
  authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
