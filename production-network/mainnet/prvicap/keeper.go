@@ -41,8 +41,7 @@ var (
 )
 
 var (
-    keyGenesis = []byte{0x01}
-    keyLifetime = []byte{0x02}
+    keyGenesis = []byte{0x01} // immutable cumulative issuance; all new native mints disabled
 )
 
 // BankView has the pinned Cosmos SDK bank keeper's GetSupply signature.
@@ -102,17 +101,12 @@ func (k Keeper) InitGenesis(ctx context.Context, genesisBase string, bank BankVi
     got,err:=kv.Get(keyGenesis)
     if err!=nil {return err}
     if got!=nil {return ErrAlreadyInitialized}
-    lifetime,err:=kv.Get(keyLifetime)
-    if err!=nil {return err}
-    if lifetime!=nil {return ErrStoreCorrupt}
     bankCoins:=bank.GetSupply(ctx,BaseDenom)
     if bankCoins.Denom!=BaseDenom || !bankCoins.Amount.IsPositive() ||
        bankCoins.Amount.String()!=value.String() {return ErrBankSupplyMismatch}
     // This is for a newly initialized genesis state in an uncommitted cached
     // SDK context: a store write error MUST abort app initialization.
-    if err:=kv.Set(keyGenesis,[]byte(value.String()));err!=nil {return err}
-    if err:=kv.Set(keyLifetime,[]byte(value.String()));err!=nil {return err}
-    return nil
+    return kv.Set(keyGenesis,[]byte(value.String()))
 }
 
 func (k Keeper) read(ctx context.Context) (*big.Int,*big.Int,error) {
@@ -120,18 +114,12 @@ func (k Keeper) read(ctx context.Context) (*big.Int,*big.Int,error) {
     if err!=nil {return nil,nil,err}
     rawGenesis,err:=kv.Get(keyGenesis)
     if err!=nil {return nil,nil,err}
-    rawLifetime,err:=kv.Get(keyLifetime)
-    if err!=nil {return nil,nil,err}
-    if rawGenesis==nil && rawLifetime==nil {return nil,nil,ErrNotInitialized}
-    if rawGenesis==nil || rawLifetime==nil {return nil,nil,ErrStoreCorrupt}
+    if rawGenesis==nil {return nil,nil,ErrNotInitialized}
     genesis,err:=parseCanonical(string(rawGenesis))
-    if err!=nil {return nil,nil,ErrStoreCorrupt}
-    lifetime,err:=parseCanonical(string(rawLifetime))
-    if err!=nil {return nil,nil,ErrStoreCorrupt}
-    if lifetime.Cmp(genesis)!=0 || lifetime.Cmp(capValue())>0 {
-        return nil,nil,ErrStoreCorrupt
-    }
-    return genesis,lifetime,nil
+    if err!=nil || genesis.Cmp(capValue())>0 {return nil,nil,ErrStoreCorrupt}
+    // All native PRVI minting is prohibited after genesis. Lifetime issued
+    // remains exactly the genesis amount even when outstanding supply burns.
+    return genesis,new(big.Int).Set(genesis),nil
 }
 
 // Snapshot reads only consensus-backed state. Every new SDK context targeting
