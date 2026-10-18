@@ -94,6 +94,34 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \t}
 \treturn response, nil'''
     app = replace_once(app, old_chainer, new_chainer, "chain init fail-closed proof")
+    # Guard supply at block boundaries as defense in depth. This catches
+    # unguarded net supply growth above the initial genesis issuance, not a
+    # mint-and-burn within one block or an increase below genesis after burns.
+    # Whole-system issuance safety still requires exhaustive mint-path audit.
+    app = replace_once(app,
+        '''func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {
+\treturn app.ModuleManager.BeginBlock(ctx)
+}'''.replace("\\t", "\t"),
+        '''func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {
+\tif err := app.PriviCapKeeper.Reconcile(ctx, app.BankKeeper); err != nil {
+\t\treturn sdk.BeginBlock{}, fmt.Errorf("PRVI beginning-of-block supply check denied: %w", err)
+\t}
+\treturn app.ModuleManager.BeginBlock(ctx)
+}'''.replace("\\t", "\t"),
+        "pre-block supply invariant")
+    app = replace_once(app,
+        '''func (app *EVMD) EndBlocker(ctx sdk.Context) (sdk.EndBlock, error) {
+\treturn app.ModuleManager.EndBlock(ctx)
+}'''.replace("\\t", "\t"),
+        '''func (app *EVMD) EndBlocker(ctx sdk.Context) (sdk.EndBlock, error) {
+\tresponse, endErr := app.ModuleManager.EndBlock(ctx)
+\tif endErr != nil { return response, endErr }
+\tif err := app.PriviCapKeeper.Reconcile(ctx, app.BankKeeper); err != nil {
+\t\treturn response, fmt.Errorf("PRVI end-of-block supply check denied: %w", err)
+\t}
+\treturn response, nil
+}'''.replace("\\t", "\t"),
+        "post-block supply invariant")
     # Verify all modifications before writing anything. No direct on-chain action.
     srcdir = source_repo / "production-network" / "mainnet" / "prvicap"
     required = ["keeper.go", "sdk_bank_adapter.go"]
