@@ -279,6 +279,40 @@ func verifyRestart(dir string) error {
         return fmt.Errorf("SECURITY: native mint allowed after process restart: %v",err)
     }
     fmt.Println("PASS: freshly restarted process loaded PRVI cap at height 2 and denied unauthorized mint")
+    // Adversarial lifetime cap proof on the real SDK bank module:
+    // physically BURN 1 native aprvi base unit via the x/vm module, then
+    // attempt to MINT exactly that unit back. A supply <= original genesis
+    // must never grant a fresh issuance allowance. This disposable
+    // checkpoint uses the child process's check-state only; NO public
+    // transaction, production key or financial PRVI exists.
+    one:=sdk.NewCoins(sdk.NewInt64Coin(prvicap.BaseDenom,1))
+    user:=sdk.AccAddress(bytes.Repeat([]byte{0x42},20))
+    beforeBurn:=restarted.BankKeeper.GetSupply(ctx,prvicap.BaseDenom).Amount
+    if err:=restarted.BankKeeper.SendCoinsFromAccountToModule(ctx,user,
+        vmtypes.ModuleName,one);err!=nil {
+        return fmt.Errorf("prepare disposable actual bank native burn: %w",err)
+    }
+    if err:=restarted.BankKeeper.BurnCoins(ctx,vmtypes.ModuleName,one);err!=nil {
+        return fmt.Errorf("actual SDK bank native burn rejected: %w",err)
+    }
+    if afterBurn:=restarted.BankKeeper.GetSupply(ctx,prvicap.BaseDenom).Amount;
+        !afterBurn.Equal(beforeBurn.Sub(sdkmath.NewInt(1))) {
+        return fmt.Errorf("actual bank supply did not decrease on native burn")
+    }
+    if err:=restarted.PriviCapKeeper.Reconcile(ctx,restarted.BankKeeper);err!=nil {
+        return fmt.Errorf("cap reconciliation rejected legitimate native burn: %w",err)
+    }
+    if err:=restarted.BankKeeper.MintCoins(ctx,vmtypes.ModuleName,one);
+        !errors.Is(err,prvicap.ErrMintForbidden) {
+        return fmt.Errorf("SECURITY: burn unlocked prohibited native re-mint: %v",err)
+    }
+    capAfterBurn,err:=restarted.PriviCapKeeper.Snapshot(ctx)
+    if err!=nil || capAfterBurn!=capState {
+        return fmt.Errorf("burn changed lifetime-issued cap: previous=%+v current=%+v error=%v",
+            capState,capAfterBurn,err)
+    }
+    fmt.Println("PASS: real SDK native burn reduces supply but cannot unlock lifetime remint")
+
     return nil
 }
 
