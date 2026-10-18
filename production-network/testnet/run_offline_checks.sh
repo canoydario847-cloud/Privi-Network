@@ -19,5 +19,6 @@ command -v go >/dev/null
 (cd "$ROOT/mainnet/capmodel" && GOTOOLCHAIN=local go test -race -count=1 ./...)
 # Strict AST baseline for pinned Cosmos EVM v0.7.3 mint entry points.
 (cd "$ROOT/mainnet/mintscan" && GOTOOLCHAIN=local go test -race -count=1 ./...)
+python3 -m unittest discover -s "$ROOT/mainnet/custom-app" -p "test_*.py"
 bash -n "$ROOT/testnet/bootstrap-local-4.sh"
 echo "Offline checks passed. Live EVM / CometBFT testing still required."
