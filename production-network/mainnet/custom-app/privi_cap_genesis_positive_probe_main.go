@@ -33,7 +33,10 @@ import (
 
 func probe() error {
     const chainID = "privi-ci-only-not-financial-1"
-    app := evmd.NewExampleApp(log.NewNopLogger(), dbm.NewMemDB(), true,
+    // Preserve the same disposable in-memory disk across a fresh app
+    // construction to exercise real LoadLatestVersion replay semantics.
+    db := dbm.NewMemDB()
+    app := evmd.NewExampleApp(log.NewNopLogger(), db, true,
         simtestutil.EmptyAppOptions{}, baseapp.SetChainID(chainID))
     genesis := app.DefaultGenesis()
 
@@ -179,6 +182,47 @@ func probe() error {
         return fmt.Errorf("native aprvi supply changed after 1 finalized block: %s",supply)
     }
     fmt.Println("PASS: customized app FinalizeBlock/Commit height 1; native PRVI lifetime issuance and supply unchanged")
+    // Another actual ABCI finalization exercises Begin/EndBlock supply
+    // checks after the first successful commit (one epoch is insufficient
+    // to demonstrate keeper state persistence).
+    fin2,err:=app.FinalizeBlock(&abci.RequestFinalizeBlock{
+        Height:2, Time:blockTime.Add(time.Second),
+        DecidedLastCommit:abci.CommitInfo{Votes:votes},
+        NextValidatorsHash:validators.Hash(),
+        ProposerAddress:validators.Proposer.Address,
+        Hash:app.LastCommitID().Hash,
+    })
+    if err!=nil {return fmt.Errorf("custom app FinalizeBlock height 2: %w",err)}
+    if fin2==nil {return fmt.Errorf("custom app nil FinalizeBlock at height 2")}
+    if _,err=app.Commit();err!=nil {return fmt.Errorf("custom app Commit height 2: %w",err)}
+    if app.LastBlockHeight()!=2 {
+        return fmt.Errorf("expected two persisted in-memory blocks; got %d",app.LastBlockHeight())
+    }
+
+    // Rebuild the same patched Cosmos EVM app around the same DB. Its startup
+    // must load persisted PRVI cap state rather than implicitly reinitializing
+    // or clearing the lifetime issuance restriction.
+    restarted:=evmd.NewExampleApp(log.NewNopLogger(),db,true,
+        simtestutil.EmptyAppOptions{},baseapp.SetChainID(chainID))
+    if restarted.LastBlockHeight()!=2 {
+        return fmt.Errorf("restarted chain height changed: %d",restarted.LastBlockHeight())
+    }
+    ctxReload:=restarted.NewContextLegacy(true,cmtproto.Header{ChainID:chainID,Height:2})
+    capReload,err:=restarted.PriviCapKeeper.Snapshot(ctxReload)
+    if err!=nil {return fmt.Errorf("cap state missing after full application restart: %w",err)}
+    if capReload!=capBefore {
+        return fmt.Errorf("lifetime issuance reset after restart: before=%+v after=%+v",capBefore,capReload)
+    }
+    if supply:=restarted.BankKeeper.GetSupply(ctxReload,prvicap.BaseDenom).Amount.String();supply!=expectedAPRVI {
+        return fmt.Errorf("restarted native PRVI supply unexpectedly changed: %s",supply)
+    }
+    err=restarted.BankKeeper.MintCoins(ctxReload,minttypes.ModuleName,
+        sdk.NewCoins(sdk.NewInt64Coin(prvicap.BaseDenom,1)))
+    if !errors.Is(err,prvicap.ErrMintForbidden) {
+        return fmt.Errorf("SECURITY: native mint permitted after app restart: %v",err)
+    }
+    fmt.Println("PASS: two finalized blocks + full app reload from same DB; PRVI lifetime cap/supply persist and mint still rejected")
+
     fmt.Println("PASS: actual customized Cosmos EVM app accepts a cap-compliant, in-memory, valueless positive genesis fixture")
     fmt.Println("NO FINANCIAL PRVI ISSUED, NO PUBLIC CHAIN, NO PRODUCTION KEYS")
     return nil
