@@ -69,8 +69,9 @@ jobs:
           gofmt -w "$PROBE/main.go"
           cd "$RUNNER_TEMP/.upstream-capbuild/evmd"
           GOTOOLCHAIN=local go run -mod=mod -p 2 ./cmd/privi-cap-genesis-probe
-          # 3 negative cases. Fails CI on an accepted atest/demo or cap+1
-          # genesis; does not start nodes, generate keys or issue PRVI.
+          # 4 negative cases. Refuse atest/demo, cap+1, missing bank
+          # and aprvi-labeled genesis with upstream stake gas.
+          # No nodes, production signing keys or real PRVI are created.
 
       - name: Prove actual custom Cosmos EVM app accepts valueless cap-compliant genesis
         run: |
