@@ -1,6 +1,8 @@
 // A valueless *positive* customized Cosmos EVM InitChain test.
-// This uses an in-memory DB and an ephemeral consensus test pubkey;
-// never a real validator signer, deployable genesis, or financial PRVI.
+// This uses an ephemeral on-disk CI database and a disposable consensus test pubkey.
+// A fresh child process opens the same DB to avoid upstream Cosmos EVM's
+// process-global fork activation duplication on same-process app reconstruction.
+// Never a production signer, deployable genesis or financial PRVI.
 package main
 
 import (
@@ -9,6 +11,7 @@ import (
     "errors"
     "fmt"
     "os"
+    "os/exec"
     "time"
 
     "cosmossdk.io/log/v2"
@@ -33,9 +36,14 @@ import (
 
 func probe() error {
     const chainID = "privi-ci-only-not-financial-1"
-    // Preserve the same disposable in-memory disk across a fresh app
-    // construction to exercise real LoadLatestVersion replay semantics.
-    db := dbm.NewMemDB()
+    // A disk-backed TEMPORARY database is necessary to prove restart in
+    // a second OS process. CI removes it after the child exits.
+    dir,err:=os.MkdirTemp("","privi-valueless-restart-*")
+    if err!=nil {return err}
+    defer os.RemoveAll(dir)
+    db,err:=dbm.NewGoLevelDB("privi-ephemeral",dir,nil)
+    if err!=nil {return fmt.Errorf("open disposable database: %w",err)}
+    defer db.Close()
     app := evmd.NewExampleApp(log.NewNopLogger(), db, true,
         simtestutil.EmptyAppOptions{}, baseapp.SetChainID(chainID))
     genesis := app.DefaultGenesis()
@@ -199,34 +207,70 @@ func probe() error {
         return fmt.Errorf("expected two persisted in-memory blocks; got %d",app.LastBlockHeight())
     }
 
-    // Rebuild the same patched Cosmos EVM app around the same DB. Its startup
-    // must load persisted PRVI cap state rather than implicitly reinitializing
-    // or clearing the lifetime issuance restriction.
-    restarted:=evmd.NewExampleApp(log.NewNopLogger(),db,true,
-        simtestutil.EmptyAppOptions{},baseapp.SetChainID(chainID))
-    if restarted.LastBlockHeight()!=2 {
-        return fmt.Errorf("restarted chain height changed: %d",restarted.LastBlockHeight())
+    // Cosmos EVM sets Go process-global fork activation once. A second app
+    // instantiated in the SAME process can panic with duplicate activation,
+    // even though real nodes would restart in a fresh process. Close this DB
+    // and load it from a fresh child binary (the very same test executable).
+    if err:=db.Close();err!=nil {
+        return fmt.Errorf("close first process chain database: %w",err)
     }
-    ctxReload:=restarted.NewContextLegacy(true,cmtproto.Header{ChainID:chainID,Height:2})
-    capReload,err:=restarted.PriviCapKeeper.Snapshot(ctxReload)
-    if err!=nil {return fmt.Errorf("cap state missing after full application restart: %w",err)}
-    if capReload!=capBefore {
-        return fmt.Errorf("lifetime issuance reset after restart: before=%+v after=%+v",capBefore,capReload)
+    self,err:=os.Executable()
+    if err!=nil {return fmt.Errorf("resolve disposable executable: %w",err)}
+    child:=exec.Command(self,"--verify-restart",dir)
+    output,err:=child.CombinedOutput()
+    if err!=nil {
+        return fmt.Errorf("fresh OS process failed PRVI restart verification: %w\n%s",err,string(output))
     }
-    if supply:=restarted.BankKeeper.GetSupply(ctxReload,prvicap.BaseDenom).Amount.String();supply!=expectedAPRVI {
-        return fmt.Errorf("restarted native PRVI supply unexpectedly changed: %s",supply)
-    }
-    err=restarted.BankKeeper.MintCoins(ctxReload,minttypes.ModuleName,
-        sdk.NewCoins(sdk.NewInt64Coin(prvicap.BaseDenom,1)))
-    if !errors.Is(err,prvicap.ErrMintForbidden) {
-        return fmt.Errorf("SECURITY: native mint permitted after app restart: %v",err)
-    }
-    fmt.Println("PASS: two finalized blocks + full app reload from same DB; PRVI lifetime cap/supply persist and mint still rejected")
+    fmt.Print(string(output))
+    fmt.Println("PASS: two finalized blocks + full app restart in fresh process; capped PRVI unchanged")
 
     fmt.Println("PASS: actual customized Cosmos EVM app accepts a cap-compliant, in-memory, valueless positive genesis fixture")
     fmt.Println("NO FINANCIAL PRVI ISSUED, NO PUBLIC CHAIN, NO PRODUCTION KEYS")
     return nil
 }
+// In a fresh OS process, this runs the exact same pinned custom app over the
+// temporary chain DB that has already committed two blocks. No InitChain call,
+// key, cloud resource, external token or network is created by the child.
+func verifyRestart(dir string) error {
+    const chainID="privi-ci-only-not-financial-1"
+    const expectedAPRVI="3000000000000000000"
+    db,err:=dbm.NewGoLevelDB("privi-ephemeral",dir,nil)
+    if err!=nil {return fmt.Errorf("reopen temporary chain database: %w",err)}
+    defer db.Close()
+    restarted:=evmd.NewExampleApp(log.NewNopLogger(),db,true,
+        simtestutil.EmptyAppOptions{},baseapp.SetChainID(chainID))
+    if restarted.LastBlockHeight()!=2 {
+        return fmt.Errorf("restarted chain height changed: %d",restarted.LastBlockHeight())
+    }
+    ctx:=restarted.NewContextLegacy(true,cmtproto.Header{ChainID:chainID,Height:2})
+    capState,err:=restarted.PriviCapKeeper.Snapshot(ctx)
+    if err!=nil {return fmt.Errorf("cap state missing after app restart: %w",err)}
+    if capState.GenesisBase!=expectedAPRVI||
+        capState.LifetimeIssuedBase!=expectedAPRVI||
+        capState.MintPolicy!="NO_NEW_NATIVE_PRVI_MINTS" {
+        return fmt.Errorf("native issuance policy changed after restart: %+v",capState)
+    }
+    if supply:=restarted.BankKeeper.GetSupply(ctx,prvicap.BaseDenom).Amount.String();supply!=expectedAPRVI {
+        return fmt.Errorf("restarted PRVI supply unexpectedly changed: %s",supply)
+    }
+    err=restarted.BankKeeper.MintCoins(ctx,minttypes.ModuleName,
+        sdk.NewCoins(sdk.NewInt64Coin(prvicap.BaseDenom,1)))
+    if !errors.Is(err,prvicap.ErrMintForbidden) {
+        return fmt.Errorf("SECURITY: native mint allowed after process restart: %v",err)
+    }
+    fmt.Println("PASS: freshly restarted process loaded PRVI cap at height 2 and denied unauthorized mint")
+    return nil
+}
+
 func main() {
+    if len(os.Args)==3 && os.Args[1]=="--verify-restart" {
+        if err:=verifyRestart(os.Args[2]);err!=nil {
+            fmt.Fprintln(os.Stderr,err);os.Exit(1)
+        }
+        return
+    }
+    if len(os.Args)!=1 {
+        fmt.Fprintln(os.Stderr,"unexpected command-line args");os.Exit(2)
+    }
     if err:=probe();err!=nil {fmt.Fprintln(os.Stderr,err);os.Exit(1)}
 }
