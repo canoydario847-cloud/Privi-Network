@@ -28,6 +28,10 @@ type bankHarness struct {
  bank bankkeeper.BaseKeeper
  cap Keeper
  account *banktestutil.MockAccountKeeper
+ // restart commits the IAVL bank+cap stores to the database, constructs a
+ // fresh multistore and a fresh cap keeper, and reopens committed chain state.
+ // This is a real SDK persistence test, not the in-memory fake KV fixture.
+ restart func(*testing.T) (sdk.Context, bankkeeper.BaseKeeper, Keeper)
 }
 
 func newRealBankHarness(t *testing.T) bankHarness {
@@ -51,7 +55,25 @@ func newRealBankHarness(t *testing.T) bankHarness {
  raw=raw.WithObjStoreKey(objKey)
  cap,err:=New(runtime.NewKVStoreService(capKey))
  if err!=nil {t.Fatal(err)}
- return bankHarness{ctx:ctx,bank:raw,cap:cap,account:ak}
+ restart:=func(t *testing.T) (sdk.Context,bankkeeper.BaseKeeper,Keeper) {
+   t.Helper()
+   // Commit before reopening to catch accidental use of a process-local
+   // record that disappears when the durable SDK state is reloaded.
+   cms.Commit()
+   reopened:=store.NewCommitMultiStore(db,log.NewNopLogger())
+   reopened.MountStoreWithDB(bankKey,storetypes.StoreTypeIAVL,db)
+   reopened.MountStoreWithDB(capKey,storetypes.StoreTypeIAVL,db)
+   reopened.MountStoreWithDB(objKey,storetypes.StoreTypeObject,db)
+   if err:=reopened.LoadLatestVersion();err!=nil {t.Fatal(err)}
+   newCtx:=sdk.NewContext(reopened,cmtproto.Header{Height:2,Time:time.Now()},false,log.NewNopLogger())
+   newCap,err:=New(runtime.NewKVStoreService(capKey))
+   if err!=nil {t.Fatal(err)}
+   // Recreate a fresh restriction-bearing bank keeper using the new cap
+   // keeper; the underlying bank store follows the fresh SDK context.
+   bank:=RestrictedBank(raw,newCap)
+   return newCtx,bank,newCap
+ }
+ return bankHarness{ctx:ctx,bank:raw,cap:cap,account:ak,restart:restart}
 }
 func (h bankHarness) genesisFund(t *testing.T,amount int64) {
  t.Helper()
@@ -133,5 +155,44 @@ func TestUnrestrictedKeeperCopiesRemainARealBypassRisk(t *testing.T) {
  }
  if !errors.Is(h.cap.Reconcile(h.ctx,h.bank),ErrUnexpectedSupply) {
    t.Fatal("periodic reconciliation must flag bypassed supply growth")
+ }
+}
+
+func TestActualSDKPersistentGenesisSurvivesCommitAndFreshMultistore(t *testing.T) {
+ h:=newRealBankHarness(t)
+ h.genesisFund(t,100)
+ if err:=h.cap.InitGenesis(h.ctx,"100",h.bank);err!=nil {t.Fatal(err)}
+ expected,err:=h.cap.Snapshot(h.ctx)
+ if err!=nil {t.Fatal(err)}
+ // Real persistent SDK multistore commit, followed by reconstructing and
+ // loading a completely fresh multistore and a new cap keeper.
+ restartedCtx,restricted,newCap:=h.restart(t)
+ actual,err:=newCap.Snapshot(restartedCtx)
+ if err!=nil || expected!=actual {t.Fatalf("persistent cap record disappeared after chain store reopen: %+v, %v",actual,err)}
+ if got:=restricted.GetSupply(restartedCtx,BaseDenom).Amount.String();got!="100" {
+   t.Fatalf("PRVI bank state lost after commit/reopen: %s",got)
+ }
+ if err:=restricted.MintCoins(restartedCtx,"mint",
+   sdk.NewCoins(sdk.NewInt64Coin(BaseDenom,1)));!errors.Is(err,ErrMintForbidden) {
+   t.Fatalf("restarted chain allowed unauthorized PRVI mint: %v",err)
+ }
+ if got:=restricted.GetSupply(restartedCtx,BaseDenom).Amount.String();got!="100" {
+   t.Fatalf("rejected post-restart mint changed bank supply: %s",got)
+ }
+ if err:=newCap.InitGenesis(restartedCtx,"100",restricted);!errors.Is(err,ErrAlreadyInitialized) {
+   t.Fatalf("restarting or upgrading attempted to reset lifetime issuance: %v",err)
+ }
+ if err:=newCap.Reconcile(restartedCtx,restricted);err!=nil {t.Fatalf("post-restart supply invariant broken: %v",err)}
+}
+
+func TestActualSDKUninitializedCapPersistsAsUninitializedAcrossCommit(t *testing.T) {
+ h:=newRealBankHarness(t)
+ ctx,bank,cap:=h.restart(t)
+ if _,err:=cap.Snapshot(ctx);!errors.Is(err,ErrNotInitialized) {
+   t.Fatalf("uninitialized chain must not silently create PRVI cap: %v",err)
+ }
+ if err:=bank.MintCoins(ctx,"mint",
+   sdk.NewCoins(sdk.NewInt64Coin(BaseDenom,1)));!errors.Is(err,ErrNotInitialized) {
+   t.Fatalf("missing genesis cap must deny new PRVI after restart: %v",err)
  }
 }
