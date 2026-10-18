@@ -30,6 +30,10 @@ func test() {
         logger,
     )
     app.BankKeeper = app.BankKeeper.WithObjStoreKey(oKeys[banktypes.ObjectStoreKey])
+    if err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap()); err != nil {
+        panic(err)
+    }
+
     return app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)
 }
 func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {
@@ -94,6 +98,11 @@ class PatcherTests(unittest.TestCase):
         self.assertIn("bankGenesis.Supply.AmountOf(prvicap.BaseDenom)", app)
         self.assertIn("prvicap.ValidateGenesisBase(initialPRVI.String())", app)
         self.assertIn("PRVI cap declared genesis denied before module init", app)
+        self.assertLess(app.index("prvicap.ValidateGenesisBase"),
+                        app.index("app.UpgradeKeeper.SetModuleVersionMap"))
+        self.assertLess(app.index("app.UpgradeKeeper.SetModuleVersionMap"),
+                        app.index("app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)"))
+        self.assertEqual(app.count("app.UpgradeKeeper.SetModuleVersionMap"),1)
         self.assertLess(app.index("prvicap.ValidateGenesisBase"),
                         app.index("app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)"))
         self.assertLess(app.index("app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)"),
