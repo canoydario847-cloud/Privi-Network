@@ -6,13 +6,16 @@ package main
 import (
     "bytes"
     "encoding/json"
+    "errors"
     "fmt"
     "os"
+    "time"
 
     "cosmossdk.io/log/v2"
     sdkmath "cosmossdk.io/math"
     abci "github.com/cometbft/cometbft/abci/types"
     cmttypes "github.com/cometbft/cometbft/types"
+    cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
     dbm "github.com/cosmos/cosmos-db"
     "github.com/cosmos/evm/evmd"
     "github.com/cosmos/evm/evmd/prvicap"
@@ -108,6 +111,56 @@ func probe() error {
     })
     if err!=nil {return fmt.Errorf("customized app InitChain rejected valid fixture: %w",err)}
     if resp==nil {return fmt.Errorf("nil InitChain response")}
+    // Verify the REAL mounted, consensus-backed Privi cap keeper reads the
+    // exact in-memory initial aprvi supply, and the FULL bank keeper injected
+    // into the custom app refuses any post-genesis native mint operation.
+    const expectedAPRVI = "3000000000000000000" // 3 valueless PRVI; NOT mainnet
+    ctx := app.NewContextLegacy(false,cmtproto.Header{ChainID:chainID,Height:0})
+    capBefore,err := app.PriviCapKeeper.Snapshot(ctx)
+    if err!=nil {return fmt.Errorf("custom native genesis cap store not initialized: %w",err)}
+    if capBefore.GenesisBase!=expectedAPRVI ||
+        capBefore.LifetimeIssuedBase!=expectedAPRVI ||
+        capBefore.MintPolicy!="NO_NEW_NATIVE_PRVI_MINTS" {
+        return fmt.Errorf("incorrect native lifetime issuance: %+v",capBefore)
+    }
+    if got:=app.BankKeeper.GetSupply(ctx,prvicap.BaseDenom).Amount.String();got!=expectedAPRVI {
+        return fmt.Errorf("native PRVI supply mismatch: %s",got)
+    }
+    err=app.BankKeeper.MintCoins(ctx,minttypes.ModuleName,
+        sdk.NewCoins(sdk.NewInt64Coin(prvicap.BaseDenom,1)))
+    if !errors.Is(err,prvicap.ErrMintForbidden) {
+        return fmt.Errorf("SECURITY: customized bank keeper allowed native mint: %v",err)
+    }
+    fmt.Println("PASS: mounted native lifetime cap equals bank supply; actual injected bank keeper refuses mint")
+
+    // Execute real Cosmos SDK Begin/EndBlock via ABCI FinalizeBlock on the
+    // modified app; a compilation-only test cannot prove this. The ephemeral
+    // one-validator commit data is ONLY for a disposable in-memory test.
+    blockTime:=time.Unix(1800000000,0).UTC()
+    votes:=make([]abci.VoteInfo,0,len(validators.Validators))
+    for _,v:=range validators.Validators {
+        votes=append(votes,abci.VoteInfo{
+            Validator:abci.Validator{Address:v.Address,Power:v.VotingPower},
+            BlockIdFlag:cmtproto.BlockIDFlagCommit,
+        })
+    }
+    fin,err:=app.FinalizeBlock(&abci.RequestFinalizeBlock{
+        Height:1, Time:blockTime, DecidedLastCommit:abci.CommitInfo{Votes:votes},
+        NextValidatorsHash:validators.Hash(),
+        ProposerAddress:validators.Proposer.Address,
+        Hash:[]byte("privi-valueless-ci-height-1"),
+    })
+    if err!=nil {return fmt.Errorf("custom app FinalizeBlock height 1: %w",err)}
+    if fin==nil {return fmt.Errorf("custom app returned nil FinalizeBlock")}
+    if _,err=app.Commit();err!=nil {return fmt.Errorf("custom app Commit height 1: %w",err)}
+    ctxAfter:=app.NewContextLegacy(true,cmtproto.Header{ChainID:chainID,Height:1})
+    capAfter,err:=app.PriviCapKeeper.Snapshot(ctxAfter)
+    if err!=nil {return fmt.Errorf("post-commit native cap store inaccessible: %w",err)}
+    if capAfter!=capBefore {return fmt.Errorf("native cap state mutated after block: before=%+v after=%+v",capBefore,capAfter)}
+    if supply:=app.BankKeeper.GetSupply(ctxAfter,prvicap.BaseDenom).Amount.String();supply!=expectedAPRVI {
+        return fmt.Errorf("native aprvi supply changed after 1 finalized block: %s",supply)
+    }
+    fmt.Println("PASS: customized app FinalizeBlock/Commit height 1; native PRVI lifetime issuance and supply unchanged")
     fmt.Println("PASS: actual customized Cosmos EVM app accepts a cap-compliant, in-memory, valueless positive genesis fixture")
     fmt.Println("NO FINANCIAL PRVI ISSUED, NO PUBLIC CHAIN, NO PRODUCTION KEYS")
     return nil
