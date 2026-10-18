@@ -110,4 +110,4 @@ if (require.main === module) {
     process.exitCode=1;
   });
 }
-module.exports={localGate};
+module.exports={localGate,exportDevKey};
