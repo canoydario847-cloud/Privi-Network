@@ -24,6 +24,24 @@ jobs:
       - name: Validate local tools and tests
         run: bash production-network/testnet/run_offline_checks.sh
 
+  sdk-prvi-capkeeper:
+    name: SDK-backed PRVI consensus-store cap keeper unit tests (NOT DEPLOYED)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up exact Go toolchain for Cosmos SDK v0.54.3
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25.9'
+          cache: false
+      - name: Test PRVI cap keeper with pinned Cosmos SDK type signatures
+        run: |
+          set -euo pipefail
+          cd production-network/mainnet/prvicap
+          GOTOOLCHAIN=local go test -mod=mod -p 2 -count=1 -timeout=20m ./...
+          # No actual PRVI or TEST tokens are issued by this job.
+
   upstream-mint-inventory:
     name: Audit pinned upstream minting routes (NO-GO until real keeper)
     runs-on: ubuntu-24.04
