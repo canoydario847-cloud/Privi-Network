@@ -77,11 +77,9 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \tapp.BankKeeper = prvicap.RestrictedBank(baseBank, app.PriviCapKeeper)'''
     app = replace_once(app, old_bank, new_bank, "apply restriction before bank injection")
     old_chainer = '\treturn app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)'
-    new_chainer = '''\t// The bank supply is loaded by module initialization. Require its exact
-\t// declared native PRVI genesis supply, refusing default upstream TEST genesis.
-\t// PRVI minting remains forbidden before and after keeper InitGenesis.
-\tresponse, initErr := app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)
-\tif initErr != nil { return nil, initErr }
+    new_chainer = '''\t// Validate the declared genesis supply BEFORE any module initializes.
+\t// The default upstream atest demo is always refused (no aprvi supply).
+\t// This has no native minting, signing, or chain activation effect.
 \tbankJSON, found := genesisState[banktypes.ModuleName]
 \tif !found { return nil, fmt.Errorf("PRVI cap: bank genesis absent") }
 \tvar bankGenesis banktypes.GenesisState
@@ -89,6 +87,13 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \t\treturn nil, fmt.Errorf("PRVI cap: invalid bank genesis: %w", err)
 \t}
 \tinitialPRVI := bankGenesis.Supply.AmountOf(prvicap.BaseDenom)
+\tif err := prvicap.ValidateGenesisBase(initialPRVI.String()); err != nil {
+\t\treturn nil, fmt.Errorf("PRVI cap declared genesis denied before module init: %w", err)
+\t}
+\t// Bank GenesisState.Supply is merely a declaration. Its actual minted
+\t// supply is checked against the mounted bank state after module InitGenesis.
+\tresponse, initErr := app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)
+\tif initErr != nil { return nil, initErr }
 \tif err := app.PriviCapKeeper.InitGenesis(ctx, initialPRVI.String(), app.BankKeeper); err != nil {
 \t\treturn nil, fmt.Errorf("PRVI cap genesis initialization denied: %w", err)
 \t}
