@@ -36,14 +36,21 @@ type bankHarness struct {
 
 func newRealBankHarness(t *testing.T) bankHarness {
  t.Helper()
- db := dbm.NewMemDB()
- cms := store.NewCommitMultiStore(db,log.NewNopLogger())
+ rootDB := dbm.NewMemDB()
+ // Persist each independent IAVL tree in its own namespace/database. Sharing
+ // an unprefixed MemDB between two IAVL trees causes version/node-key
+ // collisions when committing both: test isolation must mirror real SDK
+ // multi-store separation rather than testing an invalid storage layout.
+ bankDB := dbm.NewMemDB()
+ capDB := dbm.NewMemDB()
+ objDB := dbm.NewMemDB()
+ cms := store.NewCommitMultiStore(rootDB,log.NewNopLogger())
  bankKey := storetypes.NewKVStoreKey(banktypes.StoreKey)
  capKey := storetypes.NewKVStoreKey("prvicap")
  objKey := storetypes.NewObjectStoreKey(banktypes.ObjectStoreKey)
- cms.MountStoreWithDB(bankKey,storetypes.StoreTypeIAVL,db)
- cms.MountStoreWithDB(capKey,storetypes.StoreTypeIAVL,db)
- cms.MountStoreWithDB(objKey,storetypes.StoreTypeObject,db)
+ cms.MountStoreWithDB(bankKey,storetypes.StoreTypeIAVL,bankDB)
+ cms.MountStoreWithDB(capKey,storetypes.StoreTypeIAVL,capDB)
+ cms.MountStoreWithDB(objKey,storetypes.StoreTypeObject,objDB)
  if err:=cms.LoadLatestVersion();err!=nil {t.Fatal(err)}
  ctx := sdk.NewContext(cms,cmtproto.Header{Time:time.Now()},false,log.NewNopLogger())
  ctrl:=gomock.NewController(t)
@@ -60,10 +67,10 @@ func newRealBankHarness(t *testing.T) bankHarness {
    // Commit before reopening to catch accidental use of a process-local
    // record that disappears when the durable SDK state is reloaded.
    cms.Commit()
-   reopened:=store.NewCommitMultiStore(db,log.NewNopLogger())
-   reopened.MountStoreWithDB(bankKey,storetypes.StoreTypeIAVL,db)
-   reopened.MountStoreWithDB(capKey,storetypes.StoreTypeIAVL,db)
-   reopened.MountStoreWithDB(objKey,storetypes.StoreTypeObject,db)
+   reopened:=store.NewCommitMultiStore(rootDB,log.NewNopLogger())
+   reopened.MountStoreWithDB(bankKey,storetypes.StoreTypeIAVL,bankDB)
+   reopened.MountStoreWithDB(capKey,storetypes.StoreTypeIAVL,capDB)
+   reopened.MountStoreWithDB(objKey,storetypes.StoreTypeObject,objDB)
    if err:=reopened.LoadLatestVersion();err!=nil {t.Fatal(err)}
    newCtx:=sdk.NewContext(reopened,cmtproto.Header{Height:2,Time:time.Now()},false,log.NewNopLogger())
    newCap,err:=New(runtime.NewKVStoreService(capKey))
