@@ -125,6 +125,9 @@ jobs:
           GOTOOLCHAIN=local go test -mod=mod -p 2 -count=1 -timeout=20m ./...
           # Synthetic O(balance records) cost evidence only; NOT IAVL or real-host capacity.
           GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^$' -bench '^BenchmarkNativeReconcileScaling$' -benchtime=3x -benchmem -timeout=20m ./...
+          # Real SDK x/bank + IAVL-backed in-memory multistore benchmark;
+          # still NOT disk-backed consensus or production throughput evidence.
+          GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^$' -bench '^BenchmarkActualSDKNativeConservationScan$' -benchtime=3x -benchmem -timeout=20m ./...
           # No actual PRVI or TEST tokens are issued by this job.
 
   upstream-mint-inventory:
