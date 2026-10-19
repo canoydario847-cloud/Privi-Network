@@ -23,6 +23,7 @@ import (
     "github.com/cosmos/evm/evmd"
     "github.com/cosmos/evm/evmd/prvicap"
     vmtypes "github.com/cosmos/evm/x/vm/types"
+    erc20types "github.com/cosmos/evm/x/erc20/types"
     "github.com/cosmos/cosmos-sdk/baseapp"
     simtestutil "github.com/cosmos/cosmos-sdk/testutil/sims"
     sdk "github.com/cosmos/cosmos-sdk/types"
@@ -131,6 +132,19 @@ func probe() error {
     mintGenesis.Minter.Inflation=sdkmath.LegacyZeroDec()
     mintGenesis.Minter.AnnualProvisions=sdkmath.LegacyZeroDec()
     genesis[minttypes.ModuleName]=app.AppCodec().MustMarshalJSON(&mintGenesis)
+    // The upstream reference defaults ERC20 registration to permissionless.
+    // Privi's native-denom genesis must opt out before InitChain begins.
+    var erc20Genesis erc20types.GenesisState
+    if err:=app.AppCodec().UnmarshalJSON(genesis[erc20types.ModuleName], &erc20Genesis);err!=nil {
+        return fmt.Errorf("read valueless ERC20 module fixture: %w",err)
+    }
+    erc20Genesis.Params.PermissionlessRegistration=false
+    for _, pair:=range erc20Genesis.TokenPairs {
+        if pair.Denom==prvicap.BaseDenom {
+            return fmt.Errorf("valueless fixture incorrectly maps native aprvi ERC20")
+        }
+    }
+    genesis[erc20types.ModuleName]=app.AppCodec().MustMarshalJSON(&erc20Genesis)
     raw, err := json.Marshal(genesis)
     if err!=nil {return fmt.Errorf("encode custom genesis fixture: %w",err)}
     resp, err := app.InitChain(&abci.RequestInitChain{
