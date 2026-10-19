@@ -42,6 +42,16 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
         'evmconfig "github.com/cosmos/evm/evmd/config"\n'
         '\tprvicap "github.com/cosmos/evm/evmd/prvicap"',
         "cap import")
+    # Validate the EIP-155 chain identity before module/codec construction;
+    # the upstream dev chain ID must never slip into a financial PRVI binary.
+    app = replace_once(app,
+        "\tevmChainID := cast.ToUint64(appOpts.Get(srvflags.EVMChainID))\n\tencodingConfig := evmencoding.MakeConfig(evmChainID)",
+        "\tevmChainID := cast.ToUint64(appOpts.Get(srvflags.EVMChainID))\n"
+        "\tif err := prvicap.ValidateEVMChainID(evmChainID); err != nil {\n"
+        "\t\tpanic(fmt.Errorf(\"PRVI EIP-155 app identity rejected: %w\", err))\n"
+        "\t}\n"
+        "\tencodingConfig := evmencoding.MakeConfig(evmChainID)",
+        "reject upstream default EVM chain ID before constructing keepers")
     app = replace_once(app,
         "\tBankKeeper            bankkeeper.Keeper",
         "\tBankKeeper            bankkeeper.Keeper\n\tPriviCapKeeper        prvicap.Keeper",
@@ -258,7 +268,7 @@ func (app *EVMD) CheckPriviNativeERC20Invariant(ctx sdk.Context) error {
         raise ValueError("bank keeper restriction must precede InitGenesis")
     # Verify all modifications before writing anything. No direct on-chain action.
     srcdir = source_repo / "production-network" / "mainnet" / "prvicap"
-    required = ["keeper.go", "sdk_bank_adapter.go"]
+    required = ["keeper.go", "sdk_bank_adapter.go", "chain_identity.go"]
     files = {}
     for name in required:
         content = (srcdir / name).read_text(encoding="utf-8")
