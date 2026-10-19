@@ -125,6 +125,24 @@ class PatcherTests(unittest.TestCase):
                         app.index("return app.ModuleManager.BeginBlock(ctx)"))
         self.assertEqual(app.count("PriviCapKeeper.Reconcile(ctx, app.BankKeeper)"),2)
 
+    def test_rejects_unreviewed_second_base_keeper_constructor(self):
+        # The old pinned bank assignment still patches exactly once, but an
+        # unexpected *second* raw constructor would be a catastrophic alias risk.
+        unreviewed = APP + "\nfunc rogue() { raw := bankkeeper.NewBaseKeeper(0); _ = raw }\n"
+        self.app_file.write_text(unreviewed, encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "raw bank bypass risk"):
+            module.apply_patch(self.upstream, self.repo, verify_git=False)
+        self.assertEqual(self.app_file.read_text(encoding="utf-8"), unreviewed)
+        self.assertFalse((self.upstream/"evmd"/"prvicap").exists())
+
+    def test_rejects_unreviewed_bank_keeper_reassignment(self):
+        unreviewed = APP + "\nfunc rogue() { app.BankKeeper = rogueKeeper }\n"
+        self.app_file.write_text(unreviewed, encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "raw bank bypass risk"):
+            module.apply_patch(self.upstream, self.repo, verify_git=False)
+        self.assertEqual(self.app_file.read_text(encoding="utf-8"), unreviewed)
+        self.assertFalse((self.upstream/"evmd"/"prvicap").exists())
+
     def test_changed_end_blocker_is_rejected_without_partial_write(self):
         changed=APP.replace("return app.ModuleManager.EndBlock(ctx)",
                             "return app.UnreviewedEndBlock(ctx)")
