@@ -46,6 +46,36 @@ class StrictJSONEvidenceTests(unittest.TestCase):
             self.read(json.dumps({"description":marker}))
         self.assertNotIn(marker,str(ctx.exception))
 
+    def test_camelcase_secret_field_aliases_are_rejected(self):
+        for name in ("apiKey","rootPassword","privateKey","walletSeed",
+                     "seedPhrase","refreshToken","accessToken",
+                     "AuthorizationHeader","secretValue","credentials"):
+            with self.assertRaisesRegex(ValueError,"credential-like JSON field"):
+                self.read(json.dumps({"nested":[{name:"synthetic"}]}))
+
+    def test_property_name_cannot_smuggle_key_or_leak_to_error_log(self):
+        marker="sk-proj-0123456789ABCDEFGHIJ"
+        with self.assertRaises(ValueError) as ctx:
+            self.read(json.dumps({marker:{"rootPassword":"dummy"}}))
+        self.assertNotIn(marker,str(ctx.exception))
+
+    def test_parent_property_name_redacted_on_nested_violation(self):
+        marker="HARDCODED-FAKE-SENSITIVE-METADATA"
+        with self.assertRaises(ValueError) as ctx:
+            self.read(json.dumps({marker:{"apiKey":"not-a-key"}}))
+        self.assertNotIn(marker,str(ctx.exception))
+
+    def test_common_token_value_prefixes_are_rejected(self):
+        for token in ("ghp_"+"A"*25,"github_pat_"+"A"*25,
+                      "xoxb-"+"1"*18,"AKIA"+"A"*16):
+            with self.assertRaisesRegex(ValueError,"probable sensitive"):
+                self.read(json.dumps({"description":token}))
+
+    def test_public_fingerprints_are_not_private_keys(self):
+        data={"consensus_pubkey_sha256":"b"*64,"signer_attestation":"review-required",
+              "admin_ssh_public_key_fingerprint":"SHA256:public-test-only"}
+        self.assertEqual(self.read(json.dumps(data)), data)
+
     def test_rejects_nonfinite_nan(self):
         with self.assertRaisesRegex(ValueError,"nonfinite"):
             self.read('{"total":NaN}')
