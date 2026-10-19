@@ -54,6 +54,38 @@ class ContaboPlanTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             json.loads('{"a":1,"a":2}', object_pairs_hook=pairs_unique)
 
+    def test_validator_identity_malformed_never_crashes(self):
+        for malformed in (None, [], ["privi-owner-val-01"], {}, {"bad": "value"},
+                          42, True):
+            sample = copy.deepcopy(BASE)
+            sample["nodes"][0]["id"] = malformed
+            errors, blockers = inspect(sample)
+            self.assertTrue(any("invalid ID" in item for item in errors), malformed)
+            self.assertTrue(any("node IDs" in item for item in errors), malformed)
+
+    def test_ipv4_overlay_must_be_genuine_rfc1918(self):
+        for invalid in ("192.0.0.9", "100.64.0.1", "169.254.0.9",
+                        "127.0.0.2", "198.18.0.1", "224.0.0.1",
+                        "0.0.0.0", "255.255.255.255"):
+            sample = copy.deepcopy(BASE)
+            sample["nodes"][0]["private_overlay_ipv4"] = invalid
+            errors, _ = inspect(sample)
+            self.assertTrue(any("RFC1918" in item for item in errors), invalid)
+
+    def test_rfc1918_private_overlays_accepted(self):
+        for ip in ("10.1.2.3","172.16.0.2","172.31.255.254","192.168.1.2"):
+            sample=copy.deepcopy(BASE)
+            sample["nodes"][0]["private_overlay_ipv4"]=ip
+            errors, _ = inspect(sample)
+            self.assertFalse(any("RFC1918" in item for item in errors), (ip, errors))
+
+    def test_duplicate_key_error_does_not_echo_secret_property_name(self):
+        sentinel="secret-production-password"
+        raw=json.dumps({sentinel:1})[:-1]+', "'+sentinel+'":2}'
+        with self.assertRaises(ValueError) as ctx:
+            json.loads(raw,object_pairs_hook=pairs_unique)
+        self.assertNotIn(sentinel,str(ctx.exception))
+
     def test_reject_fingerprint_wrong_shape(self):
         sample = copy.deepcopy(BASE)
         sample['nodes'][0]['admin_ssh_public_key_fingerprint'] = 'deadbeef'
