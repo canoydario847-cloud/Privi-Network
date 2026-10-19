@@ -2,6 +2,35 @@
 
 This is a no-secrets, no-spend deployment-preparation kit for **Privi World Corp's four proposed owner-controlled hosts**, all controlled by the **same** operator. Four servers do **not** mean four independent validator operators. No PRVI financial token, genesis, staking keys or validators are deployed by this directory. BNB PRIV and valueless TEST remain separate.
 
+## New Cloud VPS 8 staging target — October 19, 2026
+
+The owner has ordered and received a Contabo **Cloud VPS 8 (2026)** activation
+email, separate from the earlier VPS 6. Treat the **new VPS 8** as the
+designated first **valueless** Privi staging node. The new address is held in
+the owner's private provider records and **must not be added to this
+public repository** or confused with the earlier VPS 6 address.
+
+A TCP connection attempt to the new VPS 8's standard SSH port 22 received
+**connection refused** (as of October 19, 2026). The correct provider panel
+assignment, OS image, actual running instance, host-key fingerprint, SSH
+socket listener and firewall must be confirmed before access or any deployment.
+**Do not try an emailed initial password against an unverified endpoint.**
+See [trusted-console recovery](SSH_FIRST_LOGIN_RECOVERY.md).
+
+After the new host becomes accessible, validate its 8-vCPU plan using the
+**read-only** host probe, from a reviewed source checkout on the host:
+
+```sh
+PRIVI_EXPECTED_VCPU=8 bash production-network/ops/contabo/host_probe.sh
+```
+
+This setting checks a minimum of eight available vCPUs (no server upgrade or
+billing operation). The default remains six for the older VPS 6. Actual
+OS, RAM, storage, network firewall and host status checks still apply.
+A single eight-core VPS **cannot stand in for four physically separate
+signing hosts or a financial mainnet**. Do not enable RPC on public interfaces
+or upload wallet/validator signing secrets during this stage.
+
 ## Order and provision (manual; no Contabo account access via repo)
 
 1. The owner reports an order for **Contabo Cloud VPS 6 (2026), US Central, Auto Backup**, not the previously proposed VPS 8. The checkout confirmation indicates a **$15.00 initial one-month amount**, but an order confirmation is not a payment receipt or activation evidence. Do not purchase a duplicate server; check the Contabo VPS Control panel for assigned IPv4, instance details, actual 200 GB SSD vs 100 GB NVMe, OS image and active service. Read [one-server onboarding](ORDERED_VPS6_NEXT_STEPS.md). The Cloud VPS 6 is advertised as 6 shared vCPU and 12 GB RAM. Four physically separated validator hosts remain unprovisioned.
