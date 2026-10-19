@@ -131,6 +131,10 @@ jobs:
           # Fail closed if Go reported PASS but the benchmark timer was
           # left stopped (no ns/op), or a required account scale was absent.
           python3 "$GITHUB_WORKSPACE/production-network/ops/assert_sdk_benchmark_timings.py" --report "$RUNNER_TEMP/privi-sdk-iavl-bench.log"
+          # Fresh committed LevelDB/IAVL state read through a newly
+          # opened SDK multistore. Disposable keyless test; no financial chain.
+          GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^$' -bench '^BenchmarkDiskBackedSDKNativeConservationScan$' -benchtime=3x -benchmem -timeout=20m ./... | tee "$RUNNER_TEMP/privi-sdk-leveldb-bench.log"
+          python3 "$GITHUB_WORKSPACE/production-network/ops/assert_sdk_benchmark_timings.py" --profile disk --report "$RUNNER_TEMP/privi-sdk-leveldb-bench.log"
           # No actual PRVI or TEST tokens are issued by this job.
 
   upstream-mint-inventory:
