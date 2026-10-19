@@ -19,7 +19,11 @@ def evidence_url(value):
     Never dereference URLs during the offline review. This checks structure,
     NOT authorship, source availability, signed assertions or actual content.
     """
-    if not isinstance(value, str) or len(value) > 2048 or value != value.strip():
+    if (not isinstance(value, str) or not value or len(value) > 2048 or
+            value != value.strip() or
+            any(ord(ch) <= 32 or ord(ch) == 127 for ch in value)):
+        # urlsplit may normalize away tabs/newlines; never silently change
+        # evidence URLs before they are independently reviewed.
         return False
     try:
         parsed = urlsplit(value)
