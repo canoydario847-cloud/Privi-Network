@@ -47,8 +47,14 @@ regression also confirms an authorized burn never makes minting permissible
   may bypass the mint callback. The block-boundary reconciliation cannot
   detect unauthorized burn/remint cycles when ending net supply remains
   at or below original genesis issuance, nor all within-block mutations.
-- Walking *all* account balances twice per block is O(number of accounts)
-  and has not been performance-benchmarked at realistic chain scale.
+- Walking *all* account balances twice per block is O(number of account
+  balance records), not just the number of accounts holding `aprvi`. An
+  explicitly synthetic benchmark now runs at 10, 1,000, and 100,000 records
+  with a mocked `BankView` and records allocations/cost in GitHub CI. It
+  does **not** benchmark real Cosmos SDK IAVL disk reads, adversarial token
+  diversity, compaction, multi-host block scheduling, or consensus latency.
+  The engineering prototype remains a scalability **BLOCKER** until a
+  bounded production design and representative real-state benchmarks exist.
 - SDK, ERC-20, VM, IBC, governance and upgrade-related bypasses need
   complete dependency audit and negative integration tests.
 - The pinned reference Cosmos EVM enables **permissionless ERC-20 token registration** by default. The Privi custom-app prototype now rejects that default and any native `aprvi` token pair in genesis, and additionally checks **live ERC-20 module state at BeginBlock and EndBlock**, refusing permissionless registration, a native-denom lookup entry, or a stored native-token pair. This detects unsafe end-state changes but **does not atomically prevent transient create/remove paths inside one block**, direct unrestricted keeper writes, unauthorized binary upgrades, or other unreviewed conversion routes. The token-pair scan is O(number of pairs) per block and needs scale benchmarks and independent security review. It is not a production-approved hard guarantee.
