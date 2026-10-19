@@ -51,6 +51,17 @@ def inspect(text):
         raise ValueError("real SDK/IAVL benchmark timing validator must run exactly once")
     if sdk_bench + ' | tee "$RUNNER_TEMP/privi-sdk-iavl-bench.log"' not in sdk:
         raise ValueError("real SDK/IAVL benchmark output must be captured for timing verification")
+    disk_bench = "GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^$' -bench '^BenchmarkDiskBackedSDKNativeConservationScan$' -benchtime=3x -benchmem -timeout=20m ./..."
+    disk_log = "$RUNNER_TEMP/privi-sdk-leveldb-bench.log"
+    disk_report = 'python3 "$GITHUB_WORKSPACE/production-network/ops/assert_sdk_benchmark_timings.py" --profile disk --report "' + disk_log + '"'
+    if sdk.count(disk_bench) != 1 or text.count(disk_bench) != 1:
+        raise ValueError("committed disk-backed SDK PRVI benchmark absent or duplicated")
+    if disk_bench + ' | tee "' + disk_log + '"' not in sdk:
+        raise ValueError("disk-backed SDK benchmark output must be captured")
+    if sdk.count(disk_report) != 1:
+        raise ValueError("disk-backed SDK benchmark validation must run")
+    if not sdk.index(mandatory_report) < sdk.index(disk_bench) < sdk.index(disk_report):
+        raise ValueError("real bank benchmark ordering must stay enforced")
     if "still NOT disk-backed consensus or production throughput evidence" not in sdk:
         raise ValueError("real SDK benchmark limitations must remain explicit")
     if sdk.count("GOTOOLCHAIN=local go test -mod=mod -p 2 -count=1 -timeout=20m ./...") != 1:
@@ -99,6 +110,14 @@ class MainnetCIStructureTests(unittest.TestCase):
         modified = original.replace("assert_sdk_benchmark_timings.py", "skipped_validator.py",1)
         with self.assertRaisesRegex(ValueError, "timing validator"):
             inspect(modified)
+
+    def test_disk_backed_benchmark_cannot_be_silently_removed(self):
+        original = WORKFLOW.read_text(encoding="utf-8")
+        for replaced in ("BenchmarkDiskBackedSDKNativeConservationScan",
+                         "--profile disk"):
+            altered = original.replace(replaced, "DISABLED", 1)
+            with self.assertRaises(ValueError):
+                inspect(altered)
 
     def test_unexpected_financial_release_action_is_refused(self):
         original = WORKFLOW.read_text(encoding="utf-8")
