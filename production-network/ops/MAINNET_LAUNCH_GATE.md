@@ -51,6 +51,7 @@ regression also confirms an authorized burn never makes minting permissible
   and has not been performance-benchmarked at realistic chain scale.
 - SDK, ERC-20, VM, IBC, governance and upgrade-related bypasses need
   complete dependency audit and negative integration tests.
+- The pinned reference Cosmos EVM enables **permissionless ERC-20 token registration** by default. The proposed Privi genesis now rejects that default and any initial ERC-20 pair with native `aprvi`, including disabled pairs. **This protects genesis only**; native-pair registration during governance, later transactions or app upgrades still needs explicitly enforced and externally reviewed policy. The current preflight cannot establish production protection.
 - A financial production release and signed actual four-host genesis do not
   exist. Current CI artifacts are isolated, disposable and **not for deployment**.
 
