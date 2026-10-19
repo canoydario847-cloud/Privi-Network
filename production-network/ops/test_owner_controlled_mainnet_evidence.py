@@ -146,7 +146,10 @@ class OwnerControlledEvidenceTests(unittest.TestCase):
         for ref in (None, True, "", "http://audit.example/claim",
                     "https://example.com/cert", "https://localhost/doc",
                     "https://some.invalid/doc", "https://user:pass@review.org/report",
-                    "https://review.org", "https://review.org:443/report"):
+                    "https://review.org", "https://review.org:443/report",
+                    "https://review.org/report\nhttps://evil.invalid/bogus",
+                    "https://review.org/report\tbad",
+                    "https://review.org/report\x00bogus"):
             problems=check(self,lambda m,g:m.update(security_audit_url=ref))
             self.assertTrue(any("security_audit_url" in p for p in problems), ref)
 
