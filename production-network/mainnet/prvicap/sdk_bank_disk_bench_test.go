@@ -49,7 +49,7 @@ func BenchmarkDiskBackedSDKNativeConservationScan(b *testing.B) {
             objDB:=dbm.NewMemDB()
             logger:=log.NewNopLogger()
             bankKey:=storetypes.NewKVStoreKey(banktypes.StoreKey)
-            capKey:=storetypes.NewKVStoreKey(StoreKey)
+            capKey:=storetypes.NewKVStoreKey("prvicap")
             objKey:=storetypes.NewObjectStoreKey(banktypes.ObjectStoreKey)
             cms:=store.NewCommitMultiStore(rootDB,logger)
             cms.MountStoreWithDB(bankKey,storetypes.StoreTypeIAVL,bankDB)
