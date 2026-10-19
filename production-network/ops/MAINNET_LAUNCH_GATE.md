@@ -61,6 +61,23 @@ document these gaps. **Gate 2 remains BLOCKED** until independently
 verified whole-system issuance control, module upgrades and signed
 genesis/release acceptance are complete.
 
+## Separate live-chain identity observation (not a launch verdict)
+
+The [read-only node identity verifier](verify_node_identity.py) compares locally
+captured CometBFT `/status` (Cosmos chain ID, observed finalized height/hash and
+non-catching-up state) to a separately captured Ethereum `eth_chainId` response.
+It refuses swapped or missing identities, and its synthetic regression tests
+fail closed on malformed JSON-RPC replies, wrong heights and invalid IDs.
+
+**Important:** Cosmos EVM's numeric Ethereum chain ID is selected through
+application options, and the upstream developer binary may default to
+`262144`. A correct Cosmos `chain_id` and native `aprvi` in genesis **do
+not prove** an independently selected Ethereum chain ID actually runs on a
+node. Even if the offline identity checker passes, the captured RPC output
+may be unauthenticated or forged. The operator must separately verify binary
+and signed genesis digests on each physical validator host before any GO vote.
+See [staging observation runbook](../mainnet/CHAIN_IDENTITY_OBSERVATION.md).
+
 ## GO / NO-GO
 
 **NO-GO** unless every gate has documented verifiable evidence, the sole owner/operator proves possession of **four different validator signatures on the same genesis** (one owner is not four independent operators), and the final accountable launch approvers explicitly authorize activation. Approval should be recorded with reviewer, date, commit/hash and evidence link. CI passing by itself does not constitute approval.
