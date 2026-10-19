@@ -18,12 +18,15 @@ NODE = {"id", "instance_id", "region", "fault_domain", "public_ipv4",
 SHA256_SSH = re.compile(r"^SHA256:[a-zA-Z0-9+/]{43}$")
 SECRETS = re.compile(r"(private.?key|mnemonic|seed.?phrase|password|api.?token|api.?key|secret|access.?token|bearer)", re.I)
 UNASSIGNED = "UNASSIGNED"
+RFC1918 = tuple(ipaddress.ip_network(net) for net in (
+    "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"
+))
 
 def pairs_unique(pairs):
     result = {}
     for key, value in pairs:
         if key in result:
-            raise ValueError("duplicate JSON key: " + key)
+            raise ValueError("duplicate JSON key (name redacted)")
         result[key] = value
     return result
 
@@ -65,7 +68,7 @@ def inspect(plan):
         if set(node) != NODE:
             errs.append(prefix + ": missing/extra host fields")
         ident = node.get("id")
-        if ident not in IDS:
+        if not isinstance(ident, str) or ident not in IDS:
             errs.append(prefix + ": invalid ID")
         for key in seen:
             value = node.get(key)
@@ -95,14 +98,14 @@ def inspect(plan):
                 errs.append(prefix + f": {key} must be an IPv4 address")
                 continue
             if require_private:
-                if not address.is_private or address.is_loopback or address.is_link_local or address.is_reserved:
+                if not any(address in network for network in RFC1918):
                     errs.append(prefix + ": overlay IP must be RFC1918, nonloopback")
             elif not address.is_global:
                 errs.append(prefix + ": public IPv4 must be globally routable")
         for key in ("rpc_bind", "metrics_bind"):
             if node.get(key) != "127.0.0.1":
                 errs.append(prefix + f": {key} must bind loopback only")
-    valid_ids = {node.get("id") for node in nodes if isinstance(node, dict)}
+    valid_ids = {node["id"] for node in nodes if isinstance(node, dict) and isinstance(node.get("id"), str)}
     if valid_ids != IDS:
         errs.append("node IDs must be exactly 01 through 04")
     return sorted(set(errs)), sorted(set(blocks))
