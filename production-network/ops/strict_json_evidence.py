@@ -9,15 +9,22 @@ import json
 import re
 from pathlib import Path
 
+# Key names are checked in normalized form so common aliases like
+# apiKey, rootPassword and walletSeed are not overlooked. Public-key
+# fingerprints are allowed; never confuse them with signing private keys.
 _FORBIDDEN_FIELD = re.compile(
-    r"(^|[_-])(password|passwd|private[_-]?key|secret|mnemonic|seed[_-]?phrase|"
-    r"recovery[_-]?phrase|api[_-]?key|access[_-]?token|refresh[_-]?token|"
-    r"wallet[_-]?seed|jwt|authorization[_-]?header)($|[_-])", re.I
+    r"privatekey|password|passwd|secret|mnemonic|seedphrase|"
+    r"recoveryphrase|apikey|accesstoken|refreshtoken|walletseed|"
+    r"authorizationheader|jwttoken|bearertoken|credential", re.I
 )
 _FORBIDDEN_VALUE = re.compile(
     r"-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----|"
     r"-----BEGIN OPENSSH PRIVATE KEY-----|"
-    r"\bsk-proj-[A-Za-z0-9_-]{15,}", re.I
+    r"\bsk-proj-[A-Za-z0-9_-]{15,}|"
+    r"\bghp_[A-Za-z0-9]{20,}|"
+    r"\bgithub_pat_[A-Za-z0-9_]{20,}|"
+    r"\bxox[baprs]-[A-Za-z0-9-]{16,}|"
+    r"\bAKIA[0-9A-Z]{16}", re.I
 )
 
 def _unique_pairs(pairs):
@@ -44,9 +51,14 @@ def reject_secrets(value, location="root"):
     """Recursively reject known credential fields or values, redacting data."""
     if isinstance(value, dict):
         for key, item in value.items():
-            if _FORBIDDEN_FIELD.search(key):
+            if not isinstance(key, str):
+                raise ValueError(location + ": JSON field names must be text")
+            normalized = re.sub(r"[^a-z0-9]", "", key.lower())
+            if _FORBIDDEN_FIELD.search(normalized):
                 raise ValueError(location + ": prohibited credential-like JSON field")
-            reject_secrets(item, location + "." + key)
+            # Never echo user-controlled field names (which may contain a
+            # credential themselves) into build logs or exception reports.
+            reject_secrets(item, location + ".object")
     elif isinstance(value, list):
         for element in value:
             reject_secrets(element, location + "[]")
