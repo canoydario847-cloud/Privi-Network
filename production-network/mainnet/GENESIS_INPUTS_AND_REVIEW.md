@@ -28,6 +28,12 @@ Every allocated account must provide a **public** receiving address only. Do not
 
 For a fixed-cap native coin, the launch committee must independently prove that **initial allocation + all possible future issuance is never greater than 1 billion PRVI**, including the effect of staking rewards, inflation parameters, governance, module mint permissions, chain upgrades and vesting. Merely placing `1000000000` in a JSON manifest does NOT enforce a chain-level limit.
 
+### Strict input and credential hygiene
+
+The review utilities parse candidate genesis and release JSON with **duplicate-key rejection**. Repeating keys such as `chain_id`, `supply`, or `max_supply_whole_prvi` is not a harmless formatting choice: many JSON parsers silently pick one version. All duplicate properties now fail closed. Obvious private-key, mnemonic, access-token, and password fields or key material are also rejected without printing credential values to build logs.
+
+The checks are **offline**, cannot validate the identity of an operator or the safety of private signing infrastructure, and cannot approve a launch. Keep production keys and service credentials outside the repository, hosted CI and chat. A public SHA256 fingerprint of a signing key is not a signing credential.
+
 ### Auditing the initial balance accounting (read-only)
 
 ```bash
