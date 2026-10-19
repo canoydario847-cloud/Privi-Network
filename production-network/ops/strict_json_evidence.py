@@ -54,7 +54,7 @@ def reject_secrets(value, location="root"):
             if not isinstance(key, str):
                 raise ValueError(location + ": JSON field names must be text")
             normalized = re.sub(r"[^a-z0-9]", "", key.lower())
-            if _FORBIDDEN_FIELD.search(normalized):
+            if _FORBIDDEN_FIELD.search(normalized) or _FORBIDDEN_VALUE.search(key):
                 raise ValueError(location + ": prohibited credential-like JSON field")
             # Never echo user-controlled field names (which may contain a
             # credential themselves) into build logs or exception reports.
