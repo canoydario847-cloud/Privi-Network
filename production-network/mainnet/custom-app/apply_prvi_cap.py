@@ -176,8 +176,40 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \tif err := app.PriviCapKeeper.InitGenesis(ctx, initialPRVI.String(), app.BankKeeper); err != nil {
 \t\treturn nil, fmt.Errorf("PRVI cap genesis initialization denied: %w", err)
 \t}
+\tif err := app.CheckPriviNativeERC20Invariant(ctx); err != nil {
+\t\treturn nil, fmt.Errorf("PRVI native genesis ERC20 runtime state denied: %w", err)
+\t}
 \treturn response, nil'''
     app = replace_once(app, old_chainer, new_chainer, "chain init fail-closed proof")
+    # Runtime ERC20 safety: reject permissionless registration and any
+    # native aprvi mapping on the actual SDK state at both block boundaries.
+    # This is defense in depth: it does not atomically forbid every possible
+    # in-block transient create/delete route or unreviewed keeper mutation.
+    # The per-block token-pair walk requires load/performance testing.
+    invariant = '''// CheckPriviNativeERC20Invariant verifies live ERC20 state rather than
+// just unsigned genesis declarations. No runtime auto-correction: a
+// forbidden state makes block execution fail closed. This is O(token pairs).
+func (app *EVMD) CheckPriviNativeERC20Invariant(ctx sdk.Context) error {
+\tparams := app.Erc20Keeper.GetParams(ctx)
+\tif params.PermissionlessRegistration {
+\t\treturn fmt.Errorf("PRVI ERC20 runtime: permissionless registration forbidden")
+\t}
+\tif app.Erc20Keeper.IsDenomRegistered(ctx, prvicap.BaseDenom) {
+\t\treturn fmt.Errorf("PRVI ERC20 runtime: native aprvi denom registry entry forbidden")
+\t}
+\tfor _, pair := range app.Erc20Keeper.GetTokenPairs(ctx) {
+\t\tif pair.Denom == prvicap.BaseDenom {
+\t\t\treturn fmt.Errorf("PRVI ERC20 runtime: native aprvi token pair forbidden")
+\t\t}
+\t}
+\treturn nil
+}
+
+'''
+    app = replace_once(app,
+        "func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {",
+        invariant + "func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {",
+        "inject ERC20 runtime invariant before block entry")
     # Guard supply at block boundaries as defense in depth. This catches
     # unguarded net supply growth above the initial genesis issuance, not a
     # mint-and-burn within one block or an increase below genesis after burns.
@@ -189,6 +221,9 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
         '''func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {
 \tif err := app.PriviCapKeeper.Reconcile(ctx, app.BankKeeper); err != nil {
 \t\treturn sdk.BeginBlock{}, fmt.Errorf("PRVI beginning-of-block supply check denied: %w", err)
+\t}
+\tif err := app.CheckPriviNativeERC20Invariant(ctx); err != nil {
+\t\treturn sdk.BeginBlock{}, fmt.Errorf("PRVI beginning-of-block ERC20 check denied: %w", err)
 \t}
 \treturn app.ModuleManager.BeginBlock(ctx)
 }'''.replace("\\t", "\t"),
@@ -202,6 +237,9 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \tif endErr != nil { return response, endErr }
 \tif err := app.PriviCapKeeper.Reconcile(ctx, app.BankKeeper); err != nil {
 \t\treturn response, fmt.Errorf("PRVI end-of-block supply check denied: %w", err)
+\t}
+\tif err := app.CheckPriviNativeERC20Invariant(ctx); err != nil {
+\t\treturn response, fmt.Errorf("PRVI end-of-block ERC20 check denied: %w", err)
 \t}
 \treturn response, nil
 }'''.replace("\\t", "\t"),
