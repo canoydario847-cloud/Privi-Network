@@ -18,6 +18,8 @@ type EVMD struct {
     BankKeeper            bankkeeper.Keeper
 }
 func test() {
+    evmChainID := cast.ToUint64(appOpts.Get(srvflags.EVMChainID))
+    encodingConfig := evmencoding.MakeConfig(evmChainID)
     keys := storetypes.NewKVStoreKeys(
         authtypes.StoreKey, banktypes.StoreKey, stakingtypes.StoreKey,
     )
@@ -94,6 +96,10 @@ class PatcherTests(unittest.TestCase):
         self.assertLess(app.index("prvicap.RestrictedBank"), app.index("return app.ModuleManager.InitGenesis")
                         if "return app.ModuleManager.InitGenesis" in app else app.index("response, initErr"))
         self.assertIn("prvicap.StoreKey", app)
+        self.assertIn("prvicap.ValidateEVMChainID(evmChainID)", app)
+        self.assertIn("PRVI EIP-155 app identity rejected", app)
+        self.assertLess(app.index("prvicap.ValidateEVMChainID(evmChainID)"), app.index("bankkeeper.NewBaseKeeper("))
+        self.assertIn("func ValidateEVMChainID", (self.upstream/"evmd"/"prvicap"/"chain_identity.go").read_text())
         self.assertIn("prvicap.New(runtime.NewKVStoreService", app)
         self.assertIn("bankGenesis.Supply.AmountOf(prvicap.BaseDenom)", app)
         self.assertIn("prvicap.ValidateGenesisBase(initialPRVI.String())", app)
