@@ -88,9 +88,17 @@ jobs:
           cp production-network/mainnet/custom-app/privi_cap_genesis_positive_probe_main.go "$POSITIVE_PROBE/main.go"
           gofmt -w "$POSITIVE_PROBE/main.go"
           cd "$RUNNER_TEMP/.upstream-capbuild/evmd"
-          GOTOOLCHAIN=local go run -mod=mod -p 2 ./cmd/privi-cap-genesis-positive-probe
-          # Offline fixture only; any aprvi in the test is valueless and
-          # never issued to a real wallet or public blockchain.
+          GOTOOLCHAIN=local go build -mod=mod -p 2 \
+            -o "$RUNNER_TEMP/privi-custom-InitChain-TEST-ONLY" ./cmd/privi-cap-genesis-positive-probe
+          "$RUNNER_TEMP/privi-custom-InitChain-TEST-ONLY"
+          # Each invocation uses a fresh in-memory Cosmos EVM app process.
+          # Assert the actual patched InitChain, not only an offline JSON audit,
+          # denies native aprvi ERC20 pairs and permissionless registration.
+          PRIVI_ERC20_NEGATIVE_PROBE=permissionless \
+            "$RUNNER_TEMP/privi-custom-InitChain-TEST-ONLY"
+          PRIVI_ERC20_NEGATIVE_PROBE=native-pair \
+            "$RUNNER_TEMP/privi-custom-InitChain-TEST-ONLY"
+          # Offline fixtures only: no issued PRVI, wallet or public network.
 
 
   sdk-prvi-capkeeper:
