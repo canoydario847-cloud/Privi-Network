@@ -36,6 +36,23 @@ sudo systemctl status ssh --no-pager
 
 Only run these commands in the **owner-controlled trusted console**; do not provide the initial password to any helper. If the service runs but remote port 22 remains unavailable, review provider firewall and host firewall policy. Never disable the entire firewall as a diagnostic shortcut, and avoid changing SSH listening port without documenting it and confirming console recovery.
 
+## If SSH is active locally but TCP/22 is refused remotely
+
+Run the new **read-only** diagnostic directly inside the authenticated VPS/VNC console:
+
+```sh
+sudo bash production-network/ops/contabo/ssh_readonly_diagnostics.sh
+```
+
+The script requires only `systemctl`, `ss`, `awk`, `ufw` (optional) and standard shell tools. It reports whether the SSH process or socket is active, whether port 22 binds only loopback or a non-loopback address, and whether UFW appears active. It does **not** change SSH configuration, firewall rules, credentials or cloud resources.
+
+- **No listener on TCP/22:** inspect the SSH socket/service configuration and logs inside VNC. An active `ssh.service` is not sufficient without a TCP listener.
+- **Loopback-only listener:** check `sshd_config`, `sshd_config.d` and `ssh.socket` listen configuration. Preserve a recovery path before changing binding.
+- **Non-loopback listener, still refused from outside:** check Contabo network/provisioning status, provider firewall, host UFW/iptables/nftables rules and IPv4 assignment. A local listener check alone **does not prove external reachability**.
+- **Public SSH working:** compare the host ED25519 fingerprint from VNC to the initial client prompt, then log in; do not bypass key checking.
+
+Never disclose passwords, keys, API credentials or other private console data as diagnostic evidence. A concise report of `LOCAL ONLY`, `LISTENING`, `No TCP listener`, and UFW active/inactive is sufficient.
+
 ## Confirm the SSH host key before login
 
 From the VNC-connected Linux console, compute the public host fingerprint:
