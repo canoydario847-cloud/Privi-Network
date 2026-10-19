@@ -45,7 +45,13 @@ jobs:
           set -euo pipefail
           python3 production-network/mainnet/custom-app/apply_prvi_cap.py \
             --upstream "$RUNNER_TEMP/.upstream-capbuild" --source-repo "$GITHUB_WORKSPACE"
-          gofmt -w "$RUNNER_TEMP/.upstream-capbuild/evmd/app.go" "$RUNNER_TEMP/.upstream-capbuild/evmd/prvicap/"*.go
+          # Patch only pinned x/erc20 state mutation sites, rejecting native
+          # aprvi and permissionless registration BEFORE consensus writes.
+          python3 production-network/mainnet/custom-app/patch_pinned_erc20_mutations.py \
+            --upstream "$RUNNER_TEMP/.upstream-capbuild"
+          gofmt -w "$RUNNER_TEMP/.upstream-capbuild/evmd/app.go" "$RUNNER_TEMP/.upstream-capbuild/evmd/prvicap/"*.go \
+            "$RUNNER_TEMP/.upstream-capbuild/x/erc20/keeper/params.go" \
+            "$RUNNER_TEMP/.upstream-capbuild/x/erc20/keeper/token_pairs.go"
           git -C "$RUNNER_TEMP/.upstream-capbuild" diff --check
       - name: Compile actual Cosmos EVM application and embedded Privi cap keeper
         run: |
