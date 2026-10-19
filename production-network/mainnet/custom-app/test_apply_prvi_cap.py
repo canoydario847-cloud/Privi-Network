@@ -132,6 +132,19 @@ class PatcherTests(unittest.TestCase):
         self.assertLess(app.index("PriviCapKeeper.Reconcile(ctx, app.BankKeeper)"),
                         app.index("return app.ModuleManager.BeginBlock(ctx)"))
         self.assertEqual(app.count("PriviCapKeeper.Reconcile(ctx, app.BankKeeper)"),2)
+        self.assertIn("func (app *EVMD) CheckPriviNativeERC20Invariant(ctx sdk.Context) error", app)
+        self.assertIn("app.Erc20Keeper.GetParams(ctx)", app)
+        self.assertIn("app.Erc20Keeper.IsDenomRegistered(ctx, prvicap.BaseDenom)", app)
+        self.assertIn("app.Erc20Keeper.GetTokenPairs(ctx)", app)
+        self.assertEqual(app.count("app.CheckPriviNativeERC20Invariant(ctx)"), 3)
+        for name in ("PRVI beginning-of-block ERC20 check denied",
+                     "PRVI end-of-block ERC20 check denied",
+                     "PRVI native genesis ERC20 runtime state denied"):
+            self.assertIn(name, app)
+        self.assertLess(app.index("PRVI beginning-of-block ERC20 check denied"),
+                        app.index("return app.ModuleManager.BeginBlock(ctx)"))
+        self.assertLess(app.index("PRVI native genesis ERC20 runtime state denied"),
+                        app.index("return response, nil"))
 
     def test_rejects_unreviewed_second_base_keeper_constructor(self):
         # The old pinned bank assignment still patches exactly once, but an
