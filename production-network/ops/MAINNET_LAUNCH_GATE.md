@@ -25,19 +25,40 @@ The inventory is currently all placeholders, and no actual production hosts or k
 | 7. Legal and communications | Review of token launch obligations and published user disclosures; claims accurately distinguish PRVI, TEST, BNB PRIV | BLOCKED |
 | 8. Final approval | Privi World Corp owner/operator and accountable security reviewers sign off on identical immutable binary + genesis hashes; published UTC activation plan and rollback/stop policy; no claim of independent validator ownership | BLOCKED |
 
-## Cap model progress (NOT a production cap implementation)
+## Cap model progress — SDK-backed build-only prototype, NOT a production cap
 
-A separately tested [proposed 1-billion lifetime PRVI cap model](../mainnet/capmodel/cap.go)
-has been implemented in pure Go, with concurrent mint, overflow, burn,
-and malformed-amount tests run in offline CI. This is a **reference accounting
-model only**. It is not registered with the Cosmos SDK, has no consensus
-KV state, is not connected to bank mint authorities and cannot limit any
-currently running or future upstream `evmd` financial chain by itself.
+The [reference in-memory Go cap model](../mainnet/capmodel/cap.go) and
+[consensus-KV-backed Cosmos SDK keeper](../mainnet/prvicap/keeper.go) are
+implemented for engineering tests. The keeper stores immutable native aprvi
+genesis allocation, denies PRVI minting through the restricted x/bank
+`MintCoins` path, and checks bank supply and actual account-balance
+conservation before and after module blocks.
 
-[Production cap integration requirements](PRVI_HARDCAP_INTEGRATION_REQUIREMENTS.md)
-list the still-missing mint-route audit, persisted state enforcement,
-complete governance/vesting/staking/upgrade tests and external review.
-**Gate 2 remains BLOCKED**, even when offline model tests pass.
+A [source-pinned Cosmos EVM v0.7.3 patcher](../mainnet/custom-app/apply_prvi_cap.py)
+wires this keeper into a **build-only** customized app and CI tests
+the actual SDK banking API, cap+1 genesis boundary, disposable InitChain,
+FinalizeBlock and persistence across restarts. The SDK burn-and-remint
+regression also confirms an authorized burn never makes minting permissible
+**through the restricted bank keeper**, including after restart.
+
+**Unresolved consensus-critical risks:**
+
+- Old unrestricted keeper copies and low-level bank balance setters
+  may bypass the mint callback. The block-boundary reconciliation cannot
+  detect unauthorized burn/remint cycles when ending net supply remains
+  at or below original genesis issuance, nor all within-block mutations.
+- Walking *all* account balances twice per block is O(number of accounts)
+  and has not been performance-benchmarked at realistic chain scale.
+- SDK, ERC-20, VM, IBC, governance and upgrade-related bypasses need
+  complete dependency audit and negative integration tests.
+- A financial production release and signed actual four-host genesis do not
+  exist. Current CI artifacts are isolated, disposable and **not for deployment**.
+
+[Hard-cap integration requirements](PRVI_HARDCAP_INTEGRATION_REQUIREMENTS.md)
+and [preliminary security findings](INTERNAL_SECURITY_REVIEW_2026-10-18.md)
+document these gaps. **Gate 2 remains BLOCKED** until independently
+verified whole-system issuance control, module upgrades and signed
+genesis/release acceptance are complete.
 
 ## GO / NO-GO
 
