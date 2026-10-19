@@ -8,6 +8,7 @@ import (
     "fmt"
     "math/big"
     "os"
+    "os/exec"
     "strings"
 
     "cosmossdk.io/log/v2"
@@ -54,6 +55,9 @@ func assertRejectEVMIdentityBeforeAppInit(id uint64) (err error) {
 }
 
 func runCase(name string, mutate func(*evmd.EVMD, map[string]json.RawMessage) error, want string) error {
+    // An upstream Cosmos EVM global chain configuration may be set only
+    // once per OS process. Exactly ONE genesis test runs in each child.
+    if os.Getenv("PRIVI_NEGATIVE_GENESIS_CASE") != name { return nil }
     // No chain keys or funded accounts are created in this process.
     app := evmd.NewExampleApp(log.NewNopLogger(), dbm.NewMemDB(), true,
         priviTestAppOptions{}, baseapp.SetChainID("privi-valueless-genesis-probe-1"))
@@ -83,6 +87,29 @@ func main() {
         }
     }
     fmt.Println("PASS: customized app constructor rejected 8 unsafe EIP-155 chain IDs")
+    if os.Getenv("PRIVI_NEGATIVE_GENESIS_CASE") == "" {
+        // The VM keeper sets process-global EVM chainConfig and panics
+        // if a second app attempts to reset it. Use one fresh subprocess
+        // per case; make every child's expected PASS marker mandatory.
+        names:=[]string{
+            "default upstream atest genesis",
+            "declared PRVI over lifetime cap",
+            "missing bank genesis module",
+            "aprvi declaration with wrong EVM gas token",
+        }
+        for _, name:=range names {
+            child:=exec.Command(os.Args[0])
+            child.Env=append(os.Environ(), "PRIVI_NEGATIVE_GENESIS_CASE="+name)
+            output,err:=child.CombinedOutput()
+            if err!=nil || !strings.Contains(string(output),"PASS "+name+":") {
+                fmt.Fprintf(os.Stderr,"FAIL: isolated valueless genesis case %q: %v\n%s",name,err,string(output))
+                os.Exit(1)
+            }
+            fmt.Print(string(output))
+        }
+        fmt.Println("ALL PASS: 4 isolated full-app valueless negative genesis cases; no network started")
+        return
+    }
     // Default upstream demo uses atest and MUST NOT silently initialize
     // a proposed native aprvi financial chain.
     if err:=runCase("default upstream atest genesis",nil,
@@ -123,5 +150,6 @@ func main() {
         },"PRVI native genesis: EVM gas denomination must be aprvi");err!=nil {
         fmt.Fprintln(os.Stderr,err);os.Exit(1)
     }
-    fmt.Println("ALL PASS: 4 full-app valueless negative genesis cases; no network started")
+    // A child process contains exactly one customized Cosmos EVM app; no
+    // independent pass marker is emitted without the selected case passing.
 }
