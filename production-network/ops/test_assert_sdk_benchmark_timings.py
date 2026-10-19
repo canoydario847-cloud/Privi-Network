@@ -62,7 +62,7 @@ class SDKBenchmarkTimingTests(unittest.TestCase):
 
     def test_disk_profile_reports_real_timed_committed_state(self):
         report = "".join(
-            f"BenchmarkDiskBackedSDKNativeConservationScan/committed-accounts-{count}-4\\t3\\t{duration} ns/op\\t4096 B/op\\t30 allocs/op\\n"
+            f"BenchmarkDiskBackedSDKNativeConservationScan/committed-accounts-{count}-4\t3\t{duration} ns/op\t4096 B/op\t30 allocs/op\n"
             for count, duration in ((100, 30000), (1000, 100000), (5000, 900000))
         )
         self.assertEqual(verify(report, profile="disk"), {
@@ -75,7 +75,7 @@ class SDKBenchmarkTimingTests(unittest.TestCase):
 
     def test_disk_profile_rejects_missing_or_stopped_timer(self):
         sample = "".join(
-            f"BenchmarkDiskBackedSDKNativeConservationScan/committed-accounts-{n}-4\\t3\\t0 B/op\\t0 allocs/op\\n"
+            f"BenchmarkDiskBackedSDKNativeConservationScan/committed-accounts-{n}-4\t3\t0 B/op\t0 allocs/op\n"
             for n in (100, 1000, 5000)
         )
         with self.assertRaisesRegex(ValueError, "no valid ns/op"):
