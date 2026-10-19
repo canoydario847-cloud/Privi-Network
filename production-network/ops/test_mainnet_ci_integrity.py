@@ -41,6 +41,13 @@ def inspect(text):
     benchmark = "GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^$' -bench '^BenchmarkNativeReconcileScaling$' -benchtime=3x -benchmem -timeout=20m ./..."
     if sdk.count(benchmark) != 1 or text.count(benchmark) != 1:
         raise ValueError("synthetic PRVI conservation benchmark absent or duplicated")
+    sdk_bench = "GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^$' -bench '^BenchmarkActualSDKNativeConservationScan$' -benchtime=3x -benchmem -timeout=20m ./..."
+    if sdk.count(sdk_bench) != 1 or text.count(sdk_bench) != 1:
+        raise ValueError("real SDK IAVL memory-store PRVI benchmark absent or duplicated")
+    if sdk.index(benchmark) > sdk.index(sdk_bench):
+        raise ValueError("synthetic benchmark should precede real SDK IAVL baseline")
+    if "still NOT disk-backed consensus or production throughput evidence" not in sdk:
+        raise ValueError("real SDK benchmark limitations must remain explicit")
     if sdk.count("GOTOOLCHAIN=local go test -mod=mod -p 2 -count=1 -timeout=20m ./...") != 1:
         raise ValueError("real SDK cap tests must precede benchmark")
     if sdk.index("-count=1 -timeout=20m") > sdk.index(benchmark):
@@ -73,6 +80,13 @@ class MainnetCIStructureTests(unittest.TestCase):
         original = WORKFLOW.read_text(encoding="utf-8")
         modified = original.replace("BenchmarkNativeReconcileScaling", "BenchmarkOther", 1)
         with self.assertRaisesRegex(ValueError, "benchmark"):
+            inspect(modified)
+
+    def test_missing_real_sdk_benchmark_is_detected(self):
+        original = WORKFLOW.read_text(encoding="utf-8")
+        modified = original.replace("BenchmarkActualSDKNativeConservationScan",
+                                    "BenchmarkUnreviewedReplacement",1)
+        with self.assertRaisesRegex(ValueError, "real SDK IAVL memory-store"):
             inspect(modified)
 
     def test_unexpected_financial_release_action_is_refused(self):
