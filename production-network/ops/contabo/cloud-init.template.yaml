@@ -1,6 +1,8 @@
 #cloud-config
-# Privi VALueless STAGING host only. Replace with a real SSH public key.
-# Never commit production validator keys. This never starts consensus or issues PRVI.
+# Privi VALUELESS STAGING host only, not mainnet.
+# No signing keys, genesis, Docker or consensus starts on boot.
+# Generated only by render_cloud_init.py with a validated SSH .pub key.
+hostname: REPLACE_WITH_HOSTNAME
 package_update: true
 package_upgrade: true
 ssh_pwauth: false
@@ -10,6 +12,8 @@ users:
   - name: priviadmin
     gecos: Privi staging operator
     groups: [sudo]
+    # SSH-key-only bootstrap: review and narrow admin sudo permissions
+    # after gaining console/recovery access. Never share the key privately.
     sudo: ['ALL=(ALL) NOPASSWD:ALL']
     shell: /bin/bash
     lock_passwd: true
@@ -26,7 +30,8 @@ write_files:
   - path: /etc/motd
     permissions: '0644'
     content: |
-      PRVI financial mainnet is NOT DEPLOYED on this host.
-      Valueless multi-host staging only. No prod signing keys.
-# Do NOT enable firewall before verifying SSH. Do NOT expose RPC or metrics.
+      Privi World Corp valueless staging host only.
+      PRVI financial mainnet is NOT DEPLOYED. No production signing keys.
+# Firewall and access policies must be reviewed after verifying SSH and
+# console recovery; never expose RPC, signer or metrics endpoints.
 final_message: 'Privi valueless staging base image complete; no blockchain started.'
