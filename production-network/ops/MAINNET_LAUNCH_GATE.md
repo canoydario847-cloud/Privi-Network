@@ -58,8 +58,16 @@ regression also confirms an authorized burn never makes minting permissible
   1,000 and 5,000 disposable unrelated-token accounts and unchanged native
   PRVI. Its costs are collected in the SDK CI job, but they exclude real
   disk I/O, CometBFT networking, EVM traffic and historical IAVL versions.
+  A third benchmark now commits 100/1,000/5,000 disposable
+  unrelated-token account balances to independent GoLevelDB-backed bank and
+  cap IAVL stores, reopens a fresh SDK multistore, then times actual capped
+  native supply reconciliation. CI rejects missing or zero-time readings
+  for both SDK timing profiles. This narrows the evidence gap but does not
+  establish real disk endurance, cold-cache worst cases, realistic account
+  growth, fees, gas load, geographic P2P propagation, or block finality.
   The engineering prototype remains a scalability **BLOCKER** until a
-  bounded production design and representative persisted real-state benchmarks exist.
+  bounded production design and representative adversarial multi-host
+  performance plus disk stress evidence exist.
 - SDK, ERC-20, VM, IBC, governance and upgrade-related bypasses need
   complete dependency audit and negative integration tests.
 - The pinned reference Cosmos EVM enables **permissionless ERC-20 token registration** by default. The Privi custom-app prototype now rejects that default and any native `aprvi` token pair in genesis, and additionally checks **live ERC-20 module state at BeginBlock and EndBlock**, refusing permissionless registration, a native-denom lookup entry, or a stored native-token pair. This detects unsafe end-state changes but **does not atomically prevent transient create/remove paths inside one block**, direct unrestricted keeper writes, unauthorized binary upgrades, or other unreviewed conversion routes. The token-pair scan is O(number of pairs) per block and needs scale benchmarks and independent security review. It is not a production-approved hard guarantee.
