@@ -9,9 +9,27 @@
 - Proposed native base precision: **18 decimals**; if approved, max lifetime base units = **1,000,000,000,000,000,000,000,000,000** (10^27). A maximum is *not* a claim about issued or circulating supply.
 - Cosmos chain ID: **TBD**, unique and distinct from `local-4221`.
 - Numeric EIP-155 chain ID: **TBD**, unique and distinct from the upstream dev-demo EVM ID `262144` and other public networks.
-- Native staking and fee denom: **TBD** pending chain review; `aprvi` is an *illustrative* possible denomination used in unit fixtures, not an approved network setting.
+- Native staking and fee base denomination: the **current custom-app candidate requires `aprvi`**, displayed as `PRVI` at 18 decimals. This remains proposed and is not proof that a financial genesis or network is approved.
 - Chain binary/version, locked release digest, genesis time, genesis digest: **TBD**.
 - Governance, slash, staking, inflation/mint module permissions, fee model, upgrade plan: **TBD**.
+
+### EIP-155 chain identity startup enforcement
+
+The custom Cosmos EVM binary now rejects unset or known development/public
+Ethereum chain IDs **before constructing its encoding configuration and
+module keepers**. The rejected values are `0`, `1`, `56`, `97`,
+`1337`, `31337`, `4221` and upstream demo `262144`. This is
+enforced by [the Cosmos SDK-compatible identity guard](prvicap/chain_identity.go)
+and injected by [the exact-source app patcher](custom-app/apply_prvi_cap.py).
+
+The acceptance of a different positive uint64 ID by the guard **does not**
+mean that ID is globally unassigned or production-approved. Independently
+review the actual chosen EIP-155 identity for collision risk, record the
+owner-approved chain ID in signed release configuration, and validate each
+real node's `eth_chainId` observation against that decision. The valueless
+CI probes use fictional `424242`; it must not be copied into a mainnet
+release without a separate registry review. Cosmos chain identity is
+distinct, and both identities must be reviewed and matched.
 
 ### Initial genesis allocation worksheet — must be filled and approved
 
