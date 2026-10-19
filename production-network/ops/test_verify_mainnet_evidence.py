@@ -29,7 +29,7 @@ class MainnetEvidenceTest(unittest.TestCase):
             }, path)
             self.assertTrue(any("Cosmos chain ID" in p for p in problems))
             self.assertTrue(any("EVM chain ID" in p for p in problems))
-            self.assertTrue(any("four validators" in p for p in problems))
+            self.assertTrue(any("exactly four" in p for p in problems))
 
     def test_false_cap_is_rejected(self):
         problems = checker.assess({"max_supply_whole_prvi": True}, Path("/missing"))
