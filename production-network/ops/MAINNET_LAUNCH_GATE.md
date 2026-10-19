@@ -53,8 +53,13 @@ regression also confirms an authorized burn never makes minting permissible
   with a mocked `BankView` and records allocations/cost in GitHub CI. It
   does **not** benchmark real Cosmos SDK IAVL disk reads, adversarial token
   diversity, compaction, multi-host block scheduling, or consensus latency.
+  A second, more representative benchmark now calls the *actual Cosmos
+  SDK v0.54.3 bank keeper and IAVL-backed in-memory multistore*, with 100,
+  1,000 and 5,000 disposable unrelated-token accounts and unchanged native
+  PRVI. Its costs are collected in the SDK CI job, but they exclude real
+  disk I/O, CometBFT networking, EVM traffic and historical IAVL versions.
   The engineering prototype remains a scalability **BLOCKER** until a
-  bounded production design and representative real-state benchmarks exist.
+  bounded production design and representative persisted real-state benchmarks exist.
 - SDK, ERC-20, VM, IBC, governance and upgrade-related bypasses need
   complete dependency audit and negative integration tests.
 - The pinned reference Cosmos EVM enables **permissionless ERC-20 token registration** by default. The Privi custom-app prototype now rejects that default and any native `aprvi` token pair in genesis, and additionally checks **live ERC-20 module state at BeginBlock and EndBlock**, refusing permissionless registration, a native-denom lookup entry, or a stored native-token pair. This detects unsafe end-state changes but **does not atomically prevent transient create/remove paths inside one block**, direct unrestricted keeper writes, unauthorized binary upgrades, or other unreviewed conversion routes. The token-pair scan is O(number of pairs) per block and needs scale benchmarks and independent security review. It is not a production-approved hard guarantee.
