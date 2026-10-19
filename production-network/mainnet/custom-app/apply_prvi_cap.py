@@ -188,6 +188,18 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \treturn response, nil
 }'''.replace("\\t", "\t"),
         "post-block supply invariant")
+    # Fail closed if upstream source evolves to retain or overwrite a raw
+    # bank keeper after restricted injection. This static check is intentionally
+    # conservative and does NOT replace an audit of module aliases or SDK code.
+    # A single unrestricted BaseKeeper constructor exists locally ONLY to be
+    # wrapped before the app hands the keeper to other modules.
+    if (app.count("bankkeeper.NewBaseKeeper(") != 1 or
+            app.count("app.BankKeeper = prvicap.RestrictedBank(") != 1 or
+            app.count("app.BankKeeper =") != 1):
+        raise ValueError("unaudited bank keeper constructor/assignment; raw bank bypass risk")
+    if app.index("app.BankKeeper = prvicap.RestrictedBank(") > app.index(
+            "app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)"):
+        raise ValueError("bank keeper restriction must precede InitGenesis")
     # Verify all modifications before writing anything. No direct on-chain action.
     srcdir = source_repo / "production-network" / "mainnet" / "prvicap"
     required = ["keeper.go", "sdk_bank_adapter.go"]
