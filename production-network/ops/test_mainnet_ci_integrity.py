@@ -46,6 +46,11 @@ def inspect(text):
         raise ValueError("real SDK IAVL memory-store PRVI benchmark absent or duplicated")
     if sdk.index(benchmark) > sdk.index(sdk_bench):
         raise ValueError("synthetic benchmark should precede real SDK IAVL baseline")
+    mandatory_report = 'python3 "$GITHUB_WORKSPACE/production-network/ops/assert_sdk_benchmark_timings.py" --report "$RUNNER_TEMP/privi-sdk-iavl-bench.log"'
+    if sdk.count(mandatory_report) != 1:
+        raise ValueError("real SDK/IAVL benchmark timing validator must run exactly once")
+    if sdk_bench + ' | tee "$RUNNER_TEMP/privi-sdk-iavl-bench.log"' not in sdk:
+        raise ValueError("real SDK/IAVL benchmark output must be captured for timing verification")
     if "still NOT disk-backed consensus or production throughput evidence" not in sdk:
         raise ValueError("real SDK benchmark limitations must remain explicit")
     if sdk.count("GOTOOLCHAIN=local go test -mod=mod -p 2 -count=1 -timeout=20m ./...") != 1:
@@ -87,6 +92,12 @@ class MainnetCIStructureTests(unittest.TestCase):
         modified = original.replace("BenchmarkActualSDKNativeConservationScan",
                                     "BenchmarkUnreviewedReplacement",1)
         with self.assertRaisesRegex(ValueError, "real SDK IAVL memory-store"):
+            inspect(modified)
+
+    def test_skipped_sdk_timing_validator_is_rejected(self):
+        original = WORKFLOW.read_text(encoding="utf-8")
+        modified = original.replace("assert_sdk_benchmark_timings.py", "skipped_validator.py",1)
+        with self.assertRaisesRegex(ValueError, "timing validator"):
             inspect(modified)
 
     def test_unexpected_financial_release_action_is_refused(self):
