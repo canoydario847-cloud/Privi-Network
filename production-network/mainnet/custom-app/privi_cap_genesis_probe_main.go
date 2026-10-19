@@ -16,16 +16,24 @@ import (
     dbm "github.com/cosmos/cosmos-db"
     "github.com/cosmos/evm/evmd"
     "github.com/cosmos/evm/evmd/prvicap"
+    srvflags "github.com/cosmos/evm/server/flags"
     "github.com/cosmos/cosmos-sdk/baseapp"
     simtestutil "github.com/cosmos/cosmos-sdk/testutil/sims"
     sdk "github.com/cosmos/cosmos-sdk/types"
     banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 )
 
+// Synthetic, nonfinancial CI-only EIP-155 candidate; never a launch identity.
+type priviTestAppOptions struct{}
+func (priviTestAppOptions) Get(key string) interface{} {
+    if key == srvflags.EVMChainID { return uint64(424242) }
+    return nil
+}
+
 func runCase(name string, mutate func(*evmd.EVMD, map[string]json.RawMessage) error, want string) error {
     // No chain keys or funded accounts are created in this process.
     app := evmd.NewExampleApp(log.NewNopLogger(), dbm.NewMemDB(), true,
-        simtestutil.EmptyAppOptions{}, baseapp.SetChainID("privi-valueless-genesis-probe-1"))
+        priviTestAppOptions{}, baseapp.SetChainID("privi-valueless-genesis-probe-1"))
     state := app.DefaultGenesis()
     if mutate != nil {
         if err := mutate(app, state); err != nil {return fmt.Errorf("%s: fixture: %w", name, err)}
