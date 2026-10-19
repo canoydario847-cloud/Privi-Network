@@ -24,7 +24,7 @@ def _unique_pairs(pairs):
     result = {}
     for key, value in pairs:
         if key in result:
-            raise ValueError("duplicate JSON property is forbidden: " + repr(key))
+            raise ValueError("duplicate JSON property is forbidden (name intentionally withheld)")
         result[key] = value
     return result
 
