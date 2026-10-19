@@ -30,6 +30,29 @@ func (priviTestAppOptions) Get(key string) interface{} {
     return nil
 }
 
+// Only the nonfinancial negative fixture; this must fail before a keeper or
+// codec is constructed, rather than after InitChain has modified state.
+type forbiddenEVMOptions struct{ id uint64 }
+func (o forbiddenEVMOptions) Get(key string) interface{} {
+    if key == srvflags.EVMChainID { return o.id }
+    return nil
+}
+func assertRejectEVMIdentityBeforeAppInit(id uint64) (err error) {
+    defer func() {
+        caught:=recover()
+        if caught==nil {
+            err=fmt.Errorf("SECURITY: Privi app accepted developer EIP-155 ID %d",id)
+            return
+        }
+        if !strings.Contains(fmt.Sprint(caught),"PRVI EIP-155 app identity rejected") {
+            err=fmt.Errorf("Privi app rejected EVM identity for unrelated reason: %v",caught)
+        }
+    }()
+    _ = evmd.NewExampleApp(log.NewNopLogger(), dbm.NewMemDB(), false,
+        forbiddenEVMOptions{id:id}, baseapp.SetChainID("privi-valueless-identity-probe-1"))
+    return nil
+}
+
 func runCase(name string, mutate func(*evmd.EVMD, map[string]json.RawMessage) error, want string) error {
     // No chain keys or funded accounts are created in this process.
     app := evmd.NewExampleApp(log.NewNopLogger(), dbm.NewMemDB(), true,
@@ -53,6 +76,13 @@ func runCase(name string, mutate func(*evmd.EVMD, map[string]json.RawMessage) er
     return nil
 }
 func main() {
+    for _, id := range []uint64{0, 1, 56, 97, 1337, 31337, 4221, 262144} {
+        if err:=assertRejectEVMIdentityBeforeAppInit(id);err!=nil {
+            fmt.Fprintln(os.Stderr,err)
+            os.Exit(1)
+        }
+    }
+    fmt.Println("PASS: customized app constructor rejected 8 unsafe EIP-155 chain IDs")
     // Default upstream demo uses atest and MUST NOT silently initialize
     // a proposed native aprvi financial chain.
     if err:=runCase("default upstream atest genesis",nil,
