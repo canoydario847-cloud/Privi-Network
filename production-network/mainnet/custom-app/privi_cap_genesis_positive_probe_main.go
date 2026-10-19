@@ -23,6 +23,7 @@ import (
     dbm "github.com/cosmos/cosmos-db"
     "github.com/cosmos/evm/evmd"
     "github.com/cosmos/evm/evmd/prvicap"
+    srvflags "github.com/cosmos/evm/server/flags"
     vmtypes "github.com/cosmos/evm/x/vm/types"
     erc20types "github.com/cosmos/evm/x/erc20/types"
     "github.com/cosmos/cosmos-sdk/baseapp"
@@ -36,6 +37,13 @@ import (
     "github.com/cosmos/cosmos-sdk/testutil/mock"
 )
 
+// Synthetic, nonfinancial CI-only EIP-155 candidate; never a launch identity.
+type priviTestAppOptions struct{}
+func (priviTestAppOptions) Get(key string) interface{} {
+    if key == srvflags.EVMChainID { return uint64(424242) }
+    return nil
+}
+
 func probe() error {
     const chainID = "privi-ci-only-not-financial-1"
     // A disk-backed TEMPORARY database is necessary to prove restart in
@@ -47,7 +55,7 @@ func probe() error {
     if err!=nil {return fmt.Errorf("open disposable database: %w",err)}
     defer db.Close()
     app := evmd.NewExampleApp(log.NewNopLogger(), db, true,
-        simtestutil.EmptyAppOptions{}, baseapp.SetChainID(chainID))
+        priviTestAppOptions{}, baseapp.SetChainID(chainID))
     genesis := app.DefaultGenesis()
 
     // The built-in Cosmos SDK fixture provides the correct bonded-validator,
@@ -378,7 +386,7 @@ func verifyRestart(dir string) error {
     if err!=nil {return fmt.Errorf("reopen temporary chain database: %w",err)}
     defer db.Close()
     restarted:=evmd.NewExampleApp(log.NewNopLogger(),db,true,
-        simtestutil.EmptyAppOptions{},baseapp.SetChainID(chainID))
+        priviTestAppOptions{},baseapp.SetChainID(chainID))
     if restarted.LastBlockHeight()!=2 {
         return fmt.Errorf("restarted chain height changed: %d",restarted.LastBlockHeight())
     }
