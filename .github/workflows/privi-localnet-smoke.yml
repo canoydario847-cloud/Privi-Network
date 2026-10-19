@@ -127,7 +127,10 @@ jobs:
           GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^$' -bench '^BenchmarkNativeReconcileScaling$' -benchtime=3x -benchmem -timeout=20m ./...
           # Real SDK x/bank + IAVL-backed in-memory multistore benchmark;
           # still NOT disk-backed consensus or production throughput evidence.
-          GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^$' -bench '^BenchmarkActualSDKNativeConservationScan$' -benchtime=3x -benchmem -timeout=20m ./...
+          GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^$' -bench '^BenchmarkActualSDKNativeConservationScan$' -benchtime=3x -benchmem -timeout=20m ./... | tee "$RUNNER_TEMP/privi-sdk-iavl-bench.log"
+          # Fail closed if Go reported PASS but the benchmark timer was
+          # left stopped (no ns/op), or a required account scale was absent.
+          python3 "$GITHUB_WORKSPACE/production-network/ops/assert_sdk_benchmark_timings.py" --report "$RUNNER_TEMP/privi-sdk-iavl-bench.log"
           # No actual PRVI or TEST tokens are issued by this job.
 
   upstream-mint-inventory:
