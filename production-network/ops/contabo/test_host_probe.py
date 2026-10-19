@@ -19,7 +19,8 @@ class HostProbeTests(unittest.TestCase):
 
     def test_contabo_cloud_vps_6_stage_sizing(self):
         code = PROBE.read_text(encoding='utf-8')
-        self.assertIn('cpus >= 6', code)
+        self.assertIn('expected_vcpu="${PRIVI_EXPECTED_VCPU:-6}"', code)
+        self.assertIn('cpus >= expected_vcpu', code)
         self.assertIn('kb >= 10 * 1024 * 1024', code)
         self.assertIn('free_kb >= 60 * 1024 * 1024', code)
 
