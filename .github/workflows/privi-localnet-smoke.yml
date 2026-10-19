@@ -54,11 +54,18 @@ jobs:
           GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^$' -timeout 20m . ./prvicap
           # Compile an isolated pre-production command binary, never uploaded,
           # executed as mainnet, issued, or distributed to operator hosts.
-          GOTOOLCHAIN=local go build -mod=mod -p 2 -trimpath \
+          GOTOOLCHAIN=local go build -mod=mod -p 2 -trimpath -buildvcs=false \
             -o "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY" ./cmd/evmd
           test -s "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY"
-          sha256sum "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY"
+          # Twin builds in the same pinned runner must match exactly. A single
+          # job/host is NOT a cross-machine reproducible-release attestation.
+          GOTOOLCHAIN=local go build -mod=mod -p 2 -trimpath -buildvcs=false \
+            -o "$RUNNER_TEMP/privi-evmd-TWIN-BUILD-ONLY" ./cmd/evmd
+          test -s "$RUNNER_TEMP/privi-evmd-TWIN-BUILD-ONLY"
+          cmp "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY" "$RUNNER_TEMP/privi-evmd-TWIN-BUILD-ONLY"
+          sha256sum "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY" "$RUNNER_TEMP/privi-evmd-TWIN-BUILD-ONLY"
           go version -m "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY"
+          # Not a signed or deployable artifact; neither binary leaves CI.
           # Compile proof only: no genesis, validators, keys or real financial PRVI.
       - name: Test actual custom Cosmos EVM InitChain refuses unsafe genesis (VALUELESS ONLY)
         run: |
