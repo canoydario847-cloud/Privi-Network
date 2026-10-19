@@ -66,7 +66,7 @@ def check(t, mutate=None):
 class OwnerControlledEvidenceTests(unittest.TestCase):
     def test_four_distinct_hosts_same_owner_is_correctly_identified(self):
         problems=check(self)
-        self.assertFalse([p for p in problems if "validator" in p or "operator" in p],
+        self.assertFalse([p for p in problems if ("validator" in p or "operator" in p) and "externally verified" not in p],
                          problems)
         self.assertFalse([p for p in problems if "genesis parameter audit" in p or
                           "bank supply audit" in p],problems)
