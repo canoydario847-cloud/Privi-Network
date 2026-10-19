@@ -129,6 +129,24 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \t\t!mintGenesis.Minter.AnnualProvisions.IsZero() {
 \t\treturn nil, fmt.Errorf("PRVI native genesis: mint must target aprvi with ZERO inflation and provisions")
 \t}
+\t// Never inherit upstream permissionless ERC20 registration for a
+\t// financial native-denom candidate. No aprvi native/ERC20 conversion
+\t// pair is allowed in genesis, even if marked disabled. An upgrade or
+\t// governance change could reopen registration: separately review it.
+\terc20JSON, hasERC20 := genesisState[erc20types.ModuleName]
+\tif !hasERC20 { return nil, fmt.Errorf("PRVI native genesis: missing ERC20 module") }
+\tvar erc20Genesis erc20types.GenesisState
+\tif err := app.appCodec.UnmarshalJSON(erc20JSON, &erc20Genesis); err != nil {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: malformed ERC20 module: %w", err)
+\t}
+\tif erc20Genesis.Params.PermissionlessRegistration {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: permissionless ERC20 registration forbidden")
+\t}
+\tfor _, pair := range erc20Genesis.TokenPairs {
+\t\tif pair.Denom == prvicap.BaseDenom {
+\t\t\treturn nil, fmt.Errorf("PRVI native genesis: aprvi ERC20 token pair forbidden")
+\t\t}
+\t}
 \tmetadataValid := false
 \tfor _, meta := range bankGenesis.DenomMetadata {
 \t\tif meta.Base != prvicap.BaseDenom { continue }
