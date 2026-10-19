@@ -158,9 +158,14 @@ func probe() error {
     default:
         return fmt.Errorf("unrecognized valueless ERC20 negative mode")
     }
-    for _, pair:=range erc20Genesis.TokenPairs {
-        if pair.Denom==prvicap.BaseDenom {
-            return fmt.Errorf("valueless fixture incorrectly maps native aprvi ERC20")
+    // Only the positive fixture must be free of native conversion pairs.
+    // Negative fixtures deliberately inject an unsafe pair and must reach
+    // the real app's InitChain rejection logic below.
+    if erc20NegativeMode=="" {
+        for _, pair:=range erc20Genesis.TokenPairs {
+            if pair.Denom==prvicap.BaseDenom {
+                return fmt.Errorf("positive fixture incorrectly maps native aprvi ERC20")
+            }
         }
     }
     genesis[erc20types.ModuleName]=app.AppCodec().MustMarshalJSON(&erc20Genesis)
