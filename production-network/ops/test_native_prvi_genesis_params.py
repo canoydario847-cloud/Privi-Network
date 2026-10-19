@@ -22,6 +22,7 @@ def fixture():
                 },
                 "evm":{"params":{"evm_denom":"aprvi"}},
                 "staking":{"params":{"bond_denom":"aprvi"}},
+                "erc20":{"params":{"permissionless_registration":False}, "token_pairs":[]},
                 "mint":{
                     "params":{"mint_denom":"aprvi","inflation_rate_change":"0.000000000000000000",
                               "inflation_max":"0.000000000000000000",
@@ -75,6 +76,34 @@ class NativeGenesisTest(unittest.TestCase):
             copy.deepcopy(s["app_state"]["bank"]["denom_metadata"][0]))
         with self.assertRaisesRegex(ValueError,"exactly one"):
             mod.audit(s)
+    def test_erc20_permissionless_disabled_explicitly(self):
+        self.assertEqual(mod.audit(fixture())["genesis_erc20_permissionless"], "DISABLED")
+        for value in (True, None, "false", 0):
+            s=fixture()
+            s["app_state"]["erc20"]["params"]["permissionless_registration"]=value
+            with self.assertRaisesRegex(ValueError,"permissionless registration"):
+                mod.audit(s)
+
+    def test_native_aprvi_erc20_mapping_always_refused(self):
+        for enabled in (True,False):
+            s=fixture()
+            s["app_state"]["erc20"]["token_pairs"]=[{
+                "denom":"aprvi","erc20_address":"0x0000000000000000000000000000000000000001",
+                "enabled":enabled}]
+            with self.assertRaisesRegex(ValueError,"native aprvi"):
+                mod.audit(s)
+
+    def test_non_native_test_erc20_pair_does_not_impersonate_aprvi(self):
+        s=fixture()
+        s["app_state"]["erc20"]["token_pairs"]=[{"denom":"atest","enabled":True}]
+        self.assertEqual(mod.audit(s)["native_aprvi_token_pair"],"ABSENT")
+
+    def test_erc20_module_cannot_be_omitted(self):
+        s=fixture()
+        del s["app_state"]["erc20"]
+        with self.assertRaisesRegex(ValueError,"erc20"):
+            mod.audit(s)
+
     def test_wrong_symbol_refused(self):
         s=fixture();s["app_state"]["bank"]["denom_metadata"][0]["symbol"]="PRIV"
         with self.assertRaisesRegex(ValueError,"PRVI"):
