@@ -210,6 +210,45 @@ func probe() error {
         return fmt.Errorf("SECURITY: customized bank keeper allowed native mint: %v",err)
     }
     fmt.Println("PASS: mounted native lifetime cap equals bank supply; actual injected bank keeper refuses mint")
+
+    // Adversarial runtime mutation on a disposable in-memory app: prove an
+    // x/erc20 params change would block the application's BeginBlock BEFORE
+    // any standard module BeginBlock runs. Restore the fixture afterward.
+    if err:=app.CheckPriviNativeERC20Invariant(ctx);err!=nil {
+        return fmt.Errorf("positive ERC20 runtime invariant failed: %w",err)
+    }
+    app.Erc20Keeper.SetPermissionlessRegistration(ctx,true)
+    _,beginErr:=app.BeginBlocker(ctx)
+    if beginErr==nil || !strings.Contains(beginErr.Error(),
+        "PRVI beginning-of-block ERC20 check denied") {
+        return fmt.Errorf("SECURITY: permissionless ERC20 runtime change not denied by BeginBlock: %v",beginErr)
+    }
+    app.Erc20Keeper.SetPermissionlessRegistration(ctx,false)
+    if err:=app.CheckPriviNativeERC20Invariant(ctx);err!=nil {
+        return fmt.Errorf("restored ERC20 registration check failed: %w",err)
+    }
+
+    // Insert a DISABLED native pair directly into the pinned SDK ERC20
+    // keeper to simulate an unauthorized runtime/governance state change.
+    // Deliberately bypass normal SetToken registration to test the
+    // consensus store iterator, even if the denom lookup index is missing.
+    injected:=erc20types.TokenPair{
+        Denom:prvicap.BaseDenom,
+        Erc20Address:"0x00000000000000000000000000000000000000f1",
+        Enabled:false, ContractOwner:erc20types.OWNER_MODULE,
+    }
+    app.Erc20Keeper.SetTokenPair(ctx,injected)
+    _,beginErr=app.BeginBlocker(ctx)
+    if beginErr==nil || !strings.Contains(beginErr.Error(),
+        "PRVI beginning-of-block ERC20 check denied") {
+        return fmt.Errorf("SECURITY: injected native APRVI token pair not denied by BeginBlock: %v",beginErr)
+    }
+    app.Erc20Keeper.DeleteTokenPair(ctx,injected)
+    if err:=app.CheckPriviNativeERC20Invariant(ctx);err!=nil {
+        return fmt.Errorf("restored ERC20 token-pair state invalid: %w",err)
+    }
+    fmt.Println("PASS: actual customized BeginBlock denies ERC20 permissionless activation and native APRVI token-pair insertion")
+
     // Simulate a dangerous direct x/bank UncheckedSetBalance write: this
     // bypasses MintCoins and changes a real aprvi account WITHOUT changing
     // bank.Supply metadata. The cap's full balance-conservation check must
