@@ -27,12 +27,25 @@ else
   warn 'Non-x86_64 architecture; verify Cosmos EVM binary compatibility'
 fi
 
+# Contabo Cloud VPS 6 has 6 advertised vCPU. This is a staging sizing
+# observation, not proof of dedicated physical CPU or production capability.
+if command -v nproc >/dev/null 2>&1; then
+  cpus=$(nproc)
+  if [[ "$cpus" =~ ^[0-9]+$ ]] && (( cpus >= 6 )); then
+    pass 'At least 6 available vCPU'
+  else
+    warn 'Fewer than 6 available vCPU; inspect paid plan and CPU affinity'
+  fi
+else
+  warn 'Cannot confirm available vCPU count'
+fi
+
 if [[ -r /proc/meminfo ]]; then
   kb=$(awk '/^MemTotal:/ {print $2; exit}' /proc/meminfo)
-  if [[ "$kb" =~ ^[0-9]+$ ]] && (( kb >= 8 * 1024 * 1024 )); then
-    pass 'At least 8 GiB RAM provisioned'
+  if [[ "$kb" =~ ^[0-9]+$ ]] && (( kb >= 10 * 1024 * 1024 )); then
+    pass 'At least 10 GiB reported RAM (Cloud VPS 6 staging floor)'
   else
-    fail 'Fewer than 8 GiB RAM or unreadable memory report'
+    fail 'Fewer than 10 GiB RAM or unreadable memory report'
   fi
 else
   fail 'Cannot verify memory'
@@ -40,10 +53,10 @@ fi
 
 if command -v df >/dev/null 2>&1; then
   free_kb=$(df -Pk / | awk 'NR==2 {print $4}')
-  if [[ "$free_kb" =~ ^[0-9]+$ ]] && (( free_kb >= 80 * 1024 * 1024 )); then
-    pass 'At least 80 GiB free on root filesystem'
+  if [[ "$free_kb" =~ ^[0-9]+$ ]] && (( free_kb >= 60 * 1024 * 1024 )); then
+    pass 'At least 60 GiB free on root filesystem for staging'
   else
-    fail 'Fewer than 80 GiB free on root filesystem'
+    fail 'Fewer than 60 GiB free on root filesystem for staging'
   fi
 else
   fail 'Cannot inspect root filesystem'
