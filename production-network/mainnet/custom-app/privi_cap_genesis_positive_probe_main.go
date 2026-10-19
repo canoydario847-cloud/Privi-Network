@@ -217,13 +217,28 @@ func probe() error {
     if err:=app.CheckPriviNativeERC20Invariant(ctx);err!=nil {
         return fmt.Errorf("positive ERC20 runtime invariant failed: %w",err)
     }
-    app.Erc20Keeper.SetPermissionlessRegistration(ctx,true)
+    // Mutations from normal keeper APIs must fail *before* any state write.
+    if err:=app.Erc20Keeper.SetPermissionlessRegistration(ctx,true);err==nil {
+        return fmt.Errorf("SECURITY: direct permissionless ERC20 setter accepted")
+    }
+    illegalParams:=app.Erc20Keeper.GetParams(ctx)
+    illegalParams.PermissionlessRegistration=true
+    if err:=app.Erc20Keeper.SetParams(ctx,illegalParams);err==nil {
+        return fmt.Errorf("SECURITY: governance-style SetParams enabled permissionless ERC20")
+    }
+    if err:=app.CheckPriviNativeERC20Invariant(ctx);err!=nil {
+        return fmt.Errorf("blocked permissionless change nevertheless modified state: %w",err)
+    }
+    // Simulate a privileged raw-store migration bypassing the patched setter.
+    // Block-entry invariant must still catch this before module execution.
+    erc20Store:=ctx.KVStore(app.GetKey(erc20types.StoreKey))
+    erc20Store.Set(erc20types.ParamStoreKeyPermissionlessRegistration,[]byte("0x01"))
     _,beginErr:=app.BeginBlocker(ctx)
     if beginErr==nil || !strings.Contains(beginErr.Error(),
         "PRVI beginning-of-block ERC20 check denied") {
-        return fmt.Errorf("SECURITY: permissionless ERC20 runtime change not denied by BeginBlock: %v",beginErr)
+        return fmt.Errorf("SECURITY: raw permissionless ERC20 runtime change not denied by BeginBlock: %v",beginErr)
     }
-    app.Erc20Keeper.SetPermissionlessRegistration(ctx,false)
+    erc20Store.Delete(erc20types.ParamStoreKeyPermissionlessRegistration)
     if err:=app.CheckPriviNativeERC20Invariant(ctx);err!=nil {
         return fmt.Errorf("restored ERC20 registration check failed: %w",err)
     }
@@ -237,13 +252,30 @@ func probe() error {
         Erc20Address:"0x00000000000000000000000000000000000000f1",
         Enabled:false, ContractOwner:erc20types.OWNER_MODULE,
     }
-    app.Erc20Keeper.SetTokenPair(ctx,injected)
+    // Both public and lower-level keeper mutators deny native APRVI, even
+    // when a caller attempts to register a disabled pair or only a denom map.
+    if err:=app.Erc20Keeper.SetToken(ctx,injected);err==nil {
+        return fmt.Errorf("SECURITY: SetToken allowed native aprvi")
+    }
+    if err:=app.Erc20Keeper.SetTokenPair(ctx,injected);err==nil {
+        return fmt.Errorf("SECURITY: low-level SetTokenPair allowed native aprvi")
+    }
+    if err:=app.Erc20Keeper.SetDenomMap(ctx,prvicap.BaseDenom,injected.GetID());err==nil {
+        return fmt.Errorf("SECURITY: low-level SetDenomMap allowed native aprvi")
+    }
+    if err:=app.CheckPriviNativeERC20Invariant(ctx);err!=nil {
+        return fmt.Errorf("denied direct native pair mutations modified state: %w",err)
+    }
+    // A trusted BUT compromised upgrade could write raw ERC20 KV state.
+    // This intentionally bypasses every keeper setter in ephemeral CI.
+    pairKey:=append(append([]byte{},erc20types.KeyPrefixTokenPair...),injected.GetID()...)
+    erc20Store.Set(pairKey,app.AppCodec().MustMarshal(&injected))
     _,beginErr=app.BeginBlocker(ctx)
     if beginErr==nil || !strings.Contains(beginErr.Error(),
         "PRVI beginning-of-block ERC20 check denied") {
-        return fmt.Errorf("SECURITY: injected native APRVI token pair not denied by BeginBlock: %v",beginErr)
+        return fmt.Errorf("SECURITY: raw native APRVI token pair not denied by BeginBlock: %v",beginErr)
     }
-    app.Erc20Keeper.DeleteTokenPair(ctx,injected)
+    erc20Store.Delete(pairKey)
     if err:=app.CheckPriviNativeERC20Invariant(ctx);err!=nil {
         return fmt.Errorf("restored ERC20 token-pair state invalid: %w",err)
     }
