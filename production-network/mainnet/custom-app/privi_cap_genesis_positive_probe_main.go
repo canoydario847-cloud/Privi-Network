@@ -12,6 +12,7 @@ import (
     "fmt"
     "os"
     "os/exec"
+    "strings"
     "time"
 
     "cosmossdk.io/log/v2"
@@ -139,6 +140,24 @@ func probe() error {
         return fmt.Errorf("read valueless ERC20 module fixture: %w",err)
     }
     erc20Genesis.Params.PermissionlessRegistration=false
+    // Each adversarial case uses a distinct ephemeral OS process, so
+    // Cosmos EVM process-global fork registration cannot invalidate results.
+    erc20NegativeMode:=os.Getenv("PRIVI_ERC20_NEGATIVE_PROBE")
+    switch erc20NegativeMode {
+    case "":
+    case "permissionless":
+        erc20Genesis.Params.PermissionlessRegistration=true
+    case "native-pair":
+        erc20Genesis.TokenPairs=append(erc20Genesis.TokenPairs,
+            erc20types.TokenPair{
+                Denom:prvicap.BaseDenom,
+                Erc20Address:"0x00000000000000000000000000000000000000ee",
+                Enabled:false,
+                ContractOwner:erc20types.OWNER_MODULE,
+            })
+    default:
+        return fmt.Errorf("unrecognized valueless ERC20 negative mode")
+    }
     for _, pair:=range erc20Genesis.TokenPairs {
         if pair.Denom==prvicap.BaseDenom {
             return fmt.Errorf("valueless fixture incorrectly maps native aprvi ERC20")
@@ -152,6 +171,17 @@ func probe() error {
         ConsensusParams:simtestutil.DefaultConsensusParams,
         AppStateBytes:raw,
     })
+    if erc20NegativeMode!="" {
+        expected:="PRVI native genesis: permissionless ERC20 registration forbidden"
+        if erc20NegativeMode=="native-pair" {
+            expected="PRVI native genesis: aprvi ERC20 token pair forbidden"
+        }
+        if err==nil || !strings.Contains(err.Error(),expected) {
+            return fmt.Errorf("SECURITY: invalid ERC20 fixture not rejected by correct InitChain rule: %v",err)
+        }
+        fmt.Printf("PASS: actual customized InitChain rejects unsafe ERC20 fixture: %s\n",erc20NegativeMode)
+        return nil
+    }
     if err!=nil {return fmt.Errorf("customized app InitChain rejected valid fixture: %w",err)}
     if resp==nil {return fmt.Errorf("nil InitChain response")}
     // Verify the REAL mounted, consensus-backed Privi cap keeper reads the
