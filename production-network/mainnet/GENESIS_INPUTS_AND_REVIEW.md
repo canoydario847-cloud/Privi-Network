@@ -39,16 +39,18 @@ python3 production-network/ops/genesis_supply_audit.py \
 
 This can reject invalid account totals and excess starting supply; it does **not** prove a total lifetime cap, vesting implementation, uniqueness of EVM ID, or deploy a chain. Attach the verifier output and independent chain-state proof to the audit.
 
-### Independent validator evidence (minimum four operator-controlled deployments)
+### Four owner-operated validator evidence (one legal operator, four independently keyed hosts)
 
-For each operator: independently verified organization identity, different operating control / fault domain, signed public consensus-key and node metadata, sentry design, secure remote-signing arrangement if applicable, signed genesis digest, backup-and-restore rehearsal and double-signing prevention. Do not create four nominally different validators under the same private-key or infrastructure control and claim independence.
+Privi World Corp has chosen **one centrally controlled, permissioned operator** controlling **four separate, uniquely keyed validators**. This is *not* a decentralized four-operator design. Each of the four hosts must have a distinct real failure domain, unique CometBFT public signing-key fingerprint, signed genesis digest, screened sentry/P2P connectivity, secure signer storage, separate host credentials, and proven single-active-signer recovery. Operator/host/failure-domain attestations are external records; names or synthetic labels in a JSON file alone cannot verify hardware separation. With 25% voting power per host, three of the four signatures are needed for >2/3 consensus; loss of two can halt block finalization. No production keys, real genesis signatures, external audit, or operating validators are established yet.
+
+The [mainnet evidence verifier](../ops/verify_mainnet_evidence.py) requires exactly four unique validator identities, signing-key fingerprints, host IDs and fault domains, each under **Privi World Corp**. The [native genesis auditor](../ops/native_prvi_genesis_params.py) additionally rejects using upstream TEST/stake for PRVI gas/staking, nonzero x/mint inflation, invalid 18-decimal metadata and excess initial issuance. These checks only reject bad *declarations*; they cannot sign, mint, attest, deploy or authorize any financial token or chain.
 
 ### Freezing and signing candidate genesis
 
 1. Obtain the audited custom-chain binary and run a reproducible build with approved parameters.
 2. Create unsigned candidate genesis offline in a controlled workstation; run initial bank audit and independently verify module configuration, vesting and max lifetime issuance rules.
 3. Validate chain IDs against reserved registries, wallets and integrations; rerun real end-to-end public testnet and upgrade/fault-recovery checks.
-4. Each validator operator independently checks every genesis field and signs the exact published SHA-256 digest with their own attested identity/signing process.
+4. The one legal operator's four distinct, protected validator signing identities must each attest the same genesis SHA-256 and approved release digest; independent external review must verify unique keys, separate hosts and exclusive signing control. Never describe them as four independently owned operators.
 5. Publish non-sensitive binary/genesis hashes and launch schedule. Store private keys offline or in secure signer/HSM, never in repository.
 6. Complete external audit, verified counsel scope, KYB, incident response and named accountable launch GO signatures. Any material file change invalidates previous digest signatures and requires review again.
 7. Only after approval, coordinate the genesis time with independent operators; verify production `eth_chainId`, block commit voting power, wallets, RPC and explorer. Never equate a developer localnet success with financial activation.
