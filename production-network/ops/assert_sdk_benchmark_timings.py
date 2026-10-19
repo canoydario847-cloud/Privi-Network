@@ -12,21 +12,33 @@ import re
 from pathlib import Path
 
 CASES = (100, 1000, 5000)
-LINE = re.compile(
-    r"^BenchmarkActualSDKNativeConservationScan/"
-    r"iavl-account-records-(?P<records>\d+)-(?P<parallelism>\d+)"
-    r"\s+(?P<iterations>\d+)\s+(?P<time>\d+(?:\.\d+)?)\s+ns/op(?:\s|$)"
-)
+PROFILES = {
+    "memory": ("BenchmarkActualSDKNativeConservationScan/", "iavl-account-records-"),
+    "disk": ("BenchmarkDiskBackedSDKNativeConservationScan/", "committed-accounts-"),
+}
 
 
-def verify(output: str):
+def profile_pattern(profile):
+    if profile not in PROFILES:
+        raise ValueError("unrecognized SDK benchmark profile")
+    heading, label = PROFILES[profile]
+    line = re.compile(
+        r"^" + re.escape(heading + label) +
+        r"(?P<records>\d+)-(?P<parallelism>\d+)"
+        r"\s+(?P<iterations>\d+)\s+(?P<time>\d+(?:\.\d+)?)\s+ns/op(?:\s|$)"
+    )
+    return heading, line
+
+
+def verify(output: str, profile="memory"):
     if not isinstance(output, str) or len(output) > 2_000_000:
         raise ValueError("SDK benchmark output absent or oversized")
+    heading, pattern = profile_pattern(profile)
     results = {}
     for raw in output.splitlines():
-        if not raw.startswith("BenchmarkActualSDKNativeConservationScan/"):
+        if not raw.startswith(heading):
             continue
-        found = LINE.match(raw)
+        found = pattern.match(raw)
         if found is None:
             raise ValueError("SDK benchmark has no valid ns/op measurement")
         size = int(found.group("records"))
@@ -46,20 +58,21 @@ def verify(output: str):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--report", required=True, type=Path)
+    ap.add_argument("--profile", choices=tuple(PROFILES), default="memory")
     ns = ap.parse_args()
     try:
         if ns.report.is_symlink() or not ns.report.is_file():
             raise ValueError("expected existing non-symlink benchmark log")
         if ns.report.stat().st_size > 2_000_000:
             raise ValueError("benchmark log exceeds offline review bound")
-        measured = verify(ns.report.read_text(encoding="utf-8"))
+        measured = verify(ns.report.read_text(encoding="utf-8"), profile=ns.profile)
     except (OSError, UnicodeError, ValueError) as exc:
         print("BENCHMARK TIMING NO-GO:", type(exc).__name__, str(exc))
         return 2
-    print("PASS: all three actual SDK/IAVL memory-store benchmark variants")
+    print(f"PASS: all three actual SDK/IAVL {ns.profile} benchmark variants")
     for size in CASES:
         print(f"  {size} unrelated token balances: {measured[size]:g} ns/op")
-    print("Synthetic in-memory measurement only; NO financial mainnet capacity claim.")
+    print("Single-runner measurements only; no disk endurance or financial mainnet capacity claim.")
     return 0
 
 
