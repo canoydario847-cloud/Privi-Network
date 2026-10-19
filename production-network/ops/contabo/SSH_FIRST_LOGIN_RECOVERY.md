@@ -1,6 +1,6 @@
 # Contabo first-boot SSH recovery (nonfinancial Privi staging)
 
-**Scope:** One newly activated owner-controlled Contabo Cloud VPS 6. This document is a manual runbook only. It does not contact Contabo, run remote commands, turn on consensus, create keys or activate the PRVI financial mainnet.
+**Scope:** One newly activated owner-controlled Contabo staging VPS (the newer **Cloud VPS 8** supersedes the earlier VPS 6 as the first valueless node). This document is a manual runbook only. It does not contact Contabo, run remote commands, turn on consensus, create keys or activate the PRVI financial mainnet.
 
 The owner has separately confirmed an IPv4 address that agrees with Contabo's "Your login data!" message. **Do not commit the address, initial password, credentials, VNC details, API credentials, or a private key into GitHub.** An external basic TCP attempt to port 22 received "connection refused"; that observation alone does not prove that the service is fully unavailable, or that the OS is Ubuntu.
 
@@ -64,6 +64,33 @@ sudo ssh-keygen -l -f /etc/ssh/ssh_host_ed25519_key.pub
 From the owner's local device, initiate `ssh root@SERVER_PUBLIC_IPV4` and compare the displayed host fingerprint to the console value before trusting it. Never use `StrictHostKeyChecking=no`, copy private SSH keys to the server, or publish credentials. Contabo's help article explains this same fingerprint verification path:
 
 https://help.contabo.com/en/support/solutions/articles/103000271398-how-do-i-set-up-an-ssh-connection-
+
+## Optional non-authenticating SSH host-key pinning test
+
+Once TCP/22 is reachable and **after** obtaining the Ed25519 host-key
+fingerprint **directly from the authenticated Contabo VNC console**, run the
+[reviewed no-login checker](ssh_host_identity_preflight.py) on the owner's
+trusted local computer:
+
+```sh
+python3 production-network/ops/contabo/ssh_host_identity_preflight.py \
+  --host-ipv4 YOUR_NEW_VPS8_PUBLIC_IP \
+  --trusted-ed25519-sha256 'SHA256:PUBLIC_FINGERPRINT_FROM_VNC'
+```
+
+The program contacts only the SSH host-key endpoint using `ssh-keyscan`,
+never sends the initial VPS password, **never uses a VNC password**, never
+establishes a shell, never writes `known_hosts` or keys, and never touches
+the node's running services. The result is only a pre-login *identity match*,
+not authorization to deploy Privi. Refuse to proceed on mismatch. Do not
+derive the expected trusted fingerprint from `ssh-keyscan` itself.
+
+The VNC endpoint IP and port may be **different** from the VPS's public SSH IP
+and can change after migrations. Retrieve them from the Contabo customer
+panel, not from a random third-party web VNC service. If the VNC password has
+been shared in chat or another channel, **rotate it through Contabo before
+using VNC**. Contabo's own guide states a VNC viewer is a separate client
+and VNC is not encrypted; disable VNC when recovery is complete.
 
 ## Once local SSH works
 
