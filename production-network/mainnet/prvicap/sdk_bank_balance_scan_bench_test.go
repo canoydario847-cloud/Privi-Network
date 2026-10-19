@@ -43,6 +43,11 @@ func BenchmarkActualSDKNativeConservationScan(b *testing.B) {
             }
             b.ReportAllocs()
             b.ResetTimer()
+            // ResetTimer clears the elapsed time but leaves a stopped
+            // benchmark stopped. StartTimer is mandatory; otherwise Go
+            // prints NO ns/op and an apparently successful zero-allocation
+            // benchmark that did not actually measure this SDK/IAVL walk.
+            b.StartTimer()
             for i:=0;i<b.N;i++ {
                 if err:=h.cap.Reconcile(h.ctx,h.bank);err!=nil {b.Fatal(err)}
             }
