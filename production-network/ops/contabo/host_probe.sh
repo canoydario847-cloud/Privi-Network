@@ -10,6 +10,15 @@ warn() { printf 'WARN: %s\n' "$1"; warnings=$((warnings+1)); }
 fail() { printf 'FAIL: %s\n' "$1"; fails=$((fails+1)); }
 
 printf 'PRIVI VALELESS STAGING — READ-ONLY HOST PROBE\n'
+
+# For the newly ordered 8-vCPU staging VPS, set PRIVI_EXPECTED_VCPU=8.
+# Default remains six for the earlier Cloud VPS 6 and existing CI fixtures.
+# This is configuration observation only and never contacts a provider API.
+expected_vcpu="${PRIVI_EXPECTED_VCPU:-6}"
+if [[ ! "$expected_vcpu" =~ ^[1-9][0-9]?$|^1[01][0-9]$|^12[0-8]$ ]]; then
+  fail 'Expected vCPU threshold must be an integer from 1 to 128'
+  exit 2
+fi
 if [[ -r /etc/os-release ]]; then
   . /etc/os-release
   if [[ "${ID:-}" == ubuntu && "${VERSION_ID:-}" == 24.04 ]]; then
@@ -27,17 +36,17 @@ else
   warn 'Non-x86_64 architecture; verify Cosmos EVM binary compatibility'
 fi
 
-# Contabo Cloud VPS 6 has 6 advertised vCPU. This is a staging sizing
-# observation, not proof of dedicated physical CPU or production capability.
+# Count available CPUs relative to the verified subscription (6 or 8).
+# Hypervisor capacity and isolation cannot be inferred from nproc alone.
 if command -v nproc >/dev/null 2>&1; then
   cpus=$(nproc)
-  if [[ "$cpus" =~ ^[0-9]+$ ]] && (( cpus >= 6 )); then
-    pass 'At least 6 available vCPU'
+  if [[ "$cpus" =~ ^[0-9]+$ ]] && (( cpus >= expected_vcpu )); then
+    pass "At least ${expected_vcpu} available vCPU"
   else
-    warn 'Fewer than 6 available vCPU; inspect paid plan and CPU affinity'
+    fail "Fewer than ${expected_vcpu} available vCPU; verify Contabo plan, provisioning and CPU affinity"
   fi
 else
-  warn 'Cannot confirm available vCPU count'
+  fail 'Cannot confirm available vCPU count'
 fi
 
 if [[ -r /proc/meminfo ]]; then
