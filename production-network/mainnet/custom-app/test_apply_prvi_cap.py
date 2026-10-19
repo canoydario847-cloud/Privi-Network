@@ -102,6 +102,14 @@ class PatcherTests(unittest.TestCase):
         self.assertIn("bonded staking denomination must be aprvi", app)
         self.assertIn("ZERO inflation and provisions", app)
         self.assertIn("aprvi requires 18 decimal PRVI metadata", app)
+        self.assertIn("permissionless ERC20 registration forbidden", app)
+        self.assertIn("aprvi ERC20 token pair forbidden", app)
+        self.assertIn("erc20Genesis.Params.PermissionlessRegistration", app)
+        self.assertIn("pair.Denom == prvicap.BaseDenom", app)
+        self.assertLess(app.index("permissionless ERC20 registration forbidden"),
+                        app.index("app.UpgradeKeeper.SetModuleVersionMap"))
+        self.assertLess(app.index("aprvi ERC20 token pair forbidden"),
+                        app.index("app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)"))
         for tag in ("EVM gas denomination", "bonded staking denomination",
                     "ZERO inflation and provisions", "missing aprvi/PRVI metadata"):
             self.assertLess(app.index(tag),
