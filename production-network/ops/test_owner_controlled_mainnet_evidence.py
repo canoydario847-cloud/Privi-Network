@@ -121,6 +121,47 @@ class OwnerControlledEvidenceTests(unittest.TestCase):
             g["app_state"]["bank"]["denom_metadata"][0]["denom_units"][1]["exponent"]=6
         self.assertTrue(any("native PRVI genesis parameter audit" in p
                             for p in check(self,edit)))
+    def test_malformed_validator_ids_are_rejected_without_exception(self):
+        for malformed in (None, [], {}, ["privi-owner-val-01"], 55, True):
+            def edit(m,g):
+                m["validators"][1]["id"] = malformed
+            problems=check(self,edit)
+            self.assertTrue(any("validator[1] invalid id" in p for p in problems),
+                            (malformed,problems))
+
+    def test_rejects_non_native_fee_denom_manifest_even_if_formatted(self):
+        problems=check(self,lambda m,g:m.update(base_denom="anotherdenom"))
+        self.assertTrue(any("exactly aprvi" in p for p in problems))
+
+    def test_rejects_evm_chain_id_beyond_uint64(self):
+        problems=check(self,lambda m,g:m.update(evm_chain_id=2**64))
+        self.assertTrue(any("EVM chain ID" in p for p in problems))
+
+    def test_rejects_missing_or_malformed_binary_release_hash(self):
+        for digest in (None, True, "123", "a"*63, "g"*64):
+            problems=check(self,lambda m,g:m.update(binary_sha256=digest))
+            self.assertTrue(any("binary_sha256" in p for p in problems))
+
+    def test_non_https_or_placeholder_evidence_is_not_accepted(self):
+        for ref in (None, True, "", "http://audit.example/claim",
+                    "https://example.com/cert", "https://localhost/doc",
+                    "https://some.invalid/doc", "https://user:pass@review.org/report",
+                    "https://review.org", "https://review.org:443/report"):
+            problems=check(self,lambda m,g:m.update(security_audit_url=ref))
+            self.assertTrue(any("security_audit_url" in p for p in problems), ref)
+
+    def test_syntactically_valid_evidence_refs_still_cannot_approve_launch(self):
+        def edit(m,g):
+            m["binary_sha256"]="b"*64
+            for k in ("security_audit_url","public_testnet_evidence_url",
+                      "incident_runbook_url","signoff_record_url"):
+                m[k]="https://github.com/canoydario847-cloud/Privi-Network/issues/999999"
+        problems=check(self,edit)
+        self.assertFalse(any("must be a concrete HTTPS" in p for p in problems),problems)
+        self.assertFalse(any("binary_sha256 must be" in p for p in problems),problems)
+        self.assertTrue(any("externally verified" in p for p in problems))
+        self.assertTrue(any("independent audited" in p for p in problems))
+
     def test_manifest_nonobject_fails(self):
         self.assertTrue(any("manifest must be" in p for p in assess(None,Path("/missing"))))
 
