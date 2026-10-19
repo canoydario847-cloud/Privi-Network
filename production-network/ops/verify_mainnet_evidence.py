@@ -5,11 +5,39 @@ import hashlib
 import json
 import re
 import sys
+from urllib.parse import urlsplit
 from pathlib import Path
 from strict_json_evidence import load as load_strict_json, reject_secrets
 
 CAP = 1_000_000_000
 HEX64 = re.compile(r"^[a-fA-F0-9]{64}$")
+RESERVED_EVIDENCE_HOSTS = {"localhost", "example.com", "example.org", "example.net", "test", "invalid"}
+
+def evidence_url(value):
+    """Require a concrete public HTTPS reference without embedded credentials.
+
+    Never dereference URLs during the offline review. This checks structure,
+    NOT authorship, source availability, signed assertions or actual content.
+    """
+    if not isinstance(value, str) or len(value) > 2048 or value != value.strip():
+        return False
+    try:
+        parsed = urlsplit(value)
+        host = parsed.hostname
+        port = parsed.port
+    except ValueError:
+        return False
+    if parsed.scheme != "https" or parsed.username is not None or parsed.password is not None:
+        return False
+    if not host or not parsed.path or port is not None:
+        return False
+    if host in RESERVED_EVIDENCE_HOSTS or host.endswith(".localhost") or host.endswith(".invalid"):
+        return False
+    if not re.fullmatch(r"[a-zA-Z0-9.-]+", host) or "." not in host:
+        return False
+    if any(label.startswith("-") or label.endswith("-") or not label for label in host.split(".")):
+        return False
+    return True
 
 def assess(manifest, genesis_path):
     errors = []
@@ -29,11 +57,11 @@ def assess(manifest, genesis_path):
     supply = manifest.get("max_supply_whole_prvi")
     require(type(supply) is int and supply == CAP, "PRVI max supply must be exactly 1000000000")
     chain_id = manifest.get("cosmos_chain_id")
-    require(isinstance(chain_id, str) and bool(chain_id.strip()) and chain_id != "local-4221", "unique mainnet Cosmos chain ID required")
+    require(isinstance(chain_id, str) and re.fullmatch(r"privi-[a-z0-9-]{3,48}-[1-9][0-9]*", chain_id) is not None and chain_id != "local-4221", "unique mainnet Cosmos chain ID required")
     evm_id = manifest.get("evm_chain_id")
-    require(type(evm_id) is int and evm_id > 0 and evm_id not in (1, 56, 97, 1337, 31337, 4221, 262144), "independently selected EVM chain ID required; common public/developer IDs are not approved")
+    require(type(evm_id) is int and 0 < evm_id <= 2**64-1 and evm_id not in (1, 56, 97, 1337, 31337, 4221, 262144), "independently selected EVM chain ID required; common public/developer IDs are not approved")
     denom = manifest.get("base_denom")
-    require(isinstance(denom, str) and bool(re.fullmatch(r"[a-z][a-z0-9/]{2,63}", denom)) and denom not in ("atest", "test", "stake", "aphotino"), "valid non-developer native PRVI base denomination required")
+    require(denom == "aprvi", "native PRVI base denomination must be exactly aprvi, not TEST/stake/BNB PRIV")
     # Owner-selected architecture: FOUR distinct signing nodes controlled by
     # ONE operator (Privi World Corp). Do not demand or claim four independent
     # operator companies: this is a centrally operated, permissioned network.
@@ -59,7 +87,7 @@ def assess(manifest, genesis_path):
             ident = row.get("id")
             if isinstance(ident, str):
                 ids.add(ident)
-            require(ident in identities, f"validator[{idx}] invalid id")
+            require(isinstance(ident, str) and ident in identities, f"validator[{idx}] invalid id")
             require(type(row.get("voting_power_percent")) is int and
                     row["voting_power_percent"] == 25,
                     f"validator[{idx}] voting power must equal 25 percent")
@@ -105,8 +133,13 @@ def assess(manifest, genesis_path):
             errors.append("ongoing issuance cap, staking and vesting require independent audited chain-specific verification")
         except (ValueError, UnicodeError):
             errors.append("genesis must be valid UTF-8 JSON")
-    for key in ("binary_sha256", "security_audit_url", "public_testnet_evidence_url", "incident_runbook_url", "signoff_record_url"):
-        require(bool(manifest.get(key)), key + " evidence missing")
+    binary_sha = manifest.get("binary_sha256")
+    require(isinstance(binary_sha, str) and HEX64.fullmatch(binary_sha) is not None,
+            "binary_sha256 must be a concrete 64-hex digest, independently verified")
+    for key in ("security_audit_url", "public_testnet_evidence_url", "incident_runbook_url", "signoff_record_url"):
+        require(evidence_url(manifest.get(key)), key + " must be a concrete HTTPS evidence link")
+    # These fields are declarations, not proof of actual external audit
+    # authenticity or a signature on the exact binary/genesis pair.
     # Offline declarations cannot demonstrate network health or cryptographic signatures.
     errors.append("independent validator signatures and live consensus checks must be externally verified")
     return errors
