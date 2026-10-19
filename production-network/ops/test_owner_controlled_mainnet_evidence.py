@@ -26,6 +26,7 @@ def fixture():
             },
             "evm":{"params":{"evm_denom":"aprvi"}},
             "staking":{"params":{"bond_denom":"aprvi"}},
+            "erc20":{"params":{"permissionless_registration":False},"token_pairs":[]},
             "mint":{
                 "params":{"mint_denom":"aprvi","inflation_rate_change":"0.000000000000000000",
                           "inflation_min":"0.000000000000000000","inflation_max":"0.000000000000000000"},
@@ -102,6 +103,19 @@ class OwnerControlledEvidenceTests(unittest.TestCase):
         def edit(m,g):g["app_state"]["mint"]["minter"]["inflation"]="0.0100"
         self.assertTrue(any("native PRVI genesis parameter audit" in p
                             for p in check(self,edit)))
+    def test_erc20_permissionless_defaults_are_unsafe(self):
+        def edit(m,g):
+            g["app_state"]["erc20"]["params"]["permissionless_registration"]=True
+        self.assertTrue(any("ERC20 permissionless registration" in p
+                            for p in check(self,edit)))
+
+    def test_native_aprvi_erc20_mapping_is_blocked(self):
+        def edit(m,g):
+            g["app_state"]["erc20"]["token_pairs"]=[
+                {"denom":"aprvi","enabled":False}]
+        self.assertTrue(any("native aprvi" in p
+                            for p in check(self,edit)))
+
     def test_bad_metadata_precision_refused(self):
         def edit(m,g):
             g["app_state"]["bank"]["denom_metadata"][0]["denom_units"][1]["exponent"]=6
