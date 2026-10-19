@@ -24,6 +24,11 @@ func TestActualSDKBurnCannotUnlockNativeReissuance(t *testing.T) {
     // burner reduces circulating supply and therefore unused headroom exists.
     h.account.EXPECT().GetModuleAccount(h.ctx, "genesisburn").
         Return(burnModule).AnyTimes()
+    // In SDK v0.54.3 BurnCoins checks spendability with LockedCoins,
+    // which calls AccountKeeper.GetAccount for this module address.
+    // The test harness uses a strict gomock account keeper.
+    h.account.EXPECT().GetAccount(h.ctx, burnModule.GetAddress()).
+        Return(burnModule).AnyTimes()
     if err := h.bank.MintCoins(h.ctx, "genesisburn",
         sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, initial))); err != nil {
         t.Fatalf("setup disposable initial PRVI supply: %v", err)
