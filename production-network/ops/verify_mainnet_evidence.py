@@ -6,12 +6,17 @@ import json
 import re
 import sys
 from pathlib import Path
+from strict_json_evidence import load as load_strict_json, reject_secrets
 
 CAP = 1_000_000_000
 HEX64 = re.compile(r"^[a-fA-F0-9]{64}$")
 
 def assess(manifest, genesis_path):
     errors = []
+    try:
+        reject_secrets(manifest)
+    except ValueError as exc:
+        errors.append("manifest credential hygiene: " + str(exc))
     if not isinstance(manifest, dict):
         return ["manifest must be a JSON object"]
     def require(ok, why):
@@ -78,7 +83,7 @@ def assess(manifest, genesis_path):
         actual = hashlib.sha256(genesis_path.read_bytes()).hexdigest()
         require(isinstance(sha, str) and actual.lower() == sha.lower(), "genesis SHA-256 mismatch")
         try:
-            genesis = json.loads(genesis_path.read_text())
+            genesis = load_strict_json(genesis_path)
             require(isinstance(genesis, dict) and genesis.get("chain_id") == chain_id, "genesis chain_id mismatch")
             # Confirm only INITIAL supply: ongoing mint/issuance cap enforcement
             # still needs audited custom chain logic and external sign-off.
@@ -112,7 +117,7 @@ def main():
     p.add_argument("--genesis", required=True, type=Path, help="candidate unsigned/signed genesis JSON")
     args = p.parse_args()
     try:
-        manifest = json.loads(args.manifest.read_text())
+        manifest = load_strict_json(args.manifest)
         if not isinstance(manifest, dict):
             raise ValueError("manifest must be a JSON object")
         failures = assess(manifest, args.genesis)
