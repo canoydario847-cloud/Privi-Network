@@ -35,7 +35,7 @@ type bankHarness struct {
  restart func(*testing.T) (sdk.Context, bankkeeper.BaseKeeper, Keeper)
 }
 
-func newRealBankHarness(t *testing.T) bankHarness {
+func newRealBankHarness(t testing.TB) bankHarness {
  t.Helper()
  rootDB := dbm.NewMemDB()
  // Persist each independent IAVL tree in its own namespace/database. Sharing
@@ -83,7 +83,7 @@ func newRealBankHarness(t *testing.T) bankHarness {
  }
  return bankHarness{ctx:ctx,bank:raw,cap:cap,account:ak,restart:restart}
 }
-func (h bankHarness) genesisFund(t *testing.T,amount int64) {
+func (h bankHarness) genesisFund(t testing.TB,amount int64) {
  t.Helper()
  genesisMinter := authtypes.NewEmptyModuleAccount("genesisfixture",authtypes.Minter)
  h.account.EXPECT().GetModuleAccount(h.ctx,"genesisfixture").Return(genesisMinter)
