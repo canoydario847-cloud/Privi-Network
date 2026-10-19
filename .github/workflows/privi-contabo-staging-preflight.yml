@@ -19,6 +19,8 @@ jobs:
         run: python3 production-network/ops/contabo/host_plan.py production-network/ops/contabo/candidate.json --mode draft
       - name: Negative tests
         run: python3 -m unittest discover -s production-network/ops/contabo -p 'test_*.py' -v
+      - name: Check read-only host diagnostic shell syntax
+        run: bash -n production-network/ops/contabo/host_probe.sh
       - name: Mainnet preflight MUST NOT succeed
         shell: bash
         run: |
