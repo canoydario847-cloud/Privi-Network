@@ -46,6 +46,20 @@ def audit(genesis):
     staking = obj(app.get("staking"), "app_state.staking")
     mint = obj(app.get("mint"), "app_state.mint")
 
+    # The pinned Cosmos EVM default enables permissionless x/erc20 token
+    # registration. That default must not be silently inherited by proposed
+    # native PRVI genesis. Note that governance/runtime registration after
+    # genesis still needs separate consensus enforcement and a full audit.
+    erc20 = obj(app.get("erc20"), "app_state.erc20")
+    erc20_params = obj(erc20.get("params"), "erc20.params")
+    if erc20_params.get("permissionless_registration") is not False:
+        raise ValueError("ERC20 permissionless registration must be explicitly disabled")
+    for pair in values(erc20.get("token_pairs"), "erc20.token_pairs"):
+        if not isinstance(pair, dict):
+            raise ValueError("ERC20 token-pair entries must be objects")
+        if pair.get("denom") == DENOM:
+            raise ValueError("native aprvi must not appear in an ERC20 token pair at genesis")
+
     if obj(evm.get("params"), "evm.params").get("evm_denom") != DENOM:
         raise ValueError("EVM gas denomination must be aprvi")
     if obj(staking.get("params"), "staking.params").get("bond_denom") != DENOM:
@@ -102,5 +116,7 @@ def audit(genesis):
         "staking": DENOM,
         "mint_denom": DENOM,
         "inflation": "ZERO",
+        "genesis_erc20_permissionless": "DISABLED",
+        "native_aprvi_token_pair": "ABSENT",
         "financial_mainnet": "NOT_AUTHORIZED",
     }
