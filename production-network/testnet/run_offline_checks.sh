@@ -48,6 +48,7 @@ command -v go >/dev/null
 # Strict AST baseline for pinned Cosmos EVM v0.7.3 mint entry points.
 (cd "$ROOT/mainnet/mintscan" && GOTOOLCHAIN=local go test -race -count=1 ./...)
 python3 -m unittest discover -s "$ROOT/mainnet/custom-app" -p "test_*.py"
+python3 -m unittest discover -s "$ROOT/mainnet/sdk-bank" -p "test_*.py"
 # Provider-observed Railway TEST services are *not* production validators.
 # Fail if snapshot is invalid or if production preflight ever permits TEST.
 python3 "$ROOT/ops/railway_staging_preflight.py" "$ROOT/ops/railway_staging_observation.json" --mode staging
