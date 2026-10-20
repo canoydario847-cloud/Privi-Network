@@ -25,6 +25,7 @@ contract PriviIoTLedger {
         uint64 lastSequence;
         bool enabled;
         bool enrolled;
+        bytes32 companyIdHash;
     }
 
     mapping(bytes32 => Device) public devices;
@@ -41,7 +42,7 @@ contract PriviIoTLedger {
     event DeveloperRegistered(address indexed developer);
     event DeveloperEnabled(address indexed developer, bool enabled);
 
-    event DeviceEnrolled(bytes32 indexed deviceIdHash, address indexed gateway, bytes32 signingKeyHash);
+    event DeviceEnrolled(bytes32 indexed deviceIdHash, address indexed gateway, bytes32 signingKeyHash, bytes32 companyIdHash);
     event DeviceEnabled(bytes32 indexed deviceIdHash, bool enabled);
     event DeviceGatewayChanged(bytes32 indexed deviceIdHash, address indexed gateway);
     event DeviceKeyChanged(bytes32 indexed deviceIdHash, bytes32 signingKeyHash);
@@ -54,7 +55,9 @@ contract PriviIoTLedger {
         bytes32 payloadHash,
         bytes32 eventTypeHash,
         bytes32 signatureHash,
-        uint64 observedAt
+        uint64 observedAt,
+        bytes32 popStampHash,
+        bytes32 popZoneHash
     );
 
     constructor() {
@@ -86,13 +89,14 @@ contract PriviIoTLedger {
         if (!d.enabled) revert DeveloperDisabled();
     }
 
-    function enrollDevice(bytes32 deviceIdHash, bytes32 signingKeyHash, address gateway) external onlyOwner {
+    function enrollDevice(bytes32 deviceIdHash, bytes32 signingKeyHash, bytes32 companyIdHash, address gateway) external onlyOwner {
         requireActiveDeveloper(gateway);
-        if (deviceIdHash == bytes32(0) || signingKeyHash == bytes32(0) || gateway == address(0))
+        if (deviceIdHash == bytes32(0) || signingKeyHash == bytes32(0) ||
+            companyIdHash == bytes32(0) || gateway == address(0))
             revert InvalidDevice();
         if (devices[deviceIdHash].enrolled) revert DeviceAlreadyEnrolled();
-        devices[deviceIdHash] = Device(gateway, signingKeyHash, 0, true, true);
-        emit DeviceEnrolled(deviceIdHash, gateway, signingKeyHash);
+        devices[deviceIdHash] = Device(gateway, signingKeyHash, 0, true, true, companyIdHash);
+        emit DeviceEnrolled(deviceIdHash, gateway, signingKeyHash, companyIdHash);
     }
 
     function setDeviceEnabled(bytes32 deviceIdHash, bool enabled) external onlyOwner {
@@ -126,7 +130,9 @@ contract PriviIoTLedger {
         bytes32 eventTypeHash,
         bytes32 payloadHash,
         bytes32 eventHash,
-        bytes32 signatureHash
+        bytes32 signatureHash,
+        bytes32 popStampHash,
+        bytes32 popZoneHash
     ) external {
         Device storage d = devices[deviceIdHash];
         if (!d.enrolled) revert DeviceNotEnrolled();
@@ -135,10 +141,12 @@ contract PriviIoTLedger {
         requireActiveDeveloper(msg.sender);
         if (sequence == 0 || uint256(sequence) != uint256(d.lastSequence) + 1) revert WrongSequence();
         if (observedAt == 0 || eventTypeHash == bytes32(0) || payloadHash == bytes32(0)
-            || eventHash == bytes32(0) || signatureHash == bytes32(0))
+            || eventHash == bytes32(0) || signatureHash == bytes32(0) ||
+            popStampHash == bytes32(0) || popZoneHash == bytes32(0))
             revert InvalidEvent();
 
         d.lastSequence = sequence;
-        emit IoTRecorded(deviceIdHash, sequence, eventHash, payloadHash, eventTypeHash, signatureHash, observedAt);
+        emit IoTRecorded(deviceIdHash, sequence, eventHash, payloadHash, eventTypeHash,
+                         signatureHash, observedAt, popStampHash, popZoneHash);
     }
 }
