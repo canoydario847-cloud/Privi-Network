@@ -45,7 +45,7 @@ jobs:
           set -e
           if [ "$code" -ne 3 ]; then echo "PoP financial mainnet gate must remain NO-GO" >&2; exit 1; fi
       - name: Exercise Point of Position validator research prototype (NOT CONSENSUS)
-        run: node --test production-network/mainnet/pop_candidate/test_engine.cjs production-network/mainnet/pop_candidate/test_persistent_vote_guard.cjs
+        run: node --test production-network/mainnet/pop_candidate/test_engine.cjs production-network/mainnet/pop_candidate/test_persistent_vote_guard.cjs production-network/mainnet/pop_candidate/test_onchain_anchor_verifier.cjs
       - name: Verify EIP-191 founder wallet proof (RESEARCH ONLY - no founder signature)
         run: |
           set -euo pipefail
