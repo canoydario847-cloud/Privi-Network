@@ -1,0 +1,143 @@
+# Render Blueprint for the Privi MCP servers (Ledger, Verify, Anchor).
+# Apply once: dashboard.render.com -> New -> Blueprint -> canoydario847-cloud/Privi-Network.
+# Render asks only for the values marked `sync: false`; every internal secret is generated
+# and shared between the services automatically.
+#
+# The discovery hub (privi-discovery) and the Jose site/backend are managed outside this file.
+
+envVarGroups:
+  - name: privi-coinbase-cdp
+    envVars:
+      - key: CDP_API_KEY_ID
+        sync: false
+      - key: CDP_API_KEY_SECRET
+        sync: false
+
+services:
+  # ------------------------------------------------------------------ Privi Anchor
+  - type: web
+    name: privi-anchor
+    runtime: docker
+    plan: starter
+    region: virginia
+    dockerfilePath: ./anchor-server/Dockerfile
+    dockerContext: ./anchor-server
+    buildFilter:
+      paths: ["anchor-server/**"]
+    healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: privi-anchor-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: ANCHOR_DB_PATH
+        value: /data/anchor.db
+      - key: ANCHOR_RPC_URL
+        value: https://privi-evm-devnet-development.up.railway.app
+      - key: ANCHOR_CHAIN_ID
+        value: "262144"
+      - key: ANCHOR_NETWORK_NAME
+        value: Privi EVM Devnet (valueless TEST gas)
+      - key: ANCHOR_RATE_PER_MIN
+        value: "30"
+      - key: ANCHOR_GENESIS
+        value: "1"
+      - key: ANCHOR_API_KEYS          # shared with Ledger and Verify below
+        generateValue: true
+      - key: ANCHOR_PRIVATE_KEY       # gas wallet on the Privi devnet (copy from Railway privi-anchor)
+        sync: false
+
+  # ------------------------------------------------------------------ Privi Ledger
+  - type: web
+    name: privi-ledger
+    runtime: docker
+    plan: starter
+    region: virginia
+    dockerfilePath: ./ledger-server/Dockerfile
+    dockerContext: ./ledger-server
+    buildFilter:
+      paths: ["ledger-server/**"]
+    healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: privi-ledger-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - fromGroup: privi-coinbase-cdp
+      - key: LEDGER_DB_PATH
+        value: /data/ledger.db
+      - key: LEDGER_PUBLIC_URL
+        value: https://privi-ledger.onrender.com
+      - key: LEDGER_NETWORK
+        value: base
+      - key: LEDGER_FACILITATOR_URL
+        value: https://api.cdp.coinbase.com/platform/v2/x402
+      - key: LEDGER_PAY_TO
+        value: "0x1990589FD200E043b8C6FD9ec5956c61b3071048"
+      - key: LEDGER_PRICE_AUDIT_STREAM
+        value: "0.02"
+      - key: LEDGER_ADMIN_KEY
+        generateValue: true
+      - key: LEDGER_ANCHOR_URL
+        value: https://privi-anchor.onrender.com/mcp
+      - key: LEDGER_ANCHOR_KEY
+        fromService:
+          name: privi-anchor
+          type: web
+          envVarKey: ANCHOR_API_KEYS
+      - key: LEDGER_ANCHOR_INTERVAL
+        value: "300"
+      - key: LEDGER_BOOTSTRAP_ORG_NAME
+        value: Privi World Co
+      - key: LEDGER_BOOTSTRAP_ORG_KEY  # Privi World Co's org API key (read it in the Render dashboard)
+        generateValue: true
+      - key: LEDGER_IMPORT_FILE
+        value: /app/seed/privi-world-co-build-2026-10-19.json
+      - key: LEDGER_BOOTSTRAP_REPORT
+        value: "1"
+      - key: LEDGER_BOOTSTRAP_PASSPORT
+        value: "1"
+
+  # ------------------------------------------------------------------ Privi Verify
+  - type: web
+    name: privi-verify
+    runtime: docker
+    plan: starter
+    region: virginia
+    dockerfilePath: ./mcp-server/Dockerfile
+    dockerContext: ./mcp-server
+    buildFilter:
+      paths: ["mcp-server/**"]
+    healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: privi-verify-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - fromGroup: privi-coinbase-cdp
+      - key: PRIVI_DB_PATH
+        value: /data/privi.db
+      - key: PRIVI_PUBLIC_URL
+        value: https://privi-verify.onrender.com
+      - key: PRIVI_NETWORK
+        value: base
+      - key: PRIVI_FACILITATOR_URL
+        value: https://api.cdp.coinbase.com/platform/v2/x402
+      - key: PRIVI_PAY_TO
+        value: "0x1990589FD200E043b8C6FD9ec5956c61b3071048"
+      - key: PRIVI_WRITE_KEYS         # manufacturer write key (read it in the Render dashboard)
+        generateValue: true
+      - key: PRIVI_SEED_DEMO
+        value: "1"
+      - key: PRIVI_ANCHOR_URL
+        value: https://privi-anchor.onrender.com/mcp
+      - key: PRIVI_ANCHOR_KEY
+        fromService:
+          name: privi-anchor
+          type: web
+          envVarKey: ANCHOR_API_KEYS
+      - key: PRIVI_ANCHOR_INTERVAL
+        value: "300"
