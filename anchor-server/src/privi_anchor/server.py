@@ -261,6 +261,38 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
     return mcp
 
 
+def startup_check(settings: Settings, chain: JsonRpcChain, store: AnchorStore) -> None:
+    """Log chain health; on first boot (ANCHOR_GENESIS=1, empty index) anchor and verify a genesis record."""
+    log = lambda m: print(f"privi-anchor: {m}", flush=True)  # noqa: E731
+    try:
+        remote = chain.remote_chain_id()
+        log(f"rpc {settings.rpc_url} chain_id={remote} expected={settings.chain_id} block={chain.latest_block()} "
+            f"wallet={chain.address} balance_wei={chain.balance_wei()}")
+        if remote != settings.chain_id:
+            log("WARNING: chain ID mismatch; anchors would be signed for the wrong chain")
+            return
+        if os.getenv("ANCHOR_GENESIS") != "1" or store.stats()["batches"]:
+            return
+        text = f"Privi Anchor genesis | Privi World Co | chain {settings.chain_id} | {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}"
+        leaf = hashlib.sha256(text.encode()).hexdigest()
+        root, proofs = merkle.build([leaf])
+        bid = store.new_batch(root, proofs, "genesis: " + text, "startup")
+        tx = chain.send_data(merkle.calldata(root))
+        store.update_batch(bid, tx_hash=tx, status="pending")
+        r = wait_receipt(chain, tx, 40)
+        if not r:
+            log(f"genesis anchor sent tx={tx}, not mined yet"); return
+        ok = int(r.get("status", "0x0"), 16) == 1
+        block = int(r["blockNumber"], 16)
+        onchain = merkle.root_from_calldata((chain.transaction(tx) or {}).get("input", ""))
+        ts = chain.block_timestamp(block) if ok else None
+        store.update_batch(bid, status="confirmed" if ok else "failed", block_number=block, block_time=ts)
+        log(f"genesis anchor {'CONFIRMED' if ok and onchain == root else 'FAILED'} text='{text}' hash={leaf} "
+            f"tx={tx} block={block} time={ts} onchain_root_matches={onchain == root}")
+    except Exception as e:  # never block serving
+        log(f"startup check error: {e}")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Privi Anchor MCP server")
     p.add_argument("--stdio", action="store_true")
@@ -268,9 +300,11 @@ def main() -> None:
     p.add_argument("--port", type=int, default=int(os.getenv("PORT", "8000")))
     args = p.parse_args()
     settings = Settings.from_env()
-    mcp = build_server(settings)
-    if settings.private_key:
-        print(f"privi-anchor: chain {settings.chain_id} via {settings.rpc_url}", flush=True)
+    store = AnchorStore(settings.db_path)
+    chain = JsonRpcChain(settings.rpc_url, settings.chain_id, settings.private_key) if settings.private_key else None
+    if chain:
+        startup_check(settings, chain, store)
+    mcp = build_server(settings, chain, store)
     if args.stdio:
         mcp.run("stdio")
         return
