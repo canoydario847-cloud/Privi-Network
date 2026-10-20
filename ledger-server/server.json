@@ -1,0 +1,19 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.canoydario847-cloud/privi-ledger",
+  "title": "Privi Ledger",
+  "description": "Tamper-evident audit logs for AI agents. Auditors verify integrity, paid per call via x402.",
+  "version": "0.1.0",
+  "websiteUrl": "https://github.com/canoydario847-cloud/Privi-Network/tree/main/ledger-server",
+  "repository": {
+    "url": "https://github.com/canoydario847-cloud/Privi-Network",
+    "source": "github",
+    "subfolder": "ledger-server"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://privi-ledger-production.up.railway.app/mcp"
+    }
+  ]
+}
