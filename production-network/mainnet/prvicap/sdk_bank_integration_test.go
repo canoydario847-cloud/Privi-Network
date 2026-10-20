@@ -329,3 +329,34 @@ func TestModuleBankDoesNotExposeRawSDKBaseKeeperViaPublicStructField(t *testing.
    t.Fatal("module bank must keep its SDK backing keeper in exactly one private interface")
  }
 }
+
+func TestModuleFacingNativeIdempotentSetBalanceAllowsNoOpWithoutStorageChange(t *testing.T) {
+ h:=newRealBankHarness(t)
+ h.genesisFund(t,100)
+ if err:=h.cap.InitGenesis(h.ctx,"100",h.bank);err!=nil {t.Fatal(err)}
+ guarded:=RestrictedBank(h.bank,h.cap)
+ blank:=sdk.AccAddress(bytes.Repeat([]byte{0x58},20))
+ // Cosmos EVM registering a precompile invokes SetAccount with an unchanged
+ // zero native balance; rejecting it breaks otherwise safe InitGenesis.
+ if err:=guarded.UncheckedSetBalance(h.ctx,blank,sdk.NewInt64Coin(BaseDenom,0));err!=nil {
+   t.Fatalf("read-only idempotent native zero is necessary for precompile setup: %v",err)
+ }
+ if err:=guarded.UncheckedSetBalance(h.ctx,blank,sdk.NewInt64Coin(BaseDenom,1));
+   !errors.Is(err,ErrDirectNativeBalanceForbidden) {
+   t.Fatalf("attempt to change precompile native balance must be denied: %v",err)
+ }
+ moduleAccount:=authtypes.NewModuleAddress("genesisfixture")
+ original:=h.bank.GetBalance(h.ctx,moduleAccount,BaseDenom)
+ if original.Amount.String()!="100" {t.Fatalf("unexpected fixture balance: %s",original)}
+ if err:=guarded.UncheckedSetBalance(h.ctx,moduleAccount,original);err!=nil {
+   t.Fatalf("idempotent existing balance must be no-op: %v",err)
+ }
+ if err:=guarded.UncheckedSetBalance(h.ctx,moduleAccount,
+   sdk.NewInt64Coin(BaseDenom,99));!errors.Is(err,ErrDirectNativeBalanceForbidden) {
+   t.Fatalf("even during genesis a different native balance must be denied: %v",err)
+ }
+ if got:=guarded.GetBalance(h.ctx,moduleAccount,BaseDenom);!got.IsEqual(original) {
+   t.Fatalf("attempted no-op changed real bank balance from %s to %s",original,got)
+ }
+ if err:=h.cap.Reconcile(h.ctx,guarded);err!=nil {t.Fatal(err)}
+}
