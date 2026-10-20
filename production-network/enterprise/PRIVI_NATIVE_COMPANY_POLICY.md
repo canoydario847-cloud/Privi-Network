@@ -37,6 +37,24 @@ reference EVM ID 262144 is a disposable development network, NOT final Privi
 PoP mainnet. Real PRVI issuance and financial network activation stay blocked
 until audited native PoP consensus and financial safety gates are complete.
 
+## Company control and safe handover (development design)
+
+A company's current registered administrator must propose any new administrator,
+and the proposed successor must accept the transfer from the successor wallet.
+The Privi platform operator is never a substitute for the company's approval.
+The old administrator may cancel an unaccepted proposal.
+
+A successful transfer advances the company's gateway-permission epoch. This
+invalidates all gateway permissions granted by the previous administrator in
+constant time, without iterating across unknown devices or operators. The new
+administrator chooses which Privi-registered gateways to reapprove.
+
+This design **does not recover lost administrator keys**. Enterprise recovery
+requires verified organizational identity, predefined multisig/guardian
+governance, independently audited emergency procedures and legal process.
+Do not permit a unilateral platform-owner takeover or bypass consent on
+the basis of a support ticket, self-declared corporate title, or payment.
+
 ## Enterprise adoption plan (proposal, not a guarantee)
 
 Offer developer documentation, self-service company onboarding, APIs,
