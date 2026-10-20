@@ -8,7 +8,7 @@ const crypto = require("node:crypto");
 
 const HEX32 = /^0x[0-9a-fA-F]{64}$/;
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
-const POP_ZONES = new Set(["GRID/READINGS","FLEET/ASSETS","ENERGY/READINGS","IOT/GENERAL","ASSETS/VALUE"]);
+const POP_ZONES = new Set(["GRID/READINGS","FLEET/ASSETS","ENERGY/READINGS","IOT/GENERAL","ASSETS/VALUE","VALIDATOR/AUTH"]);
 const FORBIDDEN_EVM_CHAINS = new Set([
   1, 10, 56, 97, 137, 250, 42161, 43114, 8453, 84532, 11155111
 ]);
