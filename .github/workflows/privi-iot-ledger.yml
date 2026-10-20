@@ -59,7 +59,7 @@ jobs:
             throw Error("Unsafe token/smart contract behavior in IoT registry");
           }
           const input = {language:"Solidity",sources:{[name]:{content:source}},
-            settings:{optimizer:{enabled:true,runs:200},evmVersion:"paris",
+            settings:{optimizer:{enabled:true,runs:200},viaIR:true,evmVersion:"paris",
               outputSelection:{"*":{"*":["abi","evm.bytecode.object"]}}}};
           const out = JSON.parse(solc.compile(JSON.stringify(input)));
           const errors = (out.errors||[]).filter(e=>e.severity==="error");
