@@ -7,7 +7,7 @@ function valid(){
  return {
   observation:{financialMainnet:false,chainId:262144,receiptCount:1,
    rawReceiptEvidence:[{txHash:tx,blockHash:block,gasUsed:"21000",effectiveGasPriceWei:"10000000000",chargedWei:"210000000000000"}],
-   observedChargedGasWei:"210000000000000",verifiedCollectorRevenueWei:null},
+   observedChargedGasWei:"210000000000000",evidenceLevel:"USER_SUPPLIED_DEV_RECEIPTS_NOT_INDEPENDENTLY_VALIDATED",verifiedCollectorRevenueWei:null},
   audit:{ok:true,evm_chain_id:262144,confirmations:2,tx_hash:tx,block_hash:block,
    gas_used:"21000",effective_gas_price_wei:"10000000000",gross_gas_paid_wei:"210000000000000"}
  };
@@ -38,4 +38,9 @@ test("reject malformed and excessive unsigned quantity",()=>{
   const {observation,audit}=valid();audit.gas_used=value;
   assert.throws(()=>assertReceiptAuditAgreement(observation,audit));
  }
+});
+
+test("reject missing or overstated dev receipt evidence level",()=>{
+ const {observation,audit}=valid();observation.evidenceLevel="INDEPENDENTLY_VERIFIED";
+ assert.throws(()=>assertReceiptAuditAgreement(observation,audit));
 });
