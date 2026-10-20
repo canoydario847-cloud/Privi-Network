@@ -3,6 +3,7 @@ FROM python:3.13-slim
 WORKDIR /app
 COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
+COPY seed ./seed
 RUN pip install --no-cache-dir .
 
 ENV PORT=8000 PRIVI_DB_PATH=/data/ledger.db

@@ -231,6 +231,25 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     return mcp
 
 
+def bootstrap(ledger: Ledger) -> None:
+    """Optional first-customer setup: LEDGER_BOOTSTRAP_ORG_NAME + LEDGER_BOOTSTRAP_ORG_KEY create that
+    organization (idempotent); LEDGER_IMPORT_FILE loads a JSON log into one of its streams if empty."""
+    name, key = os.getenv("LEDGER_BOOTSTRAP_ORG_NAME", ""), os.getenv("LEDGER_BOOTSTRAP_ORG_KEY", "")
+    if not (name and key):
+        return
+    try:
+        org = ledger.ensure_org(name, key)
+        print(f"privi-ledger: organization ready: {org['name']} ({org['org_id']})", flush=True)
+        path = os.getenv("LEDGER_IMPORT_FILE", "")
+        if path:
+            data = json.loads(open(path, encoding="utf-8").read())
+            n = ledger.import_entries(org["org_id"], data["stream_id"], data["entries"])
+            print(f"privi-ledger: imported {n} entries into {data['stream_id']}" if n else
+                  f"privi-ledger: {data['stream_id']} already has entries; import skipped", flush=True)
+    except Exception as e:
+        print(f"privi-ledger: bootstrap error: {e}", flush=True)
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Privi Ledger MCP server")
     p.add_argument("--stdio", action="store_true", help="run over stdio instead of HTTP")
@@ -239,6 +258,7 @@ def main() -> None:
     args = p.parse_args()
     settings = Settings.from_env()
     ledger = Ledger(settings.db_path)
+    bootstrap(ledger)
     mcp = build_server(settings, ledger)
     key = os.getenv("LEDGER_ANCHOR_KEY", "")
     if key:

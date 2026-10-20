@@ -132,6 +132,29 @@ class Ledger:
             self._db.commit()
         return {"org_id": org_id, "name": name, "api_key": api_key}
 
+    def ensure_org(self, name: str, api_key: str) -> dict[str, str]:
+        """Create an organization with a given API key unless that key already has one (idempotent)."""
+        if len(api_key or "") < 24:
+            raise ValueError("bootstrap API key must be at least 24 characters")
+        existing = self.org_for_key(api_key)
+        if existing:
+            return existing
+        org_id = "org_" + secrets.token_hex(8)
+        with self._lock:
+            self._db.execute("INSERT INTO orgs (org_id, name, key_hash, created_at) VALUES (?,?,?,?)",
+                             (org_id, name.strip(), hash_key(api_key), _now()))
+            self._db.commit()
+        return {"org_id": org_id, "name": name.strip()}
+
+    def import_entries(self, org_id: str, stream_id: str, entries: list[dict]) -> int:
+        """Append entries to a stream only if it is empty (idempotent import). Returns entries added."""
+        if self.entries(org_id, stream_id, limit=1):
+            return 0
+        for e in entries:
+            self.record(org_id, stream_id, e["actor"], e["action_type"], e["summary"],
+                        e.get("resource", ""), e.get("outcome", "success"), e.get("details"))
+        return len(entries)
+
     def org_for_key(self, api_key: str) -> dict | None:
         if not api_key:
             return None
