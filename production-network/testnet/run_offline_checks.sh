@@ -57,7 +57,7 @@ node --test "$ROOT/testnet/test_deploy_disposable_counter.cjs"
 # Point of Position (PoP) logical-stamp signature/sequence/hash prototype.
 # This verifies offline records; it is NOT a native PoP BFT consensus engine,
 # does not prove economic valuation and cannot authorize financial launch.
-(cd "$ROOT/mainnet/pop" && GOTOOLCHAIN=local go test -count=1 ./...)
+(cd "$ROOT/mainnet/pop" && GOTOOLCHAIN=local go test -mod=mod -count=1 ./...)
 # Hard-cap reference is a pure-Go OFF-CHAIN accounting model, not deployed
 # Cosmos SDK consensus code. Race tests exercise simultaneous candidate mints.
 command -v go >/dev/null
