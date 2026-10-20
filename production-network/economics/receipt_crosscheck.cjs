@@ -21,7 +21,7 @@ function assertReceiptAuditAgreement(observation,audit){
   check(row&&typeof row==="object","Receipt observation invalid");
   // The Python native-transfer auditor rejects failed receipts; a gross-fee
   // match must never hide a conflicting failed EVM execution status.
-  check(row.executionSucceeded===true,"Auditor execution status mismatch");
+  check(row.executionSucceeded===true&&audit.execution_succeeded===true,"Auditor execution status mismatch");
   check(typeof row.txHash==="string"&&HASH.test(row.txHash)&&
     typeof audit.tx_hash==="string"&&HASH.test(audit.tx_hash)&&
     audit.tx_hash.toLowerCase()===row.txHash.toLowerCase(),"Auditor transaction hash mismatch");
