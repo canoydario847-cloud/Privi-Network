@@ -4,7 +4,10 @@ on:
   pull_request:
     paths:
       - 'production-network/iot/**'
-      - 'production-network/mainnet/PRIVI_IOT_RELEASE_GATE.md'
+      - 'production-network/mainnet/pop_mainnet_guard.py'
+      - 'production-network/mainnet/test_pop_mainnet_guard.py'
+      - 'production-network/mainnet/privi_pop_iot_development.template.json'
+      - 'production-network/mainnet/PRIVI_POP_RELEASE_GATE.md'
       - '.github/workflows/privi-iot-ledger.yml'
   workflow_dispatch:
 
@@ -28,6 +31,18 @@ jobs:
         run: node --test production-network/iot/gateway/test_core.cjs
       - name: Verify local AI labels and non-minted PRVI estimates
         run: python3 -m unittest discover -s production-network/iot/tests -p 'test_*.py' -v
+      - name: Fail closed on non-PoP consensus, foreign ledgers, missing IoT controls
+        run: |
+          set -euo pipefail
+          python3 -m unittest production-network/mainnet/test_pop_mainnet_guard.py -v
+          python3 production-network/mainnet/pop_mainnet_guard.py \
+            --development --manifest production-network/mainnet/privi_pop_iot_development.template.json
+          set +e
+          python3 production-network/mainnet/pop_mainnet_guard.py \
+            --manifest production-network/mainnet/privi_pop_iot_development.template.json
+          code=$?
+          set -e
+          if [ "$code" -ne 3 ]; then echo "PoP financial mainnet gate must remain NO-GO" >&2; exit 1; fi
       - name: Compile Privi-native gated contract with pinned compiler
         run: |
           set -euo pipefail
@@ -54,6 +69,7 @@ jobs:
           const names = contract.abi.map(x=>x.name).filter(Boolean);
           for (const required of ["DeveloperRegistered","DeveloperEnabled",
                "registerDeveloper","setDeveloperEnabled","developers",
+               "nextPositionSequence","popLastPosition","usedPoPStamp",
                "enrollDevice","recordEvent","IoTRecorded"]) {
             if(!names.includes(required))throw Error("Privi developer gate ABI missing "+required);
           }
