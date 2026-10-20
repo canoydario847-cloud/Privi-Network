@@ -15,7 +15,8 @@ SPEC.loader.exec_module(ai)
 
 def sample():
     return {
-        "version": 2, "companyId": "PRIVI_TEST_CO", "popZone": "GRID/READINGS",
+        "version": 3, "companyId": "PRIVI_TEST_CO", "popZone": "GRID/READINGS",
+        "positionSequence": 1,
         "deviceId": "iot.test-001", "sequence": 1,
         "observedAt": 1760912345, "eventType": "environment.temperature",
         "payload": {"temperatureC": 22, "humidityPct": 51},
@@ -98,7 +99,7 @@ class LocalAiTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "iot.db"
             first = ai.record(db, packet, confirmed(packet))
-            other = {**packet, "sequence": 2}
+            other = {**packet, "sequence": 2, "positionSequence": 2}
             c = {**confirmed(other), "blockTimestamp": 1760912345 + 86400,
                  "blockNumber": 26, "transactionHash": "0x" + "d" * 64}
             second = ai.record(db, other, c)
@@ -106,6 +107,23 @@ class LocalAiTest(unittest.TestCase):
             self.assertEqual(second["pop_duration_days"], 1)
             self.assertGreater(second["pop_leverage_basis_points"], first["pop_leverage_basis_points"])
             self.assertEqual(second["pop_stamp"],"PoP:PRIVI_TEST_CO:GRID/READINGS:000002")
+
+    def test_parallel_devices_share_one_ordered_pop_position_space(self):
+        packet = sample()
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "iot.db"
+            ai.record(db, packet, confirmed(packet))
+            parallel = {**packet, "deviceId": "iot.test-002", "sequence": 1,
+                        "positionSequence": 1}
+            c = {**confirmed(parallel), "transactionHash": "0x" + "e"*64,
+                 "blockNumber": 27}
+            with self.assertRaisesRegex(ValueError, "company-zone sequence"):
+                ai.record(db, parallel, c)
+            parallel["positionSequence"] = 2
+            c = {**confirmed(parallel), "transactionHash": "0x" + "f"*64,
+                 "blockNumber": 28}
+            result = ai.record(db, parallel, c)
+            self.assertEqual(result["pop_stamp"], "PoP:PRIVI_TEST_CO:GRID/READINGS:000002")
 
     def test_rejects_ambiguous_floats_and_oversize_payload(self):
         packet = sample()
