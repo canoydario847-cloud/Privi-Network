@@ -4,7 +4,8 @@ const assert=require("node:assert/strict");
 const crypto=require("node:crypto");
 const {
   hash,signedMessage,parseRegistry,positionStamp,proposer,
-  proposalFields,voteFields,verifyCertificate,ResearchVoteLock,TRUSTED_MODE
+  proposalFields,voteFields,verifyCertificate,ResearchVoteLock,TRUSTED_MODE,
+  OWNER_OPERATOR_ID,OWNER_COMPANY_ID,OWNER_EVM_WALLET
 }=require("./engine.cjs");
 
 function makeKey(){
@@ -21,13 +22,14 @@ function fixture(count=4){
   const epoch=1;
   const registry={
     mode:TRUSTED_MODE,chainId,genesisHash,epoch,
+    ownerWallet:OWNER_EVM_WALLET,operatorId:OWNER_OPERATOR_ID,
     validators:keys.map((k,i)=>{
-      const operatorId="OPERATOR_"+i;
-      const faultDomain="host"+i+".separate-operator.test";
-      const companyId="ORG_"+i,positionSequence=i+1;
+      const operatorId=OWNER_OPERATOR_ID;
+      const faultDomain="node"+i+".distinct-host.example";
+      const companyId=OWNER_COMPANY_ID,positionSequence=i+1;
       const anchorBlockHash=hash(Buffer.from("privi-test-position-block-"+i));
       const positionHash=hash(Buffer.from(positionStamp(companyId,positionSequence)));
-      const fields=[chainId,genesisHash,epoch,operatorId,faultDomain,companyId,
+      const fields=[chainId,genesisHash,epoch,OWNER_EVM_WALLET,operatorId,faultDomain,companyId,
                     positionSequence,k.id,anchorBlockHash];
       return {
         id:k.id,keySpkiBase64:k.publicKeyB64,operatorId,faultDomain,
@@ -53,13 +55,17 @@ function fixture(count=4){
   return {gov,keys,registry,committee,bundle};
 }
 
-test("four unique PoP position admissions yield exact three-of-four quorum",()=>{
+test("one Privi World Corp operator with four unique PoP signing positions yields three-of-four quorum",()=>{
   const f=fixture();
   assert.equal(f.committee.quorum,3);
   assert.equal(f.committee.validators.length,4);
   assert.equal(f.committee.epoch,1);
   assert.equal(f.committee.mode,TRUSTED_MODE);
-  assert.equal(f.committee.validators.every(v=>v.stamp.startsWith("PoP:ORG_")),true);
+  assert.equal(f.committee.validators.every(v=>v.stamp.startsWith("PoP:PRIVI_WORLD_CORP")),true);
+  assert.equal(f.committee.validators.every(v=>v.operatorId===OWNER_OPERATOR_ID),true);
+  assert.equal(new Set(f.committee.validators.map(v=>v.faultDomain)).size,4);
+  assert.equal(f.committee.ownerWallet,OWNER_EVM_WALLET);
+  assert.equal(f.committee.operatorId,OWNER_OPERATOR_ID);
   const {proposal,votes}=f.bundle();
   const proof=verifyCertificate(f.committee,proposal,votes);
   assert.equal(proof.valid,true);
@@ -91,9 +97,18 @@ test("reject unapproved, copied or forged PoP authority",()=>{
   const invalid=structuredClone(f.registry);
   invalid.validators[0].admissionSignature=f.registry.validators[1].admissionSignature;
   assert.throws(()=>parseRegistry(invalid,f.gov.publicKeyB64),/admission signature/);
-  const clone=structuredClone(f.registry);
-  clone.validators[1].operatorId=clone.validators[0].operatorId;
-  assert.throws(()=>parseRegistry(clone,f.gov.publicKeyB64),/Duplicated|admission signature/);
+  const otherOperator=structuredClone(f.registry);
+  otherOperator.validators[1].operatorId="OTHER_CORP";
+  assert.throws(()=>parseRegistry(otherOperator,f.gov.publicKeyB64),/Only the disclosed/);
+  const otherCompany=structuredClone(f.registry);
+  otherCompany.validators[1].companyId="OTHER_CORP";
+  assert.throws(()=>parseRegistry(otherCompany,f.gov.publicKeyB64),/Privi World Corp positions/);
+  const foreignWallet=structuredClone(f.registry);
+  foreignWallet.ownerWallet="0x"+"f".repeat(40);
+  assert.throws(()=>parseRegistry(foreignWallet,f.gov.publicKeyB64),/sole proposed Privi founder wallet/);
+  const otherRegisteredOperator=structuredClone(f.registry);
+  otherRegisteredOperator.operatorId="OTHER_CORP";
+  assert.throws(()=>parseRegistry(otherRegisteredOperator,f.gov.publicKeyB64),/ONE operator/);
   const sameHost=structuredClone(f.registry);
   sameHost.validators[1].faultDomain=sameHost.validators[0].faultDomain;
   assert.throws(()=>parseRegistry(sameHost,f.gov.publicKeyB64),/Duplicated|admission signature/);

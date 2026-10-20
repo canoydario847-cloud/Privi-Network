@@ -21,7 +21,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const {
-  hash,signedMessage,verifyProposal,voteFields,TRUSTED_MODE
+  hash,signedMessage,verifyProposal,voteFields,TRUSTED_MODE,
+  OWNER_EVM_WALLET,OWNER_OPERATOR_ID
 } = require("./engine.cjs");
 
 const HEX = /^0x[0-9a-f]{64}$/;
@@ -38,6 +39,9 @@ function strictLocalDirectory(dir) {
 }
 function recordFor(committee, height, validatorId, blockHash) {
   must(committee?.mode === TRUSTED_MODE, "PoP validator lock is RESEARCH ONLY");
+  must(committee.ownerWallet === OWNER_EVM_WALLET &&
+       committee.operatorId === OWNER_OPERATOR_ID,
+       "PoP signer requires the sole proposed founder wallet and Privi operator");
   must(typeof committee.chainId==="string" && committee.chainId.startsWith("privi-pop-research-"),
        "Native Privi research identity required");
   must(typeof committee.genesisHash==="string" && HEX.test(committee.genesisHash),
