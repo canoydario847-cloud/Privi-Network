@@ -8,7 +8,7 @@ function valid(){
   observation:{financialMainnet:false,chainId:262144,genesisHash:"0x"+"5".repeat(64),receiptCount:1,
    rawReceiptEvidence:[{txHash:tx,blockHash:block,gasUsed:"21000",effectiveGasPriceWei:"10000000000",chargedWei:"210000000000000"}],
    observedChargedGasWei:"210000000000000",evidenceLevel:"USER_SUPPLIED_DEV_RECEIPTS_NOT_INDEPENDENTLY_VALIDATED",verifiedCollectorRevenueWei:null},
-  audit:{ok:true,evm_chain_id:262144,confirmations:2,tx_hash:tx,block_hash:block,
+  audit:{ok:true,evm_chain_id:262144,genesis_hash:"0x"+"5".repeat(64),confirmations:2,tx_hash:tx,block_hash:block,
    gas_used:"21000",effective_gas_price_wei:"10000000000",gross_gas_paid_wei:"210000000000000"}
  };
 }
@@ -46,3 +46,10 @@ test("reject missing or overstated dev receipt evidence level",()=>{
 });
 
 test("reject absent pinned dev genesis",()=>{const {observation,audit}=valid();delete observation.genesisHash;assert.throws(()=>assertReceiptAuditAgreement(observation,audit));});
+
+test("reject missing or mismatched audited genesis hash",()=>{
+ for(const value of [undefined,"bad","0x"+"6".repeat(64)]){
+  const {observation,audit}=valid();audit.genesis_hash=value;
+  assert.throws(()=>assertReceiptAuditAgreement(observation,audit),/genesis hash/);
+ }
+});
