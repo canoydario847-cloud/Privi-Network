@@ -61,6 +61,28 @@ Privi for unrelated software or prevent independent competing blockchains.
 
 See `production-network/enterprise/PRIVI_NATIVE_COMPANY_POLICY.md`.
 
+## Company administrator handover (development-only)
+
+The currently registered company administrator may propose a **different**
+successor wallet using `proposeCompanyAdministratorTransfer(companyIdHash, successor)`.
+Only the proposed successor may call `acceptCompanyAdministratorTransfer(companyIdHash)`;
+the original administrator may call `cancelCompanyAdministratorTransfer(companyIdHash)`
+before acceptance. The Privi platform owner CANNOT initiate or accept a company
+administrator change on the enterprise's behalf.
+
+On successful acceptance, the contract increments a company-specific
+gateway authorization epoch and thereby **revokes every previous developer
+gateway approval atomically**, including approvals that formerly returned
+true through `companyGateways(companyIdHash, gateway)`. The new administrator
+must explicitly authorize any existing gateway again. Previously enrolled
+devices may resume only when their assigned developer gateway is newly
+approved. Company suspensions and developer revocations continue to apply.
+
+This is a mutually agreed wallet handover, NOT lost-key recovery. If a company
+loses its current administrator key, it cannot use this mechanism; a separate
+independently reviewed recovery policy and threshold authorization would
+be required. Do not store company or gateway private keys in a repository.
+
 ## Pipeline
 
 1. Owner registers an official Privi developer gateway and proposes a company
