@@ -944,6 +944,35 @@ def first_report(mcp: MCPServer, ledger: Ledger, delay_s: float = 75.0) -> None:
     threading.Thread(target=run, daemon=True).start()
 
 
+def first_passport(mcp: MCPServer, ledger: Ledger, delay_s: float = 90.0) -> None:
+    """LEDGER_BOOTSTRAP_PASSPORT=1: once, issue an organization passport for the bootstrap organization."""
+    key = os.getenv("LEDGER_BOOTSTRAP_ORG_KEY", "")
+    org = ledger.org_for_key(key)
+    if not org or ledger._db.execute("SELECT 1 FROM passports WHERE org_id=?", (org["org_id"],)).fetchone():
+        return
+
+    def run() -> None:
+        time.sleep(delay_s)
+        try:
+            from mcp import Client
+
+            async def call():
+                os.environ["LEDGER_LOCAL_ORG_KEY"] = key
+                async with Client(mcp) as c:
+                    return (await c.call_tool("passport_issue", {})).structured_content
+            r = anyio.run(call)
+            a = r.get("attestation", {})
+            print(f"privi-ledger: first passport {r.get('passport_id')} for {org['name']}: grade={r.get('grade')} "
+                  f"score={r.get('score')} anchored={a.get('anchored')} tx={a.get('tx_hash')} block={a.get('block_number')} "
+                  f"url={r.get('public_url')}", flush=True)
+        except Exception as e:
+            print(f"privi-ledger: first passport error: {e}", flush=True)
+        finally:
+            os.environ.pop("LEDGER_LOCAL_ORG_KEY", None)
+
+    threading.Thread(target=run, daemon=True).start()
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Privi Ledger MCP server")
     p.add_argument("--stdio", action="store_true", help="run over stdio instead of HTTP")
@@ -962,6 +991,8 @@ def main() -> None:
                    float(os.getenv("LEDGER_ANCHOR_INTERVAL", "300")), "privi-ledger")
     if os.getenv("LEDGER_BOOTSTRAP_REPORT") == "1":
         first_report(mcp, ledger)
+    if os.getenv("LEDGER_BOOTSTRAP_PASSPORT") == "1":
+        first_passport(mcp, ledger)
     if args.stdio:
         mcp.run("stdio")
         return
