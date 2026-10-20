@@ -15,6 +15,10 @@ contract PriviIoTLedger {
     error CompanyRegistrationNotPending();
     error CompanyDisabled();
     error CompanyGatewayNotAuthorized();
+    error CompanyAdministratorTransferPending();
+    error CompanyAdministratorTransferNotPending();
+    error CompanyAdministratorUnchanged();
+    error CompanyGatewayEpochExhausted();
     error NotCompanyAdministrator();
     error InvalidDevice();
     error DeviceAlreadyEnrolled();
@@ -74,7 +78,18 @@ contract PriviIoTLedger {
     // The platform can propose onboarding but CANNOT activate a company.
     // Only the designated company's independent administrator can accept.
     mapping(bytes32 => address) public pendingCompanyAdministrators;
-    mapping(bytes32 => mapping(address => bool)) public companyGateways;
+    // A handover invalidates ALL approvals made by the former company admin
+    // in constant time. A company-admin address can never silently inherit
+    // permissions granted under the previous authorization epoch.
+    mapping(bytes32 => uint64) public companyGatewayEpoch;
+    mapping(bytes32 => mapping(address => uint64)) private _approvedGatewayEpoch;
+    mapping(bytes32 => address) public pendingCompanySuccessors;
+
+    function companyGateways(bytes32 companyIdHash, address gateway) public view returns (bool) {
+        uint64 epoch = companyGatewayEpoch[companyIdHash];
+        return epoch != 0 && companies[companyIdHash].registered &&
+            companies[companyIdHash].enabled && _approvedGatewayEpoch[companyIdHash][gateway] == epoch;
+    }
 
     event CompanyRegistrationProposed(bytes32 indexed companyIdHash, address indexed administrator);
     event CompanyRegistrationRejected(bytes32 indexed companyIdHash, address indexed administrator);
@@ -82,6 +97,9 @@ contract PriviIoTLedger {
     event CompanyRegistered(bytes32 indexed companyIdHash, address indexed administrator);
     event CompanyEnabled(bytes32 indexed companyIdHash, bool enabled);
     event CompanyGatewayAuthorized(bytes32 indexed companyIdHash, address indexed gateway, bool authorized);
+    event CompanyAdministratorTransferProposed(bytes32 indexed companyIdHash, address indexed currentAdministrator, address indexed successor);
+    event CompanyAdministratorTransferCancelled(bytes32 indexed companyIdHash, address indexed successor);
+    event CompanyAdministratorTransferred(bytes32 indexed companyIdHash, address indexed previousAdministrator, address indexed successor, uint64 gatewayEpoch);
 
     event DeveloperRegistered(address indexed developer);
     event DeveloperEnabled(address indexed developer, bool enabled);
@@ -151,6 +169,7 @@ contract PriviIoTLedger {
         if (msg.sender != administrator) revert NotCompanyAdministrator();
         delete pendingCompanyAdministrators[companyIdHash];
         companies[companyIdHash] = Company(administrator, true, true);
+        companyGatewayEpoch[companyIdHash] = 1;
         emit CompanyRegistered(companyIdHash, administrator);
     }
 
@@ -172,6 +191,49 @@ contract PriviIoTLedger {
         emit CompanyRegistrationCancelled(companyIdHash, administrator);
     }
 
+    // Existing company administrator must authorize a handover first.
+    // There is NO unilateral Privi platform/owner override.
+    function proposeCompanyAdministratorTransfer(bytes32 companyIdHash, address successor) external {
+        Company storage company = companies[companyIdHash];
+        if (!company.registered) revert CompanyNotRegistered();
+        if (msg.sender != company.administrator) revert NotCompanyAdministrator();
+        if (successor == address(0) || successor == company.administrator) revert CompanyAdministratorUnchanged();
+        if (pendingCompanySuccessors[companyIdHash] != address(0))
+            revert CompanyAdministratorTransferPending();
+        pendingCompanySuccessors[companyIdHash] = successor;
+        emit CompanyAdministratorTransferProposed(companyIdHash, msg.sender, successor);
+    }
+
+    function cancelCompanyAdministratorTransfer(bytes32 companyIdHash) external {
+        Company storage company = companies[companyIdHash];
+        if (!company.registered) revert CompanyNotRegistered();
+        if (msg.sender != company.administrator) revert NotCompanyAdministrator();
+        address successor = pendingCompanySuccessors[companyIdHash];
+        if (successor == address(0)) revert CompanyAdministratorTransferNotPending();
+        delete pendingCompanySuccessors[companyIdHash];
+        emit CompanyAdministratorTransferCancelled(companyIdHash, successor);
+    }
+
+    // The successor independently accepts using their own private key.
+    // Old delegated gateway approvals are invalidated atomically.
+    // Lost-key emergency recovery is NOT implemented by this handover.
+    function acceptCompanyAdministratorTransfer(bytes32 companyIdHash) external {
+        Company storage company = companies[companyIdHash];
+        if (!company.registered) revert CompanyNotRegistered();
+        address successor = pendingCompanySuccessors[companyIdHash];
+        if (successor == address(0)) revert CompanyAdministratorTransferNotPending();
+        if (msg.sender != successor) revert NotCompanyAdministrator();
+        uint64 previousEpoch = companyGatewayEpoch[companyIdHash];
+        if (previousEpoch == type(uint64).max) revert CompanyGatewayEpochExhausted();
+        address previousAdministrator = company.administrator;
+        delete pendingCompanySuccessors[companyIdHash];
+        company.administrator = successor;
+        companyGatewayEpoch[companyIdHash] = previousEpoch + 1;
+        emit CompanyAdministratorTransferred(
+            companyIdHash, previousAdministrator, successor, previousEpoch + 1
+        );
+    }
+
     function setCompanyEnabled(bytes32 companyIdHash, bool enabled) external onlyOwner {
         if (!companies[companyIdHash].registered) revert CompanyNotRegistered();
         companies[companyIdHash].enabled = enabled;
@@ -187,7 +249,8 @@ contract PriviIoTLedger {
             requireActiveDeveloper(gateway);
         }
         if (gateway == address(0)) revert InvalidDevice();
-        companyGateways[companyIdHash][gateway] = authorized;
+        _approvedGatewayEpoch[companyIdHash][gateway] =
+            authorized ? companyGatewayEpoch[companyIdHash] : 0;
         emit CompanyGatewayAuthorized(companyIdHash, gateway, authorized);
     }
 
@@ -195,7 +258,7 @@ contract PriviIoTLedger {
         Company storage company = companies[companyIdHash];
         if (!company.registered) revert CompanyNotRegistered();
         if (!company.enabled) revert CompanyDisabled();
-        if (!companyGateways[companyIdHash][gateway]) revert CompanyGatewayNotAuthorized();
+        if (!companyGateways(companyIdHash, gateway)) revert CompanyGatewayNotAuthorized();
     }
 
     function enrollDevice(bytes32 deviceIdHash, bytes32 signingKeyHash, bytes32 companyIdHash, address gateway) external onlyOwner {
