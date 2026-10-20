@@ -31,6 +31,32 @@ CI probes use fictional `424242`; it must not be copied into a mainnet
 release without a separate registry review. Cosmos chain identity is
 distinct, and both identities must be reviewed and matched.
 
+### Sole proposed founder-controlled administrative wallet (nonfinancial)
+
+The owner has specified that the proposed Privi **network owner, governance
+administrator, and treasury controller must be the same public EVM address**:
+
+`0x1990589FD200E043b8C6FD9ec5956c61b3071048`
+
+Dario Canoy / Privi World Corp remain the sole proposed operator. The public
+wallet address is a candidate **control identity** only; it does not prove
+possession of the private key, confer any current on-chain role, authorize
+minting, or set the amount of founder/treasury genesis allocation. All balance
+and vesting amounts remain **TBD**. No second platform owner, delegated
+administrator, guardian wallet, or multisig owner is authorized by the
+candidate policy. See
+`../ops/privi_owner_wallet.candidate.json` and the strict
+`../ops/verify_privi_single_owner.py` development verifier.
+
+Four validator *consensus signing keys* must remain distinct from one another
+and from the owner EVM account; they do not become other treasury or governance
+owners. Sole-wallet control is a material key-loss / operator-compromise risk:
+funds and governance may become inaccessible if the founder key is lost, and
+unauthorized actions can occur if that key is compromised. Store the private
+key offline under the owner's control; never supply it to an assistant,
+GitHub workflow, hosted build runner, or chat. Independent review remains
+necessary even under permissioned single-operator governance.
+
 ### Initial genesis allocation worksheet — must be filled and approved
 
 | Allocation bucket | PRVI whole units | Account addresses/public keys | Vesting/unlock terms | Control/approval |
