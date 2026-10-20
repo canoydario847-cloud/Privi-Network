@@ -7,7 +7,8 @@ const path=require("node:path");
 const crypto=require("node:crypto");
 const {
   hash,signedMessage,parseRegistry,positionStamp,proposer,
-  proposalFields,verifyCertificate,TRUSTED_MODE
+  proposalFields,verifyCertificate,TRUSTED_MODE,
+  OWNER_EVM_WALLET,OWNER_OPERATOR_ID,OWNER_COMPANY_ID
 }=require("./engine.cjs");
 const {
   recordFor,lockedFileName,reservePosition,signCommitWithResearchLock
@@ -23,17 +24,19 @@ const sign=(privateKey,tag,fields)=>
 function fixture(){
   const gov=makeKey(),keys=Array.from({length:4},makeKey);
   const chainId="privi-pop-research-lock-test",genesisHash="0x"+"a".repeat(64),epoch=1;
-  const registry={chainId,genesisHash,epoch,mode:TRUSTED_MODE,validators:keys.map((k,i)=>{
-    const operatorId="OPERATOR_"+i,faultDomain="operator"+i+".example";
-    const companyId="CO_"+i,positionSequence=i+1;
+  const registry={chainId,genesisHash,epoch,mode:TRUSTED_MODE,
+    ownerWallet:OWNER_EVM_WALLET,operatorId:OWNER_OPERATOR_ID,
+    validators:keys.map((k,i)=>{
+    const operatorId=OWNER_OPERATOR_ID,faultDomain="owner-host"+i+".example";
+    const companyId=OWNER_COMPANY_ID,positionSequence=i+1;
     const anchorBlockHash=hash(Buffer.from("native-chain-attested-anchor-"+i));
     return {
       id:k.id,keySpkiBase64:k.pub,operatorId,faultDomain,companyId,
       positionSequence,anchorBlockHash,
       positionHash:hash(Buffer.from(positionStamp(companyId,positionSequence))),
       admissionSignature:sign(gov.privateKey,"admit",[
-        chainId,genesisHash,epoch,operatorId,faultDomain,companyId,
-        positionSequence,k.id,anchorBlockHash
+        chainId,genesisHash,epoch,OWNER_EVM_WALLET,operatorId,faultDomain,
+        companyId,positionSequence,k.id,anchorBlockHash
       ])
     };
   })};
