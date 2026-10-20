@@ -18,27 +18,33 @@ var ErrDirectNativeBalanceForbidden = errors.New(
     "PRVI native bank balance cannot be changed through an unchecked external setter",
 )
 
-// ModuleRestrictedBank is the bankkeeper.Keeper used by the experimental
-// Privi application when injecting bank access into SDK/EVM modules.
+// The embedded interface is PRIVATE: other Go packages cannot dereference
+// it to obtain the underlying concrete SDK BaseKeeper. Its exported Keeper
+// methods remain promoted, except the unsafe methods we deliberately
+// override below. A direct type assertion of ModuleRestrictedBank to SDK
+// BaseKeeper will not succeed.
+type sealedBankInterface interface { bankkeeper.Keeper }
+
+// ModuleRestrictedBank is the SDK-compatible module banking dependency.
+// The private interface promotes normal SDK bank methods; their original
+// internal BaseKeeper receiver still handles ordinary transfers/delegations.
+// We deny EXTERNAL UncheckedSetBalance calls for native aprvi, not the SDK's
+// legitimate internal balance moves.
 //
-// Methods of the embedded SDK keeper implement normal, audited-by-upstream
-// transfer and delegation behavior. Its low-level methods internally call
-// their original SDK BaseKeeper receiver: this override is an additional
-// denial only for external UncheckedSetBalance calls, not a new mint right.
-//
-// WARNING: This embedded BaseKeeper remains accessible through Go type
-// assertion and is only a defense-in-depth test prototype. Any extra raw
-// keeper copy or direct KV/collection write can bypass it. No production
-// PRVI mainnet is authorized.
+// This is a defensive module capability wrapper, NOT a complete SDK
+// mutation authorization. The original raw BaseKeeper can still be retained
+// elsewhere during app construction, SDK bank collections and direct KV
+// writes may bypass it, and future module upgrades need review.
+// No production PRVI mainnet is authorized.
 type ModuleRestrictedBank struct {
-    bankkeeper.BaseKeeper
+    sealedBankInterface
 }
 
 // RestrictedBank attaches the immutable native PRVI mint restriction
 // BEFORE any module receives its SDK banking dependency, and then blocks
 // the publicly exposed unsafe PRVI balance setter on that dependency.
 func RestrictedBank(bank bankkeeper.BaseKeeper, k Keeper) *ModuleRestrictedBank {
-    return &ModuleRestrictedBank{BaseKeeper: bank.WithMintCoinsRestriction(k.MintRestriction)}
+    return &ModuleRestrictedBank{sealedBankInterface: bank.WithMintCoinsRestriction(k.MintRestriction)}
 }
 
 // Module calls to UncheckedSetBalance must not modify native aprvi.
@@ -49,7 +55,7 @@ func (bank *ModuleRestrictedBank) UncheckedSetBalance(
     if balance.Denom == BaseDenom {
         return ErrDirectNativeBalanceForbidden
     }
-    return bank.BaseKeeper.UncheckedSetBalance(ctx, address, balance)
+    return bank.sealedBankInterface.UncheckedSetBalance(ctx, address, balance)
 }
 
 // These builder methods return an SDK BaseKeeper by value. Allowing a
