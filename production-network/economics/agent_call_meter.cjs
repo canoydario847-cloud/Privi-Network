@@ -12,10 +12,15 @@ function quoteAgentCall({agentId,callId,requestedCalls,unitServiceFeeWei,custome
   const service=calls*unit;
   if(service>amount(customerMaxServiceFeeWei,"service cap"))throw Error("Service fee exceeds customer cap");
   const gasQuote=advisoryEip1559Quote(gas);
-  const combined=service+BigInt(gasQuote.maxQuotedGasWei);
-  if(combined>amount(customerMaxCombinedWei,"combined cap"))throw Error("Combined fee exceeds customer cap");
+  const quotedCombined=service+BigInt(gasQuote.maxQuotedGasWei);
+  // Future EIP-1559 inclusion can charge up to the transaction's signed
+  // maxFeePerGas, not merely the current base+priority estimate.
+  const authorizedCombined=service+BigInt(gasQuote.maxAuthorizedGasWei);
+  if(authorizedCombined>amount(customerMaxCombinedWei,"combined cap"))throw Error("Combined fee exceeds customer cap");
   return Object.freeze({agentId,callId,calls:calls.toString(),serviceFeeWei:service.toString(),
-    maxQuotedGasWei:gasQuote.maxQuotedGasWei,maxCombinedWei:combined.toString(),
+    maxQuotedGasWei:gasQuote.maxQuotedGasWei,
+    maxAuthorizedGasWei:gasQuote.maxAuthorizedGasWei,
+    quotedCombinedWei:quotedCombined.toString(),maxCombinedWei:authorizedCombined.toString(),
     feeCurrency:"DEV_CHAIN_NATIVE_UNIT",financialMainnet:false,settled:false,
     customerAuthorizationVerified:false,signatureVerificationRequiredBeforeExecution:true,
     onchainEnforcement:false,treasuryRevenueWei:null,
