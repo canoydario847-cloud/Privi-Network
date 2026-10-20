@@ -3,7 +3,7 @@ const test=require("node:test"),assert=require("node:assert/strict");
 const {quoteAgentCall,createEphemeralCallGate}=require("./agent_call_meter.cjs");
 const base={agentId:"mr-lee",callId:"task-001",requestedCalls:"2",unitServiceFeeWei:"100",
  customerMaxServiceFeeWei:"200",customerMaxCombinedWei:"315200",
- gas:{baseFeeWei:"10",priorityFeeWei:"2",customerMaxFeePerGasWei:"15",estimatedGas:"21000",customerMaxTotalWei:"315000"}};
+ gas:{baseFeeWei:"10",priorityFeeWei:"2",customerMaxFeePerGasWei:"15",estimatedGas:"21000",signedGasLimit:"21000",customerMaxTotalWei:"315000"}};
 test("agent quote separates service fee and network gas without asserting revenue",()=>{
  const q=quoteAgentCall(base);
  assert.equal(q.serviceFeeWei,"200");assert.equal(q.maxQuotedGasWei,"252000");
@@ -18,6 +18,9 @@ test("reject service and combined cap overruns",()=>{
  // Quoted 252200 fits this budget, but actual EIP-1559 inclusion may cost
  // up to signed maxFeePerGas*gasLimit + service = 315200.
  assert.throws(()=>quoteAgentCall({...base,customerMaxCombinedWei:"252200"}),/combined fee exceeds customer cap/i);
+ // 35000 signed gas units exceed the joint cap, despite a 21000 estimate.
+ assert.throws(()=>quoteAgentCall({...base,gas:{...base.gas,signedGasLimit:"35000",
+   customerMaxTotalWei:"600000"}}),/combined fee exceeds customer cap/i);
 });
 test("reject invalid call counts, identifiers, and gas caps",()=>{
  assert.throws(()=>quoteAgentCall({...base,requestedCalls:"1001"}),/Call count/);
