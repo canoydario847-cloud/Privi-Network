@@ -11,6 +11,12 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { localGate, exportDevKey } = require("../testnet/send_disposable_test_transfer.cjs");
 const { sha, packetDigest, verifyDevicePacket, submitEvent } = require("./gateway/core.cjs");
+const {
+  hash,signedMessage,positionStamp,TRUSTED_MODE,
+  OWNER_EVM_WALLET,OWNER_OPERATOR_ID,OWNER_COMPANY_ID
+}=require("../mainnet/pop_candidate/engine.cjs");
+const {verifyCandidatePositionAnchors}=require(
+  "../mainnet/pop_candidate/onchain_anchor_verifier.cjs");
 
 const RPC = "http://127.0.0.1:8545";
 const EVM_ID = 262144n;
@@ -22,17 +28,17 @@ async function confirmed(tx) {
   return r;
 }
 
-function eventPacket(key, deviceId, sequence, positionSequence) {
+function eventPacket(key, deviceId, sequence, positionSequence, options={}) {
   const data = {
     version:3,
-    companyId:"PRIVI_DISPOSABLE",
-    popZone:"GRID/READINGS",
+    companyId:options.companyId || "PRIVI_DISPOSABLE",
+    popZone:options.popZone || "GRID/READINGS",
     deviceId,
     sequence,
     positionSequence,
     observedAt:1760912345,
-    eventType:"temperature",
-    payload:{temperatureCentidegrees:2250,humidityPercent:43}
+    eventType:options.eventType || "temperature",
+    payload:options.payload || {temperatureCentidegrees:2250,humidityPercent:43}
   };
   const signature = crypto.sign(null, Buffer.from(packetDigest(data).signingText, "utf8"), key);
   data.signatureBase64 = signature.toString("base64");
@@ -133,6 +139,87 @@ async function run(env = process.env) {
   await assert.rejects(submitEvent(packet1,common),
     "an already sealed PoP event must not be submitted again");
 
+  // Real native test-ledger evidence for EACH governance-attested PoP
+  // research validator position. This is not PoP consensus: upstream
+  // Cosmos EVM CometBFT still finalizes the disposable test transactions.
+  const governanceKey=crypto.generateKeyPairSync("ed25519");
+  const govPub=governanceKey.publicKey.export({format:"der",type:"spki"}).toString("base64");
+  const valKeys=Array.from({length:4},()=>crypto.generateKeyPairSync("ed25519"));
+  const researchChainId="privi-pop-research-chain-anchors",epoch=1;
+  const researchGenesisHash="0x"+"a".repeat(64);
+  const anchorProofs=[],admittedValidators=[];
+  for(let i=0;i<4;i++){
+    const pair=valKeys[i];
+    const der=pair.publicKey.export({format:"der",type:"spki"});
+    const validatorId=hash(der);
+    const deviceId="research.validator."+i;
+    const sequence=i+1;
+    const anchorPacket=eventPacket(pair.privateKey,deviceId,1,sequence,{
+      companyId:OWNER_COMPANY_ID,
+      popZone:"VALIDATOR/AUTH",
+      eventType:"validator_position",
+      payload:{research:true,claimedHostIndex:i,source:"disposable-test-only"}
+    });
+    const memberRegistry={[deviceId]:{publicKeySpkiBase64:der.toString("base64")}};
+    const digest=verifyDevicePacket(anchorPacket,memberRegistry);
+    await confirmed(await contract.enrollDevice(
+      digest.deviceIdHash,digest.signingKeyHash,digest.companyIdHash,wallet.address,
+      {gasLimit:300000n,gasPrice:GAS_PRICE,type:0}
+    ));
+    const evidence=await submitEvent(anchorPacket,{
+      registry:memberRegistry,config,provider,wallet,contract
+    });
+    assert.equal(evidence.positionSequence,sequence);
+    const companyId=OWNER_COMPANY_ID,operatorId=OWNER_OPERATOR_ID;
+    const faultDomain="claimed-owner-host-"+i+".example";
+    const anchorBlockHash=evidence.blockHash,positionSequence=sequence;
+    const positionHash=sha(Buffer.from(positionStamp(companyId,positionSequence),"utf8"));
+    assert.equal(positionHash,digest.popStampHash);
+    const admissionFields=[
+      researchChainId,researchGenesisHash,epoch,OWNER_EVM_WALLET,
+      operatorId,faultDomain,companyId,positionSequence,validatorId,anchorBlockHash
+    ];
+    admittedValidators.push({
+      id:validatorId,
+      keySpkiBase64:der.toString("base64"),
+      operatorId,faultDomain,companyId,positionSequence,
+      anchorBlockHash,positionHash,
+      admissionSignature:crypto.sign(null,
+        signedMessage("admit",admissionFields),governanceKey.privateKey).toString("base64")
+    });
+    anchorProofs.push({validatorId,transactionHash:evidence.transactionHash});
+  }
+  const candidateRegistry={
+    chainId:researchChainId,genesisHash:researchGenesisHash,epoch,
+    mode:TRUSTED_MODE,ownerWallet:OWNER_EVM_WALLET,
+    operatorId:OWNER_OPERATOR_ID,validators:admittedValidators
+  };
+  const proofArgs={
+    provider,config,contract,registry:candidateRegistry,
+    governanceKey:govPub,proofs:anchorProofs,ethers
+  };
+  const anchored=await verifyCandidatePositionAnchors(proofArgs);
+  assert.equal(anchored.verifiedTestLedgerAnchors,4);
+  assert.equal(anchored.nativePoPConsensus,false);
+  assert.equal(anchored.productionMainnet,false);
+  await assert.rejects(
+    verifyCandidatePositionAnchors({...proofArgs,proofs:[
+      {...anchorProofs[0],transactionHash:recorded1.transactionHash},
+      ...anchorProofs.slice(1)]}),
+    /No actual Privi ledger event|not bound to the observed receipt block/,
+    "ordinary sensor receipts cannot masquerade as PoP validator positions");
+  await assert.rejects(
+    verifyCandidatePositionAnchors({...proofArgs,config:{
+      ...config,genesisHash:"0x"+"f".repeat(64)}}),
+    /genesis/,
+    "research PoP anchors must fail on a foreign genesis");
+  const reusedProof=[...anchorProofs];
+  reusedProof[1]={...anchorProofs[1],transactionHash:anchorProofs[0].transactionHash};
+  await assert.rejects(
+    verifyCandidatePositionAnchors({...proofArgs,proofs:reusedProof}),
+    /One transaction cannot falsely stand for two/,
+    "PoP anchor receipts must not be reused for multiple validators");
+
   await confirmed(await contract.setDeveloperEnabled(wallet.address,false,
     {gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
   const packet3=eventPacket(pair1.privateKey,"grid.sensorA",2,3);
@@ -148,6 +235,8 @@ async function run(env = process.env) {
     second_position:recorded2.popStamp,
     second_transaction:recorded2.transactionHash,
     developer_enrollment:"enforced",
+    onchain_validator_position_anchors:"four_actual_receipts_verified",
+    candidate_native_pop_consensus:false,
     developer_revocation:"enforced",
     second_sensor_position:"company-zone ordered",
     replay_protection:"enforced",
