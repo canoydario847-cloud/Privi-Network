@@ -7,6 +7,8 @@ package main
 
 import (
     "bytes"
+    "crypto/ed25519"
+    "crypto/rand"
     "encoding/json"
     "errors"
     "fmt"
@@ -23,6 +25,7 @@ import (
     dbm "github.com/cosmos/cosmos-db"
     "github.com/cosmos/evm/evmd"
     "github.com/cosmos/evm/evmd/prvicap"
+    prvipop "github.com/cosmos/evm/evmd/prvipop"
     srvflags "github.com/cosmos/evm/server/flags"
     vmtypes "github.com/cosmos/evm/x/vm/types"
     erc20types "github.com/cosmos/evm/x/erc20/types"
@@ -190,6 +193,36 @@ func probe() error {
         }
     }
     genesis[erc20types.ModuleName]=app.AppCodec().MustMarshalJSON(&erc20Genesis)
+    // Bootstrap the native candidate PoP authorization registry with a
+    // throwaway Ed25519 public key. This is NOT a production signing key,
+    // network operator identity, PoP finality proof or launched token.
+    popPub,_,err:=ed25519.GenerateKey(rand.Reader)
+    if err!=nil{return fmt.Errorf("disposable PoP author fixture: %w",err)}
+    popGenesis:=struct {
+        ChainID string `json:"chain_id"`
+        Authorities []prvipop.Authority `json:"authorities"`
+    }{
+        ChainID:chainID,
+        Authorities:[]prvipop.Authority{{
+            Company:"UTQ4JJ20", Zone:"GRID/READINGS", PublicKey:popPub,
+        }},
+    }
+    popNegativeMode:=os.Getenv("PRIVI_POP_NEGATIVE_PROBE")
+    switch popNegativeMode {
+    case "":
+    case "wrong-chain":
+        popGenesis.ChainID="privi-ci-incorrect"
+    case "invalid-author":
+        popGenesis.Authorities[0].PublicKey=nil
+    case "missing":
+    default:
+        return fmt.Errorf("unknown disposable PoP genesis negative mode")
+    }
+    if popNegativeMode!="missing" {
+        popBytes,marshalErr:=json.Marshal(popGenesis)
+        if marshalErr!=nil{return marshalErr}
+        genesis[prvipop.StoreKey]=popBytes
+    }
     raw, err := json.Marshal(genesis)
     if err!=nil {return fmt.Errorf("encode custom genesis fixture: %w",err)}
     resp, err := app.InitChain(&abci.RequestInitChain{
@@ -197,6 +230,14 @@ func probe() error {
         ConsensusParams:simtestutil.DefaultConsensusParams,
         AppStateBytes:raw,
     })
+    if popNegativeMode!="" {
+        expected:="Privi PoP genesis:"
+        if err==nil || !strings.Contains(err.Error(),expected){
+            return fmt.Errorf("SECURITY: invalid PoP genesis accepted or wrong error: %v",err)
+        }
+        fmt.Printf("PASS: customized InitChain rejects unsafe PoP authorization genesis: %s\n",popNegativeMode)
+        return nil
+    }
     if mintNegativeMode!="" {
         expected:="PRVI native genesis: mint must target aprvi with ZERO inflation and provisions"
         if err==nil || !strings.Contains(err.Error(),expected) {
@@ -223,6 +264,11 @@ func probe() error {
     // into the custom app refuses any post-genesis native mint operation.
     const expectedAPRVI = "3000000000000000000" // 3 valueless PRVI; NOT mainnet
     ctx := app.NewContextLegacy(false,cmtproto.Header{ChainID:chainID,Height:0})
+    popSeq,popTip,popErr:=app.PriviPoPKeeper.Snapshot(ctx,"UTQ4JJ20","GRID/READINGS")
+    if popErr!=nil||popSeq!=0||popTip!=strings.Repeat("0",64) {
+        return fmt.Errorf("native PoP genesis signer registry not persisted: %d %s %v",popSeq,popTip,popErr)
+    }
+    fmt.Println("PASS: custom InitChain mounted and initialized native PoP authorization consensus KV store")
     capBefore,err := app.PriviCapKeeper.Snapshot(ctx)
     if err!=nil {return fmt.Errorf("custom native genesis cap store not initialized: %w",err)}
     if capBefore.GenesisBase!=expectedAPRVI ||
@@ -410,6 +456,10 @@ func verifyRestart(dir string) error {
         return fmt.Errorf("restarted chain height changed: %d",restarted.LastBlockHeight())
     }
     ctx:=restarted.NewContextLegacy(true,cmtproto.Header{ChainID:chainID,Height:2})
+    popSeq,popTip,popErr:=restarted.PriviPoPKeeper.Snapshot(ctx,"UTQ4JJ20","GRID/READINGS")
+    if popErr!=nil||popSeq!=0||popTip!=strings.Repeat("0",64) {
+        return fmt.Errorf("restarted PoP authorization registry missing: %d %s %v",popSeq,popTip,popErr)
+    }
     capState,err:=restarted.PriviCapKeeper.Snapshot(ctx)
     if err!=nil {return fmt.Errorf("cap state missing after app restart: %w",err)}
     if capState.GenesisBase!=expectedAPRVI||
