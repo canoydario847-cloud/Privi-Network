@@ -140,6 +140,19 @@ func probe() error {
     mintGenesis.Params.InflationMin=sdkmath.LegacyZeroDec()
     mintGenesis.Minter.Inflation=sdkmath.LegacyZeroDec()
     mintGenesis.Minter.AnnualProvisions=sdkmath.LegacyZeroDec()
+    // Test the real customized InitChain fail-closed gate on two distinct
+    // attempts to reintroduce native issuance. Each test uses a fresh
+    // valueless app process; no PRVI tokens or production state are created.
+    mintNegativeMode:=os.Getenv("PRIVI_MINT_NEGATIVE_PROBE")
+    switch mintNegativeMode {
+    case "":
+    case "inflation":
+        mintGenesis.Params.InflationMax=sdkmath.LegacyOneDec()
+    case "provisions":
+        mintGenesis.Minter.AnnualProvisions=sdkmath.LegacyOneDec()
+    default:
+        return fmt.Errorf("unrecognized valueless mint negative mode")
+    }
     genesis[minttypes.ModuleName]=app.AppCodec().MustMarshalJSON(&mintGenesis)
     // The upstream reference defaults ERC20 registration to permissionless.
     // Privi's native-denom genesis must opt out before InitChain begins.
@@ -184,6 +197,14 @@ func probe() error {
         ConsensusParams:simtestutil.DefaultConsensusParams,
         AppStateBytes:raw,
     })
+    if mintNegativeMode!="" {
+        expected:="PRVI native genesis: mint must target aprvi with ZERO inflation and provisions"
+        if err==nil || !strings.Contains(err.Error(),expected) {
+            return fmt.Errorf("SECURITY: invalid native mint fixture not rejected by correct InitChain rule: %v",err)
+        }
+        fmt.Printf("PASS: actual customized InitChain rejects unsafe native mint fixture: %s\n",mintNegativeMode)
+        return nil
+    }
     if erc20NegativeMode!="" {
         expected:="PRVI native genesis: permissionless ERC20 registration forbidden"
         if erc20NegativeMode=="native-pair" {
