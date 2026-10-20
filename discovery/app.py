@@ -236,6 +236,15 @@ def icon():
                     '<circle cx="46" cy="44" r="4" fill="#7fd1ff"/></svg>', media_type="image/svg+xml")
 
 
+INDEXNOW_KEY = os.environ.get("INDEXNOW_KEY", "ada26ed8847e32f1a16fb752cb24b14f")
+
+
+@route(f"/{INDEXNOW_KEY}.txt")
+def indexnow_key():
+    """IndexNow ownership key (Bing, Yandex, Naver, Seznam)."""
+    return INDEXNOW_KEY
+
+
 @route("/health")
 def health():
     return {"ok": True, "service": "privi-discovery", "version": VERSION}
