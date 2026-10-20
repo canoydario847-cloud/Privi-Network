@@ -18,6 +18,8 @@ Works with Claude, ChatGPT, Cursor, VS Code and custom agents. Built by [Privi W
 | `ledger_list_streams` | org key | Your streams and entry counts |
 | `ledger_compliance_report` | org key | Audit-ready report of agent activity for a period, sealed on the Privi chain |
 | `ledger_report_pdf` | org key | The sealed report as a finished PDF (also at `GET /reports/<id>.pdf` with the org key) |
+| `ledger_handshake_offer` / `_accept` / `_reject` / `_inbox` | org key | Privi Handshake: two-sided records of dealings between companies |
+| `ledger_handshake_verify` | free | Public check of a handshake and its on-chain seal; never reveals terms |
 | `ledger_verify_report` | free | Proves a report is unaltered and was issued by Privi Ledger; checks its on-chain seal |
 
 Action types: `tool_call`, `data_access`, `data_change`, `payment`, `message`, `decision`, `approval`, `error`, `other`. Outcomes: `success`, `failure`, `pending`, `blocked`.
@@ -46,6 +48,17 @@ The customer adds the server to their agent with header `Authorization: Bearer p
 `ledger_compliance_report` turns an organization's agent logs into evidence for SOC 2 reviews, customer security questionnaires and AI-regulation record keeping. For any period it reports actions by type, actors, failures, blocked actions, human approvals, log integrity and on-chain status. It also lists **findings** an auditor would raise, such as broken integrity, logs not yet anchored, failed actions, or payments and data changes with no human approval recorded. The result comes as JSON plus a ready-to-share Markdown version.
 
 Each report is **sealed**. Its SHA-256 hash, taken over canonical JSON, is anchored on the Privi blockchain through Privi Anchor. Anyone holding the report can run `ledger_verify_report`, which recomputes the hash, confirms Privi Ledger issued exactly that content, and checks the anchor on chain. Editing even one number, such as hiding a failure, makes verification fail.
+
+## Privi Handshake
+
+A dealing between two companies, such as a payment, a data transfer, a delivery or an agreement, gets recorded by **both** of them, with neither able to deny or rewrite it alone.
+
+1. Company A's agent calls `ledger_handshake_offer` with the other company's `org_id` and the terms. A's log records the offer.
+2. Company B's agent sees it in `ledger_handshake_inbox` and calls `ledger_handshake_accept`, or `ledger_handshake_reject` with a reason.
+3. On acceptance, B's log records the same terms with A's entry hash, A's log records the confirmation with B's entry hash, and a pair hash binding the terms and both entries is anchored on the Privi blockchain.
+4. Anyone can run `ledger_handshake_verify` to see both parties, the status, whether both entries still exist, and the on-chain seal, without seeing the terms.
+
+Handshakes only work between organizations on Privi Ledger.
 
 ## On-chain checkpoints
 

@@ -29,6 +29,7 @@ from .store import ACTION_TYPES, OUTCOMES, Ledger, check_id
 from .anchoring import AnchorClient, AnchorError, Checkpoints, HttpAnchorClient, describe, start_loop
 from .reports import ReportStore, build_body, report_hash, to_markdown
 from .pdf import render_pdf
+from .handshake import HandshakeError, Handshakes
 from .x402 import Facilitator, Paywall
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor-production.up.railway.app/mcp"
@@ -46,7 +47,11 @@ access or changes, payments, messages, decisions). Keep the returned entry_hash
 as a receipt. Requires the organization's API key (Authorization: Bearer).
 
 Auditors: ledger_audit_stream checks a stream's integrity without revealing its
-contents (paid per call with x402, USDC on Base). ledger_check_receipt is free."""
+contents (paid per call with x402, USDC on Base). ledger_check_receipt is free.
+
+Dealings with another company on Privi (payments, data transfers, deliveries, agreements):
+use Privi Handshake (ledger_handshake_offer / _inbox / _accept / _reject) so both companies
+hold matching records sealed on the Privi chain; ledger_handshake_verify is a free public check."""
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
 
@@ -71,6 +76,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     if anchor_client is None and os.getenv("LEDGER_ANCHOR_KEY"):
         anchor_client = HttpAnchorClient(anchor_url, os.environ["LEDGER_ANCHOR_KEY"])
     reports = ReportStore(ledger._db, ledger._lock)
+    handshakes = Handshakes(ledger, ledger._db, ledger._lock)
 
     def onchain(org_id: str, stream_id: str, result: dict) -> dict:
         cp = checkpoints.latest(f"{org_id}/{stream_id}")
@@ -294,6 +300,91 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
                 out.update(onchain_verified=None, onchain_error=str(e))
         out["valid"] = out.get("onchain_verified", True) is not False
         return _result(out)
+
+    # ---------------- Privi Handshake (cross-organization) ----------------
+
+    WRITE = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False)
+
+    @mcp.tool(title="Offer a handshake", annotations=WRITE)
+    def ledger_handshake_offer(
+        counterparty_org_id: Annotated[str, Field(description="org_id of the other company (must be on Privi Ledger)")],
+        stream_id: Annotated[str, Field(description="Your stream to record it in, usually your agent's name")],
+        actor: Annotated[str, Field(description="Who is acting on your side")],
+        action_type: Annotated[str, Field(description=f"One of: {', '.join(ACTION_TYPES)}")],
+        summary: Annotated[str, Field(description="What is being agreed or done between the two companies")],
+        ctx: Context,
+        resource: Annotated[str, Field(description="Invoice, order, dataset, contract or other reference")] = "",
+        details: Annotated[dict[str, Any] | None, Field(description="Terms as structured data (amounts, quantities, dates)")] = None,
+        expires_hours: Annotated[float, Field(description="Hours the other company has to respond", gt=0, le=720)] = 72,
+    ) -> CallToolResult:
+        """Start a Privi Handshake: a two-sided record of a dealing with another company's agent
+        (payment, data transfer, delivery, agreement). Recorded in your log now; when the other company
+        accepts, both logs hold matching entries and the pair is sealed on the Privi chain. Requires your
+        organization API key; the other company must also use Privi Ledger."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        try:
+            return _result(handshakes.offer(org["org_id"], counterparty_org_id.strip(), stream_id, actor, action_type,
+                                            summary, resource, details, expires_hours))
+        except (HandshakeError, ValueError) as e:
+            return _result({"error": str(e)}, is_error=True)
+
+    @mcp.tool(title="Handshake inbox", annotations=READ_ONLY)
+    def ledger_handshake_inbox(ctx: Context) -> CallToolResult:
+        """Handshakes sent to and from your organization, newest first, with their terms and status.
+        Requires your organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        items = handshakes.inbox(org["org_id"])
+        return _result({"org_id": org["org_id"], "pending_for_you": sum(
+            1 for h in items if h["direction"] == "incoming" and h["status"] == "offered"), "handshakes": items})
+
+    @mcp.tool(title="Accept a handshake", annotations=WRITE)
+    async def ledger_handshake_accept(
+        handshake_id: Annotated[str, Field(description="hs_... ID from the offer")],
+        stream_id: Annotated[str, Field(description="Your stream to record it in")],
+        actor: Annotated[str, Field(description="Who is accepting on your side")],
+        ctx: Context,
+    ) -> CallToolResult:
+        """Accept a handshake addressed to your organization: records the same terms in your log, confirms
+        it in the other company's log, and seals the matched pair on the Privi chain. Requires your
+        organization API key. Read the terms first with ledger_handshake_inbox."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        try:
+            r = await anyio.to_thread.run_sync(
+                lambda: handshakes.accept(handshake_id.strip(), org["org_id"], stream_id, actor, anchor_client))
+            return _result(r)
+        except (HandshakeError, ValueError) as e:
+            return _result({"error": str(e)}, is_error=True)
+
+    @mcp.tool(title="Reject a handshake", annotations=WRITE)
+    def ledger_handshake_reject(
+        handshake_id: Annotated[str, Field(description="hs_... ID from the offer")],
+        ctx: Context,
+        reason: Annotated[str, Field(description="Why it is rejected (shared with the other company)")] = "",
+    ) -> CallToolResult:
+        """Reject a handshake addressed to your organization; the other company's log records the rejection.
+        Requires your organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        try:
+            return _result(handshakes.reject(handshake_id.strip(), org["org_id"], reason))
+        except (HandshakeError, ValueError) as e:
+            return _result({"error": str(e)}, is_error=True)
+
+    @mcp.tool(title="Verify a handshake", annotations=READ_ONLY)
+    def ledger_handshake_verify(
+        handshake_id: Annotated[str, Field(description="hs_... handshake ID")],
+    ) -> CallToolResult:
+        """Public check of a handshake: both companies, status, whether both matching log entries still exist,
+        and the on-chain seal. Never reveals the terms. Free; useful for disputes and audits."""
+        s = handshakes.public_status(handshake_id.strip())
+        return _result(s) if s else _result({"error": "no such handshake"}, is_error=True)
 
     # ---------------- http ----------------
 

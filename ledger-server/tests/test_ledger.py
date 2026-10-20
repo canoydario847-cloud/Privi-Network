@@ -241,3 +241,65 @@ def test_report_pdf(ledger, monkeypatch):
             assert pdf.startswith(b"%PDF") and len(pdf) > 2000
             assert (await c.call_tool("ledger_report_pdf", {"report_id": "rpt_nope"})).is_error
     anyio.run(go)
+
+
+def test_privi_handshake_between_two_companies(ledger, monkeypatch, tmp_path):
+    a, b, c3 = ledger.create_org("Acme Robotics"), ledger.create_org("Blue Water Fab"), ledger.create_org("Other")
+    fake = FakeAnchorWithVerify()
+    srv = build_server(Settings(pay_to=PAY_TO), ledger, FakeFacilitator(), anchor_client=fake)
+
+    async def call(key, tool, args):
+        monkeypatch.setenv("LEDGER_LOCAL_ORG_KEY", key)
+        async with Client(srv) as c:
+            return await c.call_tool(tool, args)
+
+    def run_(key, tool, args):
+        return anyio.run(call, key, tool, args)
+
+    offer = run_(a["api_key"], "ledger_handshake_offer", {
+        "counterparty_org_id": b["org_id"], "stream_id": "procurement-agent", "actor": "claude",
+        "action_type": "payment", "summary": "Pay $4,800 for 800 brackets, PO-1042", "resource": "PO-1042",
+        "details": {"usd": 4800, "qty": 800}}).structured_content
+    hid = offer["handshake_id"]
+    assert offer["status"] == "offered"
+
+    # bad offers
+    assert run_(a["api_key"], "ledger_handshake_offer", {"counterparty_org_id": a["org_id"], "stream_id": "x",
+                "actor": "y", "action_type": "payment", "summary": "self"}).is_error
+    assert run_(a["api_key"], "ledger_handshake_offer", {"counterparty_org_id": "org_nobody", "stream_id": "x",
+                "actor": "y", "action_type": "payment", "summary": "ghost"}).is_error
+
+    inbox = run_(b["api_key"], "ledger_handshake_inbox", {}).structured_content
+    assert inbox["pending_for_you"] == 1 and inbox["handshakes"][0]["terms"]["details"]["usd"] == 4800
+
+    # only the addressed company can accept
+    assert run_(c3["api_key"], "ledger_handshake_accept", {"handshake_id": hid, "stream_id": "s", "actor": "z"}).is_error
+    acc = run_(b["api_key"], "ledger_handshake_accept", {"handshake_id": hid, "stream_id": "sales-agent",
+                                                         "actor": "claude"}).structured_content
+    assert acc["status"] == "accepted" and acc["onchain"]["anchored"] and fake.calls[-1] == [acc["pair_hash"]]
+    assert run_(b["api_key"], "ledger_handshake_accept", {"handshake_id": hid, "stream_id": "s", "actor": "z"}).is_error
+
+    # both logs hold matching, cross-referenced entries
+    a_log = ledger.entries(a["org_id"], "procurement-agent")
+    b_log = ledger.entries(b["org_id"], "sales-agent")
+    assert len(a_log) == 2 and len(b_log) == 1
+    import json as _j
+    assert _j.loads(b_log[0]["details"])["handshake"]["initiator_entry_hash"] == a_log[0]["entry_hash"]
+    assert _j.loads(a_log[1]["details"])["handshake"]["counterparty_entry_hash"] == b_log[0]["entry_hash"]
+
+    pub = run_("none", "ledger_handshake_verify", {"handshake_id": hid}).structured_content
+    assert pub["both_entries_present"] and pub["pair_hash_valid"] and "terms" not in pub and "4800" not in str(pub)
+
+    # one side deletes its record: the public check exposes it
+    db = sqlite3.connect(str(tmp_path / "l.db"))
+    db.execute("DELETE FROM entries WHERE entry_hash=?", (b_log[0]["entry_hash"],)); db.commit()
+    pub2 = run_("none", "ledger_handshake_verify", {"handshake_id": hid}).structured_content
+    assert pub2["both_entries_present"] is False
+
+    # rejection path
+    o2 = run_(a["api_key"], "ledger_handshake_offer", {"counterparty_org_id": b["org_id"], "stream_id": "procurement-agent",
+              "actor": "claude", "action_type": "data_access", "summary": "Request QA records"}).structured_content
+    rj = run_(b["api_key"], "ledger_handshake_reject", {"handshake_id": o2["handshake_id"], "reason": "not covered by NDA"})
+    assert rj.structured_content["status"] == "rejected"
+    last = ledger.entries(a["org_id"], "procurement-agent")[-1]
+    assert last["outcome"] == "blocked" and "rejected" in last["summary"]
