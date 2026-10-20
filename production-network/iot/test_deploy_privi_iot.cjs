@@ -254,6 +254,79 @@ async function run(env = process.env) {
     {gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
   assert.equal(await contract.companyGateways(e1.companyIdHash,wallet.address),true);
 
+  // Prospective emergency recovery requires three explicitly accepted
+  // guardians, 2-of-3 distinct wallet votes, and seven days of real chain
+  // time. This CI run refuses to fast-forward production timelocks.
+  const guardianWallets=Array.from({length:3},
+    ()=>ethers.Wallet.createRandom().connect(provider));
+  const recoverySuccessor=ethers.Wallet.createRandom().connect(provider);
+  for (const guardian of guardianWallets) {
+    await confirmed(await wallet.sendTransaction({
+      to:guardian.address,value:GAS_PRICE * 1000000n,
+      gasLimit:30000n,gasPrice:GAS_PRICE,type:0
+    }));
+  }
+  await assert.rejects(
+    contract.configureRecoveryGuardians.staticCall(e1.companyIdHash,
+      guardianWallets.map(g=>g.address)),
+    "Privi platform owner cannot nominate enterprise guardians"
+  );
+  await confirmed(await contract.connect(successorAdmin).configureRecoveryGuardians(
+    e1.companyIdHash,guardianWallets.map(g=>g.address),
+    {gasLimit:350000n,gasPrice:GAS_PRICE,type:0}));
+  const beforeAccept=await contract.recoveryGuardians(e1.companyIdHash);
+  assert.equal(beforeAccept.active,false,"unaccepted guardians must be inactive");
+  await assert.rejects(
+    contract.connect(guardianWallets[0]).proposeCompanyRecovery.staticCall(
+      e1.companyIdHash,recoverySuccessor.address),
+    "a guardian must not recover before all guardians opt in"
+  );
+  for (const guardian of guardianWallets) {
+    await confirmed(await contract.connect(guardian).acceptRecoveryGuardianship(
+      e1.companyIdHash,{gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
+  }
+  const afterAccept=await contract.recoveryGuardians(e1.companyIdHash);
+  assert.equal(afterAccept.active,true);
+  assert.equal(afterAccept.acceptedMask,7n);
+
+  await confirmed(await contract.connect(guardianWallets[0]).proposeCompanyRecovery(
+    e1.companyIdHash,recoverySuccessor.address,
+    {gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
+  await assert.rejects(
+    contract.connect(guardianWallets[0]).approveCompanyRecovery.staticCall(e1.companyIdHash),
+    "same guardian cannot self-approve twice"
+  );
+  await assert.rejects(
+    contract.executeCompanyRecovery.staticCall(e1.companyIdHash),
+    "Privi operator cannot execute recovery with one vote"
+  );
+  await confirmed(await contract.connect(guardianWallets[1]).approveCompanyRecovery(
+    e1.companyIdHash,{gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
+  const pending=await contract.recoveryRequests(e1.companyIdHash);
+  assert.equal(pending.successor,recoverySuccessor.address);
+  assert(pending.eligibleAfter>0n,"2-of-3 approvals must start the timelock");
+  const latest=await provider.getBlock("latest");
+  assert(pending.eligibleAfter>BigInt(latest.timestamp),"7-day time delay must be future");
+  assert.equal(await contract.companyGateways(e1.companyIdHash,wallet.address),false,
+    "during recovery challenge window, enterprise gateways must be frozen");
+  await assert.rejects(submitEvent(packet3,common),
+    "company must be frozen while a 2-of-3 recovery is pending");
+  await assert.rejects(
+    contract.connect(recoverySuccessor).executeCompanyRecovery.staticCall(e1.companyIdHash),
+    "company recovery before actual seven-day timelock cannot execute"
+  );
+  await assert.rejects(
+    contract.cancelCompanyRecovery.staticCall(e1.companyIdHash),
+    "Privi owner cannot cancel an independent company's recovery"
+  );
+  await confirmed(await contract.connect(successorAdmin).cancelCompanyRecovery(
+    e1.companyIdHash,{gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
+  assert.equal(await contract.companyGateways(e1.companyIdHash,wallet.address),true,
+    "current admin veto must restore previously authorized gateways");
+  await confirmed(await contract.connect(successorAdmin).disableRecoveryGuardians(
+    e1.companyIdHash,{gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
+  assert.equal((await contract.recoveryGuardians(e1.companyIdHash)).active,false);
+
   // Company suspension blocks all its developers and devices immediately.
   await confirmed(await contract.setCompanyEnabled(e1.companyIdHash,false,
     {gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
@@ -287,6 +360,9 @@ async function run(env = process.env) {
     company_gateway_authorization:"enforced_independent_administrator",
     company_admin_handover:"two_party_signoff",
     former_gateway_authorizations:"invalidated_by_epoch_advance",
+    guardian_recovery:"three_opted_in_guardians_two_votes_seven_day_timelock",
+    contested_company_recovery:"gateway_frozen_and_admin_veto_enforced",
+    lost_key_recovery_executed_in_CI:false,
     company_suspension_and_revocation:"enforced",
     developer_enrollment:"enforced",
     developer_revocation:"enforced",
