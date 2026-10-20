@@ -32,9 +32,34 @@ Independent intellectual-property or licensing enforcement requires legal
 review; third-party integration contracts must be voluntary and explicit.
 No PRVI payment or bridge is required merely to register during testing.
 
+## Company onboarding (official Privi enterprise features only)
+
+Companies that opt into the official service must be registered on the
+Privi-native ledger. A Privi developer registration alone is not sufficient:
+the company's own administrator must separately authorize that developer's
+gateway. A company suspension or gateway revocation immediately blocks new
+IoT event transactions, even if a device has already been enrolled.
+
+Owner-side registration sequence on the Privi *developer test contract*:
+
+    registerDeveloper(gatewayAddress)
+    registerCompany(sha256CompanyId, companyAdministratorAddress)
+    setCompanyGateway(sha256CompanyId, gatewayAddress, true)
+    enrollDevice(deviceIdHash, deviceEd25519KeyHash, sha256CompanyId, gatewayAddress)
+
+Disable with `setCompanyEnabled(sha256CompanyId, false)` or have the
+company administrator call `setCompanyGateway(sha256CompanyId, gatewayAddress, false)`.
+The gateway independently checks the company registry and its authorization
+for every accepted packet. An unregistered company cannot use the official
+Privi IoT settlement feature. These controls cannot force companies to use
+Privi for unrelated software or prevent independent competing blockchains.
+
+See `production-network/enterprise/PRIVI_NATIVE_COMPANY_POLICY.md`.
+
 ## Pipeline
 
-1. Owner registers developer address on Privi IoT contract.
+1. Owner registers an official Privi developer gateway and a company account;
+   company administrator explicitly authorizes the gateway.
 2. Owner enrolls a named authorized device and its Ed25519 public-key hash
    to that active developer gateway.
 3. Device generates a canonical signed PoP-v3 JSON event containing companyId,
@@ -42,7 +67,8 @@ No PRVI payment or bridge is required merely to register during testing.
    positionSequence, Unix-seconds observedAt, eventType and JSON payload.
 4. Device signs the exact canonical signing text with its Ed25519 secret.
 5. Gateway verifies packet signatures and local registry, verifies configured
-   Privi EVM ID, genesis hash, code hash, active developer and device status.
+   Privi EVM ID, genesis hash, contract code hash, active developer, active company,
+   company-approved gateway authorization, and enabled device enrollment.
 6. Gateway may opt into one signed Privi transaction per accepted event; it
    waits for an actual receipt and confirms a matching IoTRecorded log.
 7. Only verified event hashes and receipt metadata are optionally indexed in
@@ -80,6 +106,8 @@ replayed positions. Device IDs should be pseudonyms.
 A local registry JSON maps deviceId to publicKeySpkiBase64. Only public keys
 go in the registry, never signing secrets. Owner-side Privi contract actions:
 - registerDeveloper(authorizedGatewayEvmAddress)
+- registerCompany(companyIdHash, companyAdministratorAddress)
+- setCompanyGateway(companyIdHash, authorizedGatewayEvmAddress, true)
 - enrollDevice(sha256DeviceId, sha256DerEd25519PubKey,
   sha256CompanyId, gatewayAddress)
 - setDeveloperEnabled(gatewayAddress, false) revokes gateway access.
