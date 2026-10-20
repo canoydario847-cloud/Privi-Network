@@ -19,8 +19,9 @@ cannot silently elect validators or change BFT finality.
 ## Implemented (preproduction, not released)
 - Native-only IoT event ledger commitments: PoP company / zone / sequence
   and event hashes; device signatures validated by an authorized gateway.
-- Mandatory Privi-registered developer gateway; revocation and device
-  enrollment; external bridging and token pairing disabled.
+- Mandatory Privi-registered developer and independent enterprise company
+  opt-in; an unaccepted proposal cannot enroll devices. Revocation and
+  device enrollment apply; external bridging/token pairing disabled.
 - Local classifier suggests an AI label without uploading raw readings
   to a third-party model.
 - Transparent Point of Position frequency-duration valuation from the
