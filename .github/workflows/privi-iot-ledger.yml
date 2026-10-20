@@ -34,7 +34,7 @@ jobs:
       - name: Fail closed on non-PoP consensus, foreign ledgers, missing IoT controls
         run: |
           set -euo pipefail
-          python3 -m unittest production-network/mainnet/test_pop_mainnet_guard.py -v
+          python3 -m unittest discover -s production-network/mainnet -p 'test_pop_mainnet_guard.py' -v
           python3 production-network/mainnet/pop_mainnet_guard.py \
             --development --manifest production-network/mainnet/privi_pop_iot_development.template.json
           set +e
