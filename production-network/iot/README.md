@@ -37,7 +37,9 @@ No PRVI payment or bridge is required merely to register during testing.
 Companies that opt into the official service must be registered on the
 Privi-native ledger. A Privi developer registration alone is not sufficient:
 the company's own administrator must separately authorize that developer's
-gateway. A company suspension or gateway revocation immediately blocks new
+gateway. Only the registered company administrator can authorize or revoke gateways;
+Privi's platform owner cannot authorize gateways on the company's behalf.
+A company suspension or gateway revocation immediately blocks new
 IoT event transactions, even if a device has already been enrolled.
 
 Owner-side registration sequence on the Privi *developer test contract*:
