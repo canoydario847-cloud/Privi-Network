@@ -5,7 +5,7 @@ const {assertReceiptAuditAgreement}=require("./receipt_crosscheck.cjs");
 const tx="0x"+"1".repeat(64),block="0x"+"2".repeat(64);
 function valid(){
  return {
-  observation:{financialMainnet:false,chainId:262144,receiptCount:1,
+  observation:{financialMainnet:false,chainId:262144,genesisHash:"0x"+"5".repeat(64),receiptCount:1,
    rawReceiptEvidence:[{txHash:tx,blockHash:block,gasUsed:"21000",effectiveGasPriceWei:"10000000000",chargedWei:"210000000000000"}],
    observedChargedGasWei:"210000000000000",evidenceLevel:"USER_SUPPLIED_DEV_RECEIPTS_NOT_INDEPENDENTLY_VALIDATED",verifiedCollectorRevenueWei:null},
   audit:{ok:true,evm_chain_id:262144,confirmations:2,tx_hash:tx,block_hash:block,
@@ -44,3 +44,5 @@ test("reject missing or overstated dev receipt evidence level",()=>{
  const {observation,audit}=valid();observation.evidenceLevel="INDEPENDENTLY_VERIFIED";
  assert.throws(()=>assertReceiptAuditAgreement(observation,audit));
 });
+
+test("reject absent pinned dev genesis",()=>{const {observation,audit}=valid();delete observation.genesisHash;assert.throws(()=>assertReceiptAuditAgreement(observation,audit));});
