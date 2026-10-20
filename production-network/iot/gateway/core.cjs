@@ -93,12 +93,17 @@ function verifyDevicePacket(packet, registry) {
 }
 
 function validateNetworkConfig(config) {
+  must(config && config.network === "privi-native" && config.settlementChain === "privi",
+       "Only native Privi settlement is supported");
+  must(config.bridgeMode === "disabled" && config.pairingMode === "disabled",
+       "Privi IoT integration forbids automatic external bridges or token pairs");
+  must(config.mode === "development",
+       "Production IoT submission blocked until canonical Privi mainnet identity and audits");
   must(config && Number.isSafeInteger(config.chainId) && config.chainId > 0,
        "Expected Privi EVM chain ID required");
   must(!FORBIDDEN_EVM_CHAINS.has(config.chainId), "Third-party EVM chains are prohibited");
-  must(config.chainId !== 262144 || config.mode === "development",
-       "Upstream demo chain ID is development-only");
-  must(config.mode === "development" || config.mode === "production", "Explicit network mode required");
+  must(config.chainId === 262144,
+       "Only Privi disposable developer EVM identity allowed before audited native mainnet");
   must(HEX32.test(config.genesisHash), "Pinned Privi genesis block hash required");
   must(ADDRESS.test(config.contractAddress), "Privi IoT contract address required");
   must(HEX32.test(config.contractCodeSha256), "Pinned contract bytecode SHA-256 required");
@@ -106,9 +111,9 @@ function validateNetworkConfig(config) {
   const url = new URL(config.rpcUrl);
   must(url.username === "" && url.password === "" && url.search === "" && url.hash === "",
        "RPC must not contain credentials or query strings");
-  must(url.protocol === "https:" ||
-       (url.protocol === "http:" && ["127.0.0.1", "localhost", "::1"].includes(url.hostname)),
-       "RPC requires HTTPS or loopback HTTP");
+  must(["127.0.0.1", "localhost", "::1"].includes(url.hostname) &&
+       (url.protocol === "http:" || url.protocol === "https:"),
+       "Disposable Privi developer RPC must remain on loopback");
   must(Number.isSafeInteger(config.confirmations) &&
        config.confirmations >= 1 && config.confirmations <= 20, "Confirmations must be 1..20");
   return config;
