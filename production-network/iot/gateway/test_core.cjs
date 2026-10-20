@@ -42,6 +42,7 @@ function mocks(f, config=configuration()) {
   const contract = {
     runner:wallet,
     getAddress:async()=>config.contractAddress,
+    developers:async()=>({registered:true,enabled:true}),
     devices:async()=>({gateway:wallet.address,signingKeyHash:f.signingKeyHash,lastSequence:0n,
                         enabled:true,enrolled:true}),
     recordEvent:async (...args)=>{
@@ -126,6 +127,16 @@ test("rejects replays, wrong gateway and a different provider",async()=>{
   const wrongWallet={...m.wallet,provider:{}};
   await assert.rejects(()=>submitEvent(f.packet,{registry:f.registry,config,
     provider:m.provider,wallet:wrongWallet,contract:m.contract}),/pinned Privi provider/);
+  assert.equal(m.getCalls(),0);
+});
+
+test("revoked or unknown Privi developers are rejected without submitting",async()=>{
+  const f=fixture(),config=configuration(),m=mocks(f,config);
+  m.contract.developers=async()=>({registered:false,enabled:false});
+  await assert.rejects(()=>submitEvent(f.packet,{registry:f.registry,config,...m}),/Privi developer registration/);
+  assert.equal(m.getCalls(),0);
+  m.contract.developers=async()=>({registered:true,enabled:false});
+  await assert.rejects(()=>submitEvent(f.packet,{registry:f.registry,config,...m}),/Privi developer registration/);
   assert.equal(m.getCalls(),0);
 });
 
