@@ -12,6 +12,31 @@ The owner has explicitly selected **four Privi World Corp-operated validator nod
 
 The inventory is currently all placeholders, and no actual production hosts or keys have been provisioned. **0/4 production validators verified, but not 0/4 independent operator companies (only one company is intended).** No claim of decentralization, asset issuance or live network is justified.
 
+## Existing Railway deployment — observed TEST-only, NOT native PRVI
+
+On 2026-10-19, provider **read-only** observations verified that the Railway
+project `Privi Seven Validator Staging` has **seven named validator services
+and one bootstrap service**, all online with last deployment `SUCCESS`,
+distinct attached persistent volumes, and **all in region `iad`**.
+The provider source points to branch
+`build/privi-seven-validators-20261016`, which is an **upstream
+disposable TEST** setup, not the reviewed custom PRVI binary.
+Bootstrap logs identify disposable upstream TEST validator identities.
+Runtime logs show P2P peer activity but also intermittent `pong timeout`
+errors; provider success and "online" do not verify current synchronized
+validator voting power, shared signed genesis, or fault-domain separation.
+A separate Railway `Privi EVM Devnet` service has logged actual finalized
+and committed blocks, also on its separate upstream development chain.
+
+Read [sanitized provider snapshot](railway_staging_observation.json) and
+[offline TEST-only preflight](railway_staging_preflight.py). These deliberately
+**never convert Railway staging into production host attestations**.
+The seven Railway services may be useful valueless test capacity, but
+they are in one region and they do not count toward **0/4 verified native
+financial validators**. Confirm genuine cross-host CometBFT identity and
+block hashes independently before considering them even a validated
+multi-service TEST network.
+
 ## Required evidence before GO decision
 
 | Gate | Acceptance evidence | Status |
