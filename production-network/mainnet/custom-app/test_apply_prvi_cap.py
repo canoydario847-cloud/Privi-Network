@@ -64,6 +64,9 @@ class PatcherTests(unittest.TestCase):
         (source / "chain_identity.go").write_text(
             "package prvicap\nfunc ValidateEVMChainID(id uint64) error { return nil }\n", encoding="utf-8"
         )
+        (source / "sdk_bank_direct_write_guard.go").write_text(
+            "package prvicap\nfunc BankForApp(){}\nfunc (b directNativeWriteGuard) UncheckedSetBalance(){}\n", encoding="utf-8"
+        )
         self.app_file = self.upstream / "evmd" / "app.go"
         self.app_file.write_text(APP, encoding="utf-8")
 
