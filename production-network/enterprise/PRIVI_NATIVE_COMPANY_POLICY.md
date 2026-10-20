@@ -15,7 +15,7 @@ competition and intellectual-property claims require independent legal review.
 1. A company identifier is hashed as \`SHA256(UTF8(companyId))\` and explicitly
    registered on the Privi IoT contract by the Privi administrator, including
    a unique company administrator EVM address.
-2. A company administrator (or Privi contract owner) authorizes individual
+2. Only the company administrator authorizes individual
    **Privi-registered developer gateway** addresses for that company.
 3. Devices are enrolled only after **both** company and developer are active
    and the company has authorized that specific gateway.
