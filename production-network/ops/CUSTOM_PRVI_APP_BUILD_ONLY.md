@@ -31,3 +31,26 @@ A successful application compile **does not** validate that PRVI is ready to run
 - **External authorization:** Four independently operated validators (currently **0/4 verified**, onboarding deferred), multi-host public testnet, release/genesis signatures, security review, legal requirements, operations/incident runbooks and signed activation decision remain outstanding.
 
 **Strict decision:** mainnet launch gate 2 remains **BLOCKED**. No amount of green build-only CI replaces tests of the finalized production chain or the independent go-live gates.
+
+## Module-facing unsafe native balance setter guard (development milestone)
+
+The proposed custom app now supplies `prvicap.ModuleRestrictedBank` to
+modules instead of the SDK raw `BaseKeeper` interface. In addition to
+blocking post-genesis `aprvi` mints via the consensus cap keeper, the
+module-facing `UncheckedSetBalance` method explicitly refuses native
+`aprvi` mutations *before* touching bank state. A caller cannot use
+`WithMintCoinsRestriction` or `WithObjStoreKey` on that wrapped module
+dependency to obtain a fresh raw `BaseKeeper` copy. Bank construction
+and object-store setup still happen before wrapping.
+
+This is **not a complete security resolution**: the adapter embeds the
+SDK raw keeper, which can still be extracted by Go type assertion. A
+different or previously retained `BaseKeeper`, direct SDK bank collection
+writes, IBC/EVM module changes, runtime upgrades, and within-block
+unauthorized balance reallocation can bypass the wrapper. A real SDK
+integration regression intentionally demonstrates that the original raw
+keeper can still write untracked native balance. These outstanding paths
+require an audited SDK-level mutation barrier, complete source graph review,
+adversarial state-transition proofs, and independently verified release
+before a financial mainnet.
+
