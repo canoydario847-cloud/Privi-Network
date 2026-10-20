@@ -4,6 +4,8 @@ An MCP server that lets AI agents check **where a manufactured lot came from** a
 
 Works with any MCP client: Claude, ChatGPT, Cursor, VS Code, and custom agents.
 
+**Live (testnet):** `https://privi-verify-production.up.railway.app/mcp` · demo lots `DEMO-STEEL-0001`, `DEMO-FOOD-0001`
+
 Built by [Privi World Co](https://github.com/canoydario847-cloud) (Port Huron, Michigan) as the agent-facing side of **Privi ChainFlow**.
 
 ## Tools
@@ -39,7 +41,7 @@ If settlement fails, the agent gets no result. Payments go straight to the `PRIV
 ```bash
 pip install .
 cp .env.example .env        # set PRIVI_PAY_TO and PRIVI_WRITE_KEYS
-python scripts/seed_demo.py # optional demo lots
+python scripts/seed_demo.py # optional demo lots (or set PRIVI_SEED_DEMO=1)
 privi-verify-mcp            # HTTP on :8000, MCP endpoint at /mcp
 ```
 

@@ -20,7 +20,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from .config import Settings
-from .store import EVENT_TYPES, LotStore
+from .store import EVENT_TYPES, LotStore, seed_demo
 from .x402 import Facilitator, Paywall
 
 __version__ = "0.1.0"
@@ -60,6 +60,8 @@ def build_server(
 ) -> MCPServer:
     settings = settings or Settings.from_env()
     store = store or LotStore(settings.db_path)
+    if os.getenv("PRIVI_SEED_DEMO") == "1":
+        seed_demo(store)
     paywall = Paywall(settings, facilitator)
 
     mcp = MCPServer(
