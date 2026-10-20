@@ -12,6 +12,7 @@ INCOMPLETE FOR FINANCIAL RELEASE: raw .Balances.Set / consensus KV and upgrades
 may bypass this API, and all IBC/EVM/staking access paths need a real audit.
 """
 import argparse
+import re
 import subprocess
 from pathlib import Path
 
@@ -39,8 +40,9 @@ def apply_patch(sdk_copy, *, verify_blobs=True):
     if copy.name != ".privi-reviewed-sdk-copy" or not copy.is_dir():
         raise ValueError("SDK patch must target an isolated .privi-reviewed-sdk-copy only")
     manifest = copy / "go.mod"
-    if not manifest.is_file() or not manifest.read_text(encoding="utf-8").startswith(
-        "module github.com/cosmos/cosmos-sdk\n"
+    if not manifest.is_file() or not re.search(
+        r"(?m)^module github\.com/cosmos/cosmos-sdk\\s*$",
+        manifest.read_text(encoding="utf-8"),
     ):
         raise ValueError("not the pinned Cosmos SDK source module")
     send_file = copy / "x/bank/keeper/send.go"
