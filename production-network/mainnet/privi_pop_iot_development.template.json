@@ -21,6 +21,9 @@
     "company_authorized_gateway": true,
     "company_suspension_enforced": true,
     "independent_company_admin_handover": true,
-    "revoke_prior_company_gateway_epoch": true
+    "revoke_prior_company_gateway_epoch": true,
+    "company_recovery_guardian_opt_in": true,
+    "company_recovery_threshold_and_timelock": true,
+    "company_recovery_freezes_gateway_access": true
   }
 }
