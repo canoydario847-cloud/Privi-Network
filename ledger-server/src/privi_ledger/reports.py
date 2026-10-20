@@ -181,6 +181,12 @@ class ReportStore:
             self._db.commit()
         return rid
 
+    def get(self, report_id: str, org_id: str) -> dict | None:
+        r = self._db.execute("SELECT * FROM reports WHERE report_id=? AND org_id=?", (report_id, org_id)).fetchone()
+        if not r:
+            return None
+        return {"report_id": r["report_id"], "body": json.loads(r["body"]), "attestation": json.loads(r["attestation"])}
+
     def by_hash(self, h: str) -> dict | None:
         r = self._db.execute("SELECT * FROM reports WHERE report_hash=?", (h,)).fetchone()
         if not r:

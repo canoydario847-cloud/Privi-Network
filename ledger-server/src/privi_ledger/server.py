@@ -9,6 +9,7 @@ Admin (HTTP):  POST /admin/orgs         (create an organization and its API key)
 from __future__ import annotations
 
 import argparse
+import base64
 import hmac
 import json
 import os
@@ -18,15 +19,16 @@ from typing import Annotated, Any
 
 import anyio
 from mcp.server.mcpserver import Context, MCPServer
-from mcp_types import CallToolResult, TextContent, ToolAnnotations
+from mcp_types import BlobResourceContents, CallToolResult, EmbeddedResource, TextContent, ToolAnnotations
 from pydantic import Field
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from .config import Settings
 from .store import ACTION_TYPES, OUTCOMES, Ledger, check_id
 from .anchoring import AnchorClient, AnchorError, Checkpoints, HttpAnchorClient, describe, start_loop
 from .reports import ReportStore, build_body, report_hash, to_markdown
+from .pdf import render_pdf
 from .x402 import Facilitator, Paywall
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor-production.up.railway.app/mcp"
@@ -245,6 +247,30 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         rid = reports.save(org["org_id"], body, att)
         return _result({"report_id": rid, "report": body, "attestation": att, "markdown": to_markdown(body, att)})
 
+    @mcp.tool(title="Compliance report PDF", annotations=READ_ONLY)
+    def ledger_report_pdf(
+        report_id: Annotated[str, Field(description="report_id returned by ledger_compliance_report")],
+        ctx: Context,
+    ) -> CallToolResult:
+        """A finished PDF of a sealed compliance report, for auditors and customers. Returned as base64
+        (pdf_base64) and as an embedded PDF resource; also downloadable at /reports/<report_id>.pdf with the
+        organization key. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        rec = reports.get(report_id, org["org_id"])
+        if not rec:
+            return _result({"error": "no such report for this organization"}, is_error=True)
+        pdf = render_pdf(rec["body"], rec["attestation"], report_id)
+        b64 = base64.b64encode(pdf).decode()
+        data = {"report_id": report_id, "filename": f"{report_id}.pdf", "bytes": len(pdf), "pdf_base64": b64,
+                "download": f"/reports/{report_id}.pdf"}
+        return CallToolResult(
+            content=[TextContent(type="text", text=json.dumps({k: v for k, v in data.items() if k != "pdf_base64"})),
+                     EmbeddedResource(type="resource", resource=BlobResourceContents(
+                         uri=f"privi-ledger://reports/{report_id}.pdf", mimeType="application/pdf", blob=b64))],
+            structured_content=data)
+
     @mcp.tool(title="Verify a report", annotations=READ_ONLY)
     async def ledger_verify_report(
         report: Annotated[dict[str, Any], Field(description="The 'report' object exactly as received from ledger_compliance_report")],
@@ -282,6 +308,19 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         except (ValueError, AttributeError) as e:
             return JSONResponse({"error": str(e) or "send JSON like {\"name\": \"Acme Inc\"}"}, status_code=400)
         return JSONResponse({**org, "note": "Store api_key now; it cannot be shown again."}, status_code=201)
+
+    @mcp.custom_route("/reports/{report_id}.pdf", methods=["GET"], include_in_schema=False)
+    async def report_pdf(request: Request):
+        org = ledger.org_for_key(_bearer(request.headers))
+        if not org:
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        rid = request.path_params["report_id"]
+        rec = reports.get(rid, org["org_id"])
+        if not rec:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        pdf = render_pdf(rec["body"], rec["attestation"], rid)
+        return Response(pdf, media_type="application/pdf",
+                        headers={"Content-Disposition": f'attachment; filename="{rid}.pdf"'})
 
     @mcp.custom_route("/.well-known/glama.json", methods=["GET"], include_in_schema=False)
     async def glama(_: Request) -> JSONResponse:

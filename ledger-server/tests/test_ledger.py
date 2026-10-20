@@ -224,3 +224,20 @@ def test_compliance_report_sealed_and_verifiable(ledger, monkeypatch):
         async with Client(srv) as c:
             assert (await c.call_tool("ledger_compliance_report", {})).is_error
     anyio.run(go)
+
+
+def test_report_pdf(ledger, monkeypatch):
+    import base64
+    acme = ledger.create_org("Acme")
+    ledger.record(acme["org_id"], "agent", "claude", "payment", "Paid invoice 1", outcome="failure")
+    as_org(monkeypatch, acme["api_key"])
+
+    async def go():
+        async with Client(build_server(Settings(pay_to=PAY_TO), ledger, FakeFacilitator(),
+                                       anchor_client=FakeAnchorWithVerify())) as c:
+            rid = (await c.call_tool("ledger_compliance_report", {})).structured_content["report_id"]
+            r = await c.call_tool("ledger_report_pdf", {"report_id": rid})
+            pdf = base64.b64decode(r.structured_content["pdf_base64"])
+            assert pdf.startswith(b"%PDF") and len(pdf) > 2000
+            assert (await c.call_tool("ledger_report_pdf", {"report_id": "rpt_nope"})).is_error
+    anyio.run(go)

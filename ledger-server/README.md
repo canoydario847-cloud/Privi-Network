@@ -17,6 +17,7 @@ Works with Claude, ChatGPT, Cursor, VS Code and custom agents. Built by [Privi W
 | `ledger_read_stream` | org key | Read your own entries with an integrity check |
 | `ledger_list_streams` | org key | Your streams and entry counts |
 | `ledger_compliance_report` | org key | Audit-ready report of agent activity for a period, sealed on the Privi chain |
+| `ledger_report_pdf` | org key | The sealed report as a finished PDF (also at `GET /reports/<id>.pdf` with the org key) |
 | `ledger_verify_report` | free | Proves a report is unaltered and was issued by Privi Ledger; checks its on-chain seal |
 
 Action types: `tool_call`, `data_access`, `data_change`, `payment`, `message`, `decision`, `approval`, `error`, `other`. Outcomes: `success`, `failure`, `pending`, `blocked`.
@@ -68,7 +69,6 @@ The `Dockerfile` runs on Railway with a volume at `/data`. Start on `base-sepoli
 
 ## Roadmap
 
-- PDF export of compliance reports
 - Subscription billing per organization
 - Retention policies and exports to customer storage
 
