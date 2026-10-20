@@ -37,8 +37,9 @@ No PRVI payment or bridge is required merely to register during testing.
 1. Owner registers developer address on Privi IoT contract.
 2. Owner enrolls a named authorized device and its Ed25519 public-key hash
    to that active developer gateway.
-3. Device generates a canonical JSON event containing version, deviceId,
-   monotonic sequence, Unix-seconds observedAt, eventType and a JSON payload.
+3. Device generates a canonical signed PoP-v3 JSON event containing companyId,
+   popZone, per-device monotonic sequence, independent company/zone
+   positionSequence, Unix-seconds observedAt, eventType and JSON payload.
 4. Device signs the exact canonical signing text with its Ed25519 secret.
 5. Gateway verifies packet signatures and local registry, verifies configured
    Privi EVM ID, genesis hash, code hash, active developer and device status.
@@ -52,9 +53,12 @@ No PRVI payment or bridge is required merely to register during testing.
 ## Packet example
 
 {
-  "version": 1,
+  "version": 3,
+  "companyId": "PRIVI_FACTORY",
+  "popZone": "GRID/READINGS",
   "deviceId": "factory.temperature-17",
   "sequence": 1,
+  "positionSequence": 1,
   "observedAt": 1760912345,
   "eventType": "temperature",
   "payload": {"temperatureCentidegrees": 2250, "humidityPercent": 44},
@@ -65,16 +69,19 @@ All payload field keys sort alphabetically at every nesting level before
 hashing. Numbers MUST be safe integers; use scaled integer units for fractional
 sensor data. The signing text is compact JSON of the array:
 
-[1, deviceId, sequence, observedAt, eventType, SHA256(payload_canonical_json)]
+[3, companyId, deviceId, sequence, positionSequence, observedAt, popZone, popStamp, eventType, SHA256(payload_canonical_json)]
 
-Hashes are lowercase 0x-prefixed SHA-256 hex. Each device sequence starts
-at 1 and increases by exactly one with each mined event. Replay or skips are
-rejected in contract and gateway. Device IDs should be pseudonyms.
+Hashes are lowercase 0x-prefixed SHA-256 hex. Each device sequence starts at 1 and increases by exactly one per mined
+signed-device event. Independently, each company+zone starts positionSequence
+at 1 and increments across ALL devices belonging to that company and zone.
+The contract, gateway and SQLite receipt index reject duplicate, skipped or
+replayed positions. Device IDs should be pseudonyms.
 
 A local registry JSON maps deviceId to publicKeySpkiBase64. Only public keys
 go in the registry, never signing secrets. Owner-side Privi contract actions:
 - registerDeveloper(authorizedGatewayEvmAddress)
-- enrollDevice(sha256DeviceId, sha256DerEd25519PubKey, gatewayAddress)
+- enrollDevice(sha256DeviceId, sha256DerEd25519PubKey,
+  sha256CompanyId, gatewayAddress)
 - setDeveloperEnabled(gatewayAddress, false) revokes gateway access.
 - setDeviceEnabled(deviceIdHash, false) revokes one device.
 
@@ -127,11 +134,17 @@ mobility, agriculture, building, health_device, network or other.
 Confidence below 0.75 requests human review. The category is a suggestion,
 not a security or financial authorization.
 
-A deterministic *nonfinancial proposal* attaches a positive value to each
-accepted event (proposed micro-PRVI units):
+A deterministic *nonfinancial proposal* uses the Point of Position model
+from your published research paper, computed from confirmed company-report
+count R and elapsed verified Privi block days D:
 
-    quality_score = bounded_int(35 + fields*3 + event_type_bonus + freshness_bonus)
-    proposed_micro_prvi = 1000 + (20 * quality_score)
+    F = min(1, R / 50)
+    T = min(1, D / 365)
+    L = 1 + 1.5 * (0.6 * F + 0.4 * T)
+    proposed_micro_prvi = zone_base_micro_prvi * L
+
+The code uses integer basis-point arithmetic, with capped zone-specific
+reference units. This is NOT a market rate or automatic exchange value.
 
 There is no real native PRVI mint, transfer, price, payout, entitlement,
 wallet balance, or promise that the provisional quote will ever be paid.
