@@ -78,6 +78,11 @@ jobs:
                "setCompanyEnabled","setCompanyGateway","companyGatewayEpoch",
                "proposeCompanyAdministratorTransfer","cancelCompanyAdministratorTransfer",
                "acceptCompanyAdministratorTransfer","pendingCompanySuccessors",
+               "configureRecoveryGuardians","acceptRecoveryGuardianship",
+               "disableRecoveryGuardians","recoveryGuardians",
+               "proposeCompanyRecovery","approveCompanyRecovery",
+               "cancelCompanyRecovery","executeCompanyRecovery",
+               "recoveryRequests","recoveryConfigEpoch",
                "companies","companyGateways",
                "nextPositionSequence","popLastPosition","usedPoPStamp",
                "enrollDevice","recordEvent","IoTRecorded"]) {
