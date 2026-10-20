@@ -41,7 +41,7 @@ def hash_text(value: str) -> str:
 
 
 def position(packet: dict) -> dict:
-    name = stamp(packet.get("companyId"), packet.get("popZone"), packet.get("sequence"))
+    name = stamp(packet.get("companyId"), packet.get("popZone"), packet.get("positionSequence"))
     return {
         "pop_stamp": name,
         "pop_stamp_hash": hash_text(name),
