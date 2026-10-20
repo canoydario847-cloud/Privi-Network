@@ -244,6 +244,7 @@ contract PriviIoTLedger {
         if (successor == address(0) || successor == company.administrator) revert CompanyAdministratorUnchanged();
         if (pendingCompanySuccessors[companyIdHash] != address(0))
             revert CompanyAdministratorTransferPending();
+        if (recoveryRequests[companyIdHash].successor != address(0)) revert RecoveryAlreadyProposed();
         pendingCompanySuccessors[companyIdHash] = successor;
         emit CompanyAdministratorTransferProposed(companyIdHash, msg.sender, successor);
     }
@@ -273,6 +274,11 @@ contract PriviIoTLedger {
         delete pendingCompanySuccessors[companyIdHash];
         company.administrator = successor;
         companyGatewayEpoch[companyIdHash] = previousEpoch + 1;
+        // Old admin's approved recovery guardians must never have the
+        // authority to stage recovery against the new administrator.
+        delete recoveryRequests[companyIdHash];
+        delete _recoveryConfig[companyIdHash];
+        recoveryConfigEpoch[companyIdHash] += 1;
         emit CompanyAdministratorTransferred(
             companyIdHash, previousAdministrator, successor, previousEpoch + 1
         );
@@ -294,6 +300,8 @@ contract PriviIoTLedger {
         if (!company.registered) revert CompanyNotRegistered();
         if (msg.sender != company.administrator) revert NotCompanyAdministrator();
         if (recoveryRequests[companyIdHash].successor != address(0)) revert RecoveryAlreadyProposed();
+        if (pendingCompanySuccessors[companyIdHash] != address(0))
+            revert CompanyAdministratorTransferPending();
         for (uint256 i = 0; i < 3; ++i) {
             if (nominated[i] == address(0) || nominated[i] == owner ||
                 nominated[i] == company.administrator) revert RecoveryGuardianNotAuthorized();
