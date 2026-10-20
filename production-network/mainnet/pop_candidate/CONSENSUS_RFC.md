@@ -172,3 +172,58 @@ Test only on disposable paths:
 
 Passing that test is *not* evidence that native Privi mainnet
 has implemented Point of Position validator finality.
+
+
+## Founder wallet cryptographic authorization experiment (EIP-191)
+
+The next research layer is
+\`founder_wallet_authorization.cjs\`. It closes a specific admission
+**declaration** gap: merely storing Dario Canoy's proposed EVM address in
+the admission messages does **not** prove that the EVM wallet owner has
+authorized the validator committee.
+
+It creates a deterministic \`personal_sign\` (EIP-191) challenge that
+commits to all of these proposed research values:
+
+- the **exact** founder EVM wallet
+  \`0x1990589FD200E043b8C6FD9ec5956c61b3071048\`;
+- the single legal operator \`PRIVI_WORLD_CORP\`;
+- the named \`privi-pop-research-*\` chain, genesis hash and epoch;
+- the current governance-admission Ed25519 **public** key;
+- each uniquely admitted validator's signing-key hash, host assertion,
+  company PoP stamp, position commitment and alleged native anchor;
+- a caller-generated nonzero random 32-byte nonce and an expiration
+  no more than seven days from verification.
+
+\`verifyFounderResearchAuthorization\` uses independently implemented
+ethers v6 EIP-191 signature recovery and accepts **only** that exact
+founder address. It rejects missing, forged, malformed, stale and
+different-wallet signatures. The existing baseline PoP certificate parser
+does **not** authorize owner governance by itself; only the EIP-191
+gate can produce a \`ownerCryptographicallyVerified\` *research result*.
+
+**No real founder EIP-191 signature has been provided or requested.**
+The CI tests generate an entirely unrelated, ephemeral test EVM wallet,
+show that valid signatures are actually recoverable for that test key,
+and prove that the **real founder-only** check refuses every such
+test signature. They never create, recover, simulate or claim to have
+the founder's private key.
+
+Even a valid EIP-191 approval would bind only *one research committee
+configuration*, not a deployed financial mainnet, a wallet's legal owner,
+or identity verification of real physical validator hosts. Operational
+anti-replay storage, revocation, EIP-1271 smart-account support,
+committee rotation safety, EVM-authorized governance changes,
+independent host attestations, objective PoP ledger inclusion proofs,
+distributed Byzantine finality and actually patched node consensus
+remain unimplemented. The time check assumes a trusted local clock;
+production approval would need consensus-based validity and revocation.
+
+To run the isolated proof tests without any founder credentials,
+install pinned ethers v6 into a disposable local directory and set
+\`PRIVI_POP_ETHERS_PATH\` to its module directory:
+
+    node --test production-network/mainnet/pop_candidate/test_founder_wallet_authorization.cjs
+
+This experiment never sends a token, signs a real founder authorization,
+starts validators, or changes the real Cosmos EVM node.
