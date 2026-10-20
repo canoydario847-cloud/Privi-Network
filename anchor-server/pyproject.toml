@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "privi-anchor-mcp"
+version = "0.1.0"
+description = "Timestamped proof-of-existence for AI outputs and data, anchored on the Privi blockchain, as an MCP server."
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Dario Canoy" }]
+requires-python = ">=3.11"
+dependencies = ["mcp>=2.3,<3", "uvicorn>=0.30", "eth-account>=0.13"]
+keywords = ["mcp", "blockchain", "timestamping", "proof-of-existence", "ai-agents", "provenance", "evm"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "anyio>=4"]
+
+[project.scripts]
+privi-anchor-mcp = "privi_anchor.server:main"
+
+[project.urls]
+Homepage = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/anchor-server"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/privi_anchor"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

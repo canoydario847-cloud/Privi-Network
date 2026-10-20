@@ -1,0 +1,83 @@
+"""Local index of anchors. The chain is the source of truth; this only remembers
+which batch, transaction and Merkle proof belong to each hash so it can be found."""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+import threading
+from datetime import datetime, timezone
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS batches (
+    batch_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    root         TEXT NOT NULL,
+    tx_hash      TEXT,
+    status       TEXT NOT NULL,          -- sending | pending | confirmed | failed
+    block_number INTEGER,
+    block_time   INTEGER,
+    label        TEXT NOT NULL DEFAULT '',
+    client       TEXT NOT NULL DEFAULT '',
+    created_at   TEXT NOT NULL,
+    error        TEXT
+);
+CREATE TABLE IF NOT EXISTS leaves (
+    leaf      TEXT NOT NULL,
+    batch_id  INTEGER NOT NULL REFERENCES batches(batch_id),
+    proof     TEXT NOT NULL,
+    PRIMARY KEY (leaf, batch_id)
+);
+CREATE INDEX IF NOT EXISTS idx_leaves_leaf ON leaves (leaf);
+"""
+
+
+class AnchorStore:
+    def __init__(self, path: str = "anchor.db"):
+        self._lock = threading.Lock()
+        self._db = sqlite3.connect(path, check_same_thread=False)
+        self._db.row_factory = sqlite3.Row
+        self._db.executescript(SCHEMA)
+        self._db.commit()
+
+    def new_batch(self, root: str, proofs: dict[str, list[str]], label: str, client: str) -> int:
+        with self._lock:
+            cur = self._db.execute(
+                "INSERT INTO batches (root, status, label, client, created_at) VALUES (?, 'sending', ?, ?, ?)",
+                (root, label, client, datetime.now(timezone.utc).isoformat(timespec="seconds")),
+            )
+            bid = cur.lastrowid
+            self._db.executemany("INSERT INTO leaves (leaf, batch_id, proof) VALUES (?,?,?)",
+                                 [(leaf, bid, json.dumps(p)) for leaf, p in proofs.items()])
+            self._db.commit()
+            return bid
+
+    def update_batch(self, batch_id: int, **fields) -> None:
+        if not fields:
+            return
+        cols = ", ".join(f"{k}=?" for k in fields)
+        with self._lock:
+            self._db.execute(f"UPDATE batches SET {cols} WHERE batch_id=?", (*fields.values(), batch_id))
+            self._db.commit()
+
+    def batch(self, batch_id: int) -> dict | None:
+        r = self._db.execute("SELECT * FROM batches WHERE batch_id=?", (batch_id,)).fetchone()
+        return dict(r) if r else None
+
+    def find_leaf(self, leaf: str) -> dict | None:
+        """Best record for a hash: a confirmed batch first, then the newest attempt."""
+        r = self._db.execute(
+            """SELECT l.leaf, l.proof, b.* FROM leaves l JOIN batches b USING (batch_id)
+               WHERE l.leaf=? ORDER BY (b.status='confirmed') DESC, b.batch_id ASC LIMIT 1""",
+            (leaf,),
+        ).fetchone()
+        if not r:
+            return None
+        d = dict(r)
+        d["proof"] = json.loads(d["proof"])
+        return d
+
+    def stats(self) -> dict:
+        r = self._db.execute(
+            "SELECT COUNT(*) AS batches, SUM(status='confirmed') AS confirmed FROM batches").fetchone()
+        n = self._db.execute("SELECT COUNT(*) FROM leaves").fetchone()[0]
+        return {"batches": r["batches"] or 0, "confirmed_batches": r["confirmed"] or 0, "hashes": n}
