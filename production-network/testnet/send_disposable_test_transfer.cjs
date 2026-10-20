@@ -10,6 +10,7 @@ const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const {aggregateFeeReceipts}=require("../economics/gas_market.cjs");
 
 function invariant(test, message) { if (!test) throw new Error(message); }
 function localGate(environment, url) {
@@ -91,6 +92,27 @@ async function run(env = process.env) {
   const audit = JSON.parse(raw);
   invariant(audit.ok===true && audit.tx_hash.toLowerCase()===tx.hash.toLowerCase(),
     "independent mined-receipt auditor did not confirm transaction");
+
+  // The separately audited mined devnet receipt is the only input for this
+  // observation. Gross fees are NOT equivalent to actual treasury income.
+  // No node-side fee schedule, PRVI minting or production settings change.
+  const [rawReceipt,genesis] = await Promise.all([
+    provider.send("eth_getTransactionReceipt",[tx.hash]),
+    provider.send("eth_getBlockByNumber",["0x0",false])
+  ]);
+  invariant(/^0x[0-9a-fA-F]{64}$/.test(genesis?.hash||""),
+    "disposable genesis must be identified before fee reporting");
+  invariant(rawReceipt?.blockHash?.toLowerCase()===audit.block_hash.toLowerCase(),
+    "gas fee observation receipt differs from independently confirmed block");
+  const gross=aggregateFeeReceipts({
+    chainId:262144,genesisHash:genesis.hash,receipts:[rawReceipt]
+  });
+  const paid=BigInt(gross.observedChargedGasWei);
+  invariant(paid>0n,"zero observed EVM gas charge is invalid");
+  invariant(currentBalance-afterSender===amountWei+paid,
+    "sender debit does not equal transferred valueless TEST plus measured gas");
+  invariant(gross.verifiedCollectorRevenueWei===null,
+    "cannot pretend total devnet gas goes to Privi World Corp");
   console.log(JSON.stringify({
     status:"REAL_DISPOSABLE_LOCAL_TEST_TRANSFER_VERIFIED",
     network:"local-4221",evm_chain_id:262144,asset:"atest (valueless developer TEST only)",
@@ -98,6 +120,9 @@ async function run(env = process.env) {
     block_number:receipt.blockNumber,confirmations:audit.confirmations,
     recipient_delta_wei:(got-before).toString(),
     receipt_audit:"PASS",
+    fee_accounting:"EVM_REAL_DISPOSABLE_RECEIPT_ONLY",
+    gross_gas_paid_wei:gross.observedChargedGasWei,
+    verified_privi_treasury_revenue_wei:null,
     limitations:"Same-runner upstream demo: no public network, independent validators, audited PRVI issuance or mainnet authorization"
   },null,2));
 }
