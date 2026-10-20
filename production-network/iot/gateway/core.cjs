@@ -43,7 +43,7 @@ function canonical(value, depth = 0) {
 
 function packetDigest(packet) {
   must(packet && typeof packet === "object" && !Array.isArray(packet), "Invalid event packet");
-  must(packet.version === 2, "PoP-v2 signed event required");
+  must(packet.version === 3, "PoP-v3 signed event required");
   must(typeof packet.companyId === "string" && /^[A-Z0-9_-]{1,24}$/.test(packet.companyId),
        "Privi PoP company ID required");
   must(typeof packet.popZone === "string" && POP_ZONES.has(packet.popZone),
@@ -51,6 +51,8 @@ function packetDigest(packet) {
   must(typeof packet.deviceId === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(packet.deviceId),
        "Invalid device identifier");
   must(Number.isSafeInteger(packet.sequence) && packet.sequence > 0, "Invalid sequence");
+  must(Number.isSafeInteger(packet.positionSequence) && packet.positionSequence > 0,
+       "Invalid company-zone PoP position sequence");
   must(Number.isSafeInteger(packet.observedAt) && packet.observedAt > 0, "Invalid observation timestamp");
   must(typeof packet.eventType === "string" &&
        /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/.test(packet.eventType), "Invalid event type");
@@ -59,10 +61,11 @@ function packetDigest(packet) {
   const payloadText = canonical(packet.payload);
   must(Buffer.byteLength(payloadText) <= 16384, "Payload too large");
   const payloadHash = sha(Buffer.from(payloadText, "utf8"));
-  const popStamp = `PoP:${packet.companyId}:${packet.popZone}:${String(packet.sequence).padStart(6,"0")}`;
+  const popStamp = `PoP:${packet.companyId}:${packet.popZone}:${String(packet.positionSequence).padStart(6,"0")}`;
   const signingText = JSON.stringify([
     packet.version, packet.companyId, packet.deviceId, packet.sequence,
-    packet.observedAt, packet.popZone, popStamp, packet.eventType, payloadHash
+    packet.positionSequence, packet.observedAt, packet.popZone,
+    popStamp, packet.eventType, payloadHash
   ]);
   return {
     signingText,
@@ -98,6 +101,7 @@ function verifyDevicePacket(packet, registry) {
     signingKeyHash: sha(der),
     signatureHash: sha(signature),
     sequence: BigInt(packet.sequence),
+    positionSequence: BigInt(packet.positionSequence),
     observedAt: BigInt(packet.observedAt)
   };
 }
@@ -156,6 +160,7 @@ async function submitEvent(packet, {registry, config, provider, wallet, contract
   must(contract && wallet.provider === provider && contract.runner === wallet,
        "Gateway signer and contract must use the pinned Privi provider");
   must(typeof contract.developers === "function" && typeof contract.devices === "function" &&
+       typeof contract.nextPositionSequence === "function" &&
        typeof contract.recordEvent === "function" &&
        contract.interface && typeof contract.interface.parseLog === "function",
        "Verified Privi IoT contract interface required");
@@ -177,11 +182,14 @@ async function submitEvent(packet, {registry, config, provider, wallet, contract
        "Privi PoP company position does not match device enrollment");
   must(BigInt(field(device, "lastSequence", 2)) + 1n === event.sequence,
        "Device sequence is not the next Privi transaction");
+  const nextPosition = await contract.nextPositionSequence(event.companyIdHash, event.popZoneHash);
+  must(BigInt(nextPosition) === event.positionSequence,
+       "PoP company-zone position is not the next Privi ledger position");
 
   const tx = await contract.recordEvent(
     event.deviceIdHash, event.sequence, event.observedAt,
     event.eventTypeHash, event.payloadHash, event.eventHash, event.signatureHash,
-    event.popStampHash, event.popZoneHash
+    event.popStampHash, event.popZoneHash, event.positionSequence
   );
   must(tx && /^0x[0-9a-fA-F]{64}$/.test(tx.hash) && typeof tx.wait === "function",
        "No Privi transaction hash returned");
@@ -199,13 +207,15 @@ async function submitEvent(packet, {registry, config, provider, wallet, contract
   const blockTime = Number(BigInt(receiptBlock.timestamp));
   must(Number.isSafeInteger(blockTime) && blockTime > 0, "Invalid Privi sealed block timestamp");
   const matched = (receipt.logs || []).some(log => {
+    if (!log || String(log.address).toLowerCase() !== config.contractAddress.toLowerCase()) return false;
     try {
       const decoded = contract.interface.parseLog(log);
       return decoded && decoded.name === "IoTRecorded" &&
              String(decoded.args.deviceIdHash || decoded.args[0]).toLowerCase() === event.deviceIdHash.toLowerCase() &&
              BigInt(decoded.args.sequence || decoded.args[1]) === event.sequence &&
              String(decoded.args.eventHash || decoded.args[2]).toLowerCase() === event.eventHash.toLowerCase() &&
-             String(decoded.args.popStampHash || decoded.args[7]).toLowerCase() === event.popStampHash.toLowerCase();
+             String(decoded.args.popStampHash || decoded.args[7]).toLowerCase() === event.popStampHash.toLowerCase() &&
+             BigInt(decoded.args.positionSequence ?? decoded.args[9]) === event.positionSequence;
     } catch (_) { return false; }
   });
   must(matched, "Missing matching Privi IoTRecorded receipt log");
@@ -213,6 +223,7 @@ async function submitEvent(packet, {registry, config, provider, wallet, contract
           blockTimestamp: blockTime, blockHash: receipt.blockHash,
           deviceIdHash: event.deviceIdHash, payloadHash: event.payloadHash,
           eventHash: event.eventHash, sequence: packet.sequence,
+          positionSequence: packet.positionSequence,
           popStamp: event.popStamp, popStampHash: event.popStampHash,
           popZoneHash: event.popZoneHash, companyIdHash: event.companyIdHash,
           confirmations: config.confirmations};
