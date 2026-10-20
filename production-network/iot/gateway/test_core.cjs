@@ -11,8 +11,8 @@ function fixture() {
   const {publicKey, privateKey} = crypto.generateKeyPairSync("ed25519");
   const spki = publicKey.export({format:"der",type:"spki"});
   const packet = {
-    version:1,deviceId:"sensor-01",sequence:1,observedAt:1760912345,
-    eventType:"temperature",payload:{temperatureC:22,humidityPct:46}
+    version:2,companyId:"PRIVI_TEST_CO",deviceId:"sensor-01",sequence:1,observedAt:1760912345,
+    popZone:"GRID/READINGS",eventType:"temperature",payload:{temperatureC:22,humidityPct:46}
   };
   const signature = crypto.sign(null, Buffer.from(packetDigest(packet).signingText,"utf8"),privateKey);
   packet.signatureBase64 = signature.toString("base64");
@@ -32,7 +32,8 @@ function configuration() {
 function mocks(f, config=configuration()) {
   const provider = { send: async (method,args) => {
     if (method==="eth_chainId") return "0x40000";
-    if (method==="eth_getBlockByNumber") return {hash:config.genesisHash};
+    if (method==="eth_getBlockByNumber") return args[0] === "0x0" ?
+      {hash:config.genesisHash} : {hash:"0x"+"8".repeat(64),timestamp:"0x68f66cde"};
     if (method==="eth_getCode") return "0x60006000";
     throw Error("Unexpected RPC "+method);
   }};
@@ -44,19 +45,21 @@ function mocks(f, config=configuration()) {
     getAddress:async()=>config.contractAddress,
     developers:async()=>({registered:true,enabled:true}),
     devices:async()=>({gateway:wallet.address,signingKeyHash:f.signingKeyHash,lastSequence:0n,
-                        enabled:true,enrolled:true}),
+                        enabled:true,enrolled:true,companyIdHash:id.companyIdHash}),
     recordEvent:async (...args)=>{
       calls++;
       assert.equal(args[0],id.deviceIdHash);
       assert.equal(args[4],id.payloadHash);
       return {hash:"0x"+"9".repeat(64),wait:async()=>({
-        status:1,blockNumber:41,logs:[{address:config.contractAddress,topic:"privi-iot"}]
+        status:1,blockNumber:41,blockHash:"0x"+"8".repeat(64),
+        logs:[{address:config.contractAddress,topic:"privi-iot"}]
       })};
     },
     interface:{parseLog:log=>{
       if (log.topic!=="privi-iot") throw Error("Wrong log");
       return {name:"IoTRecorded",args:{
-        deviceIdHash:id.deviceIdHash,sequence:1n,eventHash:id.eventHash
+        deviceIdHash:id.deviceIdHash,sequence:1n,eventHash:id.eventHash,
+        popStampHash:id.popStampHash
       }};
     }}
   };
@@ -100,6 +103,9 @@ test("confirmed IoT event returns Privi tx hash and metadata, never mints",async
   assert.equal(result.chainId,262144);
   assert.equal(result.confirmations,2);
   assert.equal(result.payloadHash,packetDigest(f.packet).payloadHash);
+  assert.equal(result.popStamp,"PoP:PRIVI_TEST_CO:GRID/READINGS:000001");
+  assert.equal(result.popStampHash,packetDigest(f.packet).popStampHash);
+  assert.ok(result.blockTimestamp>0);
   assert.equal(m.getCalls(),1);
 });
 
@@ -114,13 +120,13 @@ test("rejects replays, wrong gateway and a different provider",async()=>{
   const f=fixture(),config=configuration(),m=mocks(f,config);
   m.contract.devices=async()=>({
     gateway:m.wallet.address,signingKeyHash:f.signingKeyHash,lastSequence:1n,
-    enabled:true,enrolled:true
+    enabled:true,enrolled:true,companyIdHash:packetDigest(f.packet).companyIdHash
   });
   await assert.rejects(()=>submitEvent(f.packet,{registry:f.registry,config,...m}),/sequence/);
   assert.equal(m.getCalls(),0);
   m.contract.devices=async()=>({
     gateway:"0x"+"4".repeat(40),signingKeyHash:f.signingKeyHash,lastSequence:0n,
-    enabled:true,enrolled:true
+    enabled:true,enrolled:true,companyIdHash:packetDigest(f.packet).companyIdHash
   });
   await assert.rejects(()=>submitEvent(f.packet,{registry:f.registry,config,...m}),/Gateway/);
   assert.equal(m.getCalls(),0);
