@@ -235,6 +235,17 @@ jobs:
           PRIVI_SOLC_MODULE_PATH="$TMP_DEV_DEPS/node_modules/solc" \
             node production-network/testnet/deploy_disposable_counter.cjs
           rm -rf "$TMP_DEV_DEPS"
+      - name: Deploy Privi IoT contract and prove PoP developer/position controls on disposable EVM
+        run: |
+          set -euo pipefail
+          # This is a temporary CI runner, not PoP validator consensus or PRVI.
+          TMP_POP="$RUNNER_TEMP/privi-test-ethers"
+          mkdir -p "$TMP_POP"
+          npm install --prefix "$TMP_POP" --no-save --ignore-scripts --no-audit --no-fund --silent ethers@6.15.0 solc@0.8.26
+          PRIVI_ETHERS_MODULE_PATH="$TMP_POP/node_modules/ethers" \
+          PRIVI_SOLC_MODULE_PATH="$TMP_POP/node_modules/solc" \
+            node production-network/iot/test_deploy_privi_iot.cjs
+          rm -rf "$TMP_POP"
       - name: Verify controlled one-validator outage and recovery on disposable cluster
         run: |
           set -euo pipefail
