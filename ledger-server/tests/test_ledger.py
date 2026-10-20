@@ -175,3 +175,52 @@ def test_onchain_checkpoint_catches_consistent_rewrite(ledger, tmp_path):
     b = anyio.run(audit)
     assert b["intact"] is False and "anchored on the Privi chain" in b["reason"]
     assert b["onchain_checkpoint"]["matches_current_record"] is False
+
+
+class FakeAnchorWithVerify(FakeAnchor):
+    def verify(self, hash_hex, tx_hash, proof):
+        return {"verified": any(hash_hex in c for c in self.calls), "block_number": 58200,
+                "block_time_utc": "2026-10-20T03:50:00Z"}
+
+
+def test_compliance_report_sealed_and_verifiable(ledger, monkeypatch):
+    import copy
+    acme = ledger.create_org("Acme")
+    org = acme["org_id"]
+    ledger.record(org, "billing-agent", "claude", "payment", "Paid invoice 7")
+    ledger.record(org, "billing-agent", "claude", "message", "Emailed customer", outcome="failure")
+    ledger.record(org, "support-agent", "claude", "data_access", "Read ticket 9")
+    ledger.record(org, "support-agent", "dana", "approval", "Approved refund")
+    as_org(monkeypatch, acme["api_key"])
+    fake = FakeAnchorWithVerify()
+
+    async def go():
+        srv = build_server(Settings(pay_to=PAY_TO), ledger, FakeFacilitator(), anchor_client=fake)
+        async with Client(srv) as c:
+            r = (await c.call_tool("ledger_compliance_report", {})).structured_content
+            rep, att = r["report"], r["attestation"]
+            assert rep["totals"]["entries"] == 4 and rep["totals"]["failures"] == 1 and rep["totals"]["approvals"] == 1
+            assert rep["status"] == "attention_required"          # billing-agent: sensitive actions, no approval; not anchored
+            sev = {(f["stream_id"], f["severity"]) for f in rep["findings"]}
+            assert ("billing-agent", "medium") in sev
+            assert att["anchored"] and fake.calls == [[att["report_hash"]]]
+            assert "# AI Agent Activity Report: Acme" in r["markdown"] and att["report_hash"] in r["markdown"]
+
+            ok = (await c.call_tool("ledger_verify_report", {"report": rep})).structured_content
+            assert ok["valid"] and ok["onchain_verified"] and ok["report_id"] == r["report_id"]
+
+            edited = copy.deepcopy(rep)
+            edited["totals"]["failures"] = 0                       # someone hides the failure
+            bad = (await c.call_tool("ledger_verify_report", {"report": edited})).structured_content
+            assert bad["valid"] is False and "edited" in bad["reason"]
+
+            # period filter and stream filter
+            only = (await c.call_tool("ledger_compliance_report", {"streams": ["support-agent"]})).structured_content
+            assert [s["stream_id"] for s in only["report"]["streams"]] == ["support-agent"]
+            future = (await c.call_tool("ledger_compliance_report", {"since": "2999-01-01T00:00:00Z"})).structured_content
+            assert future["report"]["totals"]["entries"] == 0
+
+        monkeypatch.setenv("LEDGER_LOCAL_ORG_KEY", "plk_wrong")
+        async with Client(srv) as c:
+            assert (await c.call_tool("ledger_compliance_report", {})).is_error
+    anyio.run(go)

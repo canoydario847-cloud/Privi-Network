@@ -16,6 +16,8 @@ Works with Claude, ChatGPT, Cursor, VS Code and custom agents. Built by [Privi W
 | `ledger_record_action` | org key | Append an action; returns the entry and its `entry_hash` receipt |
 | `ledger_read_stream` | org key | Read your own entries with an integrity check |
 | `ledger_list_streams` | org key | Your streams and entry counts |
+| `ledger_compliance_report` | org key | Audit-ready report of agent activity for a period, sealed on the Privi chain |
+| `ledger_verify_report` | free | Proves a report is unaltered and was issued by Privi Ledger; checks its on-chain seal |
 
 Action types: `tool_call`, `data_access`, `data_change`, `payment`, `message`, `decision`, `approval`, `error`, `other`. Outcomes: `success`, `failure`, `pending`, `blocked`.
 
@@ -37,6 +39,12 @@ curl -X POST https://<host>/admin/orgs \
 ```
 
 The customer adds the server to their agent with header `Authorization: Bearer plk_...`, and tells it to call `ledger_record_action` after each meaningful action. They share their `org_id` and stream names with auditors, who call `ledger_audit_stream`.
+
+## Compliance reports
+
+`ledger_compliance_report` turns an organization's agent logs into evidence for SOC 2 reviews, customer security questionnaires and AI-regulation record keeping. For any period it reports actions by type, actors, failures, blocked actions, human approvals, log integrity and on-chain status. It also lists **findings** an auditor would raise, such as broken integrity, logs not yet anchored, failed actions, or payments and data changes with no human approval recorded. The result comes as JSON plus a ready-to-share Markdown version.
+
+Each report is **sealed**. Its SHA-256 hash, taken over canonical JSON, is anchored on the Privi blockchain through Privi Anchor. Anyone holding the report can run `ledger_verify_report`, which recomputes the hash, confirms Privi Ledger issued exactly that content, and checks the anchor on chain. Editing even one number, such as hiding a failure, makes verification fail.
 
 ## On-chain checkpoints
 
@@ -60,7 +68,7 @@ The `Dockerfile` runs on Railway with a volume at `/data`. Start on `base-sepoli
 
 ## Roadmap
 
-- Signed audit reports (PDF/JSON) for compliance reviews
+- PDF export of compliance reports
 - Subscription billing per organization
 - Retention policies and exports to customer storage
 

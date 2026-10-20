@@ -54,8 +54,15 @@ class HttpAnchorClient:
         self.url, self.api_key, self.timeout = url, api_key, timeout
 
     def anchor(self, hashes: list[str], label: str) -> dict:
+        return self._call("anchor_hashes", {"hashes": hashes, "label": label})
+
+    def verify(self, hash_hex: str, tx_hash: str, proof: list[str]) -> dict:
+        """Ask Privi Anchor to check a receipt against the chain (free tool)."""
+        return self._call("anchor_verify", {"hash": hash_hex, "tx_hash": tx_hash, "proof": proof})
+
+    def _call(self, tool: str, arguments: dict) -> dict:
         body = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                "params": {"name": "anchor_hashes", "arguments": {"hashes": hashes, "label": label}}}
+                "params": {"name": tool, "arguments": arguments}}
         req = urllib.request.Request(self.url, data=json.dumps(body).encode(), method="POST", headers={
             "Content-Type": "application/json", "Accept": "application/json, text/event-stream",
             "MCP-Protocol-Version": "2025-06-18", "Authorization": f"Bearer {self.api_key}"})
@@ -72,7 +79,7 @@ class HttpAnchorClient:
         res = msg["result"]
         sc = res.get("structuredContent") or {}
         if res.get("isError"):
-            raise AnchorError(sc.get("error") or "anchor_hashes failed")
+            raise AnchorError(sc.get("error") or f"{tool} failed")
         return sc
 
 

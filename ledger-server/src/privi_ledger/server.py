@@ -12,8 +12,11 @@ import argparse
 import hmac
 import json
 import os
+import time
+import threading
 from typing import Annotated, Any
 
+import anyio
 from mcp.server.mcpserver import Context, MCPServer
 from mcp_types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import Field
@@ -22,7 +25,8 @@ from starlette.responses import JSONResponse
 
 from .config import Settings
 from .store import ACTION_TYPES, OUTCOMES, Ledger, check_id
-from .anchoring import Checkpoints, HttpAnchorClient, describe, start_loop
+from .anchoring import AnchorClient, AnchorError, Checkpoints, HttpAnchorClient, describe, start_loop
+from .reports import ReportStore, build_body, report_hash, to_markdown
 from .x402 import Facilitator, Paywall
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor-production.up.railway.app/mcp"
@@ -56,12 +60,15 @@ def _bearer(headers) -> str:
 
 
 def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
-                 facilitator: Facilitator | None = None) -> MCPServer:
+                 facilitator: Facilitator | None = None, anchor_client: AnchorClient | None = None) -> MCPServer:
     settings = settings or Settings.from_env()
     ledger = ledger or Ledger(settings.db_path)
     paywall = Paywall(settings, facilitator)
     checkpoints = Checkpoints(ledger._db, ledger._lock)
     anchor_url = os.getenv("LEDGER_ANCHOR_URL", DEFAULT_ANCHOR_URL)
+    if anchor_client is None and os.getenv("LEDGER_ANCHOR_KEY"):
+        anchor_client = HttpAnchorClient(anchor_url, os.environ["LEDGER_ANCHOR_KEY"])
+    reports = ReportStore(ledger._db, ledger._lock)
 
     def onchain(org_id: str, stream_id: str, result: dict) -> dict:
         cp = checkpoints.latest(f"{org_id}/{stream_id}")
@@ -204,6 +211,64 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
             return unauthorized
         return _result({"org_id": org["org_id"], "organization": org["name"], "streams": ledger.streams(org["org_id"])})
 
+    # ---------------- compliance reports ----------------
+
+    @mcp.tool(title="Compliance report", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                     idempotentHint=False, openWorldHint=True))
+    async def ledger_compliance_report(
+        ctx: Context,
+        since: Annotated[str | None, Field(description="Start of period, ISO 8601 UTC (e.g. 2026-10-01T00:00:00Z). Omit for all history")] = None,
+        until: Annotated[str | None, Field(description="End of period, ISO 8601 UTC. Omit for now")] = None,
+        streams: Annotated[list[str] | None, Field(description="Only these streams; omit for all")] = None,
+    ) -> CallToolResult:
+        """Audit-ready report of your AI agents' activity for a period (SOC 2 evidence, security
+        questionnaires, AI-regulation record keeping): actions by type, failures, human approvals,
+        log integrity, on-chain status, and findings. The report's hash is anchored on the Privi
+        blockchain so it cannot be edited later without detection. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        body = build_body(ledger, org, onchain, since, until, streams)
+        h = report_hash(body)
+        att: dict[str, Any] = {"report_hash": h, "algorithm": "sha256 over canonical JSON (sorted keys, no spaces)"}
+        if anchor_client:
+            try:
+                r = await anyio.to_thread.run_sync(anchor_client.anchor, [h], f"compliance report {org['org_id']}")
+                rc = next(x for x in r["receipts"] if x["hash"] == h)
+                att.update(anchored=True, tx_hash=r["tx_hash"], proof=rc["proof"], merkle_root=r["merkle_root"],
+                           block_number=r.get("block_number"), block_time=r.get("block_time"),
+                           chain_id=r.get("chain_id"), status=r.get("status"), anchor_server=anchor_url)
+            except (AnchorError, StopIteration, KeyError) as e:
+                att.update(anchored=False, reason=f"anchoring failed: {e}")
+        else:
+            att.update(anchored=False, reason="anchoring is not configured on this server")
+        rid = reports.save(org["org_id"], body, att)
+        return _result({"report_id": rid, "report": body, "attestation": att, "markdown": to_markdown(body, att)})
+
+    @mcp.tool(title="Verify a report", annotations=READ_ONLY)
+    async def ledger_verify_report(
+        report: Annotated[dict[str, Any], Field(description="The 'report' object exactly as received from ledger_compliance_report")],
+    ) -> CallToolResult:
+        """Check that a compliance report is unaltered: recomputes its hash, confirms Privi Ledger issued it,
+        and checks the anchor on the Privi blockchain. Free; no key needed."""
+        h = report_hash(report)
+        rec = reports.by_hash(h)
+        if not rec:
+            return _result({"valid": False, "report_hash": h,
+                            "reason": "no report with this exact content was issued; it may have been edited"})
+        att = rec["attestation"]
+        out = {"report_hash": h, "report_id": rec["report_id"], "issued_at": rec["created_at"],
+               "organization": report.get("organization"), "anchored": bool(att.get("anchored"))}
+        if att.get("anchored") and anchor_client and hasattr(anchor_client, "verify"):
+            try:
+                v = await anyio.to_thread.run_sync(anchor_client.verify, h, att["tx_hash"], att["proof"])
+                out.update(onchain_verified=bool(v.get("verified")), block_number=v.get("block_number"),
+                           block_time_utc=v.get("block_time_utc"), tx_hash=att["tx_hash"])
+            except AnchorError as e:
+                out.update(onchain_verified=None, onchain_error=str(e))
+        out["valid"] = out.get("onchain_verified", True) is not False
+        return _result(out)
+
     # ---------------- http ----------------
 
     @mcp.custom_route("/admin/orgs", methods=["POST"], include_in_schema=False)
@@ -255,6 +320,35 @@ def bootstrap(ledger: Ledger) -> None:
         print(f"privi-ledger: bootstrap error: {e}", flush=True)
 
 
+def first_report(mcp: MCPServer, ledger: Ledger, delay_s: float = 75.0) -> None:
+    """LEDGER_BOOTSTRAP_REPORT=1: once, issue a sealed compliance report for the bootstrap organization."""
+    key = os.getenv("LEDGER_BOOTSTRAP_ORG_KEY", "")
+    org = ledger.org_for_key(key)
+    if not org or ledger._db.execute("SELECT 1 FROM reports WHERE org_id=?", (org["org_id"],)).fetchone():
+        return
+
+    def run() -> None:
+        time.sleep(delay_s)  # let the checkpoint loop anchor the logs first
+        try:
+            from mcp import Client
+
+            async def call():
+                os.environ["LEDGER_LOCAL_ORG_KEY"] = key   # in-process call has no HTTP headers
+                async with Client(mcp) as c:
+                    return (await c.call_tool("ledger_compliance_report", {})).structured_content
+            r = anyio.run(call)
+            a = r["attestation"]
+            print(f"privi-ledger: first compliance report {r['report_id']} for {org['name']}: "
+                  f"status={r['report']['status']} hash={a['report_hash']} anchored={a.get('anchored')} "
+                  f"tx={a.get('tx_hash')} block={a.get('block_number')}", flush=True)
+        except Exception as e:
+            print(f"privi-ledger: first report error: {e}", flush=True)
+        finally:
+            os.environ.pop("LEDGER_LOCAL_ORG_KEY", None)
+
+    threading.Thread(target=run, daemon=True).start()
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Privi Ledger MCP server")
     p.add_argument("--stdio", action="store_true", help="run over stdio instead of HTTP")
@@ -271,6 +365,8 @@ def main() -> None:
         cps = Checkpoints(ledger._db, ledger._lock)
         start_loop(lambda: cps.run_once(ledger.heads(), client, "privi-ledger"),
                    float(os.getenv("LEDGER_ANCHOR_INTERVAL", "300")), "privi-ledger")
+    if os.getenv("LEDGER_BOOTSTRAP_REPORT") == "1":
+        first_report(mcp, ledger)
     if args.stdio:
         mcp.run("stdio")
         return
