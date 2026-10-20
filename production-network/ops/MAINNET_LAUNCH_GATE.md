@@ -21,7 +21,7 @@ distinct attached persistent volumes, and **all in region `iad`**.
 The provider source points to branch
 `build/privi-seven-validators-20261016`, which is an **upstream
 disposable TEST** setup, not the reviewed custom PRVI binary.
-Bootstrap logs identify disposable upstream TEST validator identities.
+Bootstrap logs identify disposable upstream TEST validator identities. The source README explicitly states the bootstrap coordinator retains copies of **all seven TEST private validator signing keys** in its own persistent volume; this centralized custody is unacceptable for financial PRVI production, regardless of service count.
 Runtime logs show P2P peer activity but also intermittent `pong timeout`
 errors; provider success and "online" do not verify current synchronized
 validator voting power, shared signed genesis, or fault-domain separation.
