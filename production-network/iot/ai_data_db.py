@@ -160,8 +160,8 @@ def sha(text):
 
 
 def event_hashes(packet):
-    if packet.get("version") != 2:
-        raise ValueError("PoP-v2 signed event required")
+    if packet.get("version") != 3:
+        raise ValueError("PoP-v3 signed event required")
     pos = pop.position(packet)
     device = packet.get("deviceId")
     kind = packet.get("eventType")
@@ -179,8 +179,8 @@ def event_hashes(packet):
         raise ValueError("Invalid payload")
     payload_hash = sha(payload_text)
     signing_text = json.dumps(
-        [2, packet["companyId"], device, seq, ts, packet["popZone"],
-         pos["pop_stamp"], kind, payload_hash],
+        [3, packet["companyId"], device, seq, packet["positionSequence"],
+         ts, packet["popZone"], pos["pop_stamp"], kind, payload_hash],
         ensure_ascii=False, separators=(",", ":"))
     return {"deviceIdHash": sha(device), "payloadHash": payload_hash,
             "eventHash": sha(signing_text),
@@ -199,6 +199,7 @@ CREATE TABLE IF NOT EXISTS iot_events(
     company_id_hash TEXT NOT NULL,
     pop_zone TEXT NOT NULL,
     pop_stamp TEXT NOT NULL UNIQUE,
+    position_sequence INTEGER NOT NULL CHECK (position_sequence > 0),
     pop_stamp_hash TEXT NOT NULL UNIQUE,
     pop_verified INTEGER NOT NULL CHECK(pop_verified = 1),
     pop_report_count INTEGER NOT NULL CHECK(pop_report_count > 0),
@@ -215,7 +216,8 @@ CREATE TABLE IF NOT EXISTS iot_events(
     proposed_micro_prvi INTEGER NOT NULL CHECK (proposed_micro_prvi > 0),
     valuation_status TEXT NOT NULL CHECK (valuation_status = 'PROPOSAL_ONLY_NOT_MINTED'),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(device_id_hash, sequence)
+    UNIQUE(device_id_hash, sequence),
+    UNIQUE(company_id_hash, pop_zone, position_sequence)
 );
 """
 
@@ -250,6 +252,13 @@ def record(db_path, packet, confirmation):
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute(DDL)
         conn.execute("BEGIN IMMEDIATE")
+        prior_position = conn.execute(
+            """SELECT MAX(position_sequence) FROM iot_events
+               WHERE company_id_hash = ? AND pop_zone = ?""",
+            (hashes["companyIdHash"], packet["popZone"])
+        ).fetchone()[0]
+        if packet["positionSequence"] != (0 if prior_position is None else prior_position) + 1:
+            raise ValueError("PoP company-zone sequence would skip or duplicate a verified position")
         previous_count, oldest = conn.execute(
             """SELECT COUNT(*), MIN(block_timestamp) FROM iot_events
                WHERE company_id_hash = ?""",
@@ -264,14 +273,15 @@ def record(db_path, packet, confirmation):
         conn.execute(
             """INSERT INTO iot_events(
                 device_id_hash,sequence,event_hash,payload_hash,
-                company_id_hash,pop_zone,pop_stamp,pop_stamp_hash,pop_verified,
+                company_id_hash,pop_zone,pop_stamp,position_sequence,pop_stamp_hash,pop_verified,
                 pop_report_count,pop_duration_days,pop_leverage_bps,block_timestamp,
                 tx_hash,block_number,evm_chain_id,label,confidence,review_required,
                 alternatives_json,proposed_micro_prvi,valuation_status
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (hashes["deviceIdHash"], packet["sequence"], hashes["eventHash"],
              hashes["payloadHash"], hashes["companyIdHash"], packet["popZone"],
-             pos["pop_stamp"], hashes["popStampHash"], 1, previous_count + 1,
+             pos["pop_stamp"], packet["positionSequence"], hashes["popStampHash"],
+             1, previous_count + 1,
              duration, quote["pop_leverage_basis_points"], block_timestamp, tx_hash,
              block, chain_id, label["suggested_label"], label["confidence"],
              int(label["review_required"]), json.dumps(label["alternatives"]),
