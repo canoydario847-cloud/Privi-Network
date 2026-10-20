@@ -11,6 +11,9 @@ from pathlib import Path
 REQUIRED_IOT_CONTROLS = frozenset({
     "native_privi_only",
     "developer_registry",
+    "enterprise_company_registry",
+    "company_authorized_gateway",
+    "company_suspension_enforced",
     "device_enrollment",
     "ed25519_gateway_auth",
     "sequence_replay_protection",
