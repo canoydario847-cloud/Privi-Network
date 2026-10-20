@@ -45,6 +45,8 @@ function mocks(f, config=configuration()) {
     runner:wallet,
     getAddress:async()=>config.contractAddress,
     developers:async()=>({registered:true,enabled:true}),
+    companies:async()=>({administrator:wallet.address,registered:true,enabled:true}),
+    companyGateways:async()=>true,
     nextPositionSequence:async()=>1n,
     devices:async()=>({gateway:wallet.address,signingKeyHash:f.signingKeyHash,lastSequence:0n,
                         enabled:true,enrolled:true,companyIdHash:id.companyIdHash}),
@@ -149,6 +151,21 @@ test("revoked or unknown Privi developers are rejected without submitting",async
   assert.equal(m.getCalls(),0);
 });
 
+test("unregistered or suspended Privi companies cannot submit IoT events",async()=>{
+  const f=fixture(),config=configuration(),m=mocks(f,config);
+  m.contract.companies=async()=>({administrator:m.wallet.address,registered:false,enabled:false});
+  await assert.rejects(()=>submitEvent(f.packet,{registry:f.registry,config,...m}),/Company must be registered/);
+  assert.equal(m.getCalls(),0);
+  m.contract.companies=async()=>({administrator:m.wallet.address,registered:true,enabled:false});
+  await assert.rejects(()=>submitEvent(f.packet,{registry:f.registry,config,...m}),/Company must be registered/);
+  assert.equal(m.getCalls(),0);
+});
+test("company administrators must approve Privi developer gateway",async()=>{
+  const f=fixture(),config=configuration(),m=mocks(f,config);
+  m.contract.companyGateways=async()=>false;
+  await assert.rejects(()=>submitEvent(f.packet,{registry:f.registry,config,...m}),/Company administrator/);
+  assert.equal(m.getCalls(),0);
+});
 test("a Privi company-zone PoP position cannot be skipped",async()=>{
   const f=fixture(),config=configuration(),m=mocks(f,config);
   m.contract.nextPositionSequence=async()=>2n;
