@@ -1,9 +1,7 @@
 name: Privi unsigned custom-node binary (TEST ONLY)
 
 on:
-  push:
-    branches:
-      - launch/mainnet-readiness-gate-20261017
+  pull_request:
     paths:
       - 'production-network/mainnet/**'
       - '.github/workflows/privi-unsigned-binary.yml'
