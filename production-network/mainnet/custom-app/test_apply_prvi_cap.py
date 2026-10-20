@@ -32,6 +32,10 @@ func test() {
         logger,
     )
     app.BankKeeper = app.BankKeeper.WithObjStoreKey(oKeys[banktypes.ObjectStoreKey])
+    app.ModuleManager = module.NewManager(
+        bank.NewAppModule(appCodec, app.BankKeeper, app.AccountKeeper, nil),
+    )
+    app.ModuleManager.SetOrderInitGenesis(genesisModuleOrder...)
     if err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap()); err != nil {
         panic(err)
     }
@@ -96,6 +100,12 @@ class PatcherTests(unittest.TestCase):
         self.assertEqual(result["status"], "BUILD_ONLY_PRVI_CONSENSUS_CAP_APP_SOURCE_WIRED")
         self.assertFalse(result["release_ready"])
         self.assertIn("prvicap.RestrictedBank(baseBank, app.PriviCapKeeper)", app)
+        self.assertIn("bank.NewAppModule(appCodec,",app)
+        self.assertIn("baseBank.WithMintCoinsRestriction(app.PriviCapKeeper.MintRestriction)",app)
+        self.assertEqual(app.count("baseBank.WithMintCoinsRestriction(app.PriviCapKeeper.MintRestriction)"),1)
+        self.assertNotIn("bank.NewAppModule(appCodec, app.BankKeeper,",app)
+        self.assertLess(app.index("app.BankKeeper = prvicap.RestrictedBank("),
+                        app.index("bank.NewAppModule("))
         self.assertLess(app.index("prvicap.RestrictedBank"), app.index("return app.ModuleManager.InitGenesis")
                         if "return app.ModuleManager.InitGenesis" in app else app.index("response, initErr"))
         self.assertIn("prvicap.StoreKey", app)
@@ -203,3 +213,23 @@ class PatcherTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_bank_migration_exception_is_unique_and_mint_restricted(self):
+        module.apply_patch(self.upstream, self.repo, verify_git=False)
+        src = self.app_file.read_text(encoding="utf-8")
+        self.assertEqual(src.count("bank.NewAppModule(appCodec,"),1)
+        self.assertIn("baseBank.WithMintCoinsRestriction(app.PriviCapKeeper.MintRestriction)",src)
+        self.assertEqual(src.count("baseBank.WithMintCoinsRestriction("),1)
+        self.assertEqual(src.count("app.BankKeeper = prvicap.RestrictedBank("),1)
+
+    def test_bank_migration_rejects_unreviewed_extra_raw_module_keeper(self):
+        extra = APP.replace(
+            "bank.NewAppModule(appCodec, app.BankKeeper, app.AccountKeeper, nil),",
+            "bank.NewAppModule(appCodec, app.BankKeeper, app.AccountKeeper, nil),\n"
+            "        rogue.NewAppModule(baseBank),"
+        )
+        self.app_file.write_text(extra,encoding="utf-8")
+        original=self.app_file.read_text(encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "raw bank keeper leaked"):
+            module.apply_patch(self.upstream, self.repo, verify_git=False)
+        self.assertEqual(self.app_file.read_text(encoding="utf-8"),original)
