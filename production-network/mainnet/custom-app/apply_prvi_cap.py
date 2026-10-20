@@ -42,6 +42,11 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
         'evmconfig "github.com/cosmos/evm/evmd/config"\n'
         '\tprvicap "github.com/cosmos/evm/evmd/prvicap"',
         "cap import")
+    app = replace_once(app,
+        '\tprvicap "github.com/cosmos/evm/evmd/prvicap"',
+        '\tprvicap "github.com/cosmos/evm/evmd/prvicap"\n'
+        '\tprvipop "github.com/cosmos/evm/evmd/prvipop"',
+        "pop import")
     # Validate the EIP-155 chain identity before module/codec construction;
     # the upstream dev chain ID must never slip into a financial PRVI binary.
     app = replace_once(app,
@@ -54,12 +59,12 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
         "reject upstream default EVM chain ID before constructing keepers")
     app = replace_once(app,
         "\tBankKeeper            bankkeeper.Keeper",
-        "\tBankKeeper            bankkeeper.Keeper\n\tPriviCapKeeper        prvicap.Keeper",
+        "\tBankKeeper            bankkeeper.Keeper\n\tPriviCapKeeper        prvicap.Keeper\n\tPriviPoPKeeper        prvipop.Keeper",
         "cap keeper field")
     app = replace_once(app,
         "\t\tauthtypes.StoreKey, banktypes.StoreKey, stakingtypes.StoreKey,",
         "\t\tauthtypes.StoreKey, banktypes.StoreKey, stakingtypes.StoreKey,\n"
-        "\t\tprvicap.StoreKey,",
+        "\t\tprvicap.StoreKey,\n\t\tprvipop.StoreKey,",
         "mount dedicated merkle KV state")
     old_bank = '''\tapp.BankKeeper = bankkeeper.NewBaseKeeper(
 \t\tappCodec,
@@ -75,6 +80,11 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \tpriviCap, capErr := prvicap.New(runtime.NewKVStoreService(keys[prvicap.StoreKey]))
 \tif capErr != nil { panic(capErr) }
 \tapp.PriviCapKeeper = priviCap
+\t// Native PoP company/zone state is mounted to Cosmos consensus KV.
+\t// Its author registry will be loaded from reviewed chain genesis.
+\tpopKeeper, popErr := prvipop.NewKeeper(runtime.NewKVStoreService(keys[prvipop.StoreKey]))
+\tif popErr != nil { panic(popErr) }
+\tapp.PriviPoPKeeper = popKeeper
 \tbaseBank := bankkeeper.NewBaseKeeper(
 \t\tappCodec,
 \t\truntime.NewKVStoreService(keys[banktypes.StoreKey]),
@@ -125,6 +135,19 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \tinitialPRVI := bankGenesis.Supply.AmountOf(prvicap.BaseDenom)
 \tif err := prvicap.ValidateGenesisBase(initialPRVI.String()); err != nil {
 \t\treturn nil, fmt.Errorf("PRVI cap declared genesis denied before module init: %w", err)
+\t}
+\t// PoP company/zone authors must be pinned to immutable chain genesis.
+\tpopJSON, hasPoP := genesisState[prvipop.StoreKey]
+\tif !hasPoP { return nil, fmt.Errorf("Privi PoP genesis: authorization registry absent") }
+\tvar popGenesis struct {
+\t\tChainID string `json:"chain_id"`
+\t\tAuthorities []prvipop.Authority `json:"authorities"`
+\t}
+\tif err := json.Unmarshal(popJSON, &popGenesis); err != nil {
+\t\treturn nil, fmt.Errorf("Privi PoP genesis: malformed authorization registry: %w",err)
+\t}
+\tif popGenesis.ChainID != ctx.ChainID() {
+\t\treturn nil, fmt.Errorf("Privi PoP genesis: Cosmos chain identity mismatch")
 \t}
 \t// Native PRVI must actually be the EVM gas and staking denomination.
 \t// Do not allow a misleading genesis with capped aprvi but fees/stake in
@@ -207,6 +230,9 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \tif initErr != nil { return nil, initErr }
 \tif err := app.PriviCapKeeper.InitGenesis(ctx, initialPRVI.String(), app.BankKeeper); err != nil {
 \t\treturn nil, fmt.Errorf("PRVI cap genesis initialization denied: %w", err)
+\t}
+\tif err := app.PriviPoPKeeper.InitGenesis(ctx,popGenesis.ChainID,popGenesis.Authorities); err != nil {
+\t\treturn nil,fmt.Errorf("Privi PoP genesis authorization denied: %w",err)
 \t}
 \tif err := app.CheckPriviNativeERC20Invariant(ctx); err != nil {
 \t\treturn nil, fmt.Errorf("PRVI native genesis ERC20 runtime state denied: %w", err)
@@ -305,18 +331,36 @@ func (app *EVMD) CheckPriviNativeERC20Invariant(ctx sdk.Context) error {
 // StoreKey is mounted by the custom app with sdk NewKVStoreKeys, never memstore.
 const StoreKey = "prvicap"
 '''
+    # Validate source before writes to the pinned disposable checkout.
+    pop_srcdir = source_repo / "production-network" / "mainnet" / "pop"
+    pop_files = {}
+    for name in ("position.go", "keeper.go"):
+        content = (pop_srcdir / name).read_text(encoding="utf-8")
+        if "package position" not in content:
+            raise ValueError("invalid native PoP source " + name)
+        pop_files[name] = content
+    if (upstream / "evmd" / "prvipop").exists():
+        raise ValueError("refusing to overwrite PoP consensus source")
+    if app.count("app.PriviPoPKeeper = popKeeper") != 1 or app.count(
+            "app.PriviPoPKeeper.InitGenesis(ctx,popGenesis.ChainID,popGenesis.Authorities)") != 1:
+        raise ValueError("PoP keeper must mount and initialize once")
     if (upstream / "evmd" / "prvicap").exists():
         raise ValueError("refusing to overwrite cap keeper source")
     dest = upstream / "evmd" / "prvicap"
     dest.mkdir()
     for name, content in files.items():
         (dest / name).write_text(content, encoding="utf-8")
+    pop_dest = upstream / "evmd" / "prvipop"
+    pop_dest.mkdir()
+    for name, content in pop_files.items():
+        (pop_dest / name).write_text(content, encoding="utf-8")
     app_path.write_text(app, encoding="utf-8")
     return {
         "status": "BUILD_ONLY_PRVI_CONSENSUS_CAP_APP_SOURCE_WIRED",
         "upstream": UPSTREAM_COMMIT,
         "app_sha256": hashlib.sha256(app.encode("utf-8")).hexdigest(),
         "cap_source_files": sorted(files),
+        "pop_source_files": sorted(pop_files),
         "financial_mainnet": "NOT_ACTIVE",
         "release_ready": False,
         "limitations": "Compiler proof only; no financial genesis, validators, production audits or real PRVI issued",
