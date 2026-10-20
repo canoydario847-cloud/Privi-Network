@@ -1,6 +1,11 @@
-// Jose — language switching + example-conversation demo.
-// Nothing here calls a real AI model; the "demo" is a small set of
-// pre-written example exchanges, honestly labeled as such in every language.
+// Jose — language switching, example-conversation demo, and (v3) links to
+// the live Hey Jose chat, the NFT market, and one-click MetaMask setup.
+// The on-page demo is still a small set of pre-written example exchanges,
+// honestly labeled as such; the live chat lives in the Jose app (backend).
+
+// Where the Jose app (accounts, Hey Jose, market) is hosted. Change this one
+// line when the app moves to its own domain (e.g. app.privishine.info).
+const JOSE_APP_URL = "https://jose-backend-vbuu.onrender.com";
 
 const translations = {
   es: {
@@ -34,8 +39,29 @@ const translations = {
     "steps.s2.desc": "No solo traduce palabras: distingue un documento de aduana de una charla informal.",
     "steps.s3.title": "Responde en el idioma correcto",
     "steps.s3.desc": "A ti, en el tuyo. A la otra persona, en el suyo — sin que nadie cambie de idioma.",
-    "note.text": "Jose está en una etapa temprana. Esta página muestra ejemplos preparados para explicar la idea; todavía no es un chat en vivo conectado a un modelo de IA.",
+    "note.text": "Los ejemplos de arriba son conversaciones preparadas para explicar la idea. Hey Jose — el chat en vivo — está en la app de Jose: inicia sesión para usarlo.",
     "footer.disclaimer": "Jose es un producto independiente. No está afiliado con Anthropic, con Claude, ni con ninguna otra empresa de inteligencia artificial.",
+    "nav.market": "Mercado NFT",
+    "hero.cta_chat": "Hablar con Jose",
+    "web3.title": "Jose, ahora con JOSE",
+    "web3.lede": "Chat en vivo, billetera y mercado: todo en la misma cuenta.",
+    "web3.chat.title": "Hey Jose, en vivo",
+    "web3.chat.desc": "Chatea con Jose de verdad. Al crear tu cuenta recibes créditos de bienvenida; después puedes comprar más con el token JOSE.",
+    "web3.chat.cta": "Abrir Hey Jose",
+    "web3.wallet.title": "Agrega JOSE a MetaMask",
+    "web3.wallet.desc": "Agrega la red y el token JOSE con un clic. Nunca te pediremos tu frase secreta.",
+    "web3.wallet.network": "Agregar red",
+    "web3.wallet.token": "Agregar token JOSE",
+    "web3.market.title": "Mercado NFT",
+    "web3.market.desc": "Mira NFTs con precio en JOSE. Para publicar, el NFT debe estar en tu billetera vinculada — lo verificamos en la red.",
+    "web3.market.cta": "Ver el mercado",
+    "web3.no_wallet": "No encontramos MetaMask. Instálalo desde metamask.io y recarga la página.",
+    "web3.no_token": "La dirección del token JOSE todavía no está publicada.",
+    "web3.added_network": "Red agregada en MetaMask.",
+    "web3.added_token": "Token JOSE agregado.",
+    "web3.cancelled": "Cancelado.",
+    "web3.offline": "No pudimos leer la configuración de Jose. Intenta de nuevo en un momento.",
+    "fab.label": "Hey Jose",
   },
   pt: {
     "nav.apps": "Conectar seus apps",
@@ -68,8 +94,29 @@ const translations = {
     "steps.s2.desc": "Não traduz só palavras: distingue um documento alfandegário de uma conversa informal.",
     "steps.s3.title": "Responde no idioma certo",
     "steps.s3.desc": "Para você, no seu. Para a outra pessoa, no dela — sem que ninguém mude de idioma.",
-    "note.text": "O Jose está em estágio inicial. Esta página mostra exemplos preparados para explicar a ideia; ainda não é um chat em tempo real conectado a um modelo de IA.",
+    "note.text": "Os exemplos acima são conversas preparadas para explicar a ideia. O Hey Jose — o chat ao vivo — está no app do Jose: entre na sua conta para usar.",
     "footer.disclaimer": "Jose é um produto independente. Não tem relação com a Anthropic, com o Claude, nem com qualquer outra empresa de inteligência artificial.",
+    "nav.market": "Mercado NFT",
+    "hero.cta_chat": "Falar com o Jose",
+    "web3.title": "Jose, agora com JOSE",
+    "web3.lede": "Chat ao vivo, carteira e mercado: tudo na mesma conta.",
+    "web3.chat.title": "Hey Jose, ao vivo",
+    "web3.chat.desc": "Converse com o Jose de verdade. Ao criar sua conta você ganha créditos de boas-vindas; depois pode comprar mais com o token JOSE.",
+    "web3.chat.cta": "Abrir Hey Jose",
+    "web3.wallet.title": "Adicione JOSE ao MetaMask",
+    "web3.wallet.desc": "Adicione a rede e o token JOSE com um clique. Nunca vamos pedir sua frase secreta.",
+    "web3.wallet.network": "Adicionar rede",
+    "web3.wallet.token": "Adicionar token JOSE",
+    "web3.market.title": "Mercado NFT",
+    "web3.market.desc": "Veja NFTs com preço em JOSE. Para anunciar, o NFT precisa estar na sua carteira vinculada — verificamos na rede.",
+    "web3.market.cta": "Ver o mercado",
+    "web3.no_wallet": "Não encontramos o MetaMask. Instale em metamask.io e recarregue a página.",
+    "web3.no_token": "O endereço do token JOSE ainda não foi publicado.",
+    "web3.added_network": "Rede adicionada no MetaMask.",
+    "web3.added_token": "Token JOSE adicionado.",
+    "web3.cancelled": "Cancelado.",
+    "web3.offline": "Não conseguimos ler a configuração do Jose. Tente de novo em instantes.",
+    "fab.label": "Hey Jose",
   },
   zh: {
     "nav.apps": "连接你的应用",
@@ -102,8 +149,29 @@ const translations = {
     "steps.s2.desc": "不只是翻译单词：能分清一份海关文件和一句随口的话。",
     "steps.s3.title": "用对的语言回复",
     "steps.s3.desc": "回你的时候用你的语言，回对方的时候用对方的语言——不用谁来回切换。",
-    "note.text": "Jose 还在早期阶段。这个页面展示的是为了说明想法而准备的示例，还不是接入AI模型的实时聊天。",
+    "note.text": "上面的对话是为了说明想法而准备的示例。Hey Jose 实时聊天在 Jose 应用里：登录即可使用。",
     "footer.disclaimer": "Jose 是一个独立产品，与 Anthropic、Claude 或其他任何人工智能公司没有关联。",
+    "nav.market": "NFT 市场",
+    "hero.cta_chat": "和 Jose 聊天",
+    "web3.title": "Jose，现在有了 JOSE",
+    "web3.lede": "实时聊天、钱包和市场，一个账户全搞定。",
+    "web3.chat.title": "Hey Jose 实时聊天",
+    "web3.chat.desc": "和真正的 Jose 对话。注册即送欢迎积分，之后可以用 JOSE 代币购买更多。",
+    "web3.chat.cta": "打开 Hey Jose",
+    "web3.wallet.title": "把 JOSE 添加到 MetaMask",
+    "web3.wallet.desc": "一键添加网络和 JOSE 代币。我们绝不会向你索要助记词。",
+    "web3.wallet.network": "添加网络",
+    "web3.wallet.token": "添加 JOSE 代币",
+    "web3.market.title": "NFT 市场",
+    "web3.market.desc": "浏览以 JOSE 标价的 NFT。上架时，NFT 必须在你绑定的钱包里——我们会在链上核实。",
+    "web3.market.cta": "进入市场",
+    "web3.no_wallet": "没有检测到 MetaMask。请从 metamask.io 安装后刷新页面。",
+    "web3.no_token": "JOSE 代币地址尚未公布。",
+    "web3.added_network": "网络已添加到 MetaMask。",
+    "web3.added_token": "JOSE 代币已添加。",
+    "web3.cancelled": "已取消。",
+    "web3.offline": "暂时无法读取 Jose 的配置，请稍后再试。",
+    "fab.label": "Hey Jose",
   },
   en: {
     "nav.apps": "Connect your apps",
@@ -136,8 +204,29 @@ const translations = {
     "steps.s2.desc": "Not just word-for-word: it tells a customs document apart from a casual message.",
     "steps.s3.title": "It replies in the right language",
     "steps.s3.desc": "To you, in yours. To the other person, in theirs — without anyone switching.",
-    "note.text": "Jose is early-stage. This page shows prepared examples to explain the idea; it isn't yet a live chat connected to an AI model.",
+    "note.text": "The examples above are prepared conversations that explain the idea. Hey Jose — the live chat — is in the Jose app: sign in to use it.",
     "footer.disclaimer": "Jose is an independent product. It isn't affiliated with Anthropic, Claude, or any other AI company.",
+    "nav.market": "NFT market",
+    "hero.cta_chat": "Talk to Jose",
+    "web3.title": "Jose, now with JOSE",
+    "web3.lede": "Live chat, wallet and marketplace — all on one account.",
+    "web3.chat.title": "Hey Jose, live",
+    "web3.chat.desc": "Chat with the real Jose. New accounts get welcome credits; after that you can buy more with the JOSE token.",
+    "web3.chat.cta": "Open Hey Jose",
+    "web3.wallet.title": "Add JOSE to MetaMask",
+    "web3.wallet.desc": "Add the network and the JOSE token in one click. We will never ask for your secret phrase.",
+    "web3.wallet.network": "Add network",
+    "web3.wallet.token": "Add JOSE token",
+    "web3.market.title": "NFT market",
+    "web3.market.desc": "Browse NFTs priced in JOSE. To list one, it has to be in your linked wallet — we check on-chain.",
+    "web3.market.cta": "Browse the market",
+    "web3.no_wallet": "MetaMask wasn't found. Install it from metamask.io and reload the page.",
+    "web3.no_token": "The JOSE token address hasn't been published yet.",
+    "web3.added_network": "Network added to MetaMask.",
+    "web3.added_token": "JOSE token added.",
+    "web3.cancelled": "Cancelled.",
+    "web3.offline": "Couldn't load Jose's settings. Try again in a moment.",
+    "fab.label": "Hey Jose",
   },
 };
 
@@ -262,6 +351,68 @@ document.querySelectorAll("#demo-picker button").forEach((btn) => {
     renderDemo(currentLang, currentScenario);
   });
 });
+
+// ---- v3: links into the Jose app ----
+document.querySelectorAll("[data-app-link]").forEach((a) => {
+  a.href = `${JOSE_APP_URL}/${a.getAttribute("data-app-link")}`;
+});
+
+// ---- v3: one-click MetaMask (network + JOSE token) ----
+let joseConfig;
+async function getJoseConfig() {
+  if (!joseConfig) {
+    const res = await fetch(`${JOSE_APP_URL}/api/config`);
+    if (!res.ok) throw new Error("offline");
+    joseConfig = await res.json();
+  }
+  return joseConfig;
+}
+
+function mmStatus(key, kind = "") {
+  const el = document.getElementById("mm-status");
+  el.textContent = key ? translations[currentLang][key] || key : "";
+  el.className = "web3-status " + kind;
+}
+
+async function ensureNetwork(chain) {
+  try {
+    await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: chain.chainIdHex }] });
+  } catch (err) {
+    if (err.code !== 4902 && err?.data?.originalError?.code !== 4902) throw err;
+    await window.ethereum.request({
+      method: "wallet_addEthereumChain",
+      params: [{
+        chainId: chain.chainIdHex,
+        chainName: chain.chainName,
+        nativeCurrency: chain.nativeCurrency,
+        rpcUrls: [chain.rpcUrl],
+        blockExplorerUrls: [chain.explorerUrl],
+      }],
+    });
+  }
+}
+
+async function onMetaMask(kind) {
+  if (typeof window.ethereum === "undefined") return mmStatus("web3.no_wallet", "err");
+  let cfg;
+  try { cfg = await getJoseConfig(); } catch { return mmStatus("web3.offline", "err"); }
+  try {
+    await window.ethereum.request({ method: "eth_requestAccounts" });
+    await ensureNetwork(cfg.chain);
+    if (kind === "network") return mmStatus("web3.added_network", "ok");
+    if (!cfg.token.address) return mmStatus("web3.no_token", "err");
+    const added = await window.ethereum.request({
+      method: "wallet_watchAsset",
+      params: { type: "ERC20", options: { address: cfg.token.address, symbol: cfg.token.symbol, decimals: cfg.token.decimals, ...(cfg.token.image ? { image: cfg.token.image } : {}) } },
+    });
+    mmStatus(added ? "web3.added_token" : "web3.cancelled", added ? "ok" : "");
+  } catch {
+    mmStatus("web3.cancelled");
+  }
+}
+
+document.getElementById("mm-network").addEventListener("click", () => onMetaMask("network"));
+document.getElementById("mm-token").addEventListener("click", () => onMetaMask("token"));
 
 applyTranslations(currentLang);
 renderDemo(currentLang, currentScenario);

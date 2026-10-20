@@ -6,6 +6,11 @@ import crypto from 'crypto';
 import { db } from './store.js';
 import { hashPassword, verifyPassword, encryptSecret, decryptSecret, randomToken } from './crypto-utils.js';
 import { plugins, getPlugin } from './plugins/index.js';
+import { config, publicConfig, paymentsConfigured } from './config.js';
+import { askJose, sanitizeHistory } from './ai.js';
+import {
+  recoverPersonalSign, isAddress, sameAddress, erc20TransferredInTx, erc721OwnerOf, erc721TokenURI,
+} from './eth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '../public');
@@ -19,6 +24,12 @@ const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 // CSRF attempts. In-memory is fine: a connect flow finishes in minutes.
 const pendingOAuth = new Map();
 
+// Wallet-link challenges: userId -> { message, expiresAt }. A user proves they
+// control a wallet by signing this exact message in MetaMask.
+const pendingWalletLinks = new Map();
+const WALLET_CHALLENGE_TTL_MS = 10 * 60 * 1000;
+const MAX_BODY_BYTES = 200 * 1024;
+
 function sendJson(res, status, obj) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(obj));
@@ -31,7 +42,10 @@ function sendFile(res, filePath) {
     return;
   }
   const ext = path.extname(filePath);
-  const type = { '.html': 'text/html', '.css': 'text/css', '.js': 'application/javascript' }[ext] || 'application/octet-stream';
+  const type = {
+    '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'application/javascript',
+    '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json',
+  }[ext] || 'application/octet-stream';
   res.writeHead(200, { 'Content-Type': type });
   res.end(readFileSync(filePath));
 }
@@ -52,13 +66,23 @@ function getCurrentUser(req) {
   if (!token) return null;
   const session = db.getSession(token);
   if (!session || session.expiresAt < Date.now()) return null;
-  return db.getUser(session.userId);
+  const user = db.getUser(session.userId);
+  // Accounts created before v3 have no credit balance yet: give them the
+  // same one-time starter credits new signups get.
+  if (user && user.credits === undefined) db.updateUser(user.id, { credits: config.freeCredits });
+  return user;
 }
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
-    req.on('data', (c) => (data += c));
+    req.on('data', (c) => {
+      data += c;
+      if (data.length > MAX_BODY_BYTES) {
+        reject(Object.assign(new Error('Request body too large.'), { status: 413 }));
+        req.destroy();
+      }
+    });
     req.on('end', () => {
       try {
         resolve(data ? JSON.parse(data) : {});
@@ -104,6 +128,8 @@ const server = http.createServer(async (req, res) => {
         email,
         passwordHash: hashPassword(password),
         createdAt: Date.now(),
+        credits: config.freeCredits,
+        wallet: null,
       });
       const token = randomToken();
       db.createSession({ token, userId: user.id, expiresAt: Date.now() + SESSION_TTL_MS });
@@ -133,7 +159,213 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/me') {
       const user = getCurrentUser(req);
       if (!user) return sendJson(res, 401, { error: 'Not signed in.' });
-      return sendJson(res, 200, { email: user.email, plugins: publicPluginList(user) });
+      return sendJson(res, 200, {
+        email: user.email,
+        wallet: user.wallet || null,
+        credits: user.credits || 0,
+        plugins: publicPluginList(user),
+      });
+    }
+
+    // ---- v3: public config (chain, token, payments, AI on/off) ----
+    if (req.method === 'GET' && url.pathname === '/api/config') {
+      // Public values only, no cookies: safe for the jose-site to read.
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      return sendJson(res, 200, publicConfig());
+    }
+
+    // ---- v3: link a MetaMask wallet to the account (signed challenge) ----
+    if (req.method === 'POST' && url.pathname === '/api/wallet/challenge') {
+      const user = getCurrentUser(req);
+      if (!user) return sendJson(res, 401, { error: 'Not signed in.' });
+      const { address } = await readBody(req);
+      if (!isAddress(address)) return sendJson(res, 400, { error: 'A valid wallet address is required.' });
+      const message =
+        `Link this wallet to my Jose account.\n\n` +
+        `Account: ${user.email}\nWallet: ${address.toLowerCase()}\n` +
+        `Nonce: ${randomToken(12)}\nIssued: ${new Date().toISOString()}\n\n` +
+        `Signing this costs nothing and does not send a transaction.`;
+      pendingWalletLinks.set(user.id, { message, address: address.toLowerCase(), expiresAt: Date.now() + WALLET_CHALLENGE_TTL_MS });
+      return sendJson(res, 200, { message });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/wallet/link') {
+      const user = getCurrentUser(req);
+      if (!user) return sendJson(res, 401, { error: 'Not signed in.' });
+      const { signature } = await readBody(req);
+      const pending = pendingWalletLinks.get(user.id);
+      if (!pending || pending.expiresAt < Date.now()) {
+        return sendJson(res, 400, { error: 'That request expired. Try linking again.' });
+      }
+      let signer;
+      try {
+        signer = recoverPersonalSign(pending.message, signature);
+      } catch {
+        return sendJson(res, 400, { error: 'Could not read that signature.' });
+      }
+      if (!sameAddress(signer, pending.address)) {
+        return sendJson(res, 400, { error: 'The signature does not match that wallet.' });
+      }
+      const other = db.getUserByWallet(signer);
+      if (other && other.id !== user.id) {
+        return sendJson(res, 409, { error: 'That wallet is already linked to another Jose account.' });
+      }
+      pendingWalletLinks.delete(user.id);
+      db.updateUser(user.id, { wallet: signer, walletLinkedAt: Date.now() });
+      return sendJson(res, 200, { wallet: signer });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/wallet/unlink') {
+      const user = getCurrentUser(req);
+      if (!user) return sendJson(res, 401, { error: 'Not signed in.' });
+      db.updateUser(user.id, { wallet: null, walletLinkedAt: null });
+      return sendJson(res, 200, { ok: true });
+    }
+
+    // ---- v3: AI credits, paid in JOSE ----
+    if (req.method === 'GET' && url.pathname === '/api/credits') {
+      const user = getCurrentUser(req);
+      if (!user) return sendJson(res, 401, { error: 'Not signed in.' });
+      return sendJson(res, 200, {
+        credits: db.getUser(user.id).credits || 0,
+        payments: db.getPaymentsForUser(user.id).map(({ txHash, amount, credits, claimedAt }) => ({ txHash, amount, credits, claimedAt })),
+      });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/credits/claim') {
+      const user = getCurrentUser(req);
+      if (!user) return sendJson(res, 401, { error: 'Not signed in.' });
+      if (!paymentsConfigured()) {
+        return sendJson(res, 503, { error: 'Paying with JOSE is not switched on for this server yet.' });
+      }
+      if (!user.wallet) return sendJson(res, 400, { error: 'Link your wallet first, then pay from that wallet.' });
+      const { txHash } = await readBody(req);
+      if (!/^0x[0-9a-fA-F]{64}$/.test(String(txHash || ''))) {
+        return sendJson(res, 400, { error: 'That does not look like a transaction hash.' });
+      }
+      if (db.getPayment(txHash)) return sendJson(res, 409, { error: 'That payment was already claimed.' });
+
+      let result;
+      try {
+        result = await erc20TransferredInTx(config.rpcUrl, txHash, {
+          token: config.tokenAddress, from: user.wallet, to: config.treasuryAddress,
+        });
+      } catch (err) {
+        return sendJson(res, 502, { error: 'Could not reach the network to check that payment. Try again shortly.' });
+      }
+      if (!result.found) return sendJson(res, 404, { error: 'Transaction not found yet. Wait for it to confirm and try again.' });
+      if (result.failed) return sendJson(res, 400, { error: 'That transaction failed on-chain.' });
+      if (result.amount === 0n) {
+        return sendJson(res, 400, { error: `No ${config.tokenSymbol} transfer from your linked wallet to the Jose treasury in that transaction.` });
+      }
+      if (result.confirmations < config.minConfirmations) {
+        return sendJson(res, 425, { error: `Waiting for confirmations (${result.confirmations}/${config.minConfirmations}). Try again in a minute.` });
+      }
+      const unit = 10n ** BigInt(config.tokenDecimals);
+      const perCredit = BigInt(Math.round(config.josePerCredit * 1e6)) * unit / 1000000n;
+      const credits = Number(result.amount / perCredit);
+      if (credits < 1) {
+        return sendJson(res, 400, { error: `That payment is less than the price of one credit (${config.josePerCredit} ${config.tokenSymbol}).` });
+      }
+      // Re-check right before writing, in case two claims raced.
+      if (db.getPayment(txHash)) return sendJson(res, 409, { error: 'That payment was already claimed.' });
+      db.recordPayment({ txHash, userId: user.id, wallet: user.wallet, amount: result.amount.toString(), credits, claimedAt: Date.now() });
+      const balance = db.addCredits(user.id, credits);
+      return sendJson(res, 200, { added: credits, credits: balance });
+    }
+
+    // ---- v3: Hey Jose chat ----
+    if (req.method === 'POST' && url.pathname === '/api/chat') {
+      const user = getCurrentUser(req);
+      if (!user) return sendJson(res, 401, { error: 'Sign in to chat with Jose.' });
+      if (!config.anthropicApiKey) return sendJson(res, 503, { error: 'Hey Jose is not switched on for this server yet.' });
+      const { messages } = await readBody(req);
+      const history = sanitizeHistory(messages);
+      if (!history) return sendJson(res, 400, { error: 'Send at least one message.' });
+      const cost = config.creditsPerMessage;
+      if (!db.spendCredits(user.id, cost)) {
+        return sendJson(res, 402, { error: 'You are out of credits.', credits: db.getUser(user.id).credits || 0 });
+      }
+      try {
+        const reply = await askJose(history);
+        return sendJson(res, 200, { reply, credits: db.getUser(user.id).credits });
+      } catch (err) {
+        db.addCredits(user.id, cost); // don't charge for a failed answer
+        return sendJson(res, err.status || 502, { error: err.message, credits: db.getUser(user.id).credits });
+      }
+    }
+
+    // ---- v3: NFT marketplace (listings) ----
+    if (req.method === 'GET' && url.pathname === '/api/nfts') {
+      const seller = url.searchParams.get('seller');
+      return sendJson(res, 200, { listings: db.listListings({ seller: isAddress(seller) ? seller : undefined }) });
+    }
+
+    const nftMatch = url.pathname.match(/^\/api\/nfts\/([a-f0-9-]{36})(\/cancel)?$/);
+    if (req.method === 'GET' && nftMatch && !nftMatch[2]) {
+      const listing = db.getListing(nftMatch[1]);
+      if (!listing) return sendJson(res, 404, { error: 'Listing not found.' });
+      // If the seller no longer holds the NFT, the listing is stale.
+      if (listing.status === 'active') {
+        try {
+          const owner = await erc721OwnerOf(config.rpcUrl, listing.contract, listing.tokenId);
+          if (!sameAddress(owner, listing.seller)) db.updateListing(listing.id, { status: 'stale' });
+        } catch { /* network hiccup: show the listing as-is */ }
+      }
+      return sendJson(res, 200, { listing: db.getListing(listing.id) });
+    }
+
+    if (req.method === 'POST' && nftMatch && nftMatch[2]) {
+      const user = getCurrentUser(req);
+      if (!user) return sendJson(res, 401, { error: 'Not signed in.' });
+      const listing = db.getListing(nftMatch[1]);
+      if (!listing) return sendJson(res, 404, { error: 'Listing not found.' });
+      if (listing.userId !== user.id) return sendJson(res, 403, { error: 'Only the seller can remove this listing.' });
+      db.updateListing(listing.id, { status: 'cancelled', cancelledAt: Date.now() });
+      return sendJson(res, 200, { ok: true });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/nfts') {
+      const user = getCurrentUser(req);
+      if (!user) return sendJson(res, 401, { error: 'Not signed in.' });
+      if (!user.wallet) return sendJson(res, 400, { error: 'Link your wallet first — listings are tied to the wallet that holds the NFT.' });
+      const body = await readBody(req);
+      const contract = String(body.contract || '').trim();
+      const tokenId = String(body.tokenId || '').trim();
+      const price = Number(body.price);
+      const title = String(body.title || '').trim().slice(0, 80);
+      const description = String(body.description || '').trim().slice(0, 1000);
+      if (!isAddress(contract)) return sendJson(res, 400, { error: 'Enter the NFT contract address (0x…).' });
+      if (!/^\d{1,78}$/.test(tokenId)) return sendJson(res, 400, { error: 'Enter the token ID (a whole number).' });
+      if (!Number.isFinite(price) || price <= 0 || price > 1e12) return sendJson(res, 400, { error: `Enter a price in ${config.tokenSymbol} greater than 0.` });
+      if (db.findActiveListing(contract, tokenId)) return sendJson(res, 409, { error: 'That NFT is already listed.' });
+
+      let owner;
+      try {
+        owner = await erc721OwnerOf(config.rpcUrl, contract, tokenId);
+      } catch {
+        return sendJson(res, 400, { error: `Could not find that NFT on ${config.chainName}. Check the contract address and token ID.` });
+      }
+      if (!sameAddress(owner, user.wallet)) {
+        return sendJson(res, 403, { error: 'Your linked wallet does not hold that NFT.' });
+      }
+      const tokenURI = await erc721TokenURI(config.rpcUrl, contract, tokenId);
+      const listing = db.createListing({
+        id: crypto.randomUUID(),
+        userId: user.id,
+        seller: user.wallet,
+        contract,
+        tokenId,
+        tokenURI: tokenURI.slice(0, 2000),
+        price,
+        currency: config.tokenSymbol,
+        title,
+        description,
+        chainId: config.chainId,
+        status: 'active',
+        createdAt: Date.now(),
+      });
+      return sendJson(res, 201, { listing });
     }
 
     // ---- plugin connect / callback (real OAuth, per plugins/*.js) ----
@@ -208,6 +440,8 @@ const server = http.createServer(async (req, res) => {
 
     return sendJson(res, 404, { error: 'not found' });
   } catch (err) {
+    if (err instanceof SyntaxError) return sendJson(res, 400, { error: 'Invalid JSON.' });
+    if (err.status === 413) return sendJson(res, 413, { error: err.message });
     console.error(err);
     return sendJson(res, 500, { error: 'Internal error.' });
   }
@@ -215,6 +449,8 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`Jose backend listening on ${BASE_URL}`);
+  console.log(`  Hey Jose AI: ${config.anthropicApiKey ? 'on (' + config.aiModel + ')' : 'off (set ANTHROPIC_API_KEY)'}`);
+  console.log(`  JOSE payments: ${paymentsConfigured() ? 'on' : 'off (set JOSE_TOKEN_ADDRESS and JOSE_TREASURY_ADDRESS)'}`);
   for (const p of plugins) {
     console.log(`  ${p.name}: ${p.isConfigured() ? 'configured' : `NOT configured (missing ${p.missingEnvVars().join(', ')})`}`);
   }

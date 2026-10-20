@@ -1,11 +1,12 @@
 {
   "name": "jose-backend",
-  "version": "1.0.0",
-  "description": "Jose account + plugin/OAuth backend — WhatsApp Business, WeChat, Mercado Libre",
+  "version": "3.0.0",
+  "description": "Jose v3 — accounts, app plugins (WhatsApp, WeChat, Mercado Libre, Google), Hey Jose AI chat paid in JOSE, MetaMask wallet linking, and an NFT marketplace",
   "type": "module",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "test": "node --test test/*.test.js"
   },
   "license": "MIT"
 }

@@ -15,7 +15,8 @@
   <header class="top">
     <div class="wrap">
       <span class="wordmark">Jose</span>
-      <a class="apps-link" href="https://jose-backend-vbuu.onrender.com/signup.html" data-i18n="nav.apps"></a>
+      <a class="apps-link" data-app-link="market.html" data-i18n="nav.market"></a>
+      <a class="apps-link" data-app-link="signup.html" data-i18n="nav.apps"></a>
       <nav class="lang-switch" aria-label="Idioma / Language">
         <button type="button" data-set-lang="es" class="active">ES</button>
         <button type="button" data-set-lang="pt">PT</button>
@@ -32,8 +33,8 @@
         <h1 class="hero-headline" data-i18n-html="hero.headline"></h1>
         <p class="hero-body" data-i18n="hero.body"></p>
         <div class="cta-row">
-          <a class="btn btn-primary" href="#demo" data-i18n="hero.cta_primary"></a>
-          <a class="btn btn-ghost" href="#nota" data-i18n="hero.cta_ghost"></a>
+          <a class="btn btn-primary" data-app-link="chat.html" data-i18n="hero.cta_chat"></a>
+          <a class="btn btn-ghost" href="#demo" data-i18n="hero.cta_primary"></a>
         </div>
       </div>
 
@@ -117,6 +118,35 @@
       </div>
     </section>
 
+    <section id="jose-token">
+      <div class="wrap">
+        <h2 class="section-title" data-i18n="web3.title"></h2>
+        <p class="section-lede" data-i18n="web3.lede"></p>
+
+        <div class="web3-grid">
+          <div class="web3-cell">
+            <div class="step-title" data-i18n="web3.chat.title"></div>
+            <div class="step-desc" data-i18n="web3.chat.desc"></div>
+            <a class="btn btn-primary" data-app-link="chat.html" data-i18n="web3.chat.cta"></a>
+          </div>
+          <div class="web3-cell">
+            <div class="step-title" data-i18n="web3.wallet.title"></div>
+            <div class="step-desc" data-i18n="web3.wallet.desc"></div>
+            <div class="cta-row">
+              <button type="button" class="btn btn-ghost" id="mm-network" data-i18n="web3.wallet.network"></button>
+              <button type="button" class="btn btn-ghost" id="mm-token" data-i18n="web3.wallet.token"></button>
+            </div>
+            <p class="web3-status" id="mm-status" role="status"></p>
+          </div>
+          <div class="web3-cell">
+            <div class="step-title" data-i18n="web3.market.title"></div>
+            <div class="step-desc" data-i18n="web3.market.desc"></div>
+            <a class="btn btn-ghost" data-app-link="market.html" data-i18n="web3.market.cta"></a>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section id="nota">
       <div class="wrap">
         <p class="note" data-i18n="note.text"></p>
@@ -130,6 +160,10 @@
       <p class="footer-disclaimer" data-i18n="footer.disclaimer"></p>
     </div>
   </footer>
+
+  <a class="hey-jose-fab" data-app-link="chat.html" aria-label="Hey Jose">
+    <span class="hey-jose-dot" aria-hidden="true"></span><span data-i18n="fab.label"></span>
+  </a>
 
   <script src="app.js"></script>
 </body>
