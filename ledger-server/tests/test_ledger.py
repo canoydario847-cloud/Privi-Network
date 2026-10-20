@@ -653,3 +653,23 @@ def test_kya_http_routes(ledger):
         assert r.status_code == 200 and r.json()["known"] is False and r.json()["signature"]
         assert http.get("/kya/nope").status_code == 400
         assert http.get("/kya/0x1990589FD200E043b8C6FD9ec5956c61b3071048/badge.svg").headers["content-type"].startswith("image/svg")
+
+
+def test_kya_connect_page_and_http_bind(ledger):
+    from starlette.testclient import TestClient
+    acme = ledger.create_org("Acme")
+    ledger.record(acme["org_id"], "a", "x", "tool_call", "s")
+    addr, sign = _eth_wallet()
+    app = server(ledger).streamable_http_app(stateless_http=True, json_response=True)
+    with TestClient(app) as http:
+        page = http.get("/kya/connect")
+        assert page.status_code == 200 and "personal_sign" in page.text
+        assert http.post("/kya/challenge", json={"address": addr}).status_code == 401
+        auth = {"Authorization": "Bearer " + acme["api_key"]}
+        ch = http.post("/kya/challenge", json={"address": addr}, headers=auth).json()
+        assert ch["challenge_id"].startswith("kyc_")
+        assert http.post("/kya/bind", json={"address": addr, "challenge_id": ch["challenge_id"]}, headers=auth).status_code == 400
+        b = http.post("/kya/bind", json={"address": addr, "challenge_id": ch["challenge_id"],
+                                         "signature": sign(ch["message"]), "label": "owner"}, headers=auth).json()
+        assert b["bound"] and b["proof"] == "signature"
+        assert http.get(f"/kya/{addr}?min_score=0").json()["known"] is True

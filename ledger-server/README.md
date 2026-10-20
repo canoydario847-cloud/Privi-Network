@@ -121,6 +121,7 @@ As AI agents become the main senders of on-chain transactions, every chain, DeFi
 - `kya_challenge` + `kya_bind_wallet` (org key) - bind a wallet to your Passport by signing a Privi challenge **with the wallet** (EIP-191 personal_sign, recovered in pure Python; no web3 dependency). A binding without a signature is only *declared*.
 - `kya_check <address>` (free) - resolves the wallet to its organization and live Passport; returns allow/deny with reasons, the current score and grade, and a **Privi-signed KYA attestation valid 60 minutes** that a facilitator can cache and verify offline. Send your key and the decision is logged as evidence.
 - `kya_wallets`, `kya_unbind_wallet` (org key) - rotated or compromised keys are denied immediately.
+- **Connect wallet page:** `GET /kya/connect` — paste the org key, connect MetaMask, sign once; done. No code needed.
 - Public: `GET /kya/<address>` (JSON verdict + attestation; `?min_score=&min_grade=&require_signed=`), `GET /kya/<address>/badge.svg`.
 
 Integration pattern for a chain or protocol: before accepting an agent transaction, `GET /kya/<from>`; require `allow: true` (and optionally `proof: "signature"`); keep the `attestation` + `signature` as your compliance record.

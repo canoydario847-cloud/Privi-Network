@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privi KYA · Connect wallet</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#0b1f3a;--mut:#5b6472;--line:#e3e6eb;--ok:#1a7f37;--bad:#c62828;--acc:#1d4ed8}
+@media (prefers-color-scheme:dark){:root{--bg:#0b1220;--card:#121b2d;--ink:#e6eaf0;--mut:#9aa4b2;--line:#25304a;--ok:#4ade80;--bad:#f87171;--acc:#7aa2ff}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:560px;margin:40px auto;padding:0 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px;margin-bottom:16px}
+h1{font-size:22px;margin:0 0 4px}p{color:var(--mut);margin:.3em 0 1em}
+label{display:block;font-size:14px;font-weight:600;margin:14px 0 6px}
+input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--ink);font:inherit}
+button{margin-top:16px;width:100%;padding:12px;border:0;border-radius:10px;background:var(--acc);color:#fff;font:600 16px system-ui;cursor:pointer}
+button:disabled{opacity:.5;cursor:default}
+ol{padding-left:20px;color:var(--mut)}li{margin:.3em 0}
+#log{font:13px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;word-break:break-all;color:var(--mut)}
+.ok{color:var(--ok)}.bad{color:var(--bad)}small{color:var(--mut)}
+</style></head><body><main>
+<div class="card">
+<h1>Privi KYA · Connect a wallet</h1>
+<p>Prove that your AI agent's wallet belongs to your organization, so chains, exchanges and payment facilitators accept its transactions.</p>
+<ol><li>Paste your Privi Ledger organization API key.</li><li>Connect MetaMask (or any browser wallet).</li><li>Sign one message. It's free and sends no transaction.</li></ol>
+<label for="key">Organization API key</label>
+<input id="key" type="password" autocomplete="off" placeholder="plk_…">
+<small>The key is only used in this page to call Privi Ledger. It is never stored.</small>
+<label for="agent">Agent (stream) using this wallet <small>(optional)</small></label>
+<input id="agent" placeholder="e.g. treasury-agent (leave empty for the whole organization)">
+<label for="label">Label <small>(optional)</small></label>
+<input id="label" placeholder="e.g. owner wallet">
+<button id="go">Connect wallet and sign</button>
+</div>
+<div class="card"><div id="log">Waiting…</div></div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const log = (t, cls) => { const d = document.createElement('div'); d.textContent = t; if (cls) d.className = cls; $('log').appendChild(d); };
+async function api(path, key, body) {
+  const r = await fetch(path, {method: 'POST', headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key}, body: JSON.stringify(body)});
+  const j = await r.json().catch(() => ({error: 'bad response'}));
+  if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+  return j;
+}
+$('go').onclick = async () => {
+  $('log').textContent = '';
+  const key = $('key').value.trim();
+  if (!key) return log('Paste your organization API key first.', 'bad');
+  if (!window.ethereum) return log('No browser wallet found. Open this page in a browser with MetaMask installed.', 'bad');
+  $('go').disabled = true;
+  try {
+    log('Connecting wallet…');
+    const [address] = await window.ethereum.request({method: 'eth_requestAccounts'});
+    log('Wallet: ' + address);
+    const ch = await api('/kya/challenge', key, {address});
+    log('Got challenge ' + ch.challenge_id + '. Please sign in your wallet…');
+    const signature = await window.ethereum.request({method: 'personal_sign', params: [ch.message, address]});
+    const b = await api('/kya/bind', key, {address, challenge_id: ch.challenge_id, signature,
+                                           stream_id: $('agent').value.trim() || null, label: $('label').value.trim()});
+    log('✓ Bound: ' + b.address + ' (proof: ' + b.proof + ')', 'ok');
+    const v = await (await fetch('/kya/' + b.address + '?min_score=0')).json();
+    log(v.allow ? '✓ KYA check passes: grade ' + v.current_grade + ', score ' + v.current_score
+                : 'KYA check: ' + (v.reasons || []).join('; '), v.allow ? 'ok' : 'bad');
+    const a = document.createElement('a'); a.href = '/kya/' + b.address; a.textContent = 'View public KYA record →'; a.style.color = 'var(--acc)';
+    $('log').appendChild(a);
+  } catch (e) {
+    log('✗ ' + (e.message || e), 'bad');
+  } finally { $('go').disabled = false; }
+};
+</script></body></html>

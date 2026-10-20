@@ -961,6 +961,42 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         return Response(pdf, media_type="application/pdf",
                         headers={"Content-Disposition": f'attachment; filename="{rid}.pdf"'})
 
+    @mcp.custom_route("/kya/connect", methods=["GET"], include_in_schema=False)
+    async def kya_connect(_: Request) -> Response:
+        from pathlib import Path
+        return Response((Path(__file__).parent / "kya_connect.html").read_text(encoding="utf-8"),
+                        media_type="text/html; charset=utf-8")
+
+    @mcp.custom_route("/kya/challenge", methods=["POST"], include_in_schema=False)
+    async def kya_challenge_http(request: Request) -> JSONResponse:
+        org = ledger.org_for_key(_bearer(request.headers))
+        if not org:
+            return JSONResponse({"error": "a valid organization API key is required"}, status_code=401)
+        try:
+            body = await request.json()
+            return JSONResponse(kya.challenge(org["org_id"], org["name"], str(body.get("address", ""))))
+        except (ValueError, AttributeError) as e:
+            return JSONResponse({"error": str(e) or "send JSON like {\"address\": \"0x...\"}"}, status_code=400)
+
+    @mcp.custom_route("/kya/bind", methods=["POST"], include_in_schema=False)
+    async def kya_bind_http(request: Request) -> JSONResponse:
+        org = ledger.org_for_key(_bearer(request.headers))
+        if not org:
+            return JSONResponse({"error": "a valid organization API key is required"}, status_code=401)
+        try:
+            body = await request.json()
+            sid = check_id(body["stream_id"], "stream_id") if body.get("stream_id") else "*"
+            if not body.get("signature"):
+                raise KYAError("a wallet signature is required on this page")
+            b = kya.bind(org["org_id"], str(body.get("address", "")), sid, str(body.get("label") or ""),
+                         body.get("challenge_id"), body.get("signature"))
+            ledger.record(org["org_id"], "privi-kya", "Privi Ledger", "other",
+                          f"Wallet {b['address']} bound ({b['proof']}) to {sid}", b["address"], "success",
+                          {"proof": b["proof"], "stream_id": sid, "via": "kya/connect"})
+            return JSONResponse({"bound": True, **b})
+        except (KYAError, ValueError, KeyError, AttributeError) as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+
     @mcp.custom_route("/kya/{address}", methods=["GET"], include_in_schema=False)
     async def kya_json(request: Request) -> JSONResponse:
         q = request.query_params
