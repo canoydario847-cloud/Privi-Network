@@ -124,3 +124,36 @@ software. Licensing enforcement is separate from native contract permissions.
 This test verifies only the signed *research certificate* mechanics and
 negative admission cases. Its results MUST NOT be interpreted as an
 operational validator, finalized block or PoP financial mainnet.
+
+
+## Durable vote-signing guard research (separate follow-up)
+
+The next research experiment supplies \`persistent_vote_guard.cjs\`.
+Before emitting a **research-only** commit signature from an admitted
+Ed25519 validator, it writes a height lock for
+\`(research-chain-id, genesis-hash, epoch, height, validator-id)\`
+and the accepted block hash. It uses a private local directory (0700),
+an exclusive create (O_EXCL), fsync on the file and directory, and
+refuses to overwrite corrupted or conflicting lock records.
+
+This is materially stricter than the earlier volatile \`ResearchVoteLock\`:
+a restarted signing process rejects attempts to sign a *different* block
+at the same height, even if the round changes. Signatures are domain
+separated and require a governance-admitted signer and an authenticated
+candidate proposal. The implementation never handles financial wallet keys,
+PRVI emissions, PoS voting power or third-party settlement.
+
+**Do not deploy:** This is only a filesystem-level non-equivocation
+experiment, not a production slashing/lock protocol. The entire host,
+identity-attestation root, and local disk are assumed trusted. File
+replication, malicious administrator access, key cloning, timeouts,
+liveness, Byzantine view-change, weighted quorum intersections, ledger
+inclusion verification and active integration into validator consensus
+remain unaddressed.
+
+Test only on disposable paths:
+
+    node --test production-network/mainnet/pop_candidate/test_persistent_vote_guard.cjs
+
+Passing that test is *not* evidence that native Privi mainnet
+has implemented Point of Position validator finality.
