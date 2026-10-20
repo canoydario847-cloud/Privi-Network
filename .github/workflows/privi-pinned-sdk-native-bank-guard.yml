@@ -1,0 +1,101 @@
+name: Experimental pinned SDK native PRVI direct-write protection
+
+on:
+  pull_request:
+    paths:
+      - 'production-network/mainnet/sdk-bank/**'
+      - 'production-network/testnet/run_offline_checks.sh'
+      - '.github/workflows/privi-pinned-sdk-native-bank-guard.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: privi-sdk-native-write-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-upstream-bank-patch:
+    name: Test pinned Cosmos SDK concrete bank setter protection (VALUELESS)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25.9'
+          cache: false
+      - name: Run experimental source-patcher unit tests
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s production-network/mainnet/sdk-bank -p 'test_*.py' -v
+      - name: Pin exact SDK and Cosmos EVM source in disposable workspace
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch v0.7.3 https://github.com/cosmos/evm.git "$RUNNER_TEMP/.upstream-capbuild"
+          test "$(git -C "$RUNNER_TEMP/.upstream-capbuild" rev-parse HEAD)" = "c3ae9067a7eadcdea55a5192226916deb44c71c4"
+          cd "$RUNNER_TEMP/.upstream-capbuild/evmd"
+          GOTOOLCHAIN=local go mod download github.com/cosmos/cosmos-sdk@v0.54.3
+          SDK_MODULE="$(go env GOPATH)/pkg/mod/github.com/cosmos/cosmos-sdk@v0.54.3"
+          test -f "$SDK_MODULE/x/bank/keeper/send.go"
+          cp -a "$SDK_MODULE" "$RUNNER_TEMP/.privi-reviewed-sdk-copy"
+          chmod -R u+w "$RUNNER_TEMP/.privi-reviewed-sdk-copy"
+          # SDK unmodified source hashes must match reviewed v0.54.3 git blobs.
+          test "$(git hash-object "$RUNNER_TEMP/.privi-reviewed-sdk-copy/x/bank/keeper/send.go")" = "7fbba171c7daff3e4cbc975b10fab97307439593"
+          test "$(git hash-object "$RUNNER_TEMP/.privi-reviewed-sdk-copy/x/bank/keeper/keeper.go")" = "103918dfb965b91bddb469aa0031b82f9b373531"
+      - name: Apply exact-source bank method patch and compile real SDK keeper
+        run: |
+          set -euo pipefail
+          SDK="$RUNNER_TEMP/.privi-reviewed-sdk-copy"
+          python3 production-network/mainnet/sdk-bank/patch_native_aprvi_write.py --sdk-copy "$SDK"
+          cp production-network/mainnet/sdk-bank/privi_sdk_direct_write_test.go "$SDK/x/bank/keeper/privi_sdk_direct_write_test.go"
+          gofmt -w "$SDK/x/bank/keeper/send.go" "$SDK/x/bank/keeper/keeper.go" "$SDK/x/bank/keeper/privi_sdk_direct_write_test.go"
+          cd "$SDK"
+          GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^TestPrivi' -timeout=15m ./x/bank/keeper
+          # No edited SDK module is sent to a registry or production server.
+      - name: Compile actual customized Cosmos EVM with reviewed SDK bank patch
+        run: |
+          set -euo pipefail
+          UPSTREAM="$RUNNER_TEMP/.upstream-capbuild"
+          python3 production-network/mainnet/custom-app/apply_prvi_cap.py \
+            --upstream "$UPSTREAM" --source-repo "$GITHUB_WORKSPACE"
+          python3 production-network/mainnet/custom-app/patch_pinned_erc20_mutations.py --upstream "$UPSTREAM"
+          gofmt -w "$UPSTREAM/evmd/app.go" "$UPSTREAM/evmd/prvicap/"*.go \
+            "$UPSTREAM/x/erc20/keeper/params.go" "$UPSTREAM/x/erc20/keeper/token_pairs.go"
+          cd "$UPSTREAM/evmd"
+          GOTOOLCHAIN=local go mod edit -replace="github.com/cosmos/cosmos-sdk=$RUNNER_TEMP/.privi-reviewed-sdk-copy"
+          GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^$' -timeout=20m . ./prvicap
+          GOTOOLCHAIN=local go build -mod=mod -p 2 -trimpath -buildvcs=false \
+            -o "$RUNNER_TEMP/privi-pinned-sdk-CONCEPT-ONLY" ./cmd/evmd
+          test -s "$RUNNER_TEMP/privi-pinned-sdk-CONCEPT-ONLY"
+      - name: Prove actual custom app accepts valueless genesis and rejects direct aprvi writes
+        run: |
+          set -euo pipefail
+          UPSTREAM="$RUNNER_TEMP/.upstream-capbuild"
+          PROBE="$UPSTREAM/evmd/cmd/privi-cap-genesis-positive-probe"
+          mkdir -p "$PROBE"
+          cp production-network/mainnet/custom-app/privi_cap_genesis_positive_probe_main.go "$PROBE/main.go"
+          python3 production-network/mainnet/sdk-bank/patch_positive_probe.py --disposable-probe "$PROBE/main.go"
+          gofmt -w "$PROBE/main.go"
+          cd "$UPSTREAM/evmd"
+          GOTOOLCHAIN=local go build -mod=mod -p 2 -o "$RUNNER_TEMP/privi-bank-write-TEST-ONLY" ./cmd/privi-cap-genesis-positive-probe
+          "$RUNNER_TEMP/privi-bank-write-TEST-ONLY"
+          PRIVI_ERC20_NEGATIVE_PROBE=permissionless "$RUNNER_TEMP/privi-bank-write-TEST-ONLY"
+          PRIVI_ERC20_NEGATIVE_PROBE=native-pair "$RUNNER_TEMP/privi-bank-write-TEST-ONLY"
+          # This does not test all upstream contract/IBC/governance mutations.
+      - name: Confirm upstream default genesis and unsafe EVM identity still fail
+        run: |
+          set -euo pipefail
+          UPSTREAM="$RUNNER_TEMP/.upstream-capbuild"
+          PROBE="$UPSTREAM/evmd/cmd/privi-cap-genesis-probe"
+          mkdir -p "$PROBE"
+          cp production-network/mainnet/custom-app/privi_cap_genesis_probe_main.go "$PROBE/main.go"
+          gofmt -w "$PROBE/main.go"
+          cd "$UPSTREAM/evmd"
+          GOTOOLCHAIN=local go run -mod=mod -p 2 ./cmd/privi-cap-genesis-probe
+      - name: Explicitly retain financial launch NO-GO
+        run: |
+          printf '%s\n' 'EXPERIMENTAL ONLY: native aprvi exported setter denied inside the pinned bank SDK.'
+          printf '%s\n' 'Native supply-neutral direct KV writes and unreviewed upgrade/module paths still require audits.'
+          printf '%s\n' 'No production binary uploaded, no coins issued, no real mainnet or validator started.'
