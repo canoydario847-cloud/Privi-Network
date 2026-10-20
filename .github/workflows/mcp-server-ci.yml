@@ -1,0 +1,25 @@
+name: MCP server CI
+
+on:
+  push:
+    branches: [main]
+    paths: ["mcp-server/**", ".github/workflows/mcp-server-ci.yml"]
+  pull_request:
+    paths: ["mcp-server/**", ".github/workflows/mcp-server-ci.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp-server
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e ".[dev]"
+      - run: pytest -q

@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "privi-verify-mcp"
+version = "0.1.0"
+description = "MCP server that lets AI agents verify manufacturing lot provenance, paid per call with x402 (USDC on Base)."
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Dario Canoy" }]
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=2.3,<3",
+    "uvicorn>=0.30",
+]
+keywords = ["mcp", "x402", "traceability", "supply-chain", "provenance", "ai-agents", "base", "usdc"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "anyio>=4"]
+
+[project.scripts]
+privi-verify-mcp = "privi_verify.server:main"
+
+[project.urls]
+Homepage = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/mcp-server"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/privi_verify"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
