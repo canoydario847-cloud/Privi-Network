@@ -1,0 +1,19 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.canoydario847-cloud/privi-anchor",
+  "title": "Privi Anchor",
+  "description": "Timestamped proof that AI outputs and data existed, anchored on the Privi blockchain.",
+  "version": "0.1.0",
+  "websiteUrl": "https://github.com/canoydario847-cloud/Privi-Network/tree/main/anchor-server",
+  "repository": {
+    "url": "https://github.com/canoydario847-cloud/Privi-Network",
+    "source": "github",
+    "subfolder": "anchor-server"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://privi-anchor-production.up.railway.app/mcp"
+    }
+  ]
+}
