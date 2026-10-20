@@ -35,5 +35,18 @@ command -v go >/dev/null
 # Strict AST baseline for pinned Cosmos EVM v0.7.3 mint entry points.
 (cd "$ROOT/mainnet/mintscan" && GOTOOLCHAIN=local go test -race -count=1 ./...)
 python3 -m unittest discover -s "$ROOT/mainnet/custom-app" -p "test_*.py"
+# Provider-observed Railway TEST services are *not* production validators.
+# Fail if snapshot is invalid or if production preflight ever permits TEST.
+python3 "$ROOT/ops/railway_staging_preflight.py" "$ROOT/ops/railway_staging_observation.json" --mode staging
+if python3 "$ROOT/ops/railway_staging_preflight.py" "$ROOT/ops/railway_staging_observation.json" --mode production; then
+  echo "FATAL: disposable Railway TEST services authorized financial mainnet" >&2
+  exit 1
+else
+  status=$?
+  if [[ "$status" -ne 3 ]]; then
+    echo "Railway financial preflight returned unexpected status $status" >&2
+    exit 1
+  fi
+fi
 bash -n "$ROOT/testnet/bootstrap-local-4.sh"
 echo "Offline checks passed. Live EVM / CometBFT testing still required."
