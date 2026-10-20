@@ -1,0 +1,28 @@
+name: Privi gas revenue accounting research (NO MAINNET)
+
+on:
+  pull_request:
+    paths:
+      - 'production-network/economics/**'
+      - '.github/workflows/privi-gas-economics.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  developer-fee-economics:
+    name: Test nonfinancial PRVI gas policy and fee-revenue integrity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run gas charged vs treasury revenue accounting checks
+        run: node --test production-network/economics/test_gas_market.cjs
+      - name: Explicitly prevent any financial launch in fee-policy tests
+        run: |
+          set -euo pipefail
+          echo 'Privi economics are advisory/research only; no financial genesis, PRVI mint, payment or mainnet deployment.'
