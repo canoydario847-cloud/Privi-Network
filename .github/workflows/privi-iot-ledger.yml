@@ -46,6 +46,14 @@ jobs:
           if [ "$code" -ne 3 ]; then echo "PoP financial mainnet gate must remain NO-GO" >&2; exit 1; fi
       - name: Exercise Point of Position validator research prototype (NOT CONSENSUS)
         run: node --test production-network/mainnet/pop_candidate/test_engine.cjs production-network/mainnet/pop_candidate/test_persistent_vote_guard.cjs
+      - name: Verify EIP-191 founder wallet proof (RESEARCH ONLY - no founder signature)
+        run: |
+          set -euo pipefail
+          TEMP_ETHERS="$RUNNER_TEMP/privi-pop-ethers"
+          mkdir -p "$TEMP_ETHERS"
+          npm install --prefix "$TEMP_ETHERS" --no-save --ignore-scripts --no-audit --no-fund --silent ethers@6.15.0
+          PRIVI_POP_ETHERS_PATH="$TEMP_ETHERS/node_modules/ethers" \
+            node --test production-network/mainnet/pop_candidate/test_founder_wallet_authorization.cjs
       - name: Compile Privi-native gated contract with pinned compiler
         run: |
           set -euo pipefail
