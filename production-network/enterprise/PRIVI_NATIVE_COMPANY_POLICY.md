@@ -12,10 +12,11 @@ competition and intellectual-property claims require independent legal review.
 
 ## Enforced now in developer code
 
-1. A company identifier is hashed as \`SHA256(UTF8(companyId))\` and explicitly
-   registered on the Privi IoT contract by the Privi administrator, including
-   a unique company administrator EVM address.
-2. Only the company administrator authorizes individual
+1. A company identifier is hashed as \`SHA256(UTF8(companyId))\` and
+   onboarding is **proposed** by the Privi administrator. Only the separately
+   designated company administrator may explicitly **accept or reject** the
+   pending invitation. Pending proposals grant no IoT rights.
+2. After acceptance, only the company administrator authorizes individual
    **Privi-registered developer gateway** addresses for that company.
 3. Devices are enrolled only after **both** company and developer are active
    and the company has authorized that specific gateway.
@@ -30,7 +31,8 @@ competition and intellectual-property claims require independent legal review.
 7. Raw device data remain off-chain by default; local AI labels metadata and
    proposed, non-redeemable PoP-based micro-PRVI accounting values.
 
-These are the enforceable **official feature access controls**. The current
+These are the enforceable **official feature access controls**. A pending
+invitation MUST NOT be counted as a company adoption or activation. The current
 reference EVM ID 262144 is a disposable development network, NOT final Privi
 PoP mainnet. Real PRVI issuance and financial network activation stay blocked
 until audited native PoP consensus and financial safety gates are complete.

@@ -72,7 +72,10 @@ jobs:
           const names = contract.abi.map(x=>x.name).filter(Boolean);
           for (const required of ["DeveloperRegistered","DeveloperEnabled",
                "registerDeveloper","setDeveloperEnabled","developers",
-               "registerCompany","setCompanyEnabled","setCompanyGateway",
+               "proposeCompanyRegistration","acceptCompanyRegistration",
+               "rejectCompanyRegistration","cancelCompanyRegistration",
+               "pendingCompanyAdministrators",
+               "setCompanyEnabled","setCompanyGateway",
                "companies","companyGateways",
                "nextPositionSequence","popLastPosition","usedPoPStamp",
                "enrollDevice","recordEvent","IoTRecorded"]) {
