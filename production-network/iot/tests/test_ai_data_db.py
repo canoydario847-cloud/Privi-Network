@@ -66,7 +66,7 @@ class LocalAiTest(unittest.TestCase):
                 n, quote = conn.execute("SELECT COUNT(*), SUM(proposed_micro_prvi) FROM iot_events").fetchone()
             self.assertEqual(n, 1)
             self.assertGreater(quote, 0)
-            with self.assertRaises(sqlite3.IntegrityError):
+            with self.assertRaisesRegex(ValueError, "company-zone sequence"):
                 ai.record(db, packet, confirmed(packet))
 
     def test_refuse_unconfirmed_wrong_hash_and_external_chain(self):
