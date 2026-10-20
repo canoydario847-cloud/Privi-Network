@@ -15,6 +15,8 @@ contract PriviIoTLedger {
     error DeviceDisabled();
     error WrongGateway();
     error WrongSequence();
+    error WrongPositionSequence();
+    error DuplicatePoPPosition();
     error InvalidEvent();
 
     address public immutable owner;
@@ -29,6 +31,20 @@ contract PriviIoTLedger {
     }
 
     mapping(bytes32 => Device) public devices;
+    // Position sequence belongs to each company + zone, NOT each device.
+    // This prevents two sensors at one company using the same PoP position.
+    mapping(bytes32 => uint64) public popLastPosition;
+    mapping(bytes32 => bool) public usedPoPStamp;
+
+    function positionKey(bytes32 companyIdHash, bytes32 popZoneHash) public pure returns (bytes32) {
+        return keccak256(abi.encodePacked(companyIdHash, popZoneHash));
+    }
+
+    function nextPositionSequence(bytes32 companyIdHash, bytes32 popZoneHash) external view returns (uint64) {
+        uint64 current = popLastPosition[positionKey(companyIdHash, popZoneHash)];
+        if (current == type(uint64).max) revert WrongPositionSequence();
+        return current + 1;
+    }
 
     // An official Privi developer account is mandatory for this contract's feature.
     // Only the Privi administrator grants/revokes access; no third-party
@@ -57,7 +73,8 @@ contract PriviIoTLedger {
         bytes32 signatureHash,
         uint64 observedAt,
         bytes32 popStampHash,
-        bytes32 popZoneHash
+        bytes32 popZoneHash,
+        uint64 positionSequence
     );
 
     constructor() {
@@ -132,7 +149,8 @@ contract PriviIoTLedger {
         bytes32 eventHash,
         bytes32 signatureHash,
         bytes32 popStampHash,
-        bytes32 popZoneHash
+        bytes32 popZoneHash,
+        uint64 positionSequence
     ) external {
         Device storage d = devices[deviceIdHash];
         if (!d.enrolled) revert DeviceNotEnrolled();
@@ -140,13 +158,18 @@ contract PriviIoTLedger {
         if (msg.sender != d.gateway) revert WrongGateway();
         requireActiveDeveloper(msg.sender);
         if (sequence == 0 || uint256(sequence) != uint256(d.lastSequence) + 1) revert WrongSequence();
-        if (observedAt == 0 || eventTypeHash == bytes32(0) || payloadHash == bytes32(0)
+        if (positionSequence == 0 || observedAt == 0 || eventTypeHash == bytes32(0) || payloadHash == bytes32(0)
             || eventHash == bytes32(0) || signatureHash == bytes32(0) ||
             popStampHash == bytes32(0) || popZoneHash == bytes32(0))
             revert InvalidEvent();
 
+        bytes32 key = positionKey(d.companyIdHash, popZoneHash);
+        if (uint256(positionSequence) != uint256(popLastPosition[key]) + 1) revert WrongPositionSequence();
+        if (usedPoPStamp[popStampHash]) revert DuplicatePoPPosition();
         d.lastSequence = sequence;
+        popLastPosition[key] = positionSequence;
+        usedPoPStamp[popStampHash] = true;
         emit IoTRecorded(deviceIdHash, sequence, eventHash, payloadHash, eventTypeHash,
-                         signatureHash, observedAt, popStampHash, popZoneHash);
+                         signatureHash, observedAt, popStampHash, popZoneHash, positionSequence);
     }
 }
