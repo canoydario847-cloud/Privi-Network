@@ -30,18 +30,30 @@ engineering proposals.** Calling the proposal "PoP" does not confer security.
 * Only independently authenticated Privi-native positions can anchor validator
   identities. The draft research position uses
   \`PoP:COMPANY:VALIDATOR/AUTH:SEQUENCE\`; it is distinct from IoT data zones.
-* Admission is signed by an explicit PoP governance authorization root after
-  a separate, manual identity/fault-domain verification. This is intentionally
-  a **permissioned research admission** mechanism. It is neither stake-weighted
-  voting (PoS) nor PoSA, and does not claim permissionless Sybil resistance.
-* Each validator has exactly one active Ed25519 public identity, one admitted
-  operator, one attested failure domain, one confirmed native Privi position
-  commitment and exactly **one vote**. IoT transaction frequency, wallet PRVI
-  balances and PoP valuation multipliers **do not grant voting power**.
+* Admission is signed by an explicit PoP research Ed25519 governance
+  authorization key after a separate, manual identity/fault-domain review.
+  The proposed founder EVM control wallet is pinned as
+  `0x1990589FD200E043b8C6FD9ec5956c61b3071048` in signed candidate
+  admission messages, **but the Ed25519 key is NOT cryptographically
+  proven to belong to that wallet**. Before this can become live governance,
+  signature verification must be bound to the founder's actual EVM wallet
+  and verified genesis/validator state. This is permissioned *research*,
+  neither PoS nor PoSA, and has no permissionless Sybil resistance.
+* **One legal operator** `PRIVI_WORLD_CORP` controls four distinct signer
+  public keys, distinct declared validator host/failure domains, and unique
+  candidate `PoP:PRIVI_WORLD_CORP:VALIDATOR/AUTH:SEQUENCE` positions.
+  All four validators belong to that single operator. They are NOT four
+  independently controlled organizations, and a single company or signing
+  administrator compromise can undermine every validator. Each distinct
+  validator still has exactly **one vote**; IoT transaction frequency, PRVI
+  balances and PoP multipliers do **not** confer voting power. No independent
+  real-host proof or verified PoP ledger inclusion exists in this prototype.
 * All admission and vote signatures are domain-separated by candidate protocol
-  version, exact research chain ID, genesis hash and membership epoch; proposal
-  votes also commit to height, round, previous block hash, candidate block hash
-  and designated proposer.
+  version, exact research chain ID, genesis hash and membership epoch. Admission
+  also commits to the *sole proposed founder EVM wallet*, operator identity,
+  host claim and position. Proposal votes bind height, round, previous block
+  hash, block hash and designated proposer. Founder-wallet declaration is not
+  evidence of actual EVM private-key authorization.
 * The deterministic research proposer is the indexed validator selected by
   SHA-256(chain ID, genesis, epoch, height, round) modulo validator count,
   after validators are sorted by public identity. This is not a proof of leader
@@ -68,8 +80,11 @@ software. Licensing enforcement is separate from native contract permissions.
 
 1. The governance Ed25519 root and admitted validators are assumed honest
    enough for correct admissions. A compromised root can forge identities.
-2. Public key, operator and fault-domain uniqueness are syntactic checks, not
-   independent evidence that the operators are genuinely separate.
+2. The current owner-operated architecture intentionally **does not require
+   distinct legal operators**: Privi World Corp is the one proposed operator
+   for four or more uniquely keyed research validators. Public key and
+   declared fault-domain uniqueness do not attest independent hosts or
+   compromise resistance. Governance and infrastructure remain centralized.
 3. \`anchorBlockHash\` is an attested datum in this research module; it is
    **not** cryptographically proven against a final native Privi state root.
 4. No actual proposer/broadcast/prevote/precommit state machine, pacemaker,
