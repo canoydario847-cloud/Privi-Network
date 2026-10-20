@@ -114,6 +114,17 @@ Grades: A >= 850, B >= 700, C >= 550, D >= 400, E below. Valid 30 days.
 
 Why it compounds: agents that gate on passports push their counterparties onto Privi Ledger; every logged action, report and handshake raises the score; a better score wins more deals. Set `LEDGER_PASSPORT_SIGNING_KEY` (32-byte hex Ed25519 seed) to pin the issuer key across redeploys; otherwise one is generated and stored in the database.
 
+## Privi KYA (Know-Your-Agent for blockchain wallets)
+
+As AI agents become the main senders of on-chain transactions, every chain, DeFi protocol, exchange, stablecoin issuer and x402 facilitator needs one answer before accepting a transaction: **is this wallet operated by an audited agent, and how trustworthy is it right now?** Privi KYA answers it, and only Privi can, because the answer is the Passport.
+
+- `kya_challenge` + `kya_bind_wallet` (org key) - bind a wallet to your Passport by signing a Privi challenge **with the wallet** (EIP-191 personal_sign, recovered in pure Python; no web3 dependency). A binding without a signature is only *declared*.
+- `kya_check <address>` (free) - resolves the wallet to its organization and live Passport; returns allow/deny with reasons, the current score and grade, and a **Privi-signed KYA attestation valid 60 minutes** that a facilitator can cache and verify offline. Send your key and the decision is logged as evidence.
+- `kya_wallets`, `kya_unbind_wallet` (org key) - rotated or compromised keys are denied immediately.
+- Public: `GET /kya/<address>` (JSON verdict + attestation; `?min_score=&min_grade=&require_signed=`), `GET /kya/<address>/badge.svg`.
+
+Integration pattern for a chain or protocol: before accepting an agent transaction, `GET /kya/<from>`; require `allow: true` (and optionally `proof: "signature"`); keep the `attestation` + `signature` as your compliance record.
+
 ## Privi Handshake
 
 A dealing between two companies, such as a payment, a data transfer, a delivery or an agreement, gets recorded by **both** of them, with neither able to deny or rewrite it alone.

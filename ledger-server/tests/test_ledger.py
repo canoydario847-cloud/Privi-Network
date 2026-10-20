@@ -553,3 +553,103 @@ def test_passport_badge_and_issuer_routes(ledger):
         assert iss["public_key_hex"] and iss["key_id"].startswith("pk_")
         assert http.get("/passports/pp_missing").status_code == 404
         assert http.get("/passports/pp_missing/badge.svg").headers["content-type"].startswith("image/svg")
+
+
+# ---------------- Privi KYA ----------------
+
+def _eth_wallet():
+    """A throwaway secp256k1 wallet and a personal_sign function, using only `cryptography`."""
+    from cryptography.hazmat.primitives.asymmetric import ec, utils
+    from cryptography.hazmat.primitives import hashes
+    from privi_ledger.kya import keccak256, personal_hash, recover_address
+    k = ec.generate_private_key(ec.SECP256K1())
+    pub = k.public_key().public_numbers()
+    addr = "0x" + keccak256(pub.x.to_bytes(32, "big") + pub.y.to_bytes(32, "big"))[-20:].hex()
+    N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+
+    def sign(message: str) -> str:
+        h = personal_hash(message)
+        r, s = utils.decode_dss_signature(k.sign(h, ec.ECDSA(utils.Prehashed(hashes.SHA256()))))
+        s = N - s if s > N // 2 else s
+        for v in (27, 28):
+            sig = r.to_bytes(32, "big") + s.to_bytes(32, "big") + bytes([v])
+            try:
+                if recover_address(h, sig) == addr:
+                    return "0x" + sig.hex()
+            except ValueError:
+                pass
+        raise AssertionError("could not produce recoverable signature")
+    return addr, sign
+
+
+def test_kya_bind_and_check(ledger, monkeypatch):
+    acme, bank = ledger.create_org("Acme"), ledger.create_org("Bank")
+    for i in range(12):
+        ledger.record(acme["org_id"], "treasury-agent", "claude", "approval" if i % 3 == 0 else "payment", f"p{i}")
+
+    def run_(key, name, args):
+        as_org(monkeypatch, key)
+
+        async def go():
+            async with Client(server(ledger)) as c:
+                return await c.call_tool(name, args)
+        return anyio.run(go)
+
+    addr, sign = _eth_wallet()
+    # unknown wallet is denied
+    d0 = run_(None, "kya_check", {"address": addr}).structured_content
+    assert d0["known"] is False and d0["allow"] is False and d0["signature"]
+
+    # bind with a real wallet signature
+    ch = run_(acme["api_key"], "kya_challenge", {"address": addr}).structured_content
+    assert ch["challenge_id"].startswith("kyc_") and addr.lower()[2:10] in ch["message"].lower()
+    bad = run_(acme["api_key"], "kya_bind_wallet", {"address": addr, "challenge_id": ch["challenge_id"],
+                                                     "signature": "0x" + "11" * 65}).structured_content
+    assert "error" in bad
+    b = run_(acme["api_key"], "kya_bind_wallet", {"address": addr, "challenge_id": ch["challenge_id"],
+                                                   "signature": sign(ch["message"]), "stream_id": "treasury-agent",
+                                                   "label": "hot wallet"}).structured_content
+    assert b["bound"] and b["proof"] == "signature"
+    # challenge is single-use
+    assert "error" in run_(acme["api_key"], "kya_bind_wallet", {"address": addr, "challenge_id": ch["challenge_id"],
+                                                                 "signature": sign(ch["message"])}).structured_content
+
+    # no passport yet -> denied with a pointer
+    d1 = run_(None, "kya_check", {"address": addr, "min_score": 0}).structured_content
+    assert d1["known"] and not d1["allow"] and "passport_issue" in d1["reasons"][0]
+
+    # issue passport -> allowed; bank logs the check
+    pp = run_(acme["api_key"], "passport_issue", {"stream_id": "treasury-agent"}).structured_content
+    d2 = run_(bank["api_key"], "kya_check", {"address": addr.upper().replace("0X", "0x"), "min_score": 100,
+                                              "purpose": "settle invoice"}).structured_content
+    assert d2["allow"] and d2["passport_id"] == pp["passport_id"] and d2["proof"] == "signature"
+    assert d2["recorded_in_your_log"]["stream_id"] == "privi-kya"
+    assert d2["attestation"]["allow"] is True and len(d2["signature"]) == 128
+    # internal streams do not change the score
+    v = run_(None, "passport_verify", {"passport_id": pp["passport_id"]}).structured_content
+    assert v["live"]["drift"] == 0
+
+    # declared binding (no signature) is refused when require_signed
+    addr2, _ = _eth_wallet()
+    run_(acme["api_key"], "kya_bind_wallet", {"address": addr2})
+    assert run_(None, "kya_check", {"address": addr2, "min_score": 0}).structured_content["allow"] is False
+    assert run_(None, "kya_check", {"address": addr2, "min_score": 0, "require_signed": False}).structured_content["allow"] is True
+
+    # another org cannot steal a proven wallet without a signature
+    assert "error" in run_(bank["api_key"], "kya_bind_wallet", {"address": addr}).structured_content
+
+    # unbind -> denied
+    assert len(run_(acme["api_key"], "kya_wallets", {}).structured_content["wallets"]) == 2
+    assert run_(bank["api_key"], "kya_unbind_wallet", {"address": addr}).is_error
+    assert run_(acme["api_key"], "kya_unbind_wallet", {"address": addr}).structured_content["unbound"]
+    assert run_(None, "kya_check", {"address": addr, "min_score": 0}).structured_content["allow"] is False
+
+
+def test_kya_http_routes(ledger):
+    from starlette.testclient import TestClient
+    app = server(ledger).streamable_http_app(stateless_http=True, json_response=True)
+    with TestClient(app) as http:
+        r = http.get("/kya/0x1990589FD200E043b8C6FD9ec5956c61b3071048")
+        assert r.status_code == 200 and r.json()["known"] is False and r.json()["signature"]
+        assert http.get("/kya/nope").status_code == 400
+        assert http.get("/kya/0x1990589FD200E043b8C6FD9ec5956c61b3071048/badge.svg").headers["content-type"].startswith("image/svg")

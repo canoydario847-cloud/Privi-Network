@@ -35,11 +35,12 @@ from .plans import Plans
 from .gov_ai import HIGH_IMPACT_PRACTICES, GovAIInventory
 from .gov_pqc import KINDS, STATUSES, QuantumReady, canonical_json, classify
 from .x402 import Facilitator, Paywall
+from .kya import KYA, KYAError, checksum as eth_checksum
 from .passport import PASSPORT_VERSION as PASSPORT_VERSION_HTTP, PassportError, Passports, badge_svg, body_hash as passport_hash
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor-production.up.railway.app/mcp"
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/ledger-server"
 
 INSTRUCTIONS = """\
@@ -53,6 +54,11 @@ as a receipt. Requires the organization's API key (Authorization: Bearer).
 
 Auditors: ledger_audit_stream checks a stream's integrity without revealing its
 contents (paid per call with x402, USDC on Base). ledger_check_receipt is free.
+
+Blockchain wallets: Privi KYA (Know-Your-Agent) tells any chain, protocol, exchange or x402
+facilitator whether a wallet is operated by an audited agent: kya_check <address> is free and
+returns allow/deny with the live Passport score. Bind your agents' wallets with kya_challenge +
+kya_bind_wallet (signed with the wallet) so your transactions pass KYA checks everywhere.
 
 Before trusting or paying another agent, ask for its Privi Passport (a signed, on-chain-anchored
 trust credential scored 0-1000 from its verified history) and check it with passport_verify or
@@ -113,6 +119,8 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     passports = Passports(ledger, ledger._db, ledger._lock, reports, handshakes, onchain, public_url,
                           os.getenv("LEDGER_PASSPORT_SIGNING_KEY", ""))
 
+    kya = KYA(ledger._db, ledger._lock, passports, public_url)
+
     def org_from(ctx: Context) -> dict | None:
         headers = ctx.headers
         key = _bearer(headers) if headers is not None else os.getenv("LEDGER_LOCAL_ORG_KEY", "")
@@ -150,6 +158,8 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
                 "passport_issue": f"organization API key; free on Pro/enterprise, ${settings.prices_usd['passport_issue']} per passport (x402) on the free plan",
                 "passport_verify": "free", "passport_gate": "free", "passport_list": "organization API key",
                 "passport_revoke": "organization API key",
+                "kya_check": "free", "kya_challenge": "organization API key", "kya_bind_wallet": "organization API key",
+                "kya_wallets": "organization API key", "kya_unbind_wallet": "organization API key",
             },
             "action_types": list(ACTION_TYPES), "outcomes": list(OUTCOMES),
             "get_a_key": SOURCE,
@@ -823,6 +833,107 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         except PassportError as e:
             return _result({"error": str(e)}, is_error=True)
 
+    # ---------------- Privi KYA: Know-Your-Agent for blockchain wallets ----------------
+
+    @mcp.tool(title="KYA: check a wallet", annotations=READ_ONLY)
+    def kya_check(
+        address: Annotated[str, Field(description="0x wallet address about to send or receive a transaction")],
+        ctx: Context,
+        min_score: Annotated[int, Field(description="Minimum current Passport score 0-1000", ge=0, le=1000)] = 550,
+        min_grade: Annotated[str | None, Field(description="Minimum grade A-E")] = None,
+        require_signed: Annotated[bool, Field(description="Require wallet ownership proven by signature (not just declared)")] = True,
+        purpose: Annotated[str, Field(description="What the transaction is for (recorded in your log if you send your key)")] = "",
+    ) -> CallToolResult:
+        """Know-Your-Agent for blockchains: is this wallet operated by an audited AI agent, and how trustworthy is it
+        right now? Resolves the address to its organization and live Privi Passport and returns allow/deny with
+        reasons, plus a Privi-signed attestation (valid 60 min) you can cache. For chains, DeFi protocols, exchanges,
+        stablecoin issuers and x402 facilitators. Free; send your organization key to log the check as evidence."""
+        try:
+            d = kya.check(address, min_score, min_grade, require_signed)
+        except ValueError as e:
+            return _result({"error": str(e)}, is_error=True)
+        d.update(kya.attest(d))
+        org = org_from(ctx)
+        if org:
+            try:
+                e = ledger.record(org["org_id"], "privi-kya", "Privi Ledger", "decision",
+                                  f"KYA {'allowed' if d['allow'] else 'denied'} {d['address']}" + (f" for: {purpose[:120]}" if purpose else ""),
+                                  d["address"], "success" if d["allow"] else "blocked",
+                                  {"min_score": min_score, "min_grade": min_grade, "reasons": d["reasons"],
+                                   "current_score": d.get("current_score"), "passport_id": d.get("passport_id")})
+                d["recorded_in_your_log"] = {"stream_id": "privi-kya", "entry_hash": e["entry_hash"]}
+            except ValueError:
+                pass
+        return _result(d)
+
+    @mcp.tool(title="KYA: challenge for a wallet", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                               idempotentHint=False, openWorldHint=False))
+    def kya_challenge(
+        address: Annotated[str, Field(description="0x wallet address your agent controls")],
+        ctx: Context,
+    ) -> CallToolResult:
+        """Step 1 of binding a wallet to your Privi Passport: get a message to sign with that wallet (EIP-191
+        personal_sign). Valid 30 minutes. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        try:
+            return _result(kya.challenge(org["org_id"], org["name"], address))
+        except ValueError as e:
+            return _result({"error": str(e)}, is_error=True)
+
+    @mcp.tool(title="KYA: bind a wallet", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                      idempotentHint=True, openWorldHint=False))
+    def kya_bind_wallet(
+        address: Annotated[str, Field(description="0x wallet address")],
+        ctx: Context,
+        challenge_id: Annotated[str | None, Field(description="From kya_challenge")] = None,
+        signature: Annotated[str | None, Field(description="65-byte hex signature of the challenge message by the wallet")] = None,
+        stream_id: Annotated[str | None, Field(description="The agent (stream) that uses this wallet; omit for the whole organization")] = None,
+        label: Annotated[str, Field(description="Friendly name, e.g. 'treasury-agent hot wallet'")] = "",
+    ) -> CallToolResult:
+        """Step 2: bind the wallet to your organization's Privi Passport so its transactions pass KYA checks. With a
+        wallet signature the binding is *proven*; without one it is only *declared* (most checkers require proven).
+        Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        if blocked := over_limit(org["org_id"]):
+            return blocked
+        try:
+            sid = check_id(stream_id, "stream_id") if stream_id else "*"
+            b = kya.bind(org["org_id"], address, sid, label, challenge_id, signature)
+            ledger.record(org["org_id"], "privi-kya", "Privi Ledger", "other",
+                          f"Wallet {b['address']} bound ({b['proof']}) to {sid}", b["address"], "success",
+                          {"proof": b["proof"], "stream_id": sid})
+            return _result({"bound": True, **b, "public_url": f"{public_url}/kya/{b['address']}",
+                            "next": "Counterparties and facilitators call kya_check on this address; issue a Passport with passport_issue if you have not."})
+        except (KYAError, ValueError) as e:
+            return _result({"error": str(e)}, is_error=True)
+
+    @mcp.tool(title="KYA: your wallets", annotations=READ_ONLY)
+    def kya_wallets(ctx: Context) -> CallToolResult:
+        """Wallets bound to your organization and how each was proven. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        return _result({"org_id": org["org_id"], "wallets": kya.list_for(org["org_id"])})
+
+    @mcp.tool(title="KYA: unbind a wallet", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True,
+                                                                        idempotentHint=True, openWorldHint=False))
+    def kya_unbind_wallet(
+        address: Annotated[str, Field(description="0x wallet address")],
+        ctx: Context,
+    ) -> CallToolResult:
+        """Remove a wallet from your Passport (rotated or compromised key). KYA checks deny it immediately. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        try:
+            return _result(kya.unbind(org["org_id"], address))
+        except (KYAError, ValueError) as e:
+            return _result({"error": str(e)}, is_error=True)
+
     # ---------------- http ----------------
 
     @mcp.custom_route("/admin/orgs", methods=["POST"], include_in_schema=False)
@@ -850,6 +961,28 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         return Response(pdf, media_type="application/pdf",
                         headers={"Content-Disposition": f'attachment; filename="{rid}.pdf"'})
 
+    @mcp.custom_route("/kya/{address}", methods=["GET"], include_in_schema=False)
+    async def kya_json(request: Request) -> JSONResponse:
+        q = request.query_params
+        try:
+            d = kya.check(request.path_params["address"], int(q.get("min_score", 550)), q.get("min_grade"),
+                          q.get("require_signed", "true").lower() != "false")
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        d.update(kya.attest(d))
+        return JSONResponse(d, headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"})
+
+    @mcp.custom_route("/kya/{address}/badge.svg", methods=["GET"], include_in_schema=False)
+    async def kya_badge(request: Request) -> Response:
+        try:
+            d = kya.check(request.path_params["address"], 0, None, False)
+        except ValueError:
+            d = {"known": False}
+        if not d.get("known") or not d.get("passport_valid"):
+            return Response(badge_svg("E", 0, expired=True).replace("Privi Trust", "Privi KYA"), media_type="image/svg+xml")
+        return Response(badge_svg(d["current_grade"], d["current_score"]).replace("Privi Trust", "Privi KYA"),
+                        media_type="image/svg+xml", headers={"Cache-Control": "max-age=300"})
+
     @mcp.custom_route("/passports/{passport_id}", methods=["GET"], include_in_schema=False)
     async def passport_json(request: Request) -> JSONResponse:
         rec = passports.get(request.path_params["passport_id"])
@@ -874,7 +1007,8 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     @mcp.custom_route("/.well-known/privi-passport.json", methods=["GET"], include_in_schema=False)
     async def passport_issuer(_: Request) -> JSONResponse:
         return JSONResponse({**passports.issuer(), "version": PASSPORT_VERSION_HTTP,
-                             "verify": {"mcp": f"{public_url}/mcp", "tools": ["passport_verify", "passport_gate"]},
+                             "verify": {"mcp": f"{public_url}/mcp", "tools": ["passport_verify", "passport_gate", "kya_check"]},
+                             "kya": f"{public_url}/kya/{{address}}",
                              "lookup": f"{public_url}/passports/{{passport_id}}"},
                             headers={"Access-Control-Allow-Origin": "*"})
 

@@ -40,6 +40,7 @@ from cryptography.exceptions import InvalidSignature
 PASSPORT_VERSION = "1"
 VALID_DAYS = 30
 SENSITIVE = ("payment", "data_change", "message")
+INTERNAL_STREAMS = ("privi-passport", "privi-billing")   # Privi's own bookkeeping; never scored
 WEIGHTS = {"history": 300, "integrity": 250, "anchoring": 150, "reliability": 100,
            "oversight": 50, "compliance": 100, "handshakes": 50}
 GRADES = (("A", 850), ("B", 700), ("C", 550), ("D", 400), ("E", 0))
@@ -142,7 +143,7 @@ class Passports:
 
     def facts(self, org_id: str, stream_id: str | None) -> dict[str, Any]:
         """Everything the score is computed from, gathered live from the ledger."""
-        streams = [s["stream_id"] for s in self.ledger.streams(org_id)]
+        streams = [s["stream_id"] for s in self.ledger.streams(org_id) if s["stream_id"] not in INTERNAL_STREAMS]
         if stream_id:
             streams = [s for s in streams if s == stream_id]
         entries = 0
