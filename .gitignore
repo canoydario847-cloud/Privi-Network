@@ -3,3 +3,6 @@ privi-data/
 .env
 .env.*
 *.pem
+
+# Example env templates are safe to commit (no secrets)
+!.env.example
