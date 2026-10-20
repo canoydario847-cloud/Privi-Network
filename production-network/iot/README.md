@@ -115,6 +115,7 @@ go in the registry, never signing secrets. Owner-side Privi contract actions:
 - proposeCompanyRegistration(companyIdHash, companyAdministratorAddress)
 - acceptCompanyRegistration(companyIdHash)  // company administrator only
 - rejectCompanyRegistration(companyIdHash)  // optional decline by company administrator
+- cancelCompanyRegistration(companyIdHash)  // platform can cancel pending proposals ONLY
 - setCompanyGateway(companyIdHash, authorizedGatewayEvmAddress, true)
 - enrollDevice(sha256DeviceId, sha256DerEd25519PubKey,
   sha256CompanyId, gatewayAddress)
