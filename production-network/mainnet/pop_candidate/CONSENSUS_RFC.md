@@ -227,3 +227,52 @@ install pinned ethers v6 into a disposable local directory and set
 
 This experiment never sends a token, signs a real founder authorization,
 starts validators, or changes the real Cosmos EVM node.
+
+
+## Disposable on-chain validator-position anchor verifier
+
+The development-only module \`onchain_anchor_verifier.cjs\` can now consume
+a **real transaction receipt** for each governance-attested research
+validator. It verifies all of the following before considering a
+\`PoP:PRIVI_WORLD_CORP:VALIDATOR/AUTH:SEQUENCE\` position anchored:
+
+- Four separate, signed Ed25519 validator admissions under the one
+  \`PRIVI_WORLD_CORP\` operator and founder EVM address *declaration*
+  (not a real founder-wallet signature).
+- Live RPC chain identity, genesis block hash and the bytecode SHA-256
+  of the exact configured \`PriviIoTLedger\` Solidity contract, using
+  the existing **loopback-only, developer-only** EVM ID 262144 gate.
+- A successful mined transaction, its canonical block hash and height,
+  current-head confirmation depth, actual matching \`IoTRecorded\` event
+  decoded from the pinned contract, correct validator PoP stamp hash,
+  \`VALIDATOR/AUTH\` zone, validator-position event type and position
+  sequence.
+- On-chain device enrollment containing the governance-admitted
+  validator's Ed25519 SPKI public-key hash and Privi World Corp company
+  identifier. One receipt may not be reused for multiple validators.
+- Failure on fictitious hashes, reorg/canonical-block inconsistencies,
+  absent transaction, insufficient confirmations, alternative genesis,
+  changed contract bytecode, duplicate receipts and forged event fields.
+
+CI exercises one **actual disposable four-validator Cosmos EVM network**
+and records four separate validator-position events, then checks receipt
+inclusion and several denial cases. The mock unit tests separately
+probe tampered receipts and RPC values. Admission Ed25519 root
+signatures remain test-only and are NOT real founder EVM signatures.
+
+This is a substantial improvement over **trusting a bare claimed
+\`anchorBlockHash\` string**. But the source ledger is still the
+stake-based **upstream Cosmos EVM developer chain**, not actual native
+Privi PoP consensus. The verifier relies on its configured RPC and
+does not independently validate Merkle receipt proofs, validator
+commits, live host identity, or finalized native PoP application state.
+The developer gateway controls the validator-zone test events; such
+an event alone **does not appoint a live validator**. Candidate votes
+are not bound into actual CometBFT/ABCI messages. This does not activate
+a mainnet, create coins or prove the 1B PRVI lifetime cap.
+
+**NO-GO:** Native PoP BFT safety, objective production position-inclusion
+proofs, founder EIP-191 signature, independent signer isolation, secure
+validator update logic, complete native bank mutation authorization,
+external audit, signed genesis and public operational evidence remain
+unimplemented.
