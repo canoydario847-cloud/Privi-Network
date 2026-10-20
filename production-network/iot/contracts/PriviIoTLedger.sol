@@ -142,8 +142,7 @@ contract PriviIoTLedger {
     function setCompanyGateway(bytes32 companyIdHash, address gateway, bool authorized) external {
         Company storage company = companies[companyIdHash];
         if (!company.registered) revert CompanyNotRegistered();
-        if (msg.sender != company.administrator && msg.sender != owner)
-            revert NotCompanyAdministrator();
+        if (msg.sender != company.administrator) revert NotCompanyAdministrator();
         if (authorized) {
             if (!company.enabled) revert CompanyDisabled();
             requireActiveDeveloper(gateway);
