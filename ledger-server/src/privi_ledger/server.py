@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import hmac
 import json
 import os
@@ -31,6 +32,7 @@ from .reports import ReportStore, build_body, report_hash, to_markdown
 from .pdf import render_pdf
 from .handshake import HandshakeError, Handshakes
 from .plans import Plans
+from .gov_ai import HIGH_IMPACT_PRACTICES, GovAIInventory
 from .x402 import Facilitator, Paywall
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor-production.up.railway.app/mcp"
@@ -79,6 +81,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     reports = ReportStore(ledger._db, ledger._lock)
     handshakes = Handshakes(ledger, ledger._db, ledger._lock)
     plans = Plans(ledger)
+    gov = GovAIInventory(ledger)
 
     def onchain(org_id: str, stream_id: str, result: dict) -> dict:
         cp = checkpoints.latest(f"{org_id}/{stream_id}")
@@ -360,6 +363,101 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
 
         return await paywall.run("ledger_upgrade_pro", "Privi Ledger Pro, 30 days",
                                  dict(ctx.request_context.meta or {}), work)
+
+    # ---------------- Privi Gov AI Inventory (OMB M-25-21) ----------------
+
+    @mcp.tool(title="Save an AI use case", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                      idempotentHint=True, openWorldHint=False))
+    def gov_ai_usecase_save(
+        use_case: Annotated[dict[str, Any], Field(description=(
+            "AI use case record in OMB M-25-21 reporting fields. Required: use_case_id, name, stage "
+            "(pre_deployment|pilot|deployed|retired), high_impact, purpose, outputs, sourcing (in_house|vendor|both), "
+            "involves_pii, custom_code. Optional: bureau, contact_email, topic_area, ai_classification, "
+            "withhold_from_public, expected_benefits, start_date, vendor_name, ato_system_name, data_description, "
+            "open_data_link, pia_link, demographic_features, code_link, monitoring_streams (Ledger stream IDs), "
+            "waivers [{practice, justification}], practices {name: {done, evidence, date}} with names: "
+            + ", ".join(HIGH_IMPACT_PRACTICES)))],
+        actor: Annotated[str, Field(description="Who is making the change (person or agent)")],
+        ctx: Context,
+        merge: Annotated[bool, Field(description="Merge into the existing record (true) or replace it (false)")] = True,
+    ) -> CallToolResult:
+        """Add or update an entry in your agency's AI use case inventory (OMB M-25-21). Every change creates a
+        new version and is written to your tamper-evident 'ai-inventory' log. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        if blocked := over_limit(org["org_id"]):
+            return blocked
+        try:
+            return _result(gov.upsert(org["org_id"], actor, use_case, merge))
+        except ValueError as e:
+            return _result({"error": str(e)}, is_error=True)
+
+    @mcp.tool(title="AI use case inventory", annotations=READ_ONLY)
+    def gov_ai_inventory(
+        ctx: Context,
+        use_case_id: Annotated[str | None, Field(description="One use case; omit for all")] = None,
+    ) -> CallToolResult:
+        """Your agency's AI use case inventory: the current version of each record. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        return _result({"org_id": org["org_id"], "use_cases": gov.latest(org["org_id"], use_case_id)})
+
+    @mcp.tool(title="Check inventory readiness", annotations=READ_ONLY)
+    def gov_ai_inventory_check(ctx: Context) -> CallToolResult:
+        """Flags what an OMB M-25-21 review would flag before you submit: missing required fields, PII without a
+        Privacy Impact Assessment, and high-impact AI in pilot or deployment missing any minimum risk practice
+        (testing, impact assessment, independent review, monitoring, operator training, fail-safe, appeals, public
+        feedback) or without a recently active activity log as monitoring evidence. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        return _result(gov.check(org["org_id"]))
+
+    @mcp.tool(title="Export public inventory", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                          idempotentHint=False, openWorldHint=True))
+    async def gov_ai_inventory_export(
+        ctx: Context,
+        include_withheld: Annotated[bool, Field(description="Include use cases marked withhold_from_public (internal copy)")] = False,
+    ) -> CallToolResult:
+        """Machine-readable CSV of your publicly releasable AI use cases (for publishing at agency.gov/ai), with its
+        SHA-256 sealed on the Privi blockchain so the published file can be proven unaltered. Requires the
+        organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        text, rows = gov.export_csv(org["org_id"], include_withheld)
+        h = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        att: dict[str, Any] = {"export_hash": h, "rows": rows, "include_withheld": include_withheld}
+        if anchor_client:
+            try:
+                r = await anyio.to_thread.run_sync(anchor_client.anchor, [h], f"AI inventory export {org['org_id']}")
+                rc = next(x for x in r["receipts"] if x["hash"] == h)
+                att.update(anchored=True, tx_hash=r["tx_hash"], proof=rc["proof"], block_number=r.get("block_number"),
+                           chain_id=r.get("chain_id"))
+            except (AnchorError, StopIteration, KeyError) as e:
+                att.update(anchored=False, reason=f"anchoring failed: {e}")
+        else:
+            att.update(anchored=False, reason="anchoring is not configured on this server")
+        gov.save_export(org["org_id"], h, rows, att)
+        ledger.record(org["org_id"], "ai-inventory", "Privi Ledger", "data_access",
+                      f"Exported AI use case inventory ({rows} use case(s){', including withheld' if include_withheld else ''})",
+                      "ai-inventory-export", "success", {"export_hash": h, "anchored": att.get("anchored")})
+        return _result({"csv": text, "attestation": att,
+                        "note": "Column names follow the M-25-21 reporting fields; confirm against OMB's current template."})
+
+    @mcp.tool(title="Verify a published inventory", annotations=READ_ONLY)
+    def gov_ai_verify_export(
+        csv_text: Annotated[str, Field(description="The exact CSV file contents as published")],
+    ) -> CallToolResult:
+        """Check that a published AI inventory file is exactly what the agency exported from Privi Ledger, and
+        return its on-chain seal. Free; no key needed."""
+        h = hashlib.sha256(csv_text.encode("utf-8")).hexdigest()
+        rec = gov.find_export(h)
+        if not rec:
+            return _result({"valid": False, "export_hash": h, "reason": "no export with this exact content; it may have been edited"})
+        return _result({"valid": True, "export_hash": h, **rec})
 
     # ---------------- Privi Handshake (cross-organization) ----------------
 

@@ -352,3 +352,62 @@ def test_self_serve_free_limit_then_paid_pro(ledger, monkeypatch):
     # admin-created orgs stay unlimited (enterprise)
     ent = ledger.create_org("Big Co")
     assert run_(ent["api_key"], "ledger_plan", {}).structured_content["plan"] == "enterprise"
+
+
+def test_gov_ai_inventory_m25_21(ledger, monkeypatch):
+    agency = ledger.create_org("Department of Examples")
+    monkeypatch.setenv("LEDGER_LOCAL_ORG_KEY", agency["api_key"])
+    fake = FakeAnchorWithVerify()
+    srv = build_server(Settings(pay_to=PAY_TO), ledger, FakeFacilitator(), anchor_client=fake)
+
+    async def call(tool, args):
+        async with Client(srv) as c:
+            return await c.call_tool(tool, args)
+
+    run_ = lambda tool, args: anyio.run(call, tool, args)
+    benefits = {"use_case_id": "DOE-2026-001", "name": "Benefits eligibility triage", "stage": "deployed",
+                "high_impact": True, "purpose": "Prioritize benefit applications for review",
+                "outputs": "Priority score per application", "sourcing": "vendor", "vendor_name": "Acme AI",
+                "involves_pii": True, "custom_code": False, "monitoring_streams": ["triage-agent"],
+                "practices": {"pre_deployment_testing": {"done": True, "evidence": "Test report TR-14"}}}
+    s1 = run_("gov_ai_usecase_save", {"use_case": benefits, "actor": "CAIO office"}).structured_content
+    assert s1["version"] == 1 and s1["changed"]
+
+    # bad input is rejected
+    assert run_("gov_ai_usecase_save", {"use_case": {**benefits, "stage": "live"}, "actor": "x"}).is_error
+    assert run_("gov_ai_usecase_save", {"use_case": {**benefits, "color": "blue"}, "actor": "x"}).is_error
+
+    chk = run_("gov_ai_inventory_check", {}).structured_content
+    assert chk["ready_for_submission"] is False and chk["finding_counts"]["critical"] == 7   # 7 practices unmet
+    texts = " ".join(f["finding"] for f in chk["findings"])
+    assert "Privacy Impact Assessment" in texts and "no activity in the last 30 days" in texts
+
+    # fix it: PIA, the remaining practices (one waived), and monitoring activity
+    done = {p: {"done": True, "evidence": f"doc-{p}"} for p in
+            ["impact_assessment", "independent_review", "ongoing_monitoring", "operator_training",
+             "fail_safe", "appeal_process"]}
+    s2 = run_("gov_ai_usecase_save", {"actor": "CAIO office", "use_case": {
+        "use_case_id": "DOE-2026-001", "pia_link": "https://example.gov/pia/14", "practices": done,
+        "waivers": [{"practice": "public_feedback", "justification": "CAIO determination 2026-03"}]}}).structured_content
+    assert s2["version"] == 2 and "pia_link" in s2["changed_fields"]
+    ledger.record(agency["org_id"], "triage-agent", "triage model", "decision", "Scored application 551")
+    assert run_("gov_ai_inventory_check", {}).structured_content["ready_for_submission"] is True
+
+    # every change is in the tamper-evident log
+    log = ledger.entries(agency["org_id"], "ai-inventory")
+    assert [e["summary"].split(" (")[0] for e in log] == ["Added AI use case DOE-2026-001", "Updated AI use case DOE-2026-001"]
+
+    # internal-only use case is withheld from the public file
+    run_("gov_ai_usecase_save", {"actor": "x", "use_case": {"use_case_id": "DOE-2026-002", "name": "Internal search",
+         "stage": "pilot", "high_impact": False, "purpose": "Search", "outputs": "Results", "sourcing": "in_house",
+         "involves_pii": False, "custom_code": True, "withhold_from_public": True}})
+    ex = run_("gov_ai_inventory_export", {}).structured_content
+    import csv as _csv, io as _io
+    rows = list(_csv.DictReader(_io.StringIO(ex["csv"])))
+    assert len(rows) == 1 and rows[0]["use_case_id"] == "DOE-2026-001" and rows[0]["practice_public_feedback"] == "Waived"
+    assert ex["attestation"]["anchored"] and fake.calls[-1] == [ex["attestation"]["export_hash"]]
+
+    ok = run_("gov_ai_verify_export", {"csv_text": ex["csv"]}).structured_content
+    assert ok["valid"] and ok["rows"] == 1
+    bad = run_("gov_ai_verify_export", {"csv_text": ex["csv"].replace("Yes", "No", 1)}).structured_content
+    assert bad["valid"] is False

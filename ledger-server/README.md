@@ -59,6 +59,22 @@ The customer adds the server to their agent with header `Authorization: Bearer p
 
 Each report is **sealed**. Its SHA-256 hash, taken over canonical JSON, is anchored on the Privi blockchain through Privi Anchor. Anyone holding the report can run `ledger_verify_report`, which recomputes the hash, confirms Privi Ledger issued exactly that content, and checks the anchor on chain. Editing even one number, such as hiding a failure, makes verification fail.
 
+## Privi Gov AI Inventory (OMB M-25-21)
+
+Federal agencies must keep an inventory of their AI use cases, publish the releasable ones as a machine-readable file, and show minimum risk practices for high-impact AI. That requirement comes from OMB Memorandum M-25-21 and OMB's guidance on 2025 agency AI reporting. Privi Ledger covers the whole loop:
+
+| Tool | What it does |
+|---|---|
+| `gov_ai_usecase_save` | Add or update a use case in the guidance's reporting fields. Every change is a new version, written to the agency's tamper-evident `ai-inventory` log |
+| `gov_ai_inventory` | Current inventory |
+| `gov_ai_inventory_check` | Flags what a review would flag: missing required fields, PII without a Privacy Impact Assessment, and high-impact AI in pilot or deployment missing any minimum practice (testing, impact assessment, independent review, monitoring, operator training, fail-safe, appeals, public feedback) or without a recently active activity log as monitoring evidence. Practices waived by a written CAIO determination are respected |
+| `gov_ai_inventory_export` | CSV of releasable use cases for agency.gov/ai, with its SHA-256 sealed on the Privi chain |
+| `gov_ai_verify_export` (free) | Proves a published inventory file is exactly what the agency exported |
+
+The inventory links to agents' Privi Ledger activity logs (`monitoring_streams`), so "ongoing monitoring" is backed by real, tamper-evident records.
+
+> Field names follow OMB's published reporting fields. Confirm them against OMB's current template before submitting. This tool supports compliance work; it is not legal advice or an OMB-approved system.
+
 ## Privi Handshake
 
 A dealing between two companies, such as a payment, a data transfer, a delivery or an agreement, gets recorded by **both** of them, with neither able to deny or rewrite it alone.
