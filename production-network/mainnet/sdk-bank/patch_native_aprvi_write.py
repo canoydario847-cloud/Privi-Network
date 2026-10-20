@@ -41,7 +41,7 @@ def apply_patch(sdk_copy, *, verify_blobs=True):
         raise ValueError("SDK patch must target an isolated .privi-reviewed-sdk-copy only")
     manifest = copy / "go.mod"
     if not manifest.is_file() or not re.search(
-        r"(?m)^module github\.com/cosmos/cosmos-sdk\\s*$",
+        r"(?m)^module github\.com/cosmos/cosmos-sdk\s*$",
         manifest.read_text(encoding="utf-8"),
     ):
         raise ValueError("not the pinned Cosmos SDK source module")
