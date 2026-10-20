@@ -18,8 +18,8 @@ class FakeRPC:
     def __init__(self):
         self.values={
           "eth_chainId":"0x40000",
-          "eth_getTransactionByHash":{"hash":HASH,"from":FROM,"to":TO,"value":"0x64","input":"0x","blockHash":BHASH,"chainId":"0x40000"},
-          "eth_getTransactionReceipt":{"transactionHash":HASH,"status":"0x1","blockNumber":"0x8","blockHash":BHASH},
+          "eth_getTransactionByHash":{"hash":HASH,"from":FROM,"to":TO,"value":"0x64","input":"0x","blockHash":BHASH,"chainId":"0x40000","gas":"0x7530","gasPrice":"0x3b9aca00"},
+          "eth_getTransactionReceipt":{"transactionHash":HASH,"status":"0x1","blockNumber":"0x8","blockHash":BHASH,"gasUsed":"0x5208","effectiveGasPrice":"0x3b9aca00"},
           "eth_blockNumber":"0x9",
           "eth_getBlockByNumber":{"hash":BHASH,"transactions":[HASH]}
         }
@@ -34,6 +34,29 @@ class EVMReceiptTests(unittest.TestCase):
         out=self.verify()
         self.assertEqual(out["confirmations"],2)
         self.assertEqual(out["evm_chain_id"],262144)
+        self.assertEqual(out["gas_used"],"21000")
+        self.assertEqual(out["effective_gas_price_wei"],"1000000000")
+        self.assertEqual(out["gross_gas_paid_wei"],"21000000000000")
+    def test_gas_used_must_not_exceed_signed_gas_limit(self):
+        self.rpc.values["eth_getTransactionReceipt"]["gasUsed"]="0x7531"
+        with self.assertRaisesRegex(ValueError,"invalid EVM gas usage"):
+            self.verify()
+    def test_effective_price_must_not_exceed_signed_legacy_price(self):
+        self.rpc.values["eth_getTransactionReceipt"]["effectiveGasPrice"]="0x3b9aca01"
+        with self.assertRaisesRegex(ValueError,"exceeds transaction gas price"):
+            self.verify()
+    def test_gas_price_must_not_be_zero(self):
+        self.rpc.values["eth_getTransactionByHash"]["gasPrice"]="0x0"
+        with self.assertRaisesRegex(ValueError,"exceeds transaction gas price"):
+            self.verify()
+    def test_missing_gas_fields_fail_closed(self):
+        self.rpc.values["eth_getTransactionReceipt"].pop("gasUsed")
+        with self.assertRaisesRegex(ValueError,"receipt gasUsed"):
+            self.verify()
+    def test_invalid_effective_gas_price_fails_closed(self):
+        self.rpc.values["eth_getTransactionReceipt"]["effectiveGasPrice"]="1.5"
+        with self.assertRaisesRegex(ValueError,"receipt effectiveGasPrice"):
+            self.verify()
     def test_wrong_network(self):
         with self.assertRaisesRegex(ValueError,"EVM chain ID mismatch"):
             mod.check(self.rpc,HASH,4221,FROM,TO,100)
