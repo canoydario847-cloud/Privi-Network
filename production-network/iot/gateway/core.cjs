@@ -187,6 +187,17 @@ async function submitEvent(packet, {registry, config, provider, wallet, contract
        "No Privi transaction hash returned");
   const receipt = await tx.wait(config.confirmations);
   must(receipt && Number(receipt.status) === 1, "Privi transaction not confirmed successful");
+  must(typeof receipt.blockNumber === "number" && Number.isSafeInteger(receipt.blockNumber) && receipt.blockNumber > 0 &&
+       typeof receipt.blockHash === "string" && HEX32.test(receipt.blockHash),
+       "A mined Privi block hash and height are required");
+  const receiptBlock = await provider.send("eth_getBlockByNumber",
+    ["0x" + receipt.blockNumber.toString(16), false]);
+  must(receiptBlock && typeof receiptBlock.hash === "string" &&
+       receiptBlock.hash.toLowerCase() === receipt.blockHash.toLowerCase() &&
+       typeof receiptBlock.timestamp === "string" && /^0x[0-9a-f]+$/i.test(receiptBlock.timestamp),
+       "Privi receipt block cannot be verified");
+  const blockTime = Number(BigInt(receiptBlock.timestamp));
+  must(Number.isSafeInteger(blockTime) && blockTime > 0, "Invalid Privi sealed block timestamp");
   const matched = (receipt.logs || []).some(log => {
     try {
       const decoded = contract.interface.parseLog(log);
@@ -199,6 +210,7 @@ async function submitEvent(packet, {registry, config, provider, wallet, contract
   });
   must(matched, "Missing matching Privi IoTRecorded receipt log");
   return {chainId: config.chainId, transactionHash: tx.hash, blockNumber: receipt.blockNumber,
+          blockTimestamp: blockTime, blockHash: receipt.blockHash,
           deviceIdHash: event.deviceIdHash, payloadHash: event.payloadHash,
           eventHash: event.eventHash, sequence: packet.sequence,
           popStamp: event.popStamp, popStampHash: event.popStampHash,
