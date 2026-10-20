@@ -11,6 +11,8 @@ contract PriviIoTLedger {
     error DeveloperDisabled();
     error CompanyNotRegistered();
     error CompanyAlreadyRegistered();
+    error CompanyRegistrationPending();
+    error CompanyRegistrationNotPending();
     error CompanyDisabled();
     error CompanyGatewayNotAuthorized();
     error NotCompanyAdministrator();
@@ -69,8 +71,13 @@ contract PriviIoTLedger {
         bool enabled;
     }
     mapping(bytes32 => Company) public companies;
+    // The platform can propose onboarding but CANNOT activate a company.
+    // Only the designated company's independent administrator can accept.
+    mapping(bytes32 => address) public pendingCompanyAdministrators;
     mapping(bytes32 => mapping(address => bool)) public companyGateways;
 
+    event CompanyRegistrationProposed(bytes32 indexed companyIdHash, address indexed administrator);
+    event CompanyRegistrationRejected(bytes32 indexed companyIdHash, address indexed administrator);
     event CompanyRegistered(bytes32 indexed companyIdHash, address indexed administrator);
     event CompanyEnabled(bytes32 indexed companyIdHash, bool enabled);
     event CompanyGatewayAuthorized(bytes32 indexed companyIdHash, address indexed gateway, bool authorized);
@@ -126,11 +133,33 @@ contract PriviIoTLedger {
         if (!d.enabled) revert DeveloperDisabled();
     }
 
-    function registerCompany(bytes32 companyIdHash, address administrator) external onlyOwner {
+    // Proposal is NOT enrollment. The Privi owner cannot impersonate
+    // customer authorization or activate a company by itself.
+    function proposeCompanyRegistration(bytes32 companyIdHash, address administrator) external onlyOwner {
         if (companyIdHash == bytes32(0) || administrator == address(0)) revert InvalidDevice();
         if (companies[companyIdHash].registered) revert CompanyAlreadyRegistered();
+        if (pendingCompanyAdministrators[companyIdHash] != address(0)) revert CompanyRegistrationPending();
+        pendingCompanyAdministrators[companyIdHash] = administrator;
+        emit CompanyRegistrationProposed(companyIdHash, administrator);
+    }
+
+    // Independent wallet acknowledgement makes enterprise access opt-in.
+    function acceptCompanyRegistration(bytes32 companyIdHash) external {
+        address administrator = pendingCompanyAdministrators[companyIdHash];
+        if (administrator == address(0)) revert CompanyRegistrationNotPending();
+        if (msg.sender != administrator) revert NotCompanyAdministrator();
+        delete pendingCompanyAdministrators[companyIdHash];
         companies[companyIdHash] = Company(administrator, true, true);
         emit CompanyRegistered(companyIdHash, administrator);
+    }
+
+    // Proposed administrators may decline before the platform has access.
+    function rejectCompanyRegistration(bytes32 companyIdHash) external {
+        address administrator = pendingCompanyAdministrators[companyIdHash];
+        if (administrator == address(0)) revert CompanyRegistrationNotPending();
+        if (msg.sender != administrator) revert NotCompanyAdministrator();
+        delete pendingCompanyAdministrators[companyIdHash];
+        emit CompanyRegistrationRejected(companyIdHash, administrator);
     }
 
     function setCompanyEnabled(bytes32 companyIdHash, bool enabled) external onlyOwner {
