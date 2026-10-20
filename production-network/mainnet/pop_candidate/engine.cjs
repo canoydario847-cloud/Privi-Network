@@ -193,5 +193,5 @@ class ResearchVoteLock {
 }
 module.exports={
   hash,publicKey,signedMessage,parseRegistry,positionStamp,proposer,
-  proposalFields,voteFields,verifyCertificate,ResearchVoteLock,TRUSTED_MODE
+  proposalFields,verifyProposal,voteFields,verifyCertificate,ResearchVoteLock,TRUSTED_MODE
 };
