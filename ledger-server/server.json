@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.canoydario847-cloud/privi-ledger",
   "title": "Privi Ledger",
-  "description": "Privi KYA (Know-Your-Agent: is this wallet operated by an audited AI agent? free check for chains, protocols, exchanges and x402 facilitators) and Privi Passport (signed, on-chain-anchored trust credentials for AI agents, 0-1000), built on tamper-evident audit logs with sealed compliance reports, cross-company Handshake records, government AI inventories (OMB M-25-21) and post-quantum plans (EO 14409). Free tier; Pro $29 USDC/30 days via x402. Founder: https://privi-discovery-production.up.railway.app/llms.txt",
-  "version": "0.4.0",
+  "description": "Privi Guard: wallet policies, plain-English transaction risk scans, owner-signed approvals, agent-to-agent escrow and an on-chain agent registry, so AI agents can hold and move crypto safely. Plus Privi KYA (Know-Your-Agent wallet checks), Privi Passport trust credentials and tamper-evident audit lo",
+  "version": "0.5.0",
   "websiteUrl": "https://privi-discovery-production.up.railway.app",
   "repository": {
     "url": "https://github.com/canoydario847-cloud/Privi-Network",
