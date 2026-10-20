@@ -8,6 +8,19 @@ python3 -m py_compile "$ROOT"/testnet/*.py "$ROOT"/migration/*.py "$ROOT"/ops/*.
 (cd "$ROOT/testnet" && python3 -m unittest discover -v -p 'test_*.py')
 (cd "$ROOT/migration" && python3 -m unittest discover -v -p 'test_*.py')
 (cd "$ROOT/ops" && python3 -m unittest discover -v -p 'test_*.py')
+# The 1B PRVI genesis allocation worksheet is UNSIGNED and does not mint.
+# Refuse any release flow that mistakes it for a live financial genesis.
+python3 "$ROOT/ops/verify_prvi_issuance_plan.py" "$ROOT/ops/prvi_issuance_plan.UNSIGNED.json" --mode draft
+if python3 "$ROOT/ops/verify_prvi_issuance_plan.py" "$ROOT/ops/prvi_issuance_plan.UNSIGNED.json" --mode launch; then
+  echo "FATAL: unsigned PRVI allocation worksheet authorized live mint" >&2
+  exit 1
+else
+  status=$?
+  if [[ "$status" -ne 3 ]]; then
+    echo "Unexpected issuance preflight result $status" >&2
+    exit 1
+  fi
+fi
 # Verify the June 2026 Oracle Always Free CPU, RAM, storage and NO-SPEND policy.
 python3 "$ROOT/ops/oracle_free_pilot_preflight.py" "$ROOT/ops/oracle-always-free-pilot.candidate.json"
 # Owner-operated financial validators are a non-live, secret-free candidate.
