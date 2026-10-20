@@ -12,6 +12,24 @@ The owner has explicitly selected **four Privi World Corp-operated validator nod
 
 The inventory is currently all placeholders, and no actual production hosts or keys have been provisioned. **0/4 production validators verified, but not 0/4 independent operator companies (only one company is intended).** No claim of decentralization, asset issuance or live network is justified.
 
+## Only founder wallet is authorized in proposed Privi network governance
+
+The sole **proposed** EVM owner/governance/treasury-controller public wallet is
+`0x1990589FD200E043b8C6FD9ec5956c61b3071048` (Dario Canoy,
+Privi World Corp). No other governance admin, guardian, multisig co-owner, or
+delegate is approved in the owner's current requirements. The nonfinancial
+candidate and fail-closed validator live in
+[`privi_owner_wallet.candidate.json`](privi_owner_wallet.candidate.json)
+and [`verify_privi_single_owner.py`](verify_privi_single_owner.py).
+
+The wallet only sets the **requested future controller identity**. It cannot
+substitute for real validator private signing identities, native PoP BFT
+consensus, a signed genesis, audited 1-billion-PRVI lifetime cap, independent
+host verification or release attestation. Four validators under one
+company still share a single legal administrator. Existing Railway TEST or
+single-server clones do NOT become this mainnet. No private key, signed
+financial transfer, PRVI issuance or deployment is performed by this policy.
+
 ## Existing Railway deployment — observed TEST-only, NOT native PRVI
 
 On 2026-10-19, provider **read-only** observations verified that the Railway
