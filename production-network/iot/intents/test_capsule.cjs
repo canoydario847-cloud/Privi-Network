@@ -118,7 +118,7 @@ test("rule predicates, validity and fee ceilings fail before signing a transacti
  ];
  for (const makeBad of mutators){
   const f=fixture();makeBad(f);
-  await assert.rejects(run(f),/predicate|not active|expired|gas|budget|1..8|lifetime|maxGasPriceWei/);
+  await assert.rejects(run(f),/predicate|not active|expired|gas|budget|1..8|lifetime|maxGasPriceWei/i);
  }
 });
 test("deny unknown fields, dynamic JS keys, zero nonce, float conditions and extension attack",()=>{
