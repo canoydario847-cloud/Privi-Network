@@ -45,7 +45,7 @@ jobs:
           set -e
           if [ "$code" -ne 3 ]; then echo "PoP financial mainnet gate must remain NO-GO" >&2; exit 1; fi
       - name: Exercise Point of Position validator research prototype (NOT CONSENSUS)
-        run: node --test production-network/mainnet/pop_candidate/test_engine.cjs
+        run: node --test production-network/mainnet/pop_candidate/test_engine.cjs production-network/mainnet/pop_candidate/test_persistent_vote_guard.cjs
       - name: Compile Privi-native gated contract with pinned compiler
         run: |
           set -euo pipefail
