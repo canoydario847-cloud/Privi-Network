@@ -84,7 +84,7 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \t\tlogger,
 \t)
 \tbaseBank = baseBank.WithObjStoreKey(oKeys[banktypes.ObjectStoreKey])
-\tapp.BankKeeper = prvicap.RestrictedBank(baseBank, app.PriviCapKeeper)'''
+\tapp.BankKeeper = prvicap.BankForApp(baseBank, app.PriviCapKeeper)'''
     app = replace_once(app, old_bank, new_bank, "apply restriction before bank injection")
     old_chainer = '''\tif err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap()); err != nil {
 \t\tpanic(err)
@@ -260,15 +260,15 @@ func (app *EVMD) CheckPriviNativeERC20Invariant(ctx sdk.Context) error {
     # A single unrestricted BaseKeeper constructor exists locally ONLY to be
     # wrapped before the app hands the keeper to other modules.
     if (app.count("bankkeeper.NewBaseKeeper(") != 1 or
-            app.count("app.BankKeeper = prvicap.RestrictedBank(") != 1 or
+            app.count("app.BankKeeper = prvicap.BankForApp(") != 1 or
             app.count("app.BankKeeper =") != 1):
         raise ValueError("unaudited bank keeper constructor/assignment; raw bank bypass risk")
-    if app.index("app.BankKeeper = prvicap.RestrictedBank(") > app.index(
+    if app.index("app.BankKeeper = prvicap.BankForApp(") > app.index(
             "app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)"):
         raise ValueError("bank keeper restriction must precede InitGenesis")
     # Verify all modifications before writing anything. No direct on-chain action.
     srcdir = source_repo / "production-network" / "mainnet" / "prvicap"
-    required = ["keeper.go", "sdk_bank_adapter.go", "chain_identity.go"]
+    required = ["keeper.go", "sdk_bank_adapter.go", "chain_identity.go", "sdk_bank_direct_write_guard.go"]
     files = {}
     for name in required:
         content = (srcdir / name).read_text(encoding="utf-8")
@@ -277,6 +277,8 @@ func (app *EVMD) CheckPriviNativeERC20Invariant(ctx sdk.Context) error {
         files[name] = content
     if "func RestrictedBank" not in files["sdk_bank_adapter.go"]:
         raise ValueError("missing bank guard")
+    if "func BankForApp" not in files["sdk_bank_direct_write_guard.go"] or "func (b directNativeWriteGuard) UncheckedSetBalance" not in files["sdk_bank_direct_write_guard.go"]:
+        raise ValueError("missing native direct-write guard")
     # A helper constant for a dedicated, persistent SDK store, not memory KV.
     files["store.go"] = '''package prvicap
 
