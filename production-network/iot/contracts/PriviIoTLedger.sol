@@ -19,6 +19,16 @@ contract PriviIoTLedger {
     error CompanyAdministratorTransferNotPending();
     error CompanyAdministratorUnchanged();
     error CompanyGatewayEpochExhausted();
+    error RecoveryGuardiansNotConfigured();
+    error RecoveryGuardiansNotAccepted();
+    error RecoveryGuardianNotAuthorized();
+    error RecoveryGuardianAlreadyAccepted();
+    error RecoveryGuardianAlreadyApproved();
+    error RecoveryAlreadyProposed();
+    error RecoveryNotPending();
+    error RecoveryThresholdNotMet();
+    error RecoveryTimelockNotElapsed();
+    error RecoverySuccessorInvalid();
     error NotCompanyAdministrator();
     error InvalidDevice();
     error DeviceAlreadyEnrolled();
@@ -85,10 +95,37 @@ contract PriviIoTLedger {
     mapping(bytes32 => mapping(address => uint64)) private _approvedGatewayEpoch;
     mapping(bytes32 => address) public pendingCompanySuccessors;
 
+    // Self-selected enterprise recovery guardians are *administrative*
+    // signers, unrelated to PoP validator consensus or PRVI staking.
+    // The platform owner cannot nominate guardians or execute recovery.
+    uint64 public constant RECOVERY_DELAY_SECONDS = 7 days;
+    struct RecoveryConfig {
+        address[3] guardians;
+        uint8 acceptedMask;
+        bool active;
+    }
+    struct RecoveryRequest {
+        address successor;
+        uint8 approvalMask;
+        uint64 eligibleAfter;
+        uint64 configEpoch;
+    }
+    mapping(bytes32 => RecoveryConfig) private _recoveryConfig;
+    mapping(bytes32 => RecoveryRequest) public recoveryRequests;
+    mapping(bytes32 => uint64) public recoveryConfigEpoch;
+    function recoveryGuardians(bytes32 companyIdHash)
+        external view returns (address[3] memory guardians, uint8 acceptedMask, bool active)
+    {
+        RecoveryConfig storage c = _recoveryConfig[companyIdHash];
+        return (c.guardians, c.acceptedMask, c.active);
+    }
+
     function companyGateways(bytes32 companyIdHash, address gateway) public view returns (bool) {
         uint64 epoch = companyGatewayEpoch[companyIdHash];
         return epoch != 0 && companies[companyIdHash].registered &&
-            companies[companyIdHash].enabled && _approvedGatewayEpoch[companyIdHash][gateway] == epoch;
+            companies[companyIdHash].enabled &&
+            recoveryRequests[companyIdHash].eligibleAfter == 0 &&
+            _approvedGatewayEpoch[companyIdHash][gateway] == epoch;
     }
 
     event CompanyRegistrationProposed(bytes32 indexed companyIdHash, address indexed administrator);
@@ -100,6 +137,13 @@ contract PriviIoTLedger {
     event CompanyAdministratorTransferProposed(bytes32 indexed companyIdHash, address indexed currentAdministrator, address indexed successor);
     event CompanyAdministratorTransferCancelled(bytes32 indexed companyIdHash, address indexed successor);
     event CompanyAdministratorTransferred(bytes32 indexed companyIdHash, address indexed previousAdministrator, address indexed successor, uint64 gatewayEpoch);
+    event CompanyRecoveryGuardiansConfigured(bytes32 indexed companyIdHash, uint64 epoch);
+    event CompanyRecoveryGuardiansDisabled(bytes32 indexed companyIdHash, uint64 epoch);
+    event CompanyRecoveryGuardianAccepted(bytes32 indexed companyIdHash, address indexed guardian);
+    event CompanyRecoveryProposed(bytes32 indexed companyIdHash, address indexed successor, address indexed proposer);
+    event CompanyRecoveryApproved(bytes32 indexed companyIdHash, address indexed guardian, uint8 approvals, uint64 eligibleAfter);
+    event CompanyRecoveryCancelled(bytes32 indexed companyIdHash);
+    event CompanyRecoveryExecuted(bytes32 indexed companyIdHash, address indexed formerAdministrator, address indexed successor, uint64 gatewayEpoch);
 
     event DeveloperRegistered(address indexed developer);
     event DeveloperEnabled(address indexed developer, bool enabled);
@@ -234,6 +278,135 @@ contract PriviIoTLedger {
         );
     }
 
+    function _guardianMask(bytes32 companyIdHash, address signer) internal view returns (uint8) {
+        RecoveryConfig storage c = _recoveryConfig[companyIdHash];
+        if (!c.active) revert RecoveryGuardiansNotAccepted();
+        for (uint8 i = 0; i < 3; ++i) {
+            if (c.guardians[i] == signer) return uint8(1 << i);
+        }
+        revert RecoveryGuardianNotAuthorized();
+    }
+
+    function configureRecoveryGuardians(bytes32 companyIdHash, address[3] calldata nominated)
+        external
+    {
+        Company storage company = companies[companyIdHash];
+        if (!company.registered) revert CompanyNotRegistered();
+        if (msg.sender != company.administrator) revert NotCompanyAdministrator();
+        if (recoveryRequests[companyIdHash].successor != address(0)) revert RecoveryAlreadyProposed();
+        for (uint256 i = 0; i < 3; ++i) {
+            if (nominated[i] == address(0) || nominated[i] == owner ||
+                nominated[i] == company.administrator) revert RecoveryGuardianNotAuthorized();
+            for (uint256 j = 0; j < i; ++j) {
+                if (nominated[i] == nominated[j]) revert RecoveryGuardianNotAuthorized();
+            }
+        }
+        uint64 epoch = recoveryConfigEpoch[companyIdHash] + 1;
+        recoveryConfigEpoch[companyIdHash] = epoch;
+        RecoveryConfig storage c = _recoveryConfig[companyIdHash];
+        c.guardians = nominated;
+        c.acceptedMask = 0;
+        c.active = false;
+        emit CompanyRecoveryGuardiansConfigured(companyIdHash, epoch);
+    }
+
+    // Guardians must independently acknowledge participation before
+    // any recovery can be proposed. This does NOT attest legal identity.
+    function acceptRecoveryGuardianship(bytes32 companyIdHash) external {
+        RecoveryConfig storage c = _recoveryConfig[companyIdHash];
+        if (c.guardians[0] == address(0)) revert RecoveryGuardiansNotConfigured();
+        uint8 mask = 0;
+        for (uint8 i = 0; i < 3; ++i) {
+            if (c.guardians[i] == msg.sender) mask = uint8(1 << i);
+        }
+        if (mask == 0) revert RecoveryGuardianNotAuthorized();
+        if ((c.acceptedMask & mask) != 0) revert RecoveryGuardianAlreadyAccepted();
+        c.acceptedMask |= mask;
+        if (c.acceptedMask == 7) c.active = true;
+        emit CompanyRecoveryGuardianAccepted(companyIdHash, msg.sender);
+    }
+
+    function disableRecoveryGuardians(bytes32 companyIdHash) external {
+        Company storage company = companies[companyIdHash];
+        if (!company.registered) revert CompanyNotRegistered();
+        if (msg.sender != company.administrator) revert NotCompanyAdministrator();
+        // A conscious administrator may disable recovery or veto a takeover.
+        // Compromised administrator keys are therefore an explicit risk.
+        delete recoveryRequests[companyIdHash];
+        delete _recoveryConfig[companyIdHash];
+        recoveryConfigEpoch[companyIdHash] += 1;
+        emit CompanyRecoveryGuardiansDisabled(companyIdHash, recoveryConfigEpoch[companyIdHash]);
+    }
+
+    function proposeCompanyRecovery(bytes32 companyIdHash, address successor) external {
+        Company storage company = companies[companyIdHash];
+        if (!company.registered) revert CompanyNotRegistered();
+        uint8 signerMask = _guardianMask(companyIdHash, msg.sender);
+        if (successor == address(0) || successor == company.administrator || successor == owner)
+            revert RecoverySuccessorInvalid();
+        if (recoveryRequests[companyIdHash].successor != address(0)) revert RecoveryAlreadyProposed();
+        if (pendingCompanySuccessors[companyIdHash] != address(0))
+            revert CompanyAdministratorTransferPending();
+        recoveryRequests[companyIdHash] = RecoveryRequest(
+            successor, signerMask, 0, recoveryConfigEpoch[companyIdHash]
+        );
+        emit CompanyRecoveryProposed(companyIdHash, successor, msg.sender);
+    }
+
+    function approveCompanyRecovery(bytes32 companyIdHash) external {
+        RecoveryRequest storage r = recoveryRequests[companyIdHash];
+        if (r.successor == address(0)) revert RecoveryNotPending();
+        if (r.configEpoch != recoveryConfigEpoch[companyIdHash])
+            revert RecoveryGuardiansNotConfigured();
+        uint8 signerMask = _guardianMask(companyIdHash, msg.sender);
+        if ((r.approvalMask & signerMask) != 0) revert RecoveryGuardianAlreadyApproved();
+        r.approvalMask |= signerMask;
+        if (r.eligibleAfter == 0) {
+            // Any two of the three independently opted-in guardian keys.
+            uint8 a = r.approvalMask;
+            if ((a & (a - 1)) != 0) {
+                r.eligibleAfter = uint64(block.timestamp + RECOVERY_DELAY_SECONDS);
+            }
+        }
+        uint8 approvals = 0;
+        for (uint8 i = 0; i < 3; ++i) if ((r.approvalMask & uint8(1 << i)) != 0) ++approvals;
+        emit CompanyRecoveryApproved(companyIdHash, msg.sender, approvals, r.eligibleAfter);
+    }
+
+    function cancelCompanyRecovery(bytes32 companyIdHash) external {
+        Company storage company = companies[companyIdHash];
+        if (!company.registered) revert CompanyNotRegistered();
+        if (msg.sender != company.administrator) revert NotCompanyAdministrator();
+        if (recoveryRequests[companyIdHash].successor == address(0)) revert RecoveryNotPending();
+        delete recoveryRequests[companyIdHash];
+        emit CompanyRecoveryCancelled(companyIdHash);
+    }
+
+    // Administrative recovery requires two guardian approvals, seven days'
+    // on-chain delay AND acceptance by the nominated successor wallet.
+    // The platform owner is never a valid successor.
+    function executeCompanyRecovery(bytes32 companyIdHash) external {
+        Company storage company = companies[companyIdHash];
+        if (!company.registered) revert CompanyNotRegistered();
+        RecoveryRequest storage r = recoveryRequests[companyIdHash];
+        if (r.successor == address(0)) revert RecoveryNotPending();
+        if (msg.sender != r.successor) revert RecoverySuccessorInvalid();
+        if (r.configEpoch != recoveryConfigEpoch[companyIdHash] ||
+            !_recoveryConfig[companyIdHash].active)
+            revert RecoveryGuardiansNotConfigured();
+        if (r.eligibleAfter == 0) revert RecoveryThresholdNotMet();
+        if (block.timestamp < r.eligibleAfter) revert RecoveryTimelockNotElapsed();
+        uint64 previousEpoch = companyGatewayEpoch[companyIdHash];
+        if (previousEpoch == type(uint64).max) revert CompanyGatewayEpochExhausted();
+        address oldAdministrator = company.administrator;
+        company.administrator = msg.sender;
+        companyGatewayEpoch[companyIdHash] = previousEpoch + 1;
+        delete recoveryRequests[companyIdHash];
+        delete _recoveryConfig[companyIdHash]; // fresh admin must opt in new guardians
+        recoveryConfigEpoch[companyIdHash] += 1;
+        emit CompanyRecoveryExecuted(companyIdHash, oldAdministrator, msg.sender, previousEpoch + 1);
+    }
+
     function setCompanyEnabled(bytes32 companyIdHash, bool enabled) external onlyOwner {
         if (!companies[companyIdHash].registered) revert CompanyNotRegistered();
         companies[companyIdHash].enabled = enabled;
@@ -249,6 +422,8 @@ contract PriviIoTLedger {
             requireActiveDeveloper(gateway);
         }
         if (gateway == address(0)) revert InvalidDevice();
+        if (authorized && recoveryRequests[companyIdHash].eligibleAfter != 0)
+            revert RecoveryAlreadyProposed();
         _approvedGatewayEpoch[companyIdHash][gateway] =
             authorized ? companyGatewayEpoch[companyIdHash] : 0;
         emit CompanyGatewayAuthorized(companyIdHash, gateway, authorized);
