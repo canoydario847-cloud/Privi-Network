@@ -49,6 +49,10 @@ var (
 // module account access, staking, or normal bank sends.
 type BankView interface {
     GetSupply(ctx context.Context, denom string) sdk.Coin
+    // Check actual on-ledger account balances, not merely the bank Supply
+    // metadata. UncheckedSetBalance can alter balances without changing
+    // that metadata, bypassing a supply-only reconciliation.
+    IterateAllBalances(ctx context.Context, cb func(address sdk.AccAddress, coin sdk.Coin) (stop bool))
 }
 
 type State struct {
@@ -83,6 +87,18 @@ func capValue() *big.Int {
     return value
 }
 
+// ValidateGenesisBase is a *pure* preflight: no KV reads, writes, mint,
+// or transaction effects. Call it before ANY app module InitGenesis work
+// to reject empty/default demo genesis and oversupply without partially
+// initializing modules. InitGenesis independently repeats this validation
+// before persisting the consensus cap to defend against inconsistent callers.
+func ValidateGenesisBase(genesisBase string) error {
+    value,err:=parseCanonical(genesisBase)
+    if err!=nil || value.Cmp(capValue())>0 {return ErrInvalidGenesis}
+    return nil
+}
+
+
 func (k Keeper) kv(ctx context.Context) (corestore.KVStore,error) {
     if k.store == nil { return nil,errors.New("unconfigured cap keeper") }
     if ctx == nil {return nil,errors.New("nil block context")}
@@ -104,6 +120,12 @@ func (k Keeper) InitGenesis(ctx context.Context, genesisBase string, bank BankVi
     bankCoins:=bank.GetSupply(ctx,BaseDenom)
     if bankCoins.Denom!=BaseDenom || !bankCoins.Amount.IsPositive() ||
        bankCoins.Amount.String()!=value.String() {return ErrBankSupplyMismatch}
+    // A declared supply is insufficient: unchecked native balance setters
+    // can change real account balances without updating x/bank Supply.
+    // Reject such a genesis BEFORE writing the immutable cap record.
+    if err:=checkNativeBalances(ctx,bank,value);err!=nil {
+        return fmt.Errorf("%w: %v",ErrBankSupplyMismatch,err)
+    }
     // This is for a newly initialized genesis state in an uncommitted cached
     // SDK context: a store write error MUST abort app initialization.
     return kv.Set(keyGenesis,[]byte(value.String()))
@@ -156,8 +178,10 @@ func (k Keeper) MintRestriction(ctx context.Context, coins sdk.Coins) error {
 
 // Reconcile rejects total bank native supply above the immutable genesis
 // allocation. Burns may decrease outstanding supply but never increase budget.
-// It does not detect unguarded intra-block mint+burn, hence it is NOT a complete
-// substitute for protecting every mint path and unsafe setter.
+// An end-of-block scan detects untracked net balance changes but NOT
+// unauthorized mint+burn that cancels out inside one block. This O(accounts)
+// check is provisional; it requires scale benchmarks and alternative
+// issuance hooks before final financial deployment.
 func (k Keeper) Reconcile(ctx context.Context, bank BankView) error {
     if bank==nil {return ErrUnexpectedSupply}
     _,lifetime,err:=k.read(ctx)
@@ -168,6 +192,27 @@ func (k Keeper) Reconcile(ctx context.Context, bank BankView) error {
     }
     if supply.Amount.BigInt().Cmp(lifetime)>0 || supply.Amount.BigInt().Cmp(capValue())>0 {
         return ErrUnexpectedSupply
+    }
+    // Validate conservation after the immutable cap and bank supply checks.
+    return checkNativeBalances(ctx,bank,supply.Amount.BigInt())
+}
+
+// checkNativeBalances is shared by genesis preflight and block boundaries.
+// Checking the *actual* account sum prevents an unchecked balance mutation
+// from hiding behind unchanged x/bank supply metadata. O(number of accounts)
+// per call; this must be replaced or optimized before financial production.
+func checkNativeBalances(ctx context.Context,bank BankView,declared *big.Int) error {
+    actual:=new(big.Int)
+    invalid:=false
+    bank.IterateAllBalances(ctx,func(_ sdk.AccAddress,coin sdk.Coin) bool {
+        if coin.Denom!=BaseDenom {return false}
+        if coin.Amount.IsNegative() {invalid=true;return true}
+        actual.Add(actual,coin.Amount.BigInt())
+        if actual.Cmp(declared)>0 {invalid=true;return true}
+        return false
+    })
+    if invalid || actual.Cmp(declared)!=0 {
+        return fmt.Errorf("%w: native bank supply/balances mismatch",ErrUnexpectedSupply)
     }
     return nil
 }

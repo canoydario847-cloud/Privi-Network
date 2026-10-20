@@ -8,6 +8,34 @@ python3 -m py_compile "$ROOT"/testnet/*.py "$ROOT"/migration/*.py "$ROOT"/ops/*.
 (cd "$ROOT/testnet" && python3 -m unittest discover -v -p 'test_*.py')
 (cd "$ROOT/migration" && python3 -m unittest discover -v -p 'test_*.py')
 (cd "$ROOT/ops" && python3 -m unittest discover -v -p 'test_*.py')
+# The 1B PRVI genesis allocation worksheet is UNSIGNED and does not mint.
+# Refuse any release flow that mistakes it for a live financial genesis.
+python3 "$ROOT/ops/verify_prvi_issuance_plan.py" "$ROOT/ops/prvi_issuance_plan.UNSIGNED.json" --mode draft
+if python3 "$ROOT/ops/verify_prvi_issuance_plan.py" "$ROOT/ops/prvi_issuance_plan.UNSIGNED.json" --mode launch; then
+  echo "FATAL: unsigned PRVI allocation worksheet authorized live mint" >&2
+  exit 1
+else
+  status=$?
+  if [[ "$status" -ne 3 ]]; then
+    echo "Unexpected issuance preflight result $status" >&2
+    exit 1
+  fi
+fi
+# Verify the June 2026 Oracle Always Free CPU, RAM, storage and NO-SPEND policy.
+python3 "$ROOT/ops/oracle_free_pilot_preflight.py" "$ROOT/ops/oracle-always-free-pilot.candidate.json"
+# Owner-operated financial validators are a non-live, secret-free candidate.
+# Accept the four-node draft structure, but prove launch preflight NEVER passes.
+python3 "$ROOT/ops/owner_validator_preflight.py" "$ROOT/ops/owner-operated-validators.candidate.json" --mode draft
+if python3 "$ROOT/ops/owner_validator_preflight.py" "$ROOT/ops/owner-operated-validators.candidate.json" --mode preflight; then
+  echo "FATAL: incomplete owner-operated validator manifest passed production launch preflight" >&2
+  exit 1
+else
+  status=$?
+  if [[ "$status" -ne 3 ]]; then
+    echo "Owner validator preflight returned unexpected status $status" >&2
+    exit 1
+  fi
+fi
 node --check "$ROOT/ops/legacy_state_copy.js"
 node --test "$ROOT/ops/test_legacy_state_copy.js"
 node --test "$ROOT/ops/test_verify_operator_attestations.cjs"
@@ -20,5 +48,18 @@ command -v go >/dev/null
 # Strict AST baseline for pinned Cosmos EVM v0.7.3 mint entry points.
 (cd "$ROOT/mainnet/mintscan" && GOTOOLCHAIN=local go test -race -count=1 ./...)
 python3 -m unittest discover -s "$ROOT/mainnet/custom-app" -p "test_*.py"
+# Provider-observed Railway TEST services are *not* production validators.
+# Fail if snapshot is invalid or if production preflight ever permits TEST.
+python3 "$ROOT/ops/railway_staging_preflight.py" "$ROOT/ops/railway_staging_observation.json" --mode staging
+if python3 "$ROOT/ops/railway_staging_preflight.py" "$ROOT/ops/railway_staging_observation.json" --mode production; then
+  echo "FATAL: disposable Railway TEST services authorized financial mainnet" >&2
+  exit 1
+else
+  status=$?
+  if [[ "$status" -ne 3 ]]; then
+    echo "Railway financial preflight returned unexpected status $status" >&2
+    exit 1
+  fi
+fi
 bash -n "$ROOT/testnet/bootstrap-local-4.sh"
 echo "Offline checks passed. Live EVM / CometBFT testing still required."

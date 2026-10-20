@@ -42,6 +42,16 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
         'evmconfig "github.com/cosmos/evm/evmd/config"\n'
         '\tprvicap "github.com/cosmos/evm/evmd/prvicap"',
         "cap import")
+    # Validate the EIP-155 chain identity before module/codec construction;
+    # the upstream dev chain ID must never slip into a financial PRVI binary.
+    app = replace_once(app,
+        "\tevmChainID := cast.ToUint64(appOpts.Get(srvflags.EVMChainID))\n\tencodingConfig := evmencoding.MakeConfig(evmChainID)",
+        "\tevmChainID := cast.ToUint64(appOpts.Get(srvflags.EVMChainID))\n"
+        "\tif err := prvicap.ValidateEVMChainID(evmChainID); err != nil {\n"
+        "\t\tpanic(fmt.Errorf(\"PRVI EIP-155 app identity rejected: %w\", err))\n"
+        "\t}\n"
+        "\tencodingConfig := evmencoding.MakeConfig(evmChainID)",
+        "reject upstream default EVM chain ID before constructing keepers")
     app = replace_once(app,
         "\tBankKeeper            bankkeeper.Keeper",
         "\tBankKeeper            bankkeeper.Keeper\n\tPriviCapKeeper        prvicap.Keeper",
@@ -76,12 +86,14 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \tbaseBank = baseBank.WithObjStoreKey(oKeys[banktypes.ObjectStoreKey])
 \tapp.BankKeeper = prvicap.RestrictedBank(baseBank, app.PriviCapKeeper)'''
     app = replace_once(app, old_bank, new_bank, "apply restriction before bank injection")
-    old_chainer = '\treturn app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)'
-    new_chainer = '''\t// The bank supply is loaded by module initialization. Require its exact
-\t// declared native PRVI genesis supply, refusing default upstream TEST genesis.
-\t// PRVI minting remains forbidden before and after keeper InitGenesis.
-\tresponse, initErr := app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)
-\tif initErr != nil { return nil, initErr }
+    old_chainer = '''\tif err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap()); err != nil {
+\t\tpanic(err)
+\t}
+
+\treturn app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)'''
+    new_chainer = '''\t// Validate the declared genesis supply BEFORE any module initializes.
+\t// The default upstream atest demo is always refused (no aprvi supply).
+\t// This has no native minting, signing, or chain activation effect.
 \tbankJSON, found := genesisState[banktypes.ModuleName]
 \tif !found { return nil, fmt.Errorf("PRVI cap: bank genesis absent") }
 \tvar bankGenesis banktypes.GenesisState
@@ -89,14 +101,174 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \t\treturn nil, fmt.Errorf("PRVI cap: invalid bank genesis: %w", err)
 \t}
 \tinitialPRVI := bankGenesis.Supply.AmountOf(prvicap.BaseDenom)
+\tif err := prvicap.ValidateGenesisBase(initialPRVI.String()); err != nil {
+\t\treturn nil, fmt.Errorf("PRVI cap declared genesis denied before module init: %w", err)
+\t}
+\t// Native PRVI must actually be the EVM gas and staking denomination.
+\t// Do not allow a misleading genesis with capped aprvi but fees/stake in
+\t// upstream stake/atest. All checks precede consensus module writes.
+\tevmJSON, hasEVM := genesisState[evmtypes.ModuleName]
+\tif !hasEVM { return nil, fmt.Errorf("PRVI native genesis: missing EVM module") }
+\tvar evmGenesis evmtypes.GenesisState
+\tif err := app.appCodec.UnmarshalJSON(evmJSON, &evmGenesis); err != nil {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: malformed EVM module: %w", err)
+\t}
+\tif evmGenesis.Params.EvmDenom != prvicap.BaseDenom {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: EVM gas denomination must be aprvi")
+\t}
+\tstakingJSON, hasStaking := genesisState[stakingtypes.ModuleName]
+\tif !hasStaking { return nil, fmt.Errorf("PRVI native genesis: missing staking module") }
+\tvar stakingGenesis stakingtypes.GenesisState
+\tif err := app.appCodec.UnmarshalJSON(stakingJSON, &stakingGenesis); err != nil {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: malformed staking module: %w", err)
+\t}
+\tif stakingGenesis.Params.BondDenom != prvicap.BaseDenom {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: bonded staking denomination must be aprvi")
+\t}
+\tmintJSON, hasMint := genesisState[minttypes.ModuleName]
+\tif !hasMint { return nil, fmt.Errorf("PRVI native genesis: missing mint module") }
+\tvar mintGenesis minttypes.GenesisState
+\tif err := app.appCodec.UnmarshalJSON(mintJSON, &mintGenesis); err != nil {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: malformed mint module: %w", err)
+\t}
+\tif mintGenesis.Params.MintDenom != prvicap.BaseDenom ||
+\t\t!mintGenesis.Params.InflationMin.IsZero() ||
+\t\t!mintGenesis.Params.InflationMax.IsZero() ||
+\t\t!mintGenesis.Params.InflationRateChange.IsZero() ||
+\t\t!mintGenesis.Minter.Inflation.IsZero() ||
+\t\t!mintGenesis.Minter.AnnualProvisions.IsZero() {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: mint must target aprvi with ZERO inflation and provisions")
+\t}
+\t// Never inherit upstream permissionless ERC20 registration for a
+\t// financial native-denom candidate. No aprvi native/ERC20 conversion
+\t// pair is allowed in genesis, even if marked disabled. An upgrade or
+\t// governance change could reopen registration: separately review it.
+\terc20JSON, hasERC20 := genesisState[erc20types.ModuleName]
+\tif !hasERC20 { return nil, fmt.Errorf("PRVI native genesis: missing ERC20 module") }
+\tvar erc20Genesis erc20types.GenesisState
+\tif err := app.appCodec.UnmarshalJSON(erc20JSON, &erc20Genesis); err != nil {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: malformed ERC20 module: %w", err)
+\t}
+\tif erc20Genesis.Params.PermissionlessRegistration {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: permissionless ERC20 registration forbidden")
+\t}
+\tfor _, pair := range erc20Genesis.TokenPairs {
+\t\tif pair.Denom == prvicap.BaseDenom {
+\t\t\treturn nil, fmt.Errorf("PRVI native genesis: aprvi ERC20 token pair forbidden")
+\t\t}
+\t}
+\tmetadataValid := false
+\tfor _, meta := range bankGenesis.DenomMetadata {
+\t\tif meta.Base != prvicap.BaseDenom { continue }
+\t\tif metadataValid || meta.Display != "PRVI" {
+\t\t\treturn nil, fmt.Errorf("PRVI native genesis: duplicate/invalid aprvi metadata")
+\t\t}
+\t\tbaseFound, displayFound := false, false
+\t\tfor _, unit := range meta.DenomUnits {
+\t\t\tif unit.Denom == prvicap.BaseDenom && unit.Exponent == 0 {baseFound = true}
+\t\t\tif unit.Denom == "PRVI" && unit.Exponent == 18 {displayFound = true}
+\t\t}
+\t\tif !baseFound || !displayFound {
+\t\t\treturn nil, fmt.Errorf("PRVI native genesis: aprvi requires 18 decimal PRVI metadata")
+\t\t}
+\t\tmetadataValid = true
+\t}
+\tif !metadataValid {return nil, fmt.Errorf("PRVI native genesis: missing aprvi/PRVI metadata")}
+\t// Only after validating the cap may the upgrade module version map write.
+\t// Rejecting the proposed genesis must not touch consensus module stores.
+\tif err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap()); err != nil {
+\t\treturn nil, fmt.Errorf("PRVI cap: module version map write failed: %w", err)
+\t}
+\t// Bank GenesisState.Supply is merely a declaration. Its actual minted
+\t// supply is checked against the mounted bank state after module InitGenesis.
+\tresponse, initErr := app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)
+\tif initErr != nil { return nil, initErr }
 \tif err := app.PriviCapKeeper.InitGenesis(ctx, initialPRVI.String(), app.BankKeeper); err != nil {
 \t\treturn nil, fmt.Errorf("PRVI cap genesis initialization denied: %w", err)
 \t}
+\tif err := app.CheckPriviNativeERC20Invariant(ctx); err != nil {
+\t\treturn nil, fmt.Errorf("PRVI native genesis ERC20 runtime state denied: %w", err)
+\t}
 \treturn response, nil'''
     app = replace_once(app, old_chainer, new_chainer, "chain init fail-closed proof")
+    # Runtime ERC20 safety: reject permissionless registration and any
+    # native aprvi mapping on the actual SDK state at both block boundaries.
+    # This is defense in depth: it does not atomically forbid every possible
+    # in-block transient create/delete route or unreviewed keeper mutation.
+    # The per-block token-pair walk requires load/performance testing.
+    invariant = '''// CheckPriviNativeERC20Invariant verifies live ERC20 state rather than
+// just unsigned genesis declarations. No runtime auto-correction: a
+// forbidden state makes block execution fail closed. This is O(token pairs).
+func (app *EVMD) CheckPriviNativeERC20Invariant(ctx sdk.Context) error {
+\tparams := app.Erc20Keeper.GetParams(ctx)
+\tif params.PermissionlessRegistration {
+\t\treturn fmt.Errorf("PRVI ERC20 runtime: permissionless registration forbidden")
+\t}
+\tif app.Erc20Keeper.IsDenomRegistered(ctx, prvicap.BaseDenom) {
+\t\treturn fmt.Errorf("PRVI ERC20 runtime: native aprvi denom registry entry forbidden")
+\t}
+\tfor _, pair := range app.Erc20Keeper.GetTokenPairs(ctx) {
+\t\tif pair.Denom == prvicap.BaseDenom {
+\t\t\treturn fmt.Errorf("PRVI ERC20 runtime: native aprvi token pair forbidden")
+\t\t}
+\t}
+\treturn nil
+}
+
+'''
+    app = replace_once(app,
+        "func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {",
+        invariant + "func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {",
+        "inject ERC20 runtime invariant before block entry")
+    # Guard supply at block boundaries as defense in depth. This catches
+    # unguarded net supply growth above the initial genesis issuance, not a
+    # mint-and-burn within one block or an increase below genesis after burns.
+    # Whole-system issuance safety still requires exhaustive mint-path audit.
+    app = replace_once(app,
+        '''func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {
+\treturn app.ModuleManager.BeginBlock(ctx)
+}'''.replace("\\t", "\t"),
+        '''func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {
+\tif err := app.PriviCapKeeper.Reconcile(ctx, app.BankKeeper); err != nil {
+\t\treturn sdk.BeginBlock{}, fmt.Errorf("PRVI beginning-of-block supply check denied: %w", err)
+\t}
+\tif err := app.CheckPriviNativeERC20Invariant(ctx); err != nil {
+\t\treturn sdk.BeginBlock{}, fmt.Errorf("PRVI beginning-of-block ERC20 check denied: %w", err)
+\t}
+\treturn app.ModuleManager.BeginBlock(ctx)
+}'''.replace("\\t", "\t"),
+        "pre-block supply invariant")
+    app = replace_once(app,
+        '''func (app *EVMD) EndBlocker(ctx sdk.Context) (sdk.EndBlock, error) {
+\treturn app.ModuleManager.EndBlock(ctx)
+}'''.replace("\\t", "\t"),
+        '''func (app *EVMD) EndBlocker(ctx sdk.Context) (sdk.EndBlock, error) {
+\tresponse, endErr := app.ModuleManager.EndBlock(ctx)
+\tif endErr != nil { return response, endErr }
+\tif err := app.PriviCapKeeper.Reconcile(ctx, app.BankKeeper); err != nil {
+\t\treturn response, fmt.Errorf("PRVI end-of-block supply check denied: %w", err)
+\t}
+\tif err := app.CheckPriviNativeERC20Invariant(ctx); err != nil {
+\t\treturn response, fmt.Errorf("PRVI end-of-block ERC20 check denied: %w", err)
+\t}
+\treturn response, nil
+}'''.replace("\\t", "\t"),
+        "post-block supply invariant")
+    # Fail closed if upstream source evolves to retain or overwrite a raw
+    # bank keeper after restricted injection. This static check is intentionally
+    # conservative and does NOT replace an audit of module aliases or SDK code.
+    # A single unrestricted BaseKeeper constructor exists locally ONLY to be
+    # wrapped before the app hands the keeper to other modules.
+    if (app.count("bankkeeper.NewBaseKeeper(") != 1 or
+            app.count("app.BankKeeper = prvicap.RestrictedBank(") != 1 or
+            app.count("app.BankKeeper =") != 1):
+        raise ValueError("unaudited bank keeper constructor/assignment; raw bank bypass risk")
+    if app.index("app.BankKeeper = prvicap.RestrictedBank(") > app.index(
+            "app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)"):
+        raise ValueError("bank keeper restriction must precede InitGenesis")
     # Verify all modifications before writing anything. No direct on-chain action.
     srcdir = source_repo / "production-network" / "mainnet" / "prvicap"
-    required = ["keeper.go", "sdk_bank_adapter.go"]
+    required = ["keeper.go", "sdk_bank_adapter.go", "chain_identity.go"]
     files = {}
     for name in required:
         content = (srcdir / name).read_text(encoding="utf-8")

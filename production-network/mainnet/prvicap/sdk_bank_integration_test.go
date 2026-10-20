@@ -1,6 +1,7 @@
 package prvicap
 
 import (
+ "bytes"
  "errors"
  "testing"
  "time"
@@ -28,18 +29,29 @@ type bankHarness struct {
  bank bankkeeper.BaseKeeper
  cap Keeper
  account *banktestutil.MockAccountKeeper
+ // restart commits the IAVL bank+cap stores to the database, constructs a
+ // fresh multistore and a fresh cap keeper, and reopens committed chain state.
+ // This is a real SDK persistence test, not the in-memory fake KV fixture.
+ restart func(*testing.T) (sdk.Context, bankkeeper.BaseKeeper, Keeper)
 }
 
-func newRealBankHarness(t *testing.T) bankHarness {
+func newRealBankHarness(t testing.TB) bankHarness {
  t.Helper()
- db := dbm.NewMemDB()
- cms := store.NewCommitMultiStore(db,log.NewNopLogger())
+ rootDB := dbm.NewMemDB()
+ // Persist each independent IAVL tree in its own namespace/database. Sharing
+ // an unprefixed MemDB between two IAVL trees causes version/node-key
+ // collisions when committing both: test isolation must mirror real SDK
+ // multi-store separation rather than testing an invalid storage layout.
+ bankDB := dbm.NewMemDB()
+ capDB := dbm.NewMemDB()
+ objDB := dbm.NewMemDB()
+ cms := store.NewCommitMultiStore(rootDB,log.NewNopLogger())
  bankKey := storetypes.NewKVStoreKey(banktypes.StoreKey)
  capKey := storetypes.NewKVStoreKey("prvicap")
  objKey := storetypes.NewObjectStoreKey(banktypes.ObjectStoreKey)
- cms.MountStoreWithDB(bankKey,storetypes.StoreTypeIAVL,db)
- cms.MountStoreWithDB(capKey,storetypes.StoreTypeIAVL,db)
- cms.MountStoreWithDB(objKey,storetypes.StoreTypeObject,db)
+ cms.MountStoreWithDB(bankKey,storetypes.StoreTypeIAVL,bankDB)
+ cms.MountStoreWithDB(capKey,storetypes.StoreTypeIAVL,capDB)
+ cms.MountStoreWithDB(objKey,storetypes.StoreTypeObject,objDB)
  if err:=cms.LoadLatestVersion();err!=nil {t.Fatal(err)}
  ctx := sdk.NewContext(cms,cmtproto.Header{Time:time.Now()},false,log.NewNopLogger())
  ctrl:=gomock.NewController(t)
@@ -51,9 +63,27 @@ func newRealBankHarness(t *testing.T) bankHarness {
  raw=raw.WithObjStoreKey(objKey)
  cap,err:=New(runtime.NewKVStoreService(capKey))
  if err!=nil {t.Fatal(err)}
- return bankHarness{ctx:ctx,bank:raw,cap:cap,account:ak}
+ restart:=func(t *testing.T) (sdk.Context,bankkeeper.BaseKeeper,Keeper) {
+   t.Helper()
+   // Commit before reopening to catch accidental use of a process-local
+   // record that disappears when the durable SDK state is reloaded.
+   cms.Commit()
+   reopened:=store.NewCommitMultiStore(rootDB,log.NewNopLogger())
+   reopened.MountStoreWithDB(bankKey,storetypes.StoreTypeIAVL,bankDB)
+   reopened.MountStoreWithDB(capKey,storetypes.StoreTypeIAVL,capDB)
+   reopened.MountStoreWithDB(objKey,storetypes.StoreTypeObject,objDB)
+   if err:=reopened.LoadLatestVersion();err!=nil {t.Fatal(err)}
+   newCtx:=sdk.NewContext(reopened,cmtproto.Header{Height:2,Time:time.Now()},false,log.NewNopLogger())
+   newCap,err:=New(runtime.NewKVStoreService(capKey))
+   if err!=nil {t.Fatal(err)}
+   // Recreate a fresh restriction-bearing bank keeper using the new cap
+   // keeper; the underlying bank store follows the fresh SDK context.
+   bank:=RestrictedBank(raw,newCap)
+   return newCtx,bank,newCap
+ }
+ return bankHarness{ctx:ctx,bank:raw,cap:cap,account:ak,restart:restart}
 }
-func (h bankHarness) genesisFund(t *testing.T,amount int64) {
+func (h bankHarness) genesisFund(t testing.TB,amount int64) {
  t.Helper()
  genesisMinter := authtypes.NewEmptyModuleAccount("genesisfixture",authtypes.Minter)
  h.account.EXPECT().GetModuleAccount(h.ctx,"genesisfixture").Return(genesisMinter)
@@ -133,5 +163,66 @@ func TestUnrestrictedKeeperCopiesRemainARealBypassRisk(t *testing.T) {
  }
  if !errors.Is(h.cap.Reconcile(h.ctx,h.bank),ErrUnexpectedSupply) {
    t.Fatal("periodic reconciliation must flag bypassed supply growth")
+ }
+}
+
+func TestActualSDKPersistentGenesisSurvivesCommitAndFreshMultistore(t *testing.T) {
+ h:=newRealBankHarness(t)
+ h.genesisFund(t,100)
+ if err:=h.cap.InitGenesis(h.ctx,"100",h.bank);err!=nil {t.Fatal(err)}
+ expected,err:=h.cap.Snapshot(h.ctx)
+ if err!=nil {t.Fatal(err)}
+ // Real persistent SDK multistore commit, followed by reconstructing and
+ // loading a completely fresh multistore and a new cap keeper.
+ restartedCtx,restricted,newCap:=h.restart(t)
+ actual,err:=newCap.Snapshot(restartedCtx)
+ if err!=nil || expected!=actual {t.Fatalf("persistent cap record disappeared after chain store reopen: %+v, %v",actual,err)}
+ if got:=restricted.GetSupply(restartedCtx,BaseDenom).Amount.String();got!="100" {
+   t.Fatalf("PRVI bank state lost after commit/reopen: %s",got)
+ }
+ if err:=restricted.MintCoins(restartedCtx,"mint",
+   sdk.NewCoins(sdk.NewInt64Coin(BaseDenom,1)));!errors.Is(err,ErrMintForbidden) {
+   t.Fatalf("restarted chain allowed unauthorized PRVI mint: %v",err)
+ }
+ if got:=restricted.GetSupply(restartedCtx,BaseDenom).Amount.String();got!="100" {
+   t.Fatalf("rejected post-restart mint changed bank supply: %s",got)
+ }
+ if err:=newCap.InitGenesis(restartedCtx,"100",restricted);!errors.Is(err,ErrAlreadyInitialized) {
+   t.Fatalf("restarting or upgrading attempted to reset lifetime issuance: %v",err)
+ }
+ if err:=newCap.Reconcile(restartedCtx,restricted);err!=nil {t.Fatalf("post-restart supply invariant broken: %v",err)}
+}
+
+func TestActualSDKUninitializedCapPersistsAsUninitializedAcrossCommit(t *testing.T) {
+ h:=newRealBankHarness(t)
+ ctx,bank,cap:=h.restart(t)
+ if _,err:=cap.Snapshot(ctx);!errors.Is(err,ErrNotInitialized) {
+   t.Fatalf("uninitialized chain must not silently create PRVI cap: %v",err)
+ }
+ if err:=bank.MintCoins(ctx,"mint",
+   sdk.NewCoins(sdk.NewInt64Coin(BaseDenom,1)));!errors.Is(err,ErrNotInitialized) {
+   t.Fatalf("missing genesis cap must deny new PRVI after restart: %v",err)
+ }
+}
+
+
+// Real pinned Cosmos SDK bank keeper regression: UncheckedSetBalance writes
+// an aprvi account without updating the declared bank supply. A valid-looking
+// declared genesis must be rejected before persisting any cap state.
+func TestActualSDKGenesisRejectsUntrackedNativeBalanceBeforeCapWrite(t *testing.T) {
+ h:=newRealBankHarness(t)
+ h.genesisFund(t,100)
+ address:=sdk.AccAddress(bytes.Repeat([]byte{0x7a},20))
+ if err:=h.bank.UncheckedSetBalance(h.ctx,address,sdk.NewInt64Coin(BaseDenom,1));err!=nil {
+   t.Fatalf("inject valueless untracked genesis balance: %v",err)
+ }
+ if supply:=h.bank.GetSupply(h.ctx,BaseDenom).Amount.String();supply!="100" {
+   t.Fatalf("expected unmodified declared bank supply, got %s",supply)
+ }
+ if err:=h.cap.InitGenesis(h.ctx,"100",h.bank);!errors.Is(err,ErrBankSupplyMismatch) {
+   t.Fatalf("genesis with undeclared native account balance was accepted: %v",err)
+ }
+ if _,err:=h.cap.Snapshot(h.ctx);!errors.Is(err,ErrNotInitialized) {
+   t.Fatalf("rejected genesis wrote immutable cap record: %v",err)
  }
 }

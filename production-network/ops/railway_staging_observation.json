@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "observed_on": "2026-10-19",
+  "source": "Railway OAuth read-only describe_environment and environment_status (snapshot)",
+  "provider": "Railway",
+  "project_id": "fb95bfa1-d2e5-41c6-bab6-cc7dee3f113b",
+  "project_name": "Privi Seven Validator Staging",
+  "environment": "staging",
+  "network_class": "UPSTREAM_TEST_NOT_NATIVE_PRVI",
+  "repository": "canoydario847-cloud/Privi-Network",
+  "branch": "build/privi-seven-validators-20261016",
+  "release_sha256": "UNVERIFIED",
+  "genesis_sha256": "UNVERIFIED",
+  "production_approval": "NONE",
+  "services": [
+    {
+      "name": "privi-validator-0",
+      "kind": "validator",
+      "region": "iad",
+      "state": "online",
+      "deployment_status": "SUCCESS",
+      "volume_id": "2b9234b5-0fc5-4568-b815-020dc7bf1899"
+    },
+    {
+      "name": "privi-validator-1",
+      "kind": "validator",
+      "region": "iad",
+      "state": "online",
+      "deployment_status": "SUCCESS",
+      "volume_id": "666cc075-bebf-43bf-920d-cb82d5a8ced7"
+    },
+    {
+      "name": "privi-validator-2",
+      "kind": "validator",
+      "region": "iad",
+      "state": "online",
+      "deployment_status": "SUCCESS",
+      "volume_id": "e15acdee-fa01-4060-84df-f2c2be0f5b90"
+    },
+    {
+      "name": "privi-validator-3",
+      "kind": "validator",
+      "region": "iad",
+      "state": "online",
+      "deployment_status": "SUCCESS",
+      "volume_id": "03000061-9387-4592-8c59-a88d0c336043"
+    },
+    {
+      "name": "privi-validator-4",
+      "kind": "validator",
+      "region": "iad",
+      "state": "online",
+      "deployment_status": "SUCCESS",
+      "volume_id": "26300b8b-0b8d-4de4-812e-95b672cd2691"
+    },
+    {
+      "name": "privi-validator-5",
+      "kind": "validator",
+      "region": "iad",
+      "state": "online",
+      "deployment_status": "SUCCESS",
+      "volume_id": "cf7faa99-128e-4633-8dcf-42cdebcdb699"
+    },
+    {
+      "name": "privi-validator-6",
+      "kind": "validator",
+      "region": "iad",
+      "state": "online",
+      "deployment_status": "SUCCESS",
+      "volume_id": "157d428a-4a00-4204-bc24-933641c2429d"
+    },
+    {
+      "name": "privi-bootstrap",
+      "kind": "bootstrap",
+      "region": "iad",
+      "state": "online",
+      "deployment_status": "SUCCESS",
+      "volume_id": "f803439a-242a-4303-9b57-dc2f3fcdb888"
+    }
+  ]
+}

@@ -9,6 +9,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from strict_json_evidence import load as load_strict_json
 
 CAP_COINS = 1_000_000_000
 DECIMALS = 18
@@ -99,7 +100,7 @@ def main():
     ap.add_argument("--chain-id",required=True)
     args=ap.parse_args()
     try:
-        result=audit(json.loads(args.genesis.read_text(encoding="utf-8")),args.denom,args.chain_id)
+        result=audit(load_strict_json(args.genesis),args.denom,args.chain_id)
     except (OSError, UnicodeError, ValueError, AttributeError) as e:
         print(json.dumps({"ok": False, "error": str(e)}))
         return 1

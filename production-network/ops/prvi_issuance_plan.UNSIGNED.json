@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "network": "PRVI_FINANCIAL_CANDIDATE_NOT_DEPLOYED",
+  "asset": "PRVI",
+  "base_denom": "aprvi",
+  "decimals": 18,
+  "maximum_whole_prvi": "1000000000",
+  "proposed_genesis_whole_prvi": "1000000000",
+  "state": "UNSIGNED_DRAFT_NOT_MINTED",
+  "policy": "COUNSEL_PACKET_PROPOSAL_NOT_FINAL_ALLOCATION_APPROVAL",
+  "cosmos_chain_id": "UNASSIGNED",
+  "evm_chain_id": "UNASSIGNED",
+  "signed_genesis_sha256": "UNASSIGNED",
+  "signed_release_sha256": "UNASSIGNED",
+  "independent_security_review": "UNASSIGNED",
+  "final_go_authorization": "UNASSIGNED",
+  "allocations": [
+    {
+      "bucket": "community",
+      "whole_prvi": "400000000",
+      "base_aprvi": "400000000000000000000000000",
+      "recipient_public_address": "UNASSIGNED",
+      "vesting_terms": "UNASSIGNED",
+      "approval_reference": "UNASSIGNED"
+    },
+    {
+      "bucket": "ecosystem",
+      "whole_prvi": "200000000",
+      "base_aprvi": "200000000000000000000000000",
+      "recipient_public_address": "UNASSIGNED",
+      "vesting_terms": "UNASSIGNED",
+      "approval_reference": "UNASSIGNED"
+    },
+    {
+      "bucket": "staking_reserve",
+      "whole_prvi": "200000000",
+      "base_aprvi": "200000000000000000000000000",
+      "recipient_public_address": "UNASSIGNED",
+      "vesting_terms": "UNASSIGNED",
+      "approval_reference": "UNASSIGNED"
+    },
+    {
+      "bucket": "treasury",
+      "whole_prvi": "100000000",
+      "base_aprvi": "100000000000000000000000000",
+      "recipient_public_address": "UNASSIGNED",
+      "vesting_terms": "UNASSIGNED",
+      "approval_reference": "UNASSIGNED"
+    },
+    {
+      "bucket": "contributors",
+      "whole_prvi": "100000000",
+      "base_aprvi": "100000000000000000000000000",
+      "recipient_public_address": "UNASSIGNED",
+      "vesting_terms": "UNASSIGNED",
+      "approval_reference": "UNASSIGNED"
+    }
+  ]
+}

@@ -45,7 +45,13 @@ jobs:
           set -euo pipefail
           python3 production-network/mainnet/custom-app/apply_prvi_cap.py \
             --upstream "$RUNNER_TEMP/.upstream-capbuild" --source-repo "$GITHUB_WORKSPACE"
-          gofmt -w "$RUNNER_TEMP/.upstream-capbuild/evmd/app.go" "$RUNNER_TEMP/.upstream-capbuild/evmd/prvicap/"*.go
+          # Patch only pinned x/erc20 state mutation sites, rejecting native
+          # aprvi and permissionless registration BEFORE consensus writes.
+          python3 production-network/mainnet/custom-app/patch_pinned_erc20_mutations.py \
+            --upstream "$RUNNER_TEMP/.upstream-capbuild"
+          gofmt -w "$RUNNER_TEMP/.upstream-capbuild/evmd/app.go" "$RUNNER_TEMP/.upstream-capbuild/evmd/prvicap/"*.go \
+            "$RUNNER_TEMP/.upstream-capbuild/x/erc20/keeper/params.go" \
+            "$RUNNER_TEMP/.upstream-capbuild/x/erc20/keeper/token_pairs.go"
           git -C "$RUNNER_TEMP/.upstream-capbuild" diff --check
       - name: Compile actual Cosmos EVM application and embedded Privi cap keeper
         run: |
@@ -54,12 +60,52 @@ jobs:
           GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^$' -timeout 20m . ./prvicap
           # Compile an isolated pre-production command binary, never uploaded,
           # executed as mainnet, issued, or distributed to operator hosts.
-          GOTOOLCHAIN=local go build -mod=mod -p 2 -trimpath \
+          GOTOOLCHAIN=local go build -mod=mod -p 2 -trimpath -buildvcs=false \
             -o "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY" ./cmd/evmd
           test -s "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY"
-          sha256sum "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY"
+          # Twin builds in the same pinned runner must match exactly. A single
+          # job/host is NOT a cross-machine reproducible-release attestation.
+          GOTOOLCHAIN=local go build -mod=mod -p 2 -trimpath -buildvcs=false \
+            -o "$RUNNER_TEMP/privi-evmd-TWIN-BUILD-ONLY" ./cmd/evmd
+          test -s "$RUNNER_TEMP/privi-evmd-TWIN-BUILD-ONLY"
+          cmp "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY" "$RUNNER_TEMP/privi-evmd-TWIN-BUILD-ONLY"
+          sha256sum "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY" "$RUNNER_TEMP/privi-evmd-TWIN-BUILD-ONLY"
           go version -m "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY"
+          # Not a signed or deployable artifact; neither binary leaves CI.
           # Compile proof only: no genesis, validators, keys or real financial PRVI.
+      - name: Test actual custom Cosmos EVM InitChain refuses unsafe genesis (VALUELESS ONLY)
+        run: |
+          set -euo pipefail
+          PROBE="$RUNNER_TEMP/.upstream-capbuild/evmd/cmd/privi-cap-genesis-probe"
+          mkdir -p "$PROBE"
+          cp production-network/mainnet/custom-app/privi_cap_genesis_probe_main.go "$PROBE/main.go"
+          gofmt -w "$PROBE/main.go"
+          cd "$RUNNER_TEMP/.upstream-capbuild/evmd"
+          GOTOOLCHAIN=local go run -mod=mod -p 2 ./cmd/privi-cap-genesis-probe
+          # 4 negative cases. Refuse atest/demo, cap+1, missing bank
+          # and aprvi-labeled genesis with upstream stake gas.
+          # No nodes, production signing keys or real PRVI are created.
+
+      - name: Prove actual custom Cosmos EVM app accepts valueless cap-compliant genesis
+        run: |
+          set -euo pipefail
+          POSITIVE_PROBE="$RUNNER_TEMP/.upstream-capbuild/evmd/cmd/privi-cap-genesis-positive-probe"
+          mkdir -p "$POSITIVE_PROBE"
+          cp production-network/mainnet/custom-app/privi_cap_genesis_positive_probe_main.go "$POSITIVE_PROBE/main.go"
+          gofmt -w "$POSITIVE_PROBE/main.go"
+          cd "$RUNNER_TEMP/.upstream-capbuild/evmd"
+          GOTOOLCHAIN=local go build -mod=mod -p 2 \
+            -o "$RUNNER_TEMP/privi-custom-InitChain-TEST-ONLY" ./cmd/privi-cap-genesis-positive-probe
+          "$RUNNER_TEMP/privi-custom-InitChain-TEST-ONLY"
+          # Each invocation uses a fresh in-memory Cosmos EVM app process.
+          # Assert the actual patched InitChain, not only an offline JSON audit,
+          # denies native aprvi ERC20 pairs and permissionless registration.
+          PRIVI_ERC20_NEGATIVE_PROBE=permissionless \
+            "$RUNNER_TEMP/privi-custom-InitChain-TEST-ONLY"
+          PRIVI_ERC20_NEGATIVE_PROBE=native-pair \
+            "$RUNNER_TEMP/privi-custom-InitChain-TEST-ONLY"
+          # Offline fixtures only: no issued PRVI, wallet or public network.
+
 
   sdk-prvi-capkeeper:
     name: SDK-backed PRVI consensus-store cap keeper unit tests (NOT DEPLOYED)
@@ -77,6 +123,18 @@ jobs:
           set -euo pipefail
           cd production-network/mainnet/prvicap
           GOTOOLCHAIN=local go test -mod=mod -p 2 -count=1 -timeout=20m ./...
+          # Synthetic O(balance records) cost evidence only; NOT IAVL or real-host capacity.
+          GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^$' -bench '^BenchmarkNativeReconcileScaling$' -benchtime=3x -benchmem -timeout=20m ./...
+          # Real SDK x/bank + IAVL-backed in-memory multistore benchmark;
+          # still NOT disk-backed consensus or production throughput evidence.
+          GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^$' -bench '^BenchmarkActualSDKNativeConservationScan$' -benchtime=3x -benchmem -timeout=20m ./... | tee "$RUNNER_TEMP/privi-sdk-iavl-bench.log"
+          # Fail closed if Go reported PASS but the benchmark timer was
+          # left stopped (no ns/op), or a required account scale was absent.
+          python3 "$GITHUB_WORKSPACE/production-network/ops/assert_sdk_benchmark_timings.py" --report "$RUNNER_TEMP/privi-sdk-iavl-bench.log"
+          # Fresh committed LevelDB/IAVL state read through a newly
+          # opened SDK multistore. Disposable keyless test; no financial chain.
+          GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^$' -bench '^BenchmarkDiskBackedSDKNativeConservationScan$' -benchtime=3x -benchmem -timeout=20m ./... | tee "$RUNNER_TEMP/privi-sdk-leveldb-bench.log"
+          python3 "$GITHUB_WORKSPACE/production-network/ops/assert_sdk_benchmark_timings.py" --profile disk --report "$RUNNER_TEMP/privi-sdk-leveldb-bench.log"
           # No actual PRVI or TEST tokens are issued by this job.
 
   upstream-mint-inventory:

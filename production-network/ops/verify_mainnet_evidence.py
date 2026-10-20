@@ -5,13 +5,52 @@ import hashlib
 import json
 import re
 import sys
+from urllib.parse import urlsplit
 from pathlib import Path
+from strict_json_evidence import load as load_strict_json, reject_secrets
 
 CAP = 1_000_000_000
 HEX64 = re.compile(r"^[a-fA-F0-9]{64}$")
+RESERVED_EVIDENCE_HOSTS = {"localhost", "example.com", "example.org", "example.net", "test", "invalid"}
+
+def evidence_url(value):
+    """Require a concrete public HTTPS reference without embedded credentials.
+
+    Never dereference URLs during the offline review. This checks structure,
+    NOT authorship, source availability, signed assertions or actual content.
+    """
+    if (not isinstance(value, str) or not value or len(value) > 2048 or
+            value != value.strip() or
+            any(ord(ch) <= 32 or ord(ch) == 127 for ch in value)):
+        # urlsplit may normalize away tabs/newlines; never silently change
+        # evidence URLs before they are independently reviewed.
+        return False
+    try:
+        parsed = urlsplit(value)
+        host = parsed.hostname
+        port = parsed.port
+    except ValueError:
+        return False
+    if parsed.scheme != "https" or parsed.username is not None or parsed.password is not None:
+        return False
+    if not host or not parsed.path or port is not None:
+        return False
+    if host in RESERVED_EVIDENCE_HOSTS or host.endswith(".localhost") or host.endswith(".invalid"):
+        return False
+    if not re.fullmatch(r"[a-zA-Z0-9.-]+", host) or "." not in host:
+        return False
+    if any(label.startswith("-") or label.endswith("-") or not label for label in host.split(".")):
+        return False
+    return True
 
 def assess(manifest, genesis_path):
     errors = []
+    try:
+        reject_secrets(manifest)
+    except ValueError as exc:
+        errors.append("manifest credential hygiene: " + str(exc))
+    if not isinstance(manifest, dict):
+        return ["manifest must be a JSON object"]
     def require(ok, why):
         if not ok:
             errors.append(why)
@@ -22,20 +61,53 @@ def assess(manifest, genesis_path):
     supply = manifest.get("max_supply_whole_prvi")
     require(type(supply) is int and supply == CAP, "PRVI max supply must be exactly 1000000000")
     chain_id = manifest.get("cosmos_chain_id")
-    require(isinstance(chain_id, str) and bool(chain_id.strip()) and chain_id != "local-4221", "unique mainnet Cosmos chain ID required")
+    require(isinstance(chain_id, str) and re.fullmatch(r"privi-[a-z0-9-]{3,48}-[1-9][0-9]*", chain_id) is not None and chain_id != "local-4221", "unique mainnet Cosmos chain ID required")
     evm_id = manifest.get("evm_chain_id")
-    require(type(evm_id) is int and evm_id > 0 and evm_id not in (1, 56, 97, 1337, 31337, 4221, 262144), "independently selected EVM chain ID required; common public/developer IDs are not approved")
+    require(type(evm_id) is int and 0 < evm_id <= 2**64-1 and evm_id not in (1, 56, 97, 1337, 31337, 4221, 262144), "independently selected EVM chain ID required; common public/developer IDs are not approved")
     denom = manifest.get("base_denom")
-    require(isinstance(denom, str) and bool(re.fullmatch(r"[a-z][a-z0-9/]{2,63}", denom)) and denom not in ("atest", "test", "stake", "aphotino"), "valid non-developer native PRVI base denomination required")
-    validators = manifest.get("validators", [])
-    require(isinstance(validators, list) and len(validators) >= 4, "at least four validators required")
-    if isinstance(validators, list):
-        for attr in ("operator_id", "consensus_pubkey", "fault_domain"):
-            values = [v.get(attr) for v in validators if isinstance(v, dict)]
-            require(len(values) == len(validators) and all(isinstance(x, str) and x.strip() for x in values) and len(set(values)) == len(values),
-                    "validator " + attr + " must be present and unique")
-        require(all(isinstance(v, dict) and v.get("independent_operator_attestation") is True for v in validators),
-                "each operator must explicitly attest independent control")
+    require(denom == "aprvi", "native PRVI base denomination must be exactly aprvi, not TEST/stake/BNB PRIV")
+    # Owner-selected architecture: FOUR distinct signing nodes controlled by
+    # ONE operator (Privi World Corp). Do not demand or claim four independent
+    # operator companies: this is a centrally operated, permissioned network.
+    require(manifest.get("operator") == "Privi World Corp",
+            "operator must be Privi World Corp")
+    require(manifest.get("governance_model") == "single-operator-permissioned",
+            "governance must disclose single-operator-permissioned control")
+    require(type(manifest.get("independent_operator_count")) is int and
+            manifest["independent_operator_count"] == 1,
+            "independent_operator_count must be exactly 1")
+    validators = manifest.get("validators")
+    require(isinstance(validators, list) and len(validators) == 4,
+            "exactly four separately keyed/hosted validators required")
+    if isinstance(validators, list) and len(validators) == 4:
+        identities = {f"privi-owner-val-{i:02d}" for i in range(1, 5)}
+        ids = set()
+        for idx, row in enumerate(validators):
+            if not isinstance(row, dict):
+                errors.append(f"validator[{idx}] must be an object")
+                continue
+            require(row.get("operator") == "Privi World Corp",
+                    f"validator[{idx}] operator must be Privi World Corp")
+            ident = row.get("id")
+            if isinstance(ident, str):
+                ids.add(ident)
+            require(isinstance(ident, str) and ident in identities, f"validator[{idx}] invalid id")
+            require(type(row.get("voting_power_percent")) is int and
+                    row["voting_power_percent"] == 25,
+                    f"validator[{idx}] voting power must equal 25 percent")
+            fpr = row.get("consensus_pubkey_sha256")
+            require(isinstance(fpr, str) and HEX64.fullmatch(fpr) is not None,
+                    f"validator[{idx}] consensus key fingerprint must be SHA-256 hex")
+            evidence = row.get("signer_attestation")
+            require(isinstance(evidence, str) and evidence.strip() not in ("", "UNASSIGNED"),
+                    f"validator[{idx}] signer attestation reference missing")
+        require(ids == identities, "validator IDs must be exactly 01-04 and unique")
+        for attr in ("host_id", "fault_domain", "consensus_pubkey_sha256"):
+            values = [row.get(attr) for row in validators if isinstance(row, dict)]
+            require(len(values) == 4 and
+                    all(isinstance(v, str) and bool(v.strip()) and v != "UNASSIGNED"
+                        for v in values) and len(set(values)) == 4,
+                    f"four distinct validator {attr} values required")
     sha = manifest.get("genesis_sha256")
     require(isinstance(sha, str) and HEX64.fullmatch(sha) is not None, "genesis_sha256 required")
     require(genesis_path.is_file(), "genesis file missing")
@@ -43,7 +115,7 @@ def assess(manifest, genesis_path):
         actual = hashlib.sha256(genesis_path.read_bytes()).hexdigest()
         require(isinstance(sha, str) and actual.lower() == sha.lower(), "genesis SHA-256 mismatch")
         try:
-            genesis = json.loads(genesis_path.read_text())
+            genesis = load_strict_json(genesis_path)
             require(isinstance(genesis, dict) and genesis.get("chain_id") == chain_id, "genesis chain_id mismatch")
             # Confirm only INITIAL supply: ongoing mint/issuance cap enforcement
             # still needs audited custom chain logic and external sign-off.
@@ -55,11 +127,23 @@ def assess(manifest, genesis_path):
                     errors.append("initial PRVI bank supply audit: " + str(exc))
             else:
                 errors.append("initial PRVI bank supply cannot be audited without a valid chain ID and denomination")
+            # Bank supply agreement does not prove native fee/staking/mint
+            # configuration. Reject atest/stake fee masquerading as PRVI.
+            try:
+                from native_prvi_genesis_params import audit as audit_native_params
+                audit_native_params(genesis)
+            except (ValueError, TypeError, AttributeError) as exc:
+                errors.append("native PRVI genesis parameter audit: " + str(exc))
             errors.append("ongoing issuance cap, staking and vesting require independent audited chain-specific verification")
         except (ValueError, UnicodeError):
             errors.append("genesis must be valid UTF-8 JSON")
-    for key in ("binary_sha256", "security_audit_url", "public_testnet_evidence_url", "incident_runbook_url", "signoff_record_url"):
-        require(bool(manifest.get(key)), key + " evidence missing")
+    binary_sha = manifest.get("binary_sha256")
+    require(isinstance(binary_sha, str) and HEX64.fullmatch(binary_sha) is not None,
+            "binary_sha256 must be a concrete 64-hex digest, independently verified")
+    for key in ("security_audit_url", "public_testnet_evidence_url", "incident_runbook_url", "signoff_record_url"):
+        require(evidence_url(manifest.get(key)), key + " must be a concrete HTTPS evidence link")
+    # These fields are declarations, not proof of actual external audit
+    # authenticity or a signature on the exact binary/genesis pair.
     # Offline declarations cannot demonstrate network health or cryptographic signatures.
     errors.append("independent validator signatures and live consensus checks must be externally verified")
     return errors
@@ -70,7 +154,7 @@ def main():
     p.add_argument("--genesis", required=True, type=Path, help="candidate unsigned/signed genesis JSON")
     args = p.parse_args()
     try:
-        manifest = json.loads(args.manifest.read_text())
+        manifest = load_strict_json(args.manifest)
         if not isinstance(manifest, dict):
             raise ValueError("manifest must be a JSON object")
         failures = assess(manifest, args.genesis)
