@@ -147,6 +147,33 @@ async function run(env = process.env) {
     contract.setCompanyGateway.staticCall(e1.companyIdHash,wallet.address,true),
     "platform owner cannot bypass independent company gateway consent"
   );
+
+  // A company may reject an invitation; the platform can revoke an
+  // unaccepted mistaken invitation without granting ANY rights.
+  const declinedCompanyHash=sha(Buffer.from("PRIVI_DECLINED_CO","utf8"));
+  await confirmed(await contract.proposeCompanyRegistration(
+    declinedCompanyHash,companyAdmin.address,
+    {gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
+  await assert.rejects(
+    contract.acceptCompanyRegistration.staticCall(declinedCompanyHash),
+    "platform cannot accept a second company invitation"
+  );
+  await confirmed(await contract.connect(companyAdmin).rejectCompanyRegistration(
+    declinedCompanyHash,{gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
+  assert.equal((await contract.companies(declinedCompanyHash)).registered,false);
+  assert.equal(await contract.pendingCompanyAdministrators(declinedCompanyHash),
+    ethers.ZeroAddress);
+  await assert.rejects(contract.connect(companyAdmin).acceptCompanyRegistration.staticCall(declinedCompanyHash),
+    "a rejected invite cannot be accepted");
+  const cancelledCompanyHash=sha(Buffer.from("PRIVI_CANCELLED_CO","utf8"));
+  await confirmed(await contract.proposeCompanyRegistration(
+    cancelledCompanyHash,companyAdmin.address,
+    {gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
+  await confirmed(await contract.cancelCompanyRegistration(
+    cancelledCompanyHash,{gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
+  assert.equal((await contract.companies(cancelledCompanyHash)).registered,false);
+  assert.equal(await contract.pendingCompanyAdministrators(cancelledCompanyHash),
+    ethers.ZeroAddress);
   await assert.rejects(
     contract.enrollDevice.staticCall(e1.deviceIdHash,e1.signingKeyHash,e1.companyIdHash,wallet.address),
     "company must approve its Privi developer gateway"
