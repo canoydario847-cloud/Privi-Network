@@ -8,8 +8,7 @@ Values are non-binding *proposed* micro-PRVI estimates (1e-6 PRVI), not coins.
 from __future__ import annotations
 
 import argparse
-from collections import Counter, defaultdict
-from datetime import datetime, timezone
+from collections import Counter
 import hashlib
 import json
 import math
@@ -17,6 +16,8 @@ from pathlib import Path
 import re
 import sqlite3
 import sys
+
+import pop_position as pop
 
 CATEGORIES = {
     "environment": (
@@ -125,30 +126,13 @@ def predict(packet):
 
 
 def quality_and_quote(packet):
-    """Deterministic non-economic proposal: every eligible event > 0 units.
-
-    Quotes are metadata, not ownership, a promise of payment, mint, or
-    enforceable entitlement. AI labels do not control quote amounts.
-    """
-    payload = packet["payload"]
-    if not isinstance(payload, dict) or len(payload) > 128:
+    """Offline PoP preview before the first verified Privi record exists."""
+    if not isinstance(packet.get("payload"), dict) or len(packet["payload"]) > 128:
         raise ValueError("Payload must contain at most 128 fields")
-    score = 35 + min(len(payload), 10) * 3
-    if len(str(packet.get("eventType", ""))) >= 3:
-        score += 10
-    observed = packet.get("observedAt", 0)
-    if isinstance(observed, int) and not isinstance(observed, bool):
-        delta = abs(int(datetime.now(timezone.utc).timestamp()) - observed)
-        if delta <= 3600:
-            score += 15
-        elif delta <= 86400:
-            score += 5
-    score = max(1, min(score, 100))
-    # Proposed micro-PRVI: 0.001000 + up to 0.002000 PRVI per accepted event.
-    quote = 1000 + 20 * score
-    return {"quality_score": score, "proposed_micro_prvi": quote,
-            "proposed_prvi": f"{quote / 1_000_000:.6f}",
-            "valuation_status": "PROPOSAL_ONLY_NOT_MINTED"}
+    pos = pop.position(packet)
+    return {**pos, **{**pop.proposal(packet["popZone"], 0, 0), "pop_verified": False}}
+
+
 
 
 def stable_json(value):
@@ -176,8 +160,9 @@ def sha(text):
 
 
 def event_hashes(packet):
-    if packet.get("version") != 1:
-        raise ValueError("Unexpected event version")
+    if packet.get("version") != 2:
+        raise ValueError("PoP-v2 signed event required")
+    pos = pop.position(packet)
     device = packet.get("deviceId")
     kind = packet.get("eventType")
     seq = packet.get("sequence")
@@ -193,10 +178,15 @@ def event_hashes(packet):
     if not isinstance(packet.get("payload"), dict) or len(payload_text.encode()) > 16384:
         raise ValueError("Invalid payload")
     payload_hash = sha(payload_text)
-    signing_text = json.dumps([1, device, seq, ts, kind, payload_hash],
-                              ensure_ascii=False, separators=(",", ":"))
+    signing_text = json.dumps(
+        [2, packet["companyId"], device, seq, ts, packet["popZone"],
+         pos["pop_stamp"], kind, payload_hash],
+        ensure_ascii=False, separators=(",", ":"))
     return {"deviceIdHash": sha(device), "payloadHash": payload_hash,
-            "eventHash": sha(signing_text)}
+            "eventHash": sha(signing_text),
+            "companyIdHash": pos["company_id_hash"],
+            "popStampHash": pos["pop_stamp_hash"],
+            "popZoneHash": pos["pop_zone_hash"]}
 
 
 DDL = """
@@ -206,6 +196,15 @@ CREATE TABLE IF NOT EXISTS iot_events(
     sequence INTEGER NOT NULL CHECK (sequence > 0),
     event_hash TEXT NOT NULL UNIQUE,
     payload_hash TEXT NOT NULL,
+    company_id_hash TEXT NOT NULL,
+    pop_zone TEXT NOT NULL,
+    pop_stamp TEXT NOT NULL UNIQUE,
+    pop_stamp_hash TEXT NOT NULL UNIQUE,
+    pop_verified INTEGER NOT NULL CHECK(pop_verified = 1),
+    pop_report_count INTEGER NOT NULL CHECK(pop_report_count > 0),
+    pop_duration_days INTEGER NOT NULL CHECK(pop_duration_days >= 0),
+    pop_leverage_bps INTEGER NOT NULL CHECK(pop_leverage_bps BETWEEN 10000 AND 25000),
+    block_timestamp INTEGER NOT NULL CHECK (block_timestamp > 0),
     tx_hash TEXT NOT NULL UNIQUE,
     block_number INTEGER NOT NULL CHECK (block_number >= 0),
     evm_chain_id INTEGER NOT NULL CHECK (evm_chain_id > 0),
@@ -213,7 +212,6 @@ CREATE TABLE IF NOT EXISTS iot_events(
     confidence REAL NOT NULL,
     review_required INTEGER NOT NULL,
     alternatives_json TEXT NOT NULL,
-    quality_score INTEGER NOT NULL CHECK (quality_score BETWEEN 1 AND 100),
     proposed_micro_prvi INTEGER NOT NULL CHECK (proposed_micro_prvi > 0),
     valuation_status TEXT NOT NULL CHECK (valuation_status = 'PROPOSAL_ONLY_NOT_MINTED'),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -226,43 +224,63 @@ def record(db_path, packet, confirmation):
     if not isinstance(confirmation, dict):
         raise ValueError("Missing Privi confirmation")
     hashes = event_hashes(packet)
-    for k in ("deviceIdHash", "payloadHash", "eventHash"):
+    for k in ("deviceIdHash", "payloadHash", "eventHash",
+              "companyIdHash", "popStampHash", "popZoneHash"):
         if confirmation.get(k, "").lower() != hashes[k].lower():
             raise ValueError("Confirmed event hash does not match packet: " + k)
     tx_hash = confirmation.get("transactionHash", "")
     chain_id = confirmation.get("chainId")
     block = confirmation.get("blockNumber")
     confirmations = confirmation.get("confirmations")
+    block_timestamp = confirmation.get("blockTimestamp")
+    if not isinstance(block_timestamp, int) or isinstance(block_timestamp, bool) or block_timestamp <= 0:
+        raise ValueError("Verified Privi block timestamp required")
     if not HEX32.fullmatch(tx_hash) or not isinstance(chain_id, int) or isinstance(chain_id, bool) or chain_id <= 0:
         raise ValueError("Invalid confirmed Privi transaction identity")
     if not isinstance(block, int) or isinstance(block, bool) or block < 0:
         raise ValueError("Invalid confirmed block")
     if not isinstance(confirmations, int) or isinstance(confirmations, bool) or confirmations < 1:
         raise ValueError("Unconfirmed event")
-    if chain_id in {1, 10, 56, 97, 137, 250, 42161, 43114, 8453, 84532, 11155111}:
-        raise ValueError("Third-party EVM chain is not Privi")
+    if chain_id != 262144:
+        raise ValueError("Native Privi developer chain receipt required")
     label = predict(packet)
-    quote = quality_and_quote(packet)
     db = Path(db_path)
     db.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(db, timeout=10) as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute(DDL)
         conn.execute("BEGIN IMMEDIATE")
+        previous_count, oldest = conn.execute(
+            """SELECT COUNT(*), MIN(block_timestamp) FROM iot_events
+               WHERE company_id_hash = ?""",
+            (hashes["companyIdHash"],)
+        ).fetchone()
+        if oldest is not None and block_timestamp < oldest:
+            raise ValueError("PoP block timestamp predates prior sealed Privi history")
+        previous_count = int(previous_count)
+        duration = max(0, (block_timestamp - (oldest if oldest is not None else block_timestamp)) // 86400)
+        quote = pop.proposal(packet["popZone"], previous_count + 1, duration)
+        pos = pop.position(packet)
         conn.execute(
             """INSERT INTO iot_events(
-                device_id_hash,sequence,event_hash,payload_hash,tx_hash,
-                block_number,evm_chain_id,label,confidence,review_required,
-                alternatives_json,quality_score,proposed_micro_prvi,valuation_status
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                device_id_hash,sequence,event_hash,payload_hash,
+                company_id_hash,pop_zone,pop_stamp,pop_stamp_hash,pop_verified,
+                pop_report_count,pop_duration_days,pop_leverage_bps,block_timestamp,
+                tx_hash,block_number,evm_chain_id,label,confidence,review_required,
+                alternatives_json,proposed_micro_prvi,valuation_status
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (hashes["deviceIdHash"], packet["sequence"], hashes["eventHash"],
-             hashes["payloadHash"], tx_hash, block, chain_id, label["suggested_label"],
-             label["confidence"], int(label["review_required"]),
-             json.dumps(label["alternatives"]), quote["quality_score"],
+             hashes["payloadHash"], hashes["companyIdHash"], packet["popZone"],
+             pos["pop_stamp"], hashes["popStampHash"], 1, previous_count + 1,
+             duration, quote["pop_leverage_basis_points"], block_timestamp, tx_hash,
+             block, chain_id, label["suggested_label"], label["confidence"],
+             int(label["review_required"]), json.dumps(label["alternatives"]),
              quote["proposed_micro_prvi"], quote["valuation_status"])
         )
+
     return {"deviceIdHash": hashes["deviceIdHash"], "eventHash": hashes["eventHash"],
-            "transactionHash": tx_hash, **label, **quote,
+            "transactionHash": tx_hash, "pop_stamp": pos["pop_stamp"],
+            "pop_zone": packet["popZone"], **label, **quote,
             "stored_raw_sensor_data": False}
 
 
