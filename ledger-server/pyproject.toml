@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "privi-ledger-mcp"
+version = "0.1.0"
+description = "Tamper-evident audit logs for AI agents, as an MCP server. Auditors verify integrity, paid per call with x402."
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Dario Canoy" }]
+requires-python = ">=3.11"
+dependencies = ["mcp>=2.3,<3", "uvicorn>=0.30"]
+keywords = ["mcp", "audit-log", "ai-agents", "compliance", "x402", "base", "usdc"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "anyio>=4"]
+
+[project.scripts]
+privi-ledger-mcp = "privi_ledger.server:main"
+
+[project.urls]
+Homepage = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/ledger-server"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/privi_ledger"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

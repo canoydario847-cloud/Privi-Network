@@ -1,21 +1,22 @@
-name: MCP server CI
+name: MCP servers CI
 
 on:
   push:
     branches: [main]
-    paths: ["mcp-server/**", ".github/workflows/mcp-server-ci.yml"]
+    paths: ["mcp-server/**", "ledger-server/**", ".github/workflows/mcp-server-ci.yml"]
   pull_request:
-    paths: ["mcp-server/**", ".github/workflows/mcp-server-ci.yml"]
+    paths: ["mcp-server/**", "ledger-server/**", ".github/workflows/mcp-server-ci.yml"]
 
 jobs:
   test:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: mcp-server
+        working-directory: ${{ matrix.server }}
     strategy:
       matrix:
         python-version: ["3.11", "3.13"]
+        server: ["mcp-server", "ledger-server"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

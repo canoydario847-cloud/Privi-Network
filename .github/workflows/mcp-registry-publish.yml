@@ -1,11 +1,11 @@
 name: Publish MCP server to MCP Registry
 
-# Publishes mcp-server/server.json whenever it changes on main.
+# Publishes each server's server.json whenever it changes on main.
 # Bump "version" in server.json for each new listing; the registry rejects duplicate versions.
 on:
   push:
     branches: [main]
-    paths: ["mcp-server/server.json", ".github/workflows/mcp-registry-publish.yml"]
+    paths: ["mcp-server/server.json", "ledger-server/server.json", ".github/workflows/mcp-registry-publish.yml"]
   workflow_dispatch:
 
 jobs:
@@ -14,9 +14,13 @@ jobs:
     permissions:
       id-token: write # GitHub OIDC login to the registry, no secrets needed
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        server: ["mcp-server", "ledger-server"]
     defaults:
       run:
-        working-directory: mcp-server
+        working-directory: ${{ matrix.server }}
     steps:
       - uses: actions/checkout@v5
 
@@ -27,5 +31,6 @@ jobs:
       - name: Authenticate to MCP Registry
         run: ./mcp-publisher login github-oidc
 
+      # Publishing an already-listed version fails; that is expected for the unchanged server.
       - name: Publish
-        run: ./mcp-publisher publish
+        run: ./mcp-publisher publish || echo "::warning::not published (version may already be listed)"

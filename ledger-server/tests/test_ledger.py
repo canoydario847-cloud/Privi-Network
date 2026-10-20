@@ -1,0 +1,126 @@
+import os
+import sqlite3
+
+import anyio
+import pytest
+from mcp import Client
+
+from privi_ledger.config import Settings
+from privi_ledger.server import build_server
+from privi_ledger.store import Ledger
+
+PAY_TO = "0x1990589FD200E043b8C6FD9ec5956c61b3071048"
+
+
+class FakeFacilitator:
+    def __init__(self):
+        self.calls = []
+
+    async def verify(self, payload, req):
+        self.calls.append("verify")
+        return {"isValid": True}
+
+    async def settle(self, payload, req):
+        self.calls.append("settle")
+        return {"success": True, "transaction": "0x" + "ab" * 32, "network": req["network"]}
+
+
+@pytest.fixture
+def ledger(tmp_path):
+    return Ledger(str(tmp_path / "l.db"))
+
+
+def server(ledger, fac=None, **kw):
+    return build_server(Settings(pay_to=PAY_TO, **kw), ledger, fac or FakeFacilitator())
+
+
+def as_org(monkeypatch, key):
+    """Over in-process (stdio-like) transport the org key comes from LEDGER_LOCAL_ORG_KEY."""
+    if key is None:
+        monkeypatch.delenv("LEDGER_LOCAL_ORG_KEY", raising=False)
+    else:
+        monkeypatch.setenv("LEDGER_LOCAL_ORG_KEY", key)
+
+
+def test_record_read_and_receipt(ledger, monkeypatch):
+    acme = ledger.create_org("Acme")
+    as_org(monkeypatch, acme["api_key"])
+
+    async def go():
+        async with Client(server(ledger)) as c:
+            r1 = await c.call_tool("ledger_record_action", {
+                "stream_id": "billing-agent", "actor": "claude", "action_type": "payment",
+                "summary": "Paid invoice 1042", "resource": "inv_1042", "details": {"usd": 120.5}})
+            assert not r1.is_error, r1
+            e1 = r1.structured_content["entry"]
+            assert e1["seq"] == 1 and e1["details"] == {"usd": 120.5}
+            await c.call_tool("ledger_record_action", {
+                "stream_id": "billing-agent", "actor": "claude", "action_type": "message",
+                "summary": "Emailed receipt", "outcome": "failure"})
+            read = (await c.call_tool("ledger_read_stream", {"stream_id": "billing-agent"})).structured_content
+            assert [e["seq"] for e in read["entries"]] == [1, 2] and read["integrity"]["intact"]
+            assert read["entries"][1]["prev_hash"] == e1["entry_hash"]
+            streams = (await c.call_tool("ledger_list_streams", {})).structured_content
+            assert streams["streams"][0]["entries"] == 2
+            rc = (await c.call_tool("ledger_check_receipt", {"entry_hash": e1["entry_hash"]})).structured_content
+            assert rc["found"] and rc["seq"] == 1 and "summary" not in rc
+    anyio.run(go)
+
+
+def test_auth_and_org_isolation(ledger, monkeypatch):
+    acme, other = ledger.create_org("Acme"), ledger.create_org("Other")
+    ledger.record(acme["org_id"], "agent-a", "claude", "tool_call", "secret thing")
+
+    async def call(name, args):
+        async with Client(server(ledger)) as c:
+            return await c.call_tool(name, args)
+
+    as_org(monkeypatch, None)
+    assert anyio.run(call, "ledger_list_streams", {}).is_error
+    as_org(monkeypatch, "plk_wrong")
+    assert anyio.run(call, "ledger_record_action", {
+        "stream_id": "x", "actor": "y", "action_type": "other", "summary": "z"}).is_error
+    as_org(monkeypatch, other["api_key"])
+    r = anyio.run(call, "ledger_read_stream", {"stream_id": "agent-a"}).structured_content
+    assert r["entries"] == []  # other org cannot see Acme's stream
+    # keys are stored hashed
+    raw = sqlite3.connect(ledger._db.execute("PRAGMA database_list").fetchone()[2])
+    assert acme["api_key"] not in str(raw.execute("SELECT * FROM orgs").fetchall())
+
+
+def test_paid_audit_and_tamper_detection(ledger, tmp_path):
+    acme = ledger.create_org("Acme")
+    for i in range(3):
+        ledger.record(acme["org_id"], "ops-agent", "claude", "data_change", f"step {i}")
+    fac = FakeFacilitator()
+
+    async def go():
+        async with Client(server(ledger, fac)) as c:
+            args = {"org_id": acme["org_id"], "stream_id": "ops-agent"}
+            need = await c.call_tool("ledger_audit_stream", args)
+            assert need.is_error and need.structured_content["accepts"][0]["amount"] == "20000"
+            pay = {"x402Version": 2, "resource": need.structured_content["resource"],
+                   "accepted": need.structured_content["accepts"][0], "payload": {}}
+            ok = await c.call_tool("ledger_audit_stream", args, meta={"x402/payment": pay})
+            a = ok.structured_content
+            assert a["intact"] and a["entry_count"] == 3 and "summary" not in str(a)
+            assert ok.meta["x402/payment-response"]["success"] and fac.calls == ["verify", "settle"]
+
+            db = sqlite3.connect(str(tmp_path / "l.db"))
+            db.execute("UPDATE entries SET summary='edited' WHERE seq=2"); db.commit()
+            bad = (await c.call_tool("ledger_audit_stream", args, meta={"x402/payment": pay})).structured_content
+            assert bad["intact"] is False and bad["broken_at_seq"] == 2
+
+            db.execute("DELETE FROM entries WHERE seq=2"); db.commit()
+            gone = (await c.call_tool("ledger_audit_stream", args, meta={"x402/payment": pay})).structured_content
+            assert gone["intact"] is False and gone["broken_at_seq"] == 3
+    anyio.run(go)
+
+
+def test_validation(ledger):
+    org = ledger.create_org("Acme")["org_id"]
+    for bad in [dict(action_type="hack"), dict(outcome="maybe"), dict(stream_id="has space"),
+                dict(details={"x": "y" * 20000}), dict(summary="  ")]:
+        args = dict(stream_id="s", actor="a", action_type="other", summary="ok") | bad
+        with pytest.raises(ValueError):
+            ledger.record(org, **args)
