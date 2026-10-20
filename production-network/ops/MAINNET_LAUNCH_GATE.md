@@ -74,9 +74,10 @@ multi-service TEST network.
 A dedicated experimental module-facing `bankkeeper.Keeper` wrapper now
 rejects direct `UncheckedSetBalance` writes for `aprvi`, and rejects
 two value-copy builder functions on the restricted module dependency.
-An SDK-backed test verifies denial before mutation and after persistent
-store reopen. However this cannot eliminate pre-existing raw copies,
-access to the embedded raw keeper, low-level collection or KV writes,
+SDK-backed tests verify denial before mutation and after persistent
+store reopen; the module wrapper's sole embedded interface field is
+private and is not a concrete exported raw keeper. However this cannot
+eliminate pre-existing raw copies, low-level collection or KV writes,
 unreviewed third-party module code, or transient within-block mutations.
 The raw SDK keeper vulnerability is still reproducible by a regression
 test, so **S-01 and S-02 remain OPEN** and no code here launches a network.
