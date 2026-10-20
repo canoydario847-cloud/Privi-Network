@@ -149,6 +149,18 @@ class LotStore:
         ).fetchone()
         return dict(r) if r else None
 
+    def heads(self) -> list[tuple[str, int, str]]:
+        """(lot_code, seq, record_hash) of the latest event of every lot."""
+        rows = self._db.execute(
+            """SELECT e.lot_code, e.seq, e.record_hash FROM events e
+               JOIN (SELECT lot_code, MAX(seq) AS s FROM events GROUP BY lot_code) m
+               ON e.lot_code=m.lot_code AND e.seq=m.s""").fetchall()
+        return [(r["lot_code"], r["seq"], r["record_hash"]) for r in rows]
+
+    def hash_at(self, lot_code: str, seq: int) -> str | None:
+        r = self._db.execute("SELECT record_hash FROM events WHERE lot_code=? AND seq=?", (lot_code, seq)).fetchone()
+        return r["record_hash"] if r else None
+
     @staticmethod
     def check_chain(events: list[dict[str, Any]]) -> ChainCheck:
         prev = GENESIS

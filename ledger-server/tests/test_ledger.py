@@ -124,3 +124,54 @@ def test_validation(ledger):
         args = dict(stream_id="s", actor="a", action_type="other", summary="ok") | bad
         with pytest.raises(ValueError):
             ledger.record(org, **args)
+
+
+class FakeAnchor:
+    def __init__(self):
+        self.calls = []
+
+    def anchor(self, hashes, label):
+        self.calls.append(list(hashes))
+        return {"status": "confirmed", "merkle_root": "ab" * 32, "tx_hash": "0x" + "cd" * 32,
+                "block_number": 58200, "block_time": 1792466000,
+                "receipts": [{"hash": h, "proof": [], "tx_hash": "0x" + "cd" * 32} for h in hashes]}
+
+
+def test_onchain_checkpoint_catches_consistent_rewrite(ledger, tmp_path):
+    from privi_ledger.anchoring import Checkpoints
+    from privi_ledger.store import fingerprint, GENESIS
+
+    org = ledger.create_org("Acme")["org_id"]
+    for i in range(3):
+        ledger.record(org, "ops", "claude", "data_change", f"step {i}")
+    cps, fake = Checkpoints(ledger._db, ledger._lock), FakeAnchor()
+    assert cps.run_once(ledger.heads(), fake, "privi-ledger") == 1
+    assert cps.run_once(ledger.heads(), fake, "privi-ledger") == 0      # nothing new
+    ledger.record(org, "ops", "claude", "data_change", "step 3")
+    assert cps.run_once(ledger.heads(), fake, "privi-ledger") == 1      # new head only
+
+    async def audit():
+        async with Client(server(ledger, payments_enabled=False)) as c:
+            return (await c.call_tool("ledger_audit_stream", {"org_id": org, "stream_id": "ops"})).structured_content
+
+    a = anyio.run(audit)
+    assert a["intact"] and a["onchain_checkpoint"]["anchored"] and a["onchain_checkpoint"]["matches_current_record"]
+    assert a["onchain_checkpoint"]["seq"] == 4 and a["onchain_checkpoint"]["verify_with"]["tool"] == "anchor_verify"
+
+    # Rewrite entry 2 AND recompute every later hash, so the local chain is internally consistent.
+    db = sqlite3.connect(str(tmp_path / "l.db")); db.row_factory = sqlite3.Row
+    rows = [dict(r) for r in db.execute("SELECT * FROM entries WHERE org_id=? ORDER BY seq", (org,))]
+    prev = GENESIS
+    for r in rows:
+        if r["seq"] == 2:
+            r["summary"] = "step 1 (quietly edited)"
+        r["prev_hash"] = prev
+        r["entry_hash"] = fingerprint(r)
+        prev = r["entry_hash"]
+        db.execute("UPDATE entries SET summary=?, prev_hash=?, entry_hash=? WHERE id=?",
+                   (r["summary"], r["prev_hash"], r["entry_hash"], r["id"]))
+    db.commit()
+    assert ledger.check_chain(ledger.entries(org, "ops")).valid      # local check alone is fooled
+    b = anyio.run(audit)
+    assert b["intact"] is False and "anchored on the Privi chain" in b["reason"]
+    assert b["onchain_checkpoint"]["matches_current_record"] is False

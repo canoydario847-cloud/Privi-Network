@@ -23,7 +23,7 @@ Action types: `tool_call`, `data_access`, `data_change`, `payment`, `message`, `
 
 Each entry's SHA-256 fingerprint covers its contents **and the previous entry's fingerprint** in the same stream. Editing, deleting or reordering any entry breaks the chain from that point, and audits report the exact entry where it broke. Organizations only ever see their own streams; API keys are stored as hashes.
 
-> Today the fingerprints are checked against this server's database. Anchoring stream heads on Base, so customers can prove integrity without trusting Privi, is next on the roadmap.
+> Stream heads are anchored on the Privi blockchain every few minutes (see On-chain checkpoints), so integrity can be proven without trusting Privi.
 
 ## Onboarding a customer
 
@@ -37,6 +37,10 @@ curl -X POST https://<host>/admin/orgs \
 ```
 
 The customer adds the server to their agent with header `Authorization: Bearer plk_...`, and tells it to call `ledger_record_action` after each meaningful action. They share their `org_id` and stream names with auditors, who call `ledger_audit_stream`.
+
+## On-chain checkpoints
+
+Every 5 minutes the server anchors the latest fingerprint of each stream that changed on the Privi blockchain through [Privi Anchor](../anchor-server). Audit results include `onchain_checkpoint`: the anchored position, transaction, and Merkle proof, plus an `anchor_verify` call anyone can run. If stored history no longer matches what was anchored, the audit fails even when every local hash was recomputed consistently. Set `LEDGER_ANCHOR_KEY` (an Anchor API key) to turn it on; `LEDGER_ANCHOR_INTERVAL` changes the period (seconds, default 300).
 
 ## Payments
 
@@ -56,7 +60,6 @@ The `Dockerfile` runs on Railway with a volume at `/data`. Start on `base-sepoli
 
 ## Roadmap
 
-- Anchor stream heads on Base for trustless verification
 - Signed audit reports (PDF/JSON) for compliance reviews
 - Subscription billing per organization
 - Retention policies and exports to customer storage

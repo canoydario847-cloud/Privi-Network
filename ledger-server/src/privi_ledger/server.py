@@ -22,7 +22,10 @@ from starlette.responses import JSONResponse
 
 from .config import Settings
 from .store import ACTION_TYPES, OUTCOMES, Ledger, check_id
+from .anchoring import Checkpoints, HttpAnchorClient, describe, start_loop
 from .x402 import Facilitator, Paywall
+
+DEFAULT_ANCHOR_URL = "https://privi-anchor-production.up.railway.app/mcp"
 
 __version__ = "0.1.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/ledger-server"
@@ -57,6 +60,16 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     settings = settings or Settings.from_env()
     ledger = ledger or Ledger(settings.db_path)
     paywall = Paywall(settings, facilitator)
+    checkpoints = Checkpoints(ledger._db, ledger._lock)
+    anchor_url = os.getenv("LEDGER_ANCHOR_URL", DEFAULT_ANCHOR_URL)
+
+    def onchain(org_id: str, stream_id: str, result: dict) -> dict:
+        cp = checkpoints.latest(f"{org_id}/{stream_id}")
+        info = describe(cp, ledger.hash_at(org_id, stream_id, cp["seq"]) if cp else None, anchor_url)
+        if cp and not info["matches_current_record"]:
+            result.update(intact=False, broken_at_seq=cp["seq"],
+                          reason="history differs from the version anchored on the Privi chain")
+        return info
 
     mcp = MCPServer(
         name="privi-ledger", title="Privi Ledger",
@@ -122,7 +135,10 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
             except ValueError as e:
                 return {"found": False, "error": str(e)}
             a = ledger.audit(oid, sid)
-            return {"found": True, **a} if a else {"found": False, "org_id": oid, "stream_id": sid}
+            if not a:
+                return {"found": False, "org_id": oid, "stream_id": sid}
+            a["onchain_checkpoint"] = onchain(oid, sid, a)
+            return {"found": True, **a}
 
         return await paywall.run("ledger_audit_stream", "Integrity audit of an AI agent's action log",
                                  dict(ctx.request_context.meta or {}), work)
@@ -171,11 +187,13 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
             return _result({"error": str(err)}, is_error=True)
         for e in page:
             e["details"] = json.loads(e["details"])
+        integrity = {"intact": check.valid, "broken_at_seq": check.broken_at_seq,
+                     "reason": check.reason, "entry_count": check.entry_count}
+        integrity["onchain_checkpoint"] = onchain(org["org_id"], stream_id, integrity)
         return _result({
             "stream_id": stream_id, "entries": page,
             "next_after_seq": page[-1]["seq"] if len(page) == limit else None,
-            "integrity": {"intact": check.valid, "broken_at_seq": check.broken_at_seq,
-                          "reason": check.reason, "entry_count": check.entry_count},
+            "integrity": integrity,
         })
 
     @mcp.tool(title="List streams", annotations=READ_ONLY)
@@ -219,7 +237,15 @@ def main() -> None:
     p.add_argument("--host", default=os.getenv("HOST", "0.0.0.0"))
     p.add_argument("--port", type=int, default=int(os.getenv("PORT", "8000")))
     args = p.parse_args()
-    mcp = build_server()
+    settings = Settings.from_env()
+    ledger = Ledger(settings.db_path)
+    mcp = build_server(settings, ledger)
+    key = os.getenv("LEDGER_ANCHOR_KEY", "")
+    if key:
+        client = HttpAnchorClient(os.getenv("LEDGER_ANCHOR_URL", DEFAULT_ANCHOR_URL), key)
+        cps = Checkpoints(ledger._db, ledger._lock)
+        start_loop(lambda: cps.run_once(ledger.heads(), client, "privi-ledger"),
+                   float(os.getenv("LEDGER_ANCHOR_INTERVAL", "300")), "privi-ledger")
     if args.stdio:
         mcp.run("stdio")
         return

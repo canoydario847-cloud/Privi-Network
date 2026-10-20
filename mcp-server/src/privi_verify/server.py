@@ -21,7 +21,10 @@ from starlette.responses import JSONResponse
 
 from .config import Settings
 from .store import EVENT_TYPES, LotStore, seed_demo
+from .anchoring import Checkpoints, HttpAnchorClient, describe, start_loop
 from .x402 import Facilitator, Paywall
+
+DEFAULT_ANCHOR_URL = "https://privi-anchor-production.up.railway.app/mcp"
 
 __version__ = "0.1.0"
 
@@ -63,6 +66,16 @@ def build_server(
     if os.getenv("PRIVI_SEED_DEMO") == "1":
         seed_demo(store)
     paywall = Paywall(settings, facilitator)
+    checkpoints = Checkpoints(store._db, store._lock)
+    anchor_url = os.getenv("PRIVI_ANCHOR_URL", DEFAULT_ANCHOR_URL)
+
+    def onchain(lot_code: str, integrity: dict) -> dict:
+        cp = checkpoints.latest(lot_code)
+        info = describe(cp, store.hash_at(lot_code, cp["seq"]) if cp else None, anchor_url)
+        if cp and not info["matches_current_record"]:
+            integrity.update(valid=False, broken_at_seq=cp["seq"],
+                             reason="history differs from the version anchored on the Privi chain")
+        return info
 
     mcp = MCPServer(
         name="privi-verify",
@@ -123,7 +136,10 @@ def build_server(
                 s = store.summary(lot_code)
             except ValueError as e:
                 return {"found": False, "error": str(e)}
-            return {"found": True, **s} if s else {"found": False, "lot_code": lot_code}
+            if not s:
+                return {"found": False, "lot_code": lot_code}
+            s["integrity"]["onchain_checkpoint"] = onchain(s["lot_code"], s["integrity"])
+            return {"found": True, **s}
 
         return await paywall.run(
             "privi_verify_lot", "Verify a manufacturing lot's provenance and record integrity", _meta(ctx), work
@@ -145,12 +161,9 @@ def build_server(
             if not evs:
                 return {"found": False, "lot_code": lot_code}
             check = store.check_chain(evs)
-            return {
-                "found": True,
-                "lot_code": evs[0]["lot_code"],
-                "integrity": {"valid": check.valid, "broken_at_seq": check.broken_at_seq, "reason": check.reason},
-                "events": evs,
-            }
+            integrity = {"valid": check.valid, "broken_at_seq": check.broken_at_seq, "reason": check.reason}
+            integrity["onchain_checkpoint"] = onchain(evs[0]["lot_code"], integrity)
+            return {"found": True, "lot_code": evs[0]["lot_code"], "integrity": integrity, "events": evs}
 
         return await paywall.run(
             "privi_chain_of_custody", "Full chain of custody for a manufacturing lot", _meta(ctx), work
@@ -212,7 +225,17 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=int(os.getenv("PORT", "8000")))
     args = parser.parse_args()
 
-    mcp = build_server()
+    settings = Settings.from_env()
+    store = LotStore(settings.db_path)
+    if os.getenv("PRIVI_SEED_DEMO") == "1":
+        seed_demo(store)
+    mcp = build_server(settings, store)
+    key = os.getenv("PRIVI_ANCHOR_KEY", "")
+    if key:
+        client = HttpAnchorClient(os.getenv("PRIVI_ANCHOR_URL", DEFAULT_ANCHOR_URL), key)
+        cps = Checkpoints(store._db, store._lock)
+        start_loop(lambda: cps.run_once(store.heads(), client, "privi-verify"),
+                   float(os.getenv("PRIVI_ANCHOR_INTERVAL", "300")), "privi-verify")
     if args.stdio:
         mcp.run("stdio")
         return

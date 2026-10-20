@@ -24,7 +24,11 @@ Prices are set with environment variables.
 
 Each event's fingerprint is a SHA-256 of its contents **plus the previous event's fingerprint** in the same lot. Editing or deleting any past event breaks every fingerprint after it, and both verify tools report exactly where the chain broke.
 
-> Fingerprints are checked against this server's database today. Anchoring each lot's latest fingerprint on Base, so anyone can check it without trusting Privi, is on the roadmap.
+> Each lot's latest fingerprint is anchored on the Privi blockchain every few minutes (see On-chain checkpoints), so anyone can check it without trusting Privi.
+
+## On-chain checkpoints
+
+Every 5 minutes the server anchors the latest fingerprint of each lot that changed on the Privi blockchain through [Privi Anchor](../anchor-server). Audit results include `onchain_checkpoint`: the anchored position, transaction, and Merkle proof, plus an `anchor_verify` call anyone can run. If stored history no longer matches what was anchored, the audit fails even when every local hash was recomputed consistently. Set `PRIVI_ANCHOR_KEY` (an Anchor API key) to turn it on; `PRIVI_ANCHOR_INTERVAL` changes the period (seconds, default 300).
 
 ## How payment works (x402 over MCP)
 
@@ -105,7 +109,6 @@ Tests cover the payment flow (missing, mismatched, invalid and failed-settlement
 
 ## Roadmap
 
-- Anchor lot fingerprints on Base
 - Per-manufacturer accounts and dashboards (Privi ChainFlow)
 - Postgres storage for multi-instance hosting
 - Listings in MCP directories

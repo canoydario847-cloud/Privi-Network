@@ -202,6 +202,19 @@ class Ledger:
         ).fetchone()
         return dict(r) if r else None
 
+    def heads(self) -> list[tuple[str, int, str]]:
+        """(chain_key, seq, entry_hash) of the latest entry in every stream; chain_key = org_id/stream_id."""
+        rows = self._db.execute(
+            """SELECT e.org_id, e.stream_id, e.seq, e.entry_hash FROM entries e
+               JOIN (SELECT org_id, stream_id, MAX(seq) AS s FROM entries GROUP BY org_id, stream_id) m
+               ON e.org_id=m.org_id AND e.stream_id=m.stream_id AND e.seq=m.s""").fetchall()
+        return [(f"{r['org_id']}/{r['stream_id']}", r["seq"], r["entry_hash"]) for r in rows]
+
+    def hash_at(self, org_id: str, stream_id: str, seq: int) -> str | None:
+        r = self._db.execute("SELECT entry_hash FROM entries WHERE org_id=? AND stream_id=? AND seq=?",
+                             (org_id, stream_id, seq)).fetchone()
+        return r["entry_hash"] if r else None
+
     @staticmethod
     def check_chain(entries: list[dict]) -> ChainCheck:
         prev = GENESIS

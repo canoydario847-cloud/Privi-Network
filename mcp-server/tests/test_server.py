@@ -143,3 +143,26 @@ def test_write_requires_auth_over_stdio(store, monkeypatch):
     monkeypatch.setenv("PRIVI_ALLOW_LOCAL_WRITES", "1")
     run(lambda: go(True))
     assert store.exists("LOT-2")
+
+
+def test_onchain_checkpoint_on_lots(store):
+    from privi_verify.anchoring import Checkpoints
+
+    class FakeAnchor:
+        def anchor(self, hashes, label):
+            return {"status": "confirmed", "merkle_root": "ab" * 32, "tx_hash": "0x" + "cd" * 32,
+                    "block_number": 1, "block_time": 2,
+                    "receipts": [{"hash": h, "proof": [], "tx_hash": "0x" + "cd" * 32} for h in hashes]}
+
+    cps = Checkpoints(store._db, store._lock)
+
+    async def verify():
+        async with Client(build_server(settings(payments_enabled=False), store)) as c:
+            return (await c.call_tool("privi_verify_lot", {"lot_code": "LOT-1"})).structured_content
+
+    before = run(verify)
+    assert before["integrity"]["onchain_checkpoint"]["anchored"] is False
+    assert cps.run_once(store.heads(), FakeAnchor(), "privi-verify") == 1
+    after = run(verify)
+    cp = after["integrity"]["onchain_checkpoint"]
+    assert cp["anchored"] and cp["matches_current_record"] and cp["seq"] == 3 and after["integrity"]["valid"]
