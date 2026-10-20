@@ -218,6 +218,11 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
             return JSONResponse({"error": str(e) or "send JSON like {\"name\": \"Acme Inc\"}"}, status_code=400)
         return JSONResponse({**org, "note": "Store api_key now; it cannot be shown again."}, status_code=201)
 
+    @mcp.custom_route("/.well-known/glama.json", methods=["GET"], include_in_schema=False)
+    async def glama(_: Request) -> JSONResponse:
+        return JSONResponse({"$schema": "https://glama.ai/mcp/schemas/server.json",
+                             "maintainers": ["canoydario847-cloud"]})
+
     @mcp.custom_route("/health", methods=["GET"], include_in_schema=False)
     async def health(_: Request) -> JSONResponse:
         return JSONResponse({"ok": True, "service": "privi-ledger", "version": __version__})
