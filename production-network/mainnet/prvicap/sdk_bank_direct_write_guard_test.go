@@ -7,6 +7,7 @@ import (
 
     sdk "github.com/cosmos/cosmos-sdk/types"
     authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+    banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 )
 
 func TestAppFacingBankDeniesDirectNativeWritesButPermitsNormalSend(t *testing.T) {
@@ -68,7 +69,7 @@ func TestAppBankGuardDoesNotProtectEscapedBaseKeeper(t *testing.T) {
     h.genesisFund(t,100)
     if err:=h.cap.InitGenesis(h.ctx,"100",h.bank);err!=nil {t.Fatal(err)}
     guarded:=BankForApp(h.bank,h.cap)
-    copied:=guarded.WithObjStoreKey(nil)
+    copied:=guarded.WithMintCoinsRestriction(banktypes.NoOpMintingRestrictionFn)
     addr:=sdk.AccAddress(bytes.Repeat([]byte{0x37},20))
     if err:=copied.UncheckedSetBalance(h.ctx,addr,sdk.NewInt64Coin(BaseDenom,1));err!=nil {
         t.Fatalf("known unprotected SDK BaseKeeper copy behavior changed: %v",err)
