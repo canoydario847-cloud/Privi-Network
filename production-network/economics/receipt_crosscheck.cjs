@@ -32,6 +32,8 @@ function assertReceiptAuditAgreement(observation,audit){
   check(quantity(audit.gross_gas_paid_wei,"audited gross fee")===charged&&
     quantity(row.chargedWei,"receipt gross fee")===charged&&gas*price===charged,
     "Auditor gross fee mismatch");
+  check(typeof observation.genesisHash==="string"&&HASH.test(observation.genesisHash),
+    "Pinned developer genesis evidence missing");
   check(observation.evidenceLevel==="USER_SUPPLIED_DEV_RECEIPTS_NOT_INDEPENDENTLY_VALIDATED",
     "Receipt observation evidence level missing or overstated");
   check(observation.verifiedCollectorRevenueWei===null,
