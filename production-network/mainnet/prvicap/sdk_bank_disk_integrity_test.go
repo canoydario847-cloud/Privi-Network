@@ -37,7 +37,7 @@ type committedPriviDiskHarness struct {
     cap Keeper
     corruptCapRecord func([]byte) error
     mintModuleAddr sdk.AccAddress
-    commitAndReopen func(*testing.T) (sdk.Context,bankkeeper.BaseKeeper,Keeper)
+    commitAndReopen func(*testing.T) (sdk.Context,bankkeeper.Keeper,Keeper)
 }
 
 // Actual test database files are confined to t.TempDir, never on the
@@ -80,7 +80,7 @@ func newCommittedPriviDiskHarness(t *testing.T) committedPriviDiskHarness {
     }
     if err:=cap.InitGenesis(ctx,"100",bank);err!=nil {t.Fatalf("commit fixture cap genesis: %v",err)}
     if err:=cap.Reconcile(ctx,bank);err!=nil {t.Fatalf("baseline balance conservation: %v",err)}
-    reopen:=func(t *testing.T) (sdk.Context,bankkeeper.BaseKeeper,Keeper) {
+    reopen:=func(t *testing.T) (sdk.Context,bankkeeper.Keeper,Keeper) {
         t.Helper()
         // Persistent write then independent SDK multistore open: this is
         // strictly stronger than a new keeper over the same in-memory view.

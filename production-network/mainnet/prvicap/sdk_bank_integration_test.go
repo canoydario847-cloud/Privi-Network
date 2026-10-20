@@ -3,6 +3,7 @@ package prvicap
 import (
  "bytes"
  "errors"
+ "reflect"
  "testing"
  "time"
 
@@ -32,7 +33,7 @@ type bankHarness struct {
  // restart commits the IAVL bank+cap stores to the database, constructs a
  // fresh multistore and a fresh cap keeper, and reopens committed chain state.
  // This is a real SDK persistence test, not the in-memory fake KV fixture.
- restart func(*testing.T) (sdk.Context, bankkeeper.BaseKeeper, Keeper)
+ restart func(*testing.T) (sdk.Context, bankkeeper.Keeper, Keeper)
 }
 
 func newRealBankHarness(t testing.TB) bankHarness {
@@ -63,7 +64,7 @@ func newRealBankHarness(t testing.TB) bankHarness {
  raw=raw.WithObjStoreKey(objKey)
  cap,err:=New(runtime.NewKVStoreService(capKey))
  if err!=nil {t.Fatal(err)}
- restart:=func(t *testing.T) (sdk.Context,bankkeeper.BaseKeeper,Keeper) {
+ restart:=func(t *testing.T) (sdk.Context,bankkeeper.Keeper,Keeper) {
    t.Helper()
    // Commit before reopening to catch accidental use of a process-local
    // record that disappears when the durable SDK state is reloaded.
@@ -225,4 +226,137 @@ func TestActualSDKGenesisRejectsUntrackedNativeBalanceBeforeCapWrite(t *testing.
  if _,err:=h.cap.Snapshot(h.ctx);!errors.Is(err,ErrNotInitialized) {
    t.Fatalf("rejected genesis wrote immutable cap record: %v",err)
  }
+}
+
+func TestModuleFacingNativeUncheckedSetBalanceDeniedBeforeWrite(t *testing.T) {
+ h:=newRealBankHarness(t)
+ h.genesisFund(t,100)
+ if err:=h.cap.InitGenesis(h.ctx,"100",h.bank);err!=nil {t.Fatal(err)}
+ guarded:=RestrictedBank(h.bank,h.cap)
+ addr:=sdk.AccAddress(bytes.Repeat([]byte{0x42},20))
+ native:=sdk.NewInt64Coin(BaseDenom,12)
+ if err:=guarded.UncheckedSetBalance(h.ctx,addr,native);!errors.Is(err,ErrDirectNativeBalanceForbidden) {
+   t.Fatalf("module-facing unsafe native balance setter must fail before mutation: %v",err)
+ }
+ if got:=guarded.GetBalance(h.ctx,addr,BaseDenom).Amount.Int64();got!=0 {
+   t.Fatalf("rejected direct write changed actual native account balance: %d",got)
+ }
+ if got:=guarded.GetSupply(h.ctx,BaseDenom).Amount.String();got!="100" {
+   t.Fatalf("rejected direct write changed supply: %s",got)
+ }
+ if err:=h.cap.Reconcile(h.ctx,guarded);err!=nil {
+   t.Fatalf("rejected external setter must preserve native supply invariant: %v",err)
+ }
+}
+
+func TestModuleFacingNativeUnsafeSetterRemainsDeniedAfterRestart(t *testing.T) {
+ h:=newRealBankHarness(t)
+ h.genesisFund(t,100)
+ if err:=h.cap.InitGenesis(h.ctx,"100",h.bank);err!=nil {t.Fatal(err)}
+ ctx,guarded,cap:=h.restart(t)
+ addr:=sdk.AccAddress(bytes.Repeat([]byte{0x43},20))
+ if err:=guarded.UncheckedSetBalance(ctx,addr,sdk.NewInt64Coin(BaseDenom,1));
+  !errors.Is(err,ErrDirectNativeBalanceForbidden) {
+    t.Fatalf("restarted module can directly forge PRVI account balance: %v",err)
+ }
+ if err:=cap.Reconcile(ctx,guarded);err!=nil {t.Fatal(err)}
+}
+
+func TestModuleFacingUnsafeSetterAllowsUnrelatedDisposableDenom(t *testing.T) {
+ h:=newRealBankHarness(t)
+ h.genesisFund(t,100)
+ if err:=h.cap.InitGenesis(h.ctx,"100",h.bank);err!=nil {t.Fatal(err)}
+ guarded:=RestrictedBank(h.bank,h.cap)
+ addr:=sdk.AccAddress(bytes.Repeat([]byte{0x44},20))
+ if err:=guarded.UncheckedSetBalance(h.ctx,addr,sdk.NewInt64Coin("atest",3));err!=nil {
+   t.Fatalf("unrelated test balance unexpectedly denied: %v",err)
+ }
+ if got:=guarded.GetBalance(h.ctx,addr,"atest").Amount.String();got!="3" {
+   t.Fatalf("unrelated disposable balance write did not persist: %s",got)
+ }
+ if err:=h.cap.Reconcile(h.ctx,guarded);err!=nil {t.Fatal(err)}
+}
+
+func TestModuleKeeperCannotObtainUnwrappedBuilderCopies(t *testing.T) {
+ h:=newRealBankHarness(t)
+ guarded:=RestrictedBank(h.bank,h.cap)
+ t.Run("mint restriction constructor",func(t *testing.T){
+   defer func(){if recover()==nil {t.Fatal("module leaked mutable unrestricted keeper through builder")}}()
+   _=guarded.WithMintCoinsRestriction(nil)
+ })
+ t.Run("object store constructor",func(t *testing.T){
+   defer func(){if recover()==nil {t.Fatal("module leaked mutable base keeper through builder")}}()
+   _=guarded.WithObjStoreKey(nil)
+ })
+}
+
+// This illustrates an unresolved severe risk: source that retained the
+// original SDK BaseKeeper can still change native balances. The hardened
+// module-facing dependency only helps when all modules receive that interface
+// and no transitive code obtains the base via type assertion/reflection.
+func TestUnrestrictedRawKeeperStillBypassesModuleFacingSetterDenial(t *testing.T) {
+ h:=newRealBankHarness(t)
+ h.genesisFund(t,100)
+ if err:=h.cap.InitGenesis(h.ctx,"100",h.bank);err!=nil {t.Fatal(err)}
+ guarded:=RestrictedBank(h.bank,h.cap)
+ addr:=sdk.AccAddress(bytes.Repeat([]byte{0x45},20))
+ coin:=sdk.NewInt64Coin(BaseDenom,1)
+ if err:=guarded.UncheckedSetBalance(h.ctx,addr,coin);
+   !errors.Is(err,ErrDirectNativeBalanceForbidden) {t.Fatalf("guard missing: %v",err)}
+ if err:=h.bank.UncheckedSetBalance(h.ctx,addr,coin);err!=nil {
+   t.Fatalf("expected intentional residual raw SDK bypass: %v",err)
+ }
+ if err:=h.cap.Reconcile(h.ctx,guarded);!errors.Is(err,ErrUnexpectedSupply) {
+   t.Fatalf("untracked native write must be detected by reconciliation: %v",err)
+ }
+}
+
+func TestModuleBankDoesNotExposeRawSDKBaseKeeperViaPublicStructField(t *testing.T) {
+ h:=newRealBankHarness(t)
+ guarded:=RestrictedBank(h.bank,h.cap)
+ if _,ok:=any(guarded).(bankkeeper.BaseKeeper);ok {
+   t.Fatal("wrapped module dependency cannot itself be a raw SDK BaseKeeper")
+ }
+ typ:=reflect.TypeOf(*guarded)
+ if typ.Kind()!=reflect.Struct {t.Fatal("expected private module wrapper")}
+ for i:=0;i<typ.NumField();i++ {
+   field:=typ.Field(i)
+   if field.IsExported() {
+     t.Fatalf("raw SDK module banking implementation is exposed in public field %s",field.Name)
+   }
+ }
+ if typ.NumField()!=1 || typ.Field(0).Type.Kind()!=reflect.Interface {
+   t.Fatal("module bank must keep its SDK backing keeper in exactly one private interface")
+ }
+}
+
+func TestModuleFacingNativeIdempotentSetBalanceAllowsNoOpWithoutStorageChange(t *testing.T) {
+ h:=newRealBankHarness(t)
+ h.genesisFund(t,100)
+ if err:=h.cap.InitGenesis(h.ctx,"100",h.bank);err!=nil {t.Fatal(err)}
+ guarded:=RestrictedBank(h.bank,h.cap)
+ blank:=sdk.AccAddress(bytes.Repeat([]byte{0x58},20))
+ // Cosmos EVM registering a precompile invokes SetAccount with an unchanged
+ // zero native balance; rejecting it breaks otherwise safe InitGenesis.
+ if err:=guarded.UncheckedSetBalance(h.ctx,blank,sdk.NewInt64Coin(BaseDenom,0));err!=nil {
+   t.Fatalf("read-only idempotent native zero is necessary for precompile setup: %v",err)
+ }
+ if err:=guarded.UncheckedSetBalance(h.ctx,blank,sdk.NewInt64Coin(BaseDenom,1));
+   !errors.Is(err,ErrDirectNativeBalanceForbidden) {
+   t.Fatalf("attempt to change precompile native balance must be denied: %v",err)
+ }
+ moduleAccount:=authtypes.NewModuleAddress("genesisfixture")
+ original:=h.bank.GetBalance(h.ctx,moduleAccount,BaseDenom)
+ if original.Amount.String()!="100" {t.Fatalf("unexpected fixture balance: %s",original)}
+ if err:=guarded.UncheckedSetBalance(h.ctx,moduleAccount,original);err!=nil {
+   t.Fatalf("idempotent existing balance must be no-op: %v",err)
+ }
+ if err:=guarded.UncheckedSetBalance(h.ctx,moduleAccount,
+   sdk.NewInt64Coin(BaseDenom,99));!errors.Is(err,ErrDirectNativeBalanceForbidden) {
+   t.Fatalf("even during genesis a different native balance must be denied: %v",err)
+ }
+ if got:=guarded.GetBalance(h.ctx,moduleAccount,BaseDenom);!got.IsEqual(original) {
+   t.Fatalf("attempted no-op changed real bank balance from %s to %s",original,got)
+ }
+ if err:=h.cap.Reconcile(h.ctx,guarded);err!=nil {t.Fatal(err)}
 }

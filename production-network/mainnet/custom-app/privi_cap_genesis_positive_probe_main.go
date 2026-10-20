@@ -289,25 +289,23 @@ func probe() error {
     }
     fmt.Println("PASS: actual customized BeginBlock denies ERC20 permissionless activation and native APRVI token-pair insertion")
 
-    // Simulate a dangerous direct x/bank UncheckedSetBalance write: this
-    // bypasses MintCoins and changes a real aprvi account WITHOUT changing
-    // bank.Supply metadata. The cap's full balance-conservation check must
-    // catch it. Restore the fixture before processing any block.
+    // Validate the *actual customized EVMD* has injected the module-facing
+    // bank capability guard, rather than merely running unit tests against
+    // the wrapper type. The direct unsafe native write must fail before it
+    // can change any account or supply data.
     original:=app.BankKeeper.GetBalance(ctx,address,prvicap.BaseDenom)
-    if err:=app.BankKeeper.UncheckedSetBalance(ctx,address,
-        sdk.NewCoin(prvicap.BaseDenom,original.Amount.Add(sdkmath.NewInt(1))));err!=nil {
-        return fmt.Errorf("inject disposable untracked balance edit: %w",err)
+    err=app.BankKeeper.UncheckedSetBalance(ctx,address,
+        sdk.NewCoin(prvicap.BaseDenom,original.Amount.Add(sdkmath.NewInt(1))))
+    if !errors.Is(err,prvicap.ErrDirectNativeBalanceForbidden) {
+        return fmt.Errorf("SECURITY: custom app module-facing bank allowed unsafe native PRVI account write: %v",err)
     }
-    if err:=app.PriviCapKeeper.Reconcile(ctx,app.BankKeeper); !errors.Is(err,prvicap.ErrUnexpectedSupply) {
-        return fmt.Errorf("SECURITY: bank supply-vs-balances spoof not detected: %v",err)
-    }
-    if err:=app.BankKeeper.UncheckedSetBalance(ctx,address,original);err!=nil {
-        return fmt.Errorf("restore disposable native account: %w",err)
+    if actual:=app.BankKeeper.GetBalance(ctx,address,prvicap.BaseDenom);!actual.IsEqual(original) {
+        return fmt.Errorf("SECURITY: denied native account mutation modified actual balance: before=%s after=%s",original,actual)
     }
     if err:=app.PriviCapKeeper.Reconcile(ctx,app.BankKeeper);err!=nil {
-        return fmt.Errorf("native balance not restored after adversarial probe: %w",err)
+        return fmt.Errorf("denied native account mutation modified bank supply: %w",err)
     }
-    fmt.Println("PASS: native balance-conservation guard rejects actual unchecked +1 balance tampering")
+    fmt.Println("PASS: actual customized app bank keeper rejects external native balance forgery BEFORE SDK storage writes")
 
 
     // Execute real Cosmos SDK Begin/EndBlock via ABCI FinalizeBlock on the

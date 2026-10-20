@@ -68,6 +68,20 @@ multi-service TEST network.
 | 7. Legal and communications | Review of token launch obligations and published user disclosures; claims accurately distinguish PRVI, TEST, BNB PRIV | BLOCKED |
 | 8. Final approval | Privi World Corp owner/operator and accountable security reviewers sign off on identical immutable binary + genesis hashes; published UTC activation plan and rollback/stop policy; no claim of independent validator ownership | BLOCKED |
 
+
+## Native bank guard progress — still no financial activation
+
+A dedicated experimental module-facing `bankkeeper.Keeper` wrapper now
+rejects direct `UncheckedSetBalance` writes for `aprvi`, and rejects
+two value-copy builder functions on the restricted module dependency.
+SDK-backed tests verify denial before mutation and after persistent
+store reopen; the module wrapper's sole embedded interface field is
+private and is not a concrete exported raw keeper. However this cannot
+eliminate pre-existing raw copies, low-level collection or KV writes,
+unreviewed third-party module code, or transient within-block mutations.
+The raw SDK keeper vulnerability is still reproducible by a regression
+test, so **S-01 and S-02 remain OPEN** and no code here launches a network.
+
 ## Cap model progress — SDK-backed build-only prototype, NOT a production cap
 
 The [reference in-memory Go cap model](../mainnet/capmodel/cap.go) and

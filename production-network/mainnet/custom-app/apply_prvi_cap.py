@@ -86,6 +86,28 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \tbaseBank = baseBank.WithObjStoreKey(oKeys[banktypes.ObjectStoreKey])
 \tapp.BankKeeper = prvicap.RestrictedBank(baseBank, app.PriviCapKeeper)'''
     app = replace_once(app, old_bank, new_bank, "apply restriction before bank injection")
+    # Pinned Cosmos SDK v0.54.3 x/bank RegisterServices enforces a
+    # BaseKeeper concrete type assertion for migration registration. Passing
+    # our sealed *ModuleRestrictedBank panics on InitChain. Permit a narrowly
+    # scoped BaseKeeper with an aprvi MintRestriction ONLY in x/bank's module
+    # constructor, while all other modules and the app-facing BankKeeper
+    # continue to receive the sealed direct-balance-denying interface.
+    # Migration code itself still holds raw bank collection access; security
+    # review and audited upgrades remain financial NO-GO requirements.
+    app = replace_once(app,
+        "bank.NewAppModule(appCodec, app.BankKeeper, app.AccountKeeper, nil)",
+        "bank.NewAppModule(appCodec,\n"
+        "\t\t\tbaseBank.WithMintCoinsRestriction(app.PriviCapKeeper.MintRestriction),\n"
+        "\t\t\tapp.AccountKeeper, nil)",
+        "SDK v0.54.3 bank migration needs a distinct mint-restricted BaseKeeper")
+    if app.count("bank.NewAppModule(appCodec,") != 1 or app.count(
+            "baseBank.WithMintCoinsRestriction(app.PriviCapKeeper.MintRestriction)") != 1:
+        raise ValueError("raw bank migration exception must remain unique")
+    # No other module may receive baseBank or a concrete SDK BaseKeeper.
+    module_section = app[app.index("app.ModuleManager = module.NewManager("):
+                         app.index("app.ModuleManager.SetOrderInitGenesis(")]
+    if module_section.count("baseBank") != 1:
+        raise ValueError("raw bank keeper leaked outside the one required bank migration constructor")
     old_chainer = '''\tif err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap()); err != nil {
 \t\tpanic(err)
 \t}
