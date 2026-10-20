@@ -143,14 +143,19 @@ async function submitEvent(packet, {registry, config, provider, wallet, contract
   const event = verifyDevicePacket(packet, registry);
   await assertPriviChain(provider, config); // always check before any signed transaction
   must(wallet && ADDRESS.test(wallet.address), "Gateway wallet required");
-  must(wallet.provider === provider && contract.runner === wallet, "Gateway signer and contract must use the pinned Privi provider");
-  must(contract && typeof contract.devices === "function" &&
+  must(contract && wallet.provider === provider && contract.runner === wallet,
+       "Gateway signer and contract must use the pinned Privi provider");
+  must(typeof contract.developers === "function" && typeof contract.devices === "function" &&
        typeof contract.recordEvent === "function" &&
        contract.interface && typeof contract.interface.parseLog === "function",
        "Verified Privi IoT contract interface required");
   const deployed = await contract.getAddress();
   must(typeof deployed === "string" &&
        deployed.toLowerCase() === config.contractAddress.toLowerCase(), "Wrong contract target");
+  const developer = await contract.developers(wallet.address);
+  must(field(developer, "registered", 0) === true &&
+       field(developer, "enabled", 1) === true,
+       "Privi developer registration missing or revoked");
   const device = await contract.devices(event.deviceIdHash);
   must(field(device, "enrolled", 4) === true && field(device, "enabled", 3) === true,
        "Device not enrolled or disabled on Privi");
