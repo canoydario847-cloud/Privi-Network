@@ -1,0 +1,39 @@
+name: Privi Railway seven-validator staging adapter
+
+on:
+  pull_request:
+    paths:
+      - "production-network/seven-validator/railway/**"
+      - ".github/workflows/privi-railway-adapter.yml"
+  push:
+    branches:
+      - "build/privi-seven-validators-20261016"
+    paths:
+      - "production-network/seven-validator/railway/**"
+      - ".github/workflows/privi-railway-adapter.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-railway:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Railway adapter Python
+        run: |
+          python3 -m py_compile production-network/seven-validator/railway/main.py
+          python3 -m py_compile production-network/seven-validator/railway/test_main.py
+      - name: Test private-network, bootstrap, archive and signer isolation rules
+        run: python3 -m unittest discover -s production-network/seven-validator/railway -p 'test_*.py' -v
+
+  build-image:
+    needs: offline-railway
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned Cosmos EVM Railway adapter, no keys and no deployments
+        run: docker build -f production-network/seven-validator/railway/Dockerfile -t privi-seven-railway-staging:test .
