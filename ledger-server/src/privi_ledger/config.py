@@ -63,8 +63,8 @@ class Settings:
             pay_to=os.getenv("LEDGER_PAY_TO", "").strip(),
             facilitator_url=os.getenv("LEDGER_FACILITATOR_URL", "https://x402.org/facilitator").rstrip("/"),
             facilitator_auth=os.getenv("LEDGER_FACILITATOR_AUTH", ""),
-            cdp_key_id=os.getenv("CDP_API_KEY_ID", "").strip(),
-            cdp_key_secret=os.getenv("CDP_API_KEY_SECRET", "").strip(),
+            cdp_key_id=os.getenv("CDP_API_KEY_ID", "").strip().strip("\"'"),
+            cdp_key_secret=os.getenv("CDP_API_KEY_SECRET", "").strip().strip("\"'"),
             admin_key=os.getenv("LEDGER_ADMIN_KEY", ""),
         )
         if os.getenv("LEDGER_PRICE_PRO_MONTH"):

@@ -67,7 +67,7 @@ class Settings:
             rpc_url=os.getenv("ANCHOR_RPC_URL", cls.rpc_url),
             chain_id=int(os.getenv("ANCHOR_CHAIN_ID", str(cls.chain_id))),
             network_name=os.getenv("ANCHOR_NETWORK_NAME", cls.network_name),
-            private_key=os.getenv("ANCHOR_PRIVATE_KEY", ""),
+            private_key="".join(os.getenv("ANCHOR_PRIVATE_KEY", "").split()).strip("\"'"),
             db_path=os.getenv("ANCHOR_DB_PATH", "anchor.db"),
             api_keys={k.strip() for k in os.getenv("ANCHOR_API_KEYS", "").split(",") if k.strip()},
             rate_per_min=int(os.getenv("ANCHOR_RATE_PER_MIN", "30")),

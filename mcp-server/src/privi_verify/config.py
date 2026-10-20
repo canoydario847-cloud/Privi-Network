@@ -63,8 +63,8 @@ class Settings:
             pay_to=os.getenv("PRIVI_PAY_TO", "").strip(),
             facilitator_url=os.getenv("PRIVI_FACILITATOR_URL", "https://x402.org/facilitator").rstrip("/"),
             facilitator_auth=os.getenv("PRIVI_FACILITATOR_AUTH", ""),
-            cdp_key_id=os.getenv("CDP_API_KEY_ID", "").strip(),
-            cdp_key_secret=os.getenv("CDP_API_KEY_SECRET", "").strip(),
+            cdp_key_id=os.getenv("CDP_API_KEY_ID", "").strip().strip("\"'"),
+            cdp_key_secret=os.getenv("CDP_API_KEY_SECRET", "").strip().strip("\"'"),
             write_keys={k.strip() for k in os.getenv("PRIVI_WRITE_KEYS", "").split(",") if k.strip()},
             public_url=os.getenv("PRIVI_PUBLIC_URL", "").rstrip("/"),
         )
