@@ -21,4 +21,24 @@ function quoteAgentCall({agentId,callId,requestedCalls,unitServiceFeeWei,custome
     onchainEnforcement:false,treasuryRevenueWei:null,
     note:"A quote is not a payment or verified network revenue; agent calls require separate authorization and metering."});
 }
-module.exports={quoteAgentCall};
+/**
+ * In-memory replay gate for disposable tests only. Not durable, distributed,
+ * cryptographically authenticated, or an onchain settlement proof.
+ * A caller MUST verify a signed authorization before invoking this gate.
+ */
+function createEphemeralCallGate(){
+ const seen=new Set();
+ return Object.freeze({accept({agentId,callId,authorizationVerified,quote}){
+  if(authorizationVerified!==true)throw Error("Verified authorization required");
+  if(!quote||quote.agentId!==agentId||quote.callId!==callId||
+     quote.financialMainnet!==false||quote.settled!==false)
+    throw Error("Call does not match nonfinancial quote");
+  const key=JSON.stringify([agentId,callId]);
+  if(seen.has(key))throw Error("Duplicate agent call replay");
+  seen.add(key);
+  return Object.freeze({accepted:true,agentId,callId,settled:false,
+    authorizationEvidenceExternallyProvided:true,
+    replayScope:"PROCESS_MEMORY_ONLY",treasuryRevenueWei:null});
+ }});
+}
+module.exports={quoteAgentCall,createEphemeralCallGate};
