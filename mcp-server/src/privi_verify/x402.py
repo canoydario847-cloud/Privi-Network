@@ -34,13 +34,54 @@ class Facilitator(Protocol):
     async def settle(self, payload: dict, requirements: dict) -> dict: ...
 
 
-class HttpFacilitator:
-    """Calls a facilitator's POST /verify and POST /settle endpoints."""
+CDP_FACILITATOR_URL = "https://api.cdp.coinbase.com/platform/v2/x402"
 
-    def __init__(self, base_url: str, auth_header: str = "", timeout: float = 30.0):
+
+def _b64url(b: bytes) -> str:
+    import base64
+    return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+
+
+def cdp_jwt(key_id: str, key_secret_b64: str, method: str, url: str, lifetime_s: int = 120) -> str:
+    """Bearer JWT for Coinbase Developer Platform v2 REST calls, signed with an Ed25519 secret API key.
+
+    Header: alg EdDSA, typ JWT, kid=<key id>, random nonce. Claims: sub=<key id>, iss "cdp",
+    aud ["cdp_service"], nbf/exp (2 minutes), uri "<METHOD> <host><path>".
+    """
+    import base64
+    import secrets as _secrets
+    import time as _time
+    from urllib.parse import urlsplit
+
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    raw = base64.b64decode(key_secret_b64)
+    if len(raw) != 64:
+        raise ValueError("CDP API key secret must be a base64 Ed25519 key (64 bytes)")
+    signer = Ed25519PrivateKey.from_private_bytes(raw[:32])
+    parts = urlsplit(url)
+    now = int(_time.time())
+    header = {"alg": "EdDSA", "typ": "JWT", "kid": key_id, "nonce": _secrets.token_hex(16)}
+    claims = {"sub": key_id, "iss": "cdp", "aud": ["cdp_service"], "nbf": now, "exp": now + lifetime_s,
+              "uri": f"{method.upper()} {parts.netloc}{parts.path}"}
+    signing_input = (_b64url(json.dumps(header, separators=(",", ":")).encode()) + "." +
+                     _b64url(json.dumps(claims, separators=(",", ":")).encode()))
+    return signing_input + "." + _b64url(signer.sign(signing_input.encode()))
+
+
+class HttpFacilitator:
+    """Calls a facilitator's POST /verify and POST /settle endpoints.
+
+    With cdp_key_id/cdp_key_secret set, each request carries a fresh CDP JWT (Coinbase's facilitator,
+    required for Base mainnet). Otherwise an optional static Authorization header is sent.
+    """
+
+    def __init__(self, base_url: str, auth_header: str = "", timeout: float = 30.0,
+                 cdp_key_id: str = "", cdp_key_secret: str = ""):
         self.base_url = base_url.rstrip("/")
         self.auth_header = auth_header
         self.timeout = timeout
+        self.cdp_key_id, self.cdp_key_secret = cdp_key_id, cdp_key_secret
 
     def _post(self, path: str, body: dict) -> dict:
         req = urllib.request.Request(
@@ -49,7 +90,10 @@ class HttpFacilitator:
             headers={"Content-Type": "application/json", "Accept": "application/json"},
             method="POST",
         )
-        if self.auth_header:
+        if self.cdp_key_id and self.cdp_key_secret:
+            req.add_header("Authorization", "Bearer " + cdp_jwt(self.cdp_key_id, self.cdp_key_secret, "POST",
+                                                                 f"{self.base_url}/{path}"))
+        elif self.auth_header:
             req.add_header("Authorization", self.auth_header)
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
@@ -74,7 +118,9 @@ class HttpFacilitator:
 class Paywall:
     def __init__(self, settings: Settings, facilitator: Facilitator | None = None):
         self.settings = settings
-        self.facilitator = facilitator or HttpFacilitator(settings.facilitator_url, settings.facilitator_auth)
+        self.facilitator = facilitator or HttpFacilitator(
+            settings.facilitator_url, settings.facilitator_auth,
+            cdp_key_id=getattr(settings, "cdp_key_id", ""), cdp_key_secret=getattr(settings, "cdp_key_secret", ""))
 
     def requirements(self, tool: str) -> dict:
         net = self.settings.network

@@ -166,3 +166,30 @@ def test_onchain_checkpoint_on_lots(store):
     after = run(verify)
     cp = after["integrity"]["onchain_checkpoint"]
     assert cp["anchored"] and cp["matches_current_record"] and cp["seq"] == 3 and after["integrity"]["valid"]
+
+
+def test_cdp_jwt_and_mainnet_guard():
+    import base64, json as _j
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from cryptography.hazmat.primitives import serialization
+    from privi_verify.x402 import cdp_jwt, CDP_FACILITATOR_URL
+
+    k = Ed25519PrivateKey.generate()
+    seed = k.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption())
+    pub = k.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    secret = base64.b64encode(seed + pub).decode()
+    tok = cdp_jwt("key-123", secret, "POST", CDP_FACILITATOR_URL + "/verify")
+    h, c, s = tok.split(".")
+    pad = lambda x: x + "=" * (-len(x) % 4)
+    header, claims = _j.loads(base64.urlsafe_b64decode(pad(h))), _j.loads(base64.urlsafe_b64decode(pad(c)))
+    assert header["alg"] == "EdDSA" and header["kid"] == "key-123" and len(header["nonce"]) == 32
+    assert claims["iss"] == "cdp" and claims["aud"] == ["cdp_service"] and claims["sub"] == "key-123"
+    assert claims["uri"] == "POST api.cdp.coinbase.com/platform/v2/x402/verify" and claims["exp"] - claims["nbf"] == 120
+    k.public_key().verify(base64.urlsafe_b64decode(pad(s)), f"{h}.{c}".encode())   # raises if invalid
+
+    with pytest.raises(ValueError):          # mainnet on the testnet-only facilitator is refused
+        Settings(pay_to=PAY_TO, network_key="base").validate()
+    with pytest.raises(ValueError):          # Coinbase facilitator without credentials is refused
+        Settings(pay_to=PAY_TO, network_key="base", facilitator_url=CDP_FACILITATOR_URL).validate()
+    Settings(pay_to=PAY_TO, network_key="base", facilitator_url=CDP_FACILITATOR_URL,
+             cdp_key_id="k", cdp_key_secret=secret).validate()

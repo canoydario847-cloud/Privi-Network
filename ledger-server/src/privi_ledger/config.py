@@ -48,6 +48,8 @@ class Settings:
     pay_to: str = ""
     facilitator_url: str = "https://x402.org/facilitator"
     facilitator_auth: str = ""
+    cdp_key_id: str = ""
+    cdp_key_secret: str = ""
     prices_usd: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_PRICES_USD))
     admin_key: str = ""
 
@@ -60,6 +62,8 @@ class Settings:
             pay_to=os.getenv("LEDGER_PAY_TO", "").strip(),
             facilitator_url=os.getenv("LEDGER_FACILITATOR_URL", "https://x402.org/facilitator").rstrip("/"),
             facilitator_auth=os.getenv("LEDGER_FACILITATOR_AUTH", ""),
+            cdp_key_id=os.getenv("CDP_API_KEY_ID", "").strip(),
+            cdp_key_secret=os.getenv("CDP_API_KEY_SECRET", "").strip(),
             admin_key=os.getenv("LEDGER_ADMIN_KEY", ""),
         )
         if os.getenv("LEDGER_PRICE_PRO_MONTH"):
@@ -74,6 +78,11 @@ class Settings:
             raise ValueError(f"LEDGER_NETWORK must be one of {list(NETWORKS)}")
         for usd in self.prices_usd.values():
             usd_to_atomic(usd)
+        if self.payments_enabled and self.network_key == "base" and "x402.org" in self.facilitator_url:
+            raise ValueError("Base mainnet needs a production facilitator: set LEDGER_FACILITATOR_URL to "
+                             "https://api.cdp.coinbase.com/platform/v2/x402 and CDP_API_KEY_ID / CDP_API_KEY_SECRET")
+        if self.payments_enabled and "api.cdp.coinbase.com" in self.facilitator_url and not (self.cdp_key_id and self.cdp_key_secret):
+            raise ValueError("The Coinbase facilitator needs CDP_API_KEY_ID and CDP_API_KEY_SECRET")
         if self.payments_enabled:
             p = self.pay_to
             if not (p.startswith("0x") and len(p) == 42):

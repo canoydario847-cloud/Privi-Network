@@ -13,6 +13,7 @@ requires-python = ">=3.11"
 dependencies = [
     "mcp>=2.3,<3",
     "uvicorn>=0.30",
+    "cryptography>=42",
 ]
 keywords = ["mcp", "x402", "traceability", "supply-chain", "provenance", "ai-agents", "base", "usdc"]
 
