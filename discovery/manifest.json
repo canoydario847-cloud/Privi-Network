@@ -65,7 +65,7 @@
     {
       "name": "Privi Ledger",
       "registry_id": "io.github.canoydario847-cloud/privi-ledger",
-      "url": "https://privi-ledger-production.up.railway.app/mcp",
+      "url": "https://privi-ledger.onrender.com/mcp",
       "transport": "streamable-http",
       "description": "Privi Mandates: signed proof that a human authorized an AI agent to spend (budget, per-payment cap, payees, expiry), checkable free by merchants and payment facilitators. Privi KYA (Know-Your-Agent): free check of whether a blockchain wallet is operated by an audited AI agent, with a Privi-signed attestation, for chains, DeFi protocols, exchanges and x402 facilitators. Privi Passport: signed, on-chain-anchored trust credentials for AI agents (0-1000 score; verify and gate counterparties for free) built on tamper-evident audit logs. Free tier: 500 entries/month via ledger_signup. Pro: $29 USDC / 30 days via x402. Sealed compliance reports (PDF), Privi Handshake cross-company records, Gov AI use-case inventories (OMB M-25-21), Quantum-Ready PQC migration plans (EO 14409). Every checkpoint anchored on the Privi chain.",
       "pricing": "free tier + $29 USDC/30 days Pro + per-call x402 audits",
@@ -120,7 +120,7 @@
     {
       "name": "Privi Verify",
       "registry_id": "io.github.canoydario847-cloud/privi-verify",
-      "url": "https://privi-verify-production.up.railway.app/mcp",
+      "url": "https://privi-verify.onrender.com/mcp",
       "transport": "streamable-http",
       "description": "Paid manufacturing lot verification and traceability for AI agents. Pay per call with USDC on Base (x402, Coinbase CDP facilitator). Lot fingerprints anchored on the Privi chain every 5 minutes.",
       "pricing": "per-call x402, USDC on Base mainnet",
@@ -136,7 +136,7 @@
     {
       "name": "Privi Anchor",
       "registry_id": "io.github.canoydario847-cloud/privi-anchor",
-      "url": "https://privi-anchor-production.up.railway.app/mcp",
+      "url": "https://privi-anchor.onrender.com/mcp",
       "transport": "streamable-http",
       "description": "Hash anchoring / proof-of-existence on the Privi EVM chain (chain id 262144). Free with an API key until mainnet.",
       "pricing": "free (API key)",

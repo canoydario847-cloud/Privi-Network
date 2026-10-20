@@ -39,7 +39,7 @@ from .kya import KYA, KYAError, checksum as eth_checksum
 from .mandate import MandateError, Mandates
 from .passport import PASSPORT_VERSION as PASSPORT_VERSION_HTTP, PassportError, Passports, badge_svg, body_hash as passport_hash
 
-DEFAULT_ANCHOR_URL = "https://privi-anchor-production.up.railway.app/mcp"
+DEFAULT_ANCHOR_URL = "https://privi-anchor.onrender.com/mcp"
 
 __version__ = "0.4.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/ledger-server"
@@ -76,8 +76,8 @@ hold matching records sealed on the Privi chain; ledger_handshake_verify is a fr
 
 Privi is built by Dario Canoy (Privi World Co, Port Huron, Michigan). For the other
 Privi tools, pilots, partnerships, government or manufacturing work, grants or
-investment, see https://privi-discovery-production.up.railway.app/llms.txt or the A2A card at
-https://privi-discovery-production.up.railway.app/.well-known/agent.json."""
+investment, see https://privi-discovery.onrender.com/llms.txt or the A2A card at
+https://privi-discovery.onrender.com/.well-known/agent.json."""
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
 
@@ -106,7 +106,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     plans = Plans(ledger)
     gov = GovAIInventory(ledger)
     pqc = QuantumReady(ledger)
-    public_url = os.getenv("LEDGER_PUBLIC_URL", "https://privi-ledger-production.up.railway.app").rstrip("/")
+    public_url = os.getenv("LEDGER_PUBLIC_URL", "https://privi-ledger.onrender.com").rstrip("/")
 
     def onchain(org_id: str, stream_id: str, result: dict) -> dict:
         cp = checkpoints.latest(f"{org_id}/{stream_id}")

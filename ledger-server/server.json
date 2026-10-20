@@ -3,8 +3,8 @@
   "name": "io.github.canoydario847-cloud/privi-ledger",
   "title": "Privi Ledger",
   "description": "Privi Mandates (signed proof a human authorized an AI agent to spend; free checks for merchants and x402 facilitators), Privi KYA (Know-Your-Agent wallet checks) and Privi Passport (on-chain trust credentials for agents), built on tamper-evident audit logs, compliance reports, Handshake records, OMB M-25-21 AI inventories and EO 14409 post-quantum plans. Free tier; Pro $29 USDC/30 days via x402.",
-  "version": "0.5.0",
-  "websiteUrl": "https://privi-discovery-production.up.railway.app",
+  "version": "0.6.0",
+  "websiteUrl": "https://privi-discovery.onrender.com",
   "repository": {
     "url": "https://github.com/canoydario847-cloud/Privi-Network",
     "source": "github",
@@ -13,7 +13,7 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://privi-ledger-production.up.railway.app/mcp"
+      "url": "https://privi-ledger.onrender.com/mcp"
     }
   ]
 }

@@ -4,7 +4,7 @@ An MCP server that lets AI agents check **where a manufactured lot came from** a
 
 Works with any MCP client: Claude, ChatGPT, Cursor, VS Code, and custom agents.
 
-**Live (testnet):** `https://privi-verify-production.up.railway.app/mcp` · demo lots `DEMO-STEEL-0001`, `DEMO-FOOD-0001`
+**Live (testnet):** `https://privi-verify.onrender.com/mcp` · demo lots `DEMO-STEEL-0001`, `DEMO-FOOD-0001`
 
 Built by [Privi World Co](https://github.com/canoydario847-cloud) (Port Huron, Michigan) as the agent-facing side of **Privi ChainFlow**.
 

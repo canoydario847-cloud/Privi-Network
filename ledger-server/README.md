@@ -4,7 +4,7 @@
 
 Works with Claude, ChatGPT, Cursor, VS Code and custom agents. Built by [Privi World Co](https://github.com/canoydario847-cloud) on the same record technology as [Privi Verify](../mcp-server).
 
-**Live (testnet):** `https://privi-ledger-production.up.railway.app/mcp`
+**Live (testnet):** `https://privi-ledger.onrender.com/mcp`
 
 ## Tools
 

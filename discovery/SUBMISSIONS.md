@@ -20,10 +20,10 @@ Tamper-evident audit logs, sealed compliance reports, and paid lot verification 
 Privi gives AI agents the trust layer they need to do real work for companies and governments. Privi Ledger records every agent action in a hash-linked stream, issues sealed PDF compliance reports, produces OMB M-25-21 AI use-case inventories and EO 14409 post-quantum migration plans, and lets two companies seal a shared record with Privi Handshake. Privi Verify checks manufacturing lot provenance and chain of custody, paid per call with x402. Privi Anchor timestamps any hash on the Privi chain so proofs don't depend on trusting us. Everything is callable over MCP; paid tools settle in USDC on Base; the free tier is self-serve via `ledger_signup`. Built by Dario Canoy, Privi World Co, Port Huron, Michigan.
 
 **Endpoints:**
-- Ledger `https://privi-ledger-production.up.railway.app/mcp` (streamable-http)
-- Verify `https://privi-verify-production.up.railway.app/mcp`
-- Anchor `https://privi-anchor-production.up.railway.app/mcp`
-- Hub / docs `https://privi-discovery-production.up.railway.app`
+- Ledger `https://privi-ledger.onrender.com/mcp` (streamable-http)
+- Verify `https://privi-verify.onrender.com/mcp`
+- Anchor `https://privi-anchor.onrender.com/mcp`
+- Hub / docs `https://privi-discovery.onrender.com`
 - Repo `https://github.com/canoydario847-cloud/Privi-Network`
 
 **Categories/tags:** Security & Compliance, Blockchain, Developer Tools, Finance, Supply Chain · `audit-log` `compliance` `x402` `usdc` `base` `proof-of-existence` `supply-chain` `government` `a2a`
@@ -41,17 +41,17 @@ https://glama.ai/mcp/servers → "Claim" each listing with your GitHub (they alr
 https://mcp.so → Submit → repo URL + hub URL. One submission covers the repo.
 
 ## 5. Cursor directory + Cline marketplace
-https://cursor.directory/mcp → Submit. https://github.com/cline/mcp-marketplace → "New issue → Server submission" with the repo URL and a 400×400 logo (use `https://privi-discovery-production.up.railway.app/icon.svg`, exported to PNG).
+https://cursor.directory/mcp → Submit. https://github.com/cline/mcp-marketplace → "New issue → Server submission" with the repo URL and a 400×400 logo (use `https://privi-discovery.onrender.com/icon.svg`, exported to PNG).
 
 ## 6. Search engines (drives every RAG/browse agent)
-- Bing Webmaster: https://www.bing.com/webmasters → Add site → URL `https://privi-discovery-production.up.railway.app` → verify by meta tag (I'll add it to the hub if you paste it) → Sitemaps → submit `/sitemap.xml`.
+- Bing Webmaster: https://www.bing.com/webmasters → Add site → URL `https://privi-discovery.onrender.com` → verify by meta tag (I'll add it to the hub if you paste it) → Sitemaps → submit `/sitemap.xml`.
 - Google Search Console: https://search.google.com/search-console → same flow → submit `/sitemap.xml`.
 
 ## 7. x402 ecosystem (paying agents)
 - Coinbase x402 Bazaar / ecosystem page: https://www.x402.org/ecosystem → "Add your project" PR or form → list Privi Verify and Privi Ledger as sellers with the Ledger pricing.
 
 ## 8. GitHub repo settings (2 minutes, you only)
-Repo → About (gear icon) → Website: `https://privi-discovery-production.up.railway.app` → Topics: `mcp-server mcp ai-agents x402 a2a audit-log blockchain usdc base compliance supply-chain llms-txt`.
+Repo → About (gear icon) → Website: `https://privi-discovery.onrender.com` → Topics: `mcp-server mcp ai-agents x402 a2a audit-log blockchain usdc base compliance supply-chain llms-txt`.
 
 ## 9. Your own domain (biggest trust multiplier)
 Attach `agents.priviflow.us` to the `privi-discovery` Railway service, set `PUBLIC_BASE_URL` to it, then redo 6 and update the three `server.json` `websiteUrl` fields. I can do all of that the moment you say the word.

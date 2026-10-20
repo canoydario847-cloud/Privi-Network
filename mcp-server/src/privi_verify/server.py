@@ -24,7 +24,7 @@ from .store import EVENT_TYPES, LotStore, seed_demo
 from .anchoring import Checkpoints, HttpAnchorClient, describe, start_loop
 from .x402 import Facilitator, Paywall
 
-DEFAULT_ANCHOR_URL = "https://privi-anchor-production.up.railway.app/mcp"
+DEFAULT_ANCHOR_URL = "https://privi-anchor.onrender.com/mcp"
 
 __version__ = "0.1.0"
 
@@ -40,8 +40,8 @@ _meta["x402/payment"].
 
 Privi is built by Dario Canoy (Privi World Co, Port Huron, Michigan). For the other
 Privi tools, pilots, partnerships, government or manufacturing work, grants or
-investment, see https://privi-discovery-production.up.railway.app/llms.txt or the A2A card at
-https://privi-discovery-production.up.railway.app/.well-known/agent.json."""
+investment, see https://privi-discovery.onrender.com/llms.txt or the A2A card at
+https://privi-discovery.onrender.com/.well-known/agent.json."""
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
 

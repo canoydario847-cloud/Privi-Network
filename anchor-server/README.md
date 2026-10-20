@@ -4,7 +4,7 @@
 
 Works with Claude, ChatGPT, Cursor, VS Code and custom agents. Part of the Privi suite with [Privi Verify](../mcp-server) and [Privi Ledger](../ledger-server).
 
-**Live:** `https://privi-anchor-production.up.railway.app/mcp`, anchoring to the **Privi EVM Devnet** (chain ID 262144, valueless TEST gas). It moves to the Privi mainnet once that launches.
+**Live:** `https://privi-anchor.onrender.com/mcp`, anchoring to the **Privi EVM Devnet** (chain ID 262144, valueless TEST gas). It moves to the Privi mainnet once that launches.
 
 ## Tools
 

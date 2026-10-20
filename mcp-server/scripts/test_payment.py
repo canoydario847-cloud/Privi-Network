@@ -22,7 +22,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-DEFAULT_URL = "https://privi-verify-production.up.railway.app/mcp"
+DEFAULT_URL = "https://privi-verify.onrender.com/mcp"
 WALLET_FILE = Path(".agent-wallet")
 CHAIN_IDS = {"eip155:84532": 84532, "eip155:8453": 8453}
 EXPLORERS = {"eip155:84532": "https://sepolia.basescan.org/tx/", "eip155:8453": "https://basescan.org/tx/"}
