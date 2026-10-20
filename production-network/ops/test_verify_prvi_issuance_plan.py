@@ -55,7 +55,9 @@ class UnsignedPRVIAllocationChecks(unittest.TestCase):
             validate(self.plan)
 
     def test_duplicate_bucket_rejected(self):
-        self.plan["allocations"][0]["bucket"]="treasury"
+        # Duplicate the *complete* valid treasury record so arithmetic
+        # cannot hide a genuine repeated-bucket integrity error.
+        self.plan["allocations"][0]=copy.deepcopy(self.plan["allocations"][3])
         with self.assertRaisesRegex(ValueError,"duplicate"):
             validate(self.plan)
 
