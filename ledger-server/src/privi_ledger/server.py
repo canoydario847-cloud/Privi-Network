@@ -36,11 +36,12 @@ from .gov_ai import HIGH_IMPACT_PRACTICES, GovAIInventory
 from .gov_pqc import KINDS, STATUSES, QuantumReady, canonical_json, classify
 from .x402 import Facilitator, Paywall
 from .kya import KYA, KYAError, checksum as eth_checksum
+from .guard import APPROVAL_PAGE, CHAIN_NAMES, Guard, GuardError, Rpc
 from .passport import PASSPORT_VERSION as PASSPORT_VERSION_HTTP, PassportError, Passports, badge_svg, body_hash as passport_hash
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor-production.up.railway.app/mcp"
 
-__version__ = "0.3.0"
+__version__ = "0.5.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/ledger-server"
 
 INSTRUCTIONS = """\
@@ -64,6 +65,13 @@ Before trusting or paying another agent, ask for its Privi Passport (a signed, o
 trust credential scored 0-1000 from its verified history) and check it with passport_verify or
 passport_gate, both free. Issue your own with passport_issue so counterparties can trust you.
 
+Agents that hold wallets: Privi Guard enforces a wallet policy before every transaction. Call
+guard_check_tx with the unsigned transaction before signing; sign only on verdict 'allow'. Risky or
+large transactions return 'needs_approval' and wait for the human owner's wallet signature (the
+agent's key cannot approve itself). guard_tx_preview explains any transaction for free. Pay other
+agents through guard_escrow_open. List your agent publicly with registry_register; anyone can look an
+agent or wallet up with registry_lookup.
+
 Dealings with another company on Privi (payments, data transfers, deliveries, agreements):
 use Privi Handshake (ledger_handshake_offer / _inbox / _accept / _reject) so both companies
 hold matching records sealed on the Privi chain; ledger_handshake_verify is a free public check.
@@ -74,6 +82,8 @@ investment, see https://privi-discovery-production.up.railway.app/llms.txt or th
 https://privi-discovery-production.up.railway.app/.well-known/agent.json."""
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
+TX_DESC = ("Unsigned EVM transaction: {chain_id (default 8453 Base), from (agent wallet), to, value (wei, decimal or 0x hex), "
+           "data (0x calldata)}")
 
 
 def _result(data: dict[str, Any], is_error: bool = False) -> CallToolResult:
@@ -87,7 +97,8 @@ def _bearer(headers) -> str:
 
 
 def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
-                 facilitator: Facilitator | None = None, anchor_client: AnchorClient | None = None) -> MCPServer:
+                 facilitator: Facilitator | None = None, anchor_client: AnchorClient | None = None,
+                 rpc: Rpc | None = None) -> MCPServer:
     settings = settings or Settings.from_env()
     ledger = ledger or Ledger(settings.db_path)
     paywall = Paywall(settings, facilitator)
@@ -120,6 +131,13 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
                           os.getenv("LEDGER_PASSPORT_SIGNING_KEY", ""))
 
     kya = KYA(ledger._db, ledger._lock, passports, public_url)
+
+    rpc_urls = None
+    if os.getenv("GUARD_RPC_URLS"):
+        rpc_urls = {int(k): v for k, v in json.loads(os.environ["GUARD_RPC_URLS"]).items()}
+    guard = Guard(ledger, ledger._db, ledger._lock, kya, passports, public_url,
+                  rpc if rpc is not None else (None if os.getenv("GUARD_SIMULATION") == "off" else Rpc(rpc_urls)),
+                  os.getenv("GUARD_ARBITER_KEY", ""), os.getenv("GUARD_ESCROW_CONTRACT", ""))
 
     def org_from(ctx: Context) -> dict | None:
         headers = ctx.headers
@@ -160,6 +178,13 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
                 "passport_revoke": "organization API key",
                 "kya_check": "free", "kya_challenge": "organization API key", "kya_bind_wallet": "organization API key",
                 "kya_wallets": "organization API key", "kya_unbind_wallet": "organization API key",
+                "guard_tx_preview": "free", "guard_check_tx": "organization API key",
+                "guard_policy_set": "organization API key", "guard_policies": "organization API key",
+                "guard_approvals": "organization API key", "guard_approve": "free (owner wallet signature)",
+                "guard_escrow_open": "organization API key", "guard_escrow_act": "organization API key",
+                "guard_escrows": "organization API key", "guard_escrow_status": "free",
+                "registry_register": "organization API key", "registry_lookup": "free",
+                "registry_verify": "free", "registry_remove": "organization API key",
             },
             "action_types": list(ACTION_TYPES), "outcomes": list(OUTCOMES),
             "get_a_key": SOURCE,
@@ -933,6 +958,315 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
             return _result(kya.unbind(org["org_id"], address))
         except (KYAError, ValueError) as e:
             return _result({"error": str(e)}, is_error=True)
+
+    # ---------------- Privi Guard: wallets, transactions, approvals, escrow, registry ----------------
+
+    def gerr(e: Exception) -> CallToolResult:
+        return _result({"error": str(e)}, is_error=True)
+
+    @mcp.tool(title="Guard: preview a transaction", annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True))
+    async def guard_tx_preview(
+        tx: Annotated[dict[str, Any], Field(description=TX_DESC)],
+        simulate: Annotated[bool, Field(description="Also simulate over JSON-RPC (eth_call) and check whether spenders are contracts")] = True,
+    ) -> CallToolResult:
+        """Explain an EVM transaction in plain English before anyone signs it: decodes transfers, approvals, NFT operator
+        grants, permits, admin and batched calls; flags drainer patterns (unlimited approvals, approvals to personal wallets,
+        operator grants, burns, admin actions); simulates it; and checks counterparties with Privi KYA. Free; no key needed."""
+        try:
+            return _result(await anyio.to_thread.run_sync(lambda: guard.preview(tx, simulate)))
+        except (ValueError, GuardError) as e:
+            return gerr(e)
+
+    @mcp.tool(title="Guard: set a wallet policy", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                               idempotentHint=True, openWorldHint=False))
+    def guard_policy_set(
+        wallet: Annotated[str, Field(description="Agent wallet (0x), already bound to your organization with kya_bind_wallet")],
+        owner_address: Annotated[str, Field(description="The human owner's wallet (0x). Only its signature can approve risky transactions")],
+        max_tx_usd: Annotated[float, Field(description="Hard limit per transaction in USD", ge=0)],
+        daily_cap_usd: Annotated[float, Field(description="Hard limit per rolling 24 hours in USD", ge=0)],
+        ctx: Context,
+        approval_above_usd: Annotated[float | None, Field(description="Transactions above this need the owner's signature (default: the lower of max_tx_usd and $100)", ge=0)] = None,
+        allowed_chains: Annotated[list[int] | None, Field(description="Chain IDs the agent may use (default [8453] Base)")] = None,
+        allowed_contracts: Annotated[list[str] | None, Field(description="If set, the only contracts/recipients the agent may call")] = None,
+        block_unlimited_approvals: Annotated[bool, Field(description="Refuse unlimited token approvals outright")] = True,
+        require_known_counterparty: Annotated[bool, Field(description="Ask the owner when the recipient or spender is not a KYA-verified agent")] = False,
+        expires_at: Annotated[str | None, Field(description="ISO 8601 time after which the agent may not transact")] = None,
+        active: Annotated[bool, Field(description="false pauses the wallet instantly (kill switch)")] = True,
+    ) -> CallToolResult:
+        """Set the rules an AI agent's wallet must obey: per-transaction and daily USD caps, chains, allowed contracts, an
+        approval threshold above which the human owner must sign, expiry, and a pause switch. Every change is written to
+        your tamper-evident log. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        if blocked := over_limit(org["org_id"]):
+            return blocked
+        try:
+            return _result(guard.set_policy(org["org_id"], wallet, {
+                "owner_address": owner_address, "max_tx_usd": max_tx_usd, "daily_cap_usd": daily_cap_usd,
+                "approval_above_usd": approval_above_usd, "allowed_chains": allowed_chains,
+                "allowed_contracts": allowed_contracts, "block_unlimited_approvals": block_unlimited_approvals,
+                "require_known_counterparty": require_known_counterparty, "expires_at": expires_at, "active": active}))
+        except (ValueError, GuardError) as e:
+            return gerr(e)
+
+    @mcp.tool(title="Guard: your wallet policies", annotations=READ_ONLY)
+    def guard_policies(ctx: Context) -> CallToolResult:
+        """Your wallets' Guard policies with spend in the last 24 hours. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        ps = guard.policies(org["org_id"])
+        for p in ps:
+            p["spent_24h_usd"] = format(guard.spent_24h(org["org_id"], p["wallet"]).normalize(), "f")
+        return _result({"org_id": org["org_id"], "policies": ps})
+
+    @mcp.tool(title="Guard: check before signing", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                                idempotentHint=False, openWorldHint=True))
+    async def guard_check_tx(
+        tx: Annotated[dict[str, Any], Field(description=TX_DESC)],
+        ctx: Context,
+        usd_value: Annotated[float | None, Field(description="Your best estimate of the USD value moved or exposed", ge=0)] = None,
+        approval_id: Annotated[str | None, Field(description="apr_... ID once the owner has approved this exact transaction")] = None,
+        purpose: Annotated[str, Field(description="Why the agent is sending it (recorded in your log)")] = "",
+        simulate: Annotated[bool, Field(description="Simulate over JSON-RPC")] = True,
+    ) -> CallToolResult:
+        """Call before your agent signs any transaction. Applies the wallet's Guard policy to a decoded, simulated and
+        risk-scanned preview and returns verdict 'allow' (sign it; includes a Privi-signed Guard attestation and counts
+        toward the daily cap), 'needs_approval' (returns an approval link for the human owner; call again with
+        approval_id after they sign) or 'block' (do not sign), with reasons. Every decision is recorded in your
+        tamper-evident log. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        if blocked := over_limit(org["org_id"]):
+            return blocked
+        try:
+            return _result(await anyio.to_thread.run_sync(
+                lambda: guard.check(org["org_id"], tx, usd_value, approval_id, simulate, purpose)))
+        except (ValueError, GuardError) as e:
+            return gerr(e)
+
+    @mcp.tool(title="Guard: approvals", annotations=READ_ONLY)
+    def guard_approvals(
+        ctx: Context,
+        status: Annotated[str | None, Field(description="pending | approved | rejected | used; omit for all")] = None,
+    ) -> CallToolResult:
+        """Transactions waiting for (or decided by) the human owner. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        return _result({"approvals": guard.approvals(org["org_id"], status)})
+
+    @mcp.tool(title="Guard: owner decision", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                          idempotentHint=True, openWorldHint=False))
+    def guard_approve(
+        approval_id: Annotated[str, Field(description="apr_... ID")],
+        decision: Annotated[str, Field(description="approve or reject")],
+        signature: Annotated[str, Field(description="Owner wallet's EIP-191 personal_sign of the approval message for this decision")],
+    ) -> CallToolResult:
+        """Record the human owner's decision on a pending transaction. Valid only with a signature from the policy's
+        owner wallet over the exact approval message (see the approval's messages), so an agent cannot approve itself.
+        Usually done on the approval page. No API key needed."""
+        try:
+            return _result(guard.decide(approval_id.strip(), decision.strip().lower(), signature.strip()))
+        except (ValueError, GuardError) as e:
+            return gerr(e)
+
+    @mcp.tool(title="Guard: open an escrow", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                          idempotentHint=False, openWorldHint=False))
+    def guard_escrow_open(
+        payee_org_id: Annotated[str, Field(description="org_id of the agent's company you are paying (on Privi Ledger)")],
+        amount: Annotated[str, Field(description="Amount in token units, e.g. '250' for 250 USDC")],
+        payer_wallet: Annotated[str, Field(description="Your agent wallet that pays (bound to your organization)")],
+        payee_wallet: Annotated[str, Field(description="Wallet that receives on release")],
+        terms: Annotated[str, Field(description="What must be delivered for release, in plain words")],
+        ctx: Context,
+        chain_id: Annotated[int, Field(description="Chain ID (default 8453 Base)")] = 8453,
+        token: Annotated[str | None, Field(description="ERC-20 token address (default USDC on the chosen Base network)")] = None,
+        decimals: Annotated[int, Field(description="Token decimals (USDC: 6)", ge=0, le=36)] = 6,
+        deadline_hours: Annotated[float, Field(description="Hours for the payee to deliver", gt=0, le=2160)] = 72,
+    ) -> CallToolResult:
+        """Pay another company's AI agent through escrow: terms both sides see, recorded in both logs. Release and refund
+        are authorized by the Privi Guard arbiter signature, which any EVM contract can verify with ecrecover
+        (contracts/PriviEscrow.sol). Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        if blocked := over_limit(org["org_id"]):
+            return blocked
+        tok = token or {8453: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                        84532: "0x036CbD53842c5426634e7929541eC2318f3dCF7e"}.get(chain_id)
+        if not tok:
+            return gerr(ValueError("token is required on this chain"))
+        try:
+            return _result(guard.escrow_open(org["org_id"], payee_org_id.strip(), amount, payer_wallet, payee_wallet,
+                                             chain_id, tok, decimals, terms, deadline_hours))
+        except (ValueError, GuardError) as e:
+            return gerr(e)
+
+    @mcp.tool(title="Guard: act on an escrow", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                            idempotentHint=False, openWorldHint=False))
+    def guard_escrow_act(
+        escrow_id: Annotated[str, Field(description="esc_... ID")],
+        action: Annotated[str, Field(description="payee: accept | deliver | refund | dispute; payer: fund | release | refund (after deadline) | cancel (before acceptance) | dispute")],
+        ctx: Context,
+        note: Annotated[str, Field(description="Delivery proof, reason or comment (shared with the other side)")] = "",
+        tx_hash: Annotated[str, Field(description="On-chain transaction hash, for 'fund'")] = "",
+    ) -> CallToolResult:
+        """Move an escrow forward. 'release' (payer) and 'refund' return an arbiter-signed authorization the escrow
+        contract accepts. Every step is recorded in both companies' logs. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        try:
+            return _result(guard.escrow_act(org["org_id"], escrow_id.strip(), action.strip().lower(), note, tx_hash))
+        except (ValueError, GuardError) as e:
+            return gerr(e)
+
+    @mcp.tool(title="Guard: your escrows", annotations=READ_ONLY)
+    def guard_escrows(ctx: Context) -> CallToolResult:
+        """Escrows where your organization pays or is paid, with terms and history. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        return _result({"org_id": org["org_id"], "escrows": guard.escrow_list(org["org_id"]), "arbiter": guard.arbiter.address})
+
+    @mcp.tool(title="Guard: escrow status", annotations=READ_ONLY)
+    def guard_escrow_status(escrow_id: Annotated[str, Field(description="esc_... ID")]) -> CallToolResult:
+        """Public status of an escrow: parties, amount, deadline, history and any arbiter authorization. Terms text is
+        not revealed. Free."""
+        s = guard.escrow_public(escrow_id.strip())
+        return _result(s) if s else gerr(GuardError("no such escrow"))
+
+    @mcp.tool(title="Registry: list your agent", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                              idempotentHint=False, openWorldHint=True))
+    async def registry_register(
+        stream_id: Annotated[str, Field(description="The agent's stream ID")],
+        name: Annotated[str, Field(description="Public name of the agent")],
+        ctx: Context,
+        description: Annotated[str, Field(description="What it does, in a sentence or two")] = "",
+        endpoint: Annotated[str, Field(description="Where other agents reach it (MCP or A2A URL)")] = "",
+        capabilities: Annotated[list[str] | None, Field(description="Short capability tags, e.g. ['payments', 'invoicing']")] = None,
+    ) -> CallToolResult:
+        """Publish your agent in the Privi Agent Registry so any dApp, wallet or agent can look it up by ID, wallet or
+        capability. The record lists its bound wallets and current Passport; each version is anchored on the Privi
+        chain. Calling again publishes a new version. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        if blocked := over_limit(org["org_id"]):
+            return blocked
+        try:
+            sid = check_id(stream_id, "stream_id")
+        except ValueError as e:
+            return gerr(e)
+        rec = guard.registry_build(org, sid, name, description, endpoint, capabilities or [])
+        h = passport_hash(rec)
+        att = await _anchor_hash(h, f"privi agent registry {rec['agent_id']} v{rec['record_version']}")
+        att["signature"] = passports.sign(h)
+        att["key_id"] = passports.key_id
+        guard.registry_save(rec, h, att)
+        return _result({"registered": True, **guard.registry_get(rec["agent_id"])})
+
+    @mcp.tool(title="Registry: look up agents", annotations=READ_ONLY)
+    def registry_lookup(
+        agent_id: Annotated[str | None, Field(description="agt_... ID")] = None,
+        address: Annotated[str | None, Field(description="Find the agent that uses this wallet")] = None,
+        query: Annotated[str, Field(description="Search names, descriptions and organizations")] = "",
+        capability: Annotated[str, Field(description="Only agents with this capability tag")] = "",
+        limit: Annotated[int, Field(ge=1, le=100)] = 25,
+    ) -> CallToolResult:
+        """Find AI agents in the Privi Agent Registry by ID, wallet, name or capability: who operates them, their wallets,
+        endpoint and Passport. Free; no key needed."""
+        if agent_id:
+            r = guard.registry_get(agent_id.strip())
+            return _result({"agents": [r] if r else [], "total_registered": guard.registry_count()})
+        try:
+            return _result({"agents": guard.registry_search(query, address or "", capability, limit),
+                            "total_registered": guard.registry_count()})
+        except ValueError as e:
+            return gerr(e)
+
+    @mcp.tool(title="Registry: verify a record", annotations=READ_ONLY)
+    async def registry_verify(agent_id: Annotated[str, Field(description="agt_... ID")]) -> CallToolResult:
+        """Check a registry record: content hash, Privi signature and anchor on the Privi chain, plus the agent's live
+        Passport status. Free."""
+        r = guard.registry_get(agent_id.strip())
+        if not r:
+            return _result({"valid": False, "reason": "no such agent"})
+        h = passport_hash(r["agent"])
+        att = r["attestation"]
+        out = {"agent_id": agent_id, "record_hash": h, "hash_matches": h == r["record_hash"],
+               "signature_valid": passports.signature_ok(h, att.get("signature", "")), "revoked": r["revoked"],
+               "anchored": bool(att.get("anchored"))}
+        out.update(await _chain_check(att, h))
+        pid = r["agent"].get("passport_id")
+        if pid and (rec := passports.get(pid)):
+            v = passports.check(rec)
+            out["passport"] = {"passport_id": pid, "valid": v["valid"], "live_score": (v.get("live") or {}).get("score")}
+        out["valid"] = out["hash_matches"] and out["signature_valid"] and not r["revoked"] and out.get("onchain_verified") is not False
+        return _result(out)
+
+    @mcp.tool(title="Registry: remove your agent", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True,
+                                                                                idempotentHint=True, openWorldHint=False))
+    def registry_remove(agent_id: Annotated[str, Field(description="agt_... ID")], ctx: Context) -> CallToolResult:
+        """Remove your agent from the public registry (retired or compromised). Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        try:
+            return _result(guard.registry_revoke(org["org_id"], agent_id.strip()))
+        except GuardError as e:
+            return gerr(e)
+
+    # ---------------- Guard http ----------------
+
+    @mcp.custom_route("/guard/approvals/{approval_id}.json", methods=["GET"], include_in_schema=False)
+    async def approval_json(request: Request) -> JSONResponse:
+        a = guard.approval_public(request.path_params["approval_id"])
+        return JSONResponse(a or {"error": "no such approval"}, status_code=200 if a else 404,
+                            headers={"Cache-Control": "no-store"})
+
+    @mcp.custom_route("/guard/approvals/{approval_id}", methods=["GET"], include_in_schema=False)
+    async def approval_page(_: Request) -> Response:
+        return Response(APPROVAL_PAGE, media_type="text/html", headers={"Cache-Control": "no-store"})
+
+    @mcp.custom_route("/guard/approvals/{approval_id}/decide", methods=["POST"], include_in_schema=False)
+    async def approval_decide(request: Request) -> JSONResponse:
+        try:
+            body = await request.json()
+            r = guard.decide(request.path_params["approval_id"], str(body.get("decision", "")).lower(), str(body.get("signature", "")))
+        except (ValueError, GuardError, AttributeError) as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        return JSONResponse(r)
+
+    @mcp.custom_route("/registry/{agent_id}", methods=["GET"], include_in_schema=False)
+    async def registry_json(request: Request) -> JSONResponse:
+        r = guard.registry_get(request.path_params["agent_id"])
+        return JSONResponse(r or {"error": "not found"}, status_code=200 if r else 404,
+                            headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"})
+
+    @mcp.custom_route("/registry", methods=["GET"], include_in_schema=False)
+    async def registry_index(request: Request) -> JSONResponse:
+        q = request.query_params
+        try:
+            agents = guard.registry_search(q.get("q", ""), q.get("address", ""), q.get("capability", ""), min(int(q.get("limit", 50)), 100))
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        return JSONResponse({"agents": agents, "total_registered": guard.registry_count()},
+                            headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"})
+
+    @mcp.custom_route("/.well-known/privi-guard.json", methods=["GET"], include_in_schema=False)
+    async def guard_wellknown(_: Request) -> JSONResponse:
+        return JSONResponse({"service": "Privi Guard", "version": __version__, "arbiter_address": guard.arbiter.address,
+                             "escrow_contract": guard.escrow_contract, "attestation_issuer": passports.issuer(),
+                             "simulation_chains": sorted(guard.rpc.urls) if guard.rpc else [],
+                             "chain_names": CHAIN_NAMES, "mcp": f"{public_url}/mcp",
+                             "tools": ["guard_tx_preview", "guard_check_tx", "guard_policy_set", "guard_approve",
+                                       "guard_escrow_open", "guard_escrow_act", "registry_register", "registry_lookup"],
+                             "registry": f"{public_url}/registry"},
+                            headers={"Access-Control-Allow-Origin": "*"})
 
     # ---------------- http ----------------
 

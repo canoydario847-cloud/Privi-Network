@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "privi-ledger-mcp"
-version = "0.3.0"
+version = "0.5.0"
 description = "Tamper-evident audit logs for AI agents, as an MCP server. Auditors verify integrity, paid per call with x402."
 readme = "README.md"
 license = "MIT"

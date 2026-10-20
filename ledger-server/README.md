@@ -125,6 +125,23 @@ As AI agents become the main senders of on-chain transactions, every chain, DeFi
 
 Integration pattern for a chain or protocol: before accepting an agent transaction, `GET /kya/<from>`; require `allow: true` (and optionally `proof: "signature"`); keep the `attestation` + `signature` as your compliance record.
 
+## Privi Guard (AI agents + blockchains)
+
+What a chain, wallet or dApp needs before letting an AI agent move money. Built on KYA, Passport and the Ledger.
+
+| Tool | What it does | Access |
+|---|---|---|
+| `guard_tx_preview` | Decodes any EVM transaction (transfers, approvals, NFT operator grants, permits, admin and batched calls), explains it in plain English, flags drainer patterns, simulates it over JSON-RPC and KYA-checks counterparties | free |
+| `guard_policy_set` / `guard_policies` | Per-wallet rules: per-tx and 24h USD caps, chains, allowed contracts, approval threshold, unlimited-approval block, expiry, pause switch, and the human owner's wallet | org key |
+| `guard_check_tx` | Call before signing: `allow` (with a Privi-signed Guard attestation), `needs_approval` (approval link for the owner) or `block`, with reasons; every decision logged | org key |
+| `guard_approve` / `guard_approvals` | The owner approves or rejects with an EIP-191 wallet signature (page at `/guard/approvals/<id>`). The agent's API key can never approve itself | owner signature |
+| `guard_escrow_open` / `_act` / `guard_escrows` / `guard_escrow_status` | Agent-to-agent escrow between two Privi organizations; release/refund are signed by the Guard arbiter key (secp256k1) and verify on-chain with ecrecover in `contracts/PriviEscrow.sol` | org key / free status |
+| `registry_register` / `registry_lookup` / `registry_verify` / `registry_remove` | Public Privi Agent Registry: wallets, Passport, endpoint, capabilities; every version anchored on the Privi chain; lookup at `/registry?address=0x...` | org key / free |
+
+Config: `GUARD_RPC_URLS` (JSON `{chain_id: url}`, defaults to public Base, Base Sepolia and Privi devnet RPCs), `GUARD_SIMULATION=off`,
+`GUARD_ARBITER_KEY` (hex; otherwise generated and stored in the database), `GUARD_ESCROW_CONTRACT` (address once PriviEscrow is deployed).
+Public: `/.well-known/privi-guard.json` lists the arbiter address. `PriviEscrow.sol` is unaudited and not yet deployed.
+
 ## Privi Handshake
 
 A dealing between two companies, such as a payment, a data transfer, a delivery or an agreement, gets recorded by **both** of them, with neither able to deny or rewrite it alone.
