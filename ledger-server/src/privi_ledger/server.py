@@ -30,6 +30,7 @@ from .anchoring import AnchorClient, AnchorError, Checkpoints, HttpAnchorClient,
 from .reports import ReportStore, build_body, report_hash, to_markdown
 from .pdf import render_pdf
 from .handshake import HandshakeError, Handshakes
+from .plans import Plans
 from .x402 import Facilitator, Paywall
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor-production.up.railway.app/mcp"
@@ -77,6 +78,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         anchor_client = HttpAnchorClient(anchor_url, os.environ["LEDGER_ANCHOR_KEY"])
     reports = ReportStore(ledger._db, ledger._lock)
     handshakes = Handshakes(ledger, ledger._db, ledger._lock)
+    plans = Plans(ledger)
 
     def onchain(org_id: str, stream_id: str, result: dict) -> dict:
         cp = checkpoints.latest(f"{org_id}/{stream_id}")
@@ -100,6 +102,14 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     unauthorized = _result({"error": "a valid organization API key is required (Authorization: Bearer <key>)"},
                            is_error=True)
 
+    def over_limit(org_id: str, n: int = 1) -> CallToolResult | None:
+        ok, st = plans.can_write(org_id, n)
+        if ok:
+            return None
+        return _result({"error": f"free plan limit reached ({st['monthly_limit']} entries this month)",
+                        "plan": st, "upgrade": f"call ledger_upgrade_pro (${settings.prices_usd['ledger_upgrade_pro']} "
+                        f"USDC per 30 days via x402) for unlimited entries"}, is_error=True)
+
     # ---------------- free ----------------
 
     @mcp.tool(title="Ledger pricing", annotations=READ_ONLY)
@@ -116,6 +126,8 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
                 "ledger_record_action": "organization API key",
                 "ledger_read_stream": "organization API key",
                 "ledger_list_streams": "organization API key",
+                "ledger_signup": "free (free plan: monthly entry limit)",
+                "ledger_upgrade_pro": f"${settings.prices_usd['ledger_upgrade_pro']} per 30 days (x402), unlimited entries",
             },
             "action_types": list(ACTION_TYPES), "outcomes": list(OUTCOMES),
             "get_a_key": SOURCE,
@@ -177,6 +189,8 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         org = org_from(ctx)
         if not org:
             return unauthorized
+        if blocked := over_limit(org["org_id"]):
+            return blocked
         try:
             e = ledger.record(org["org_id"], stream_id, actor, action_type, summary, resource, outcome, details)
         except ValueError as err:
@@ -301,6 +315,52 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         out["valid"] = out.get("onchain_verified", True) is not False
         return _result(out)
 
+    # ---------------- self-serve plans ----------------
+
+    @mcp.tool(title="Sign up", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                           idempotentHint=False, openWorldHint=False))
+    def ledger_signup(
+        organization_name: Annotated[str, Field(description="Your company or project name")],
+    ) -> CallToolResult:
+        """Create a Privi Ledger organization on the free plan and get its API key (shown once; store it).
+        Free plan: up to the monthly entry limit, all tools included. Upgrade any time with
+        ledger_upgrade_pro. No key needed to sign up."""
+        try:
+            org = plans.signup(organization_name)
+        except ValueError as e:
+            return _result({"error": str(e)}, is_error=True)
+        return _result({**org, "plan": plans.status(org["org_id"]),
+                        "next": "Send 'Authorization: Bearer <api_key>' and call ledger_record_action after each agent action.",
+                        "note": "Store api_key now; it cannot be shown again."})
+
+    @mcp.tool(title="Plan and usage", annotations=READ_ONLY)
+    def ledger_plan(ctx: Context) -> CallToolResult:
+        """Your plan, entries used this month, the limit, and when a Pro plan renews. Requires your organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        return _result({"org_id": org["org_id"], "organization": org["name"], **plans.status(org["org_id"]),
+                        "pro_price_usd_per_30_days": settings.prices_usd["ledger_upgrade_pro"]})
+
+    @mcp.tool(title="Upgrade to Pro", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                   idempotentHint=False, openWorldHint=True))
+    async def ledger_upgrade_pro(ctx: Context) -> CallToolResult:
+        """Buy 30 days of Privi Ledger Pro (unlimited entries) for your organization, paid in USDC on Base
+        via x402. Each call adds 30 days. Requires your organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+
+        async def work() -> dict[str, Any]:
+            st = plans.extend_pro(org["org_id"])
+            ledger.record(org["org_id"], "privi-billing", "Privi Ledger", "payment",
+                          f"Pro plan purchased: 30 days, ${settings.prices_usd['ledger_upgrade_pro']} USDC",
+                          "ledger_upgrade_pro", "success", {"paid_until": st["paid_until"]})
+            return {"upgraded": True, "org_id": org["org_id"], **st}
+
+        return await paywall.run("ledger_upgrade_pro", "Privi Ledger Pro, 30 days",
+                                 dict(ctx.request_context.meta or {}), work)
+
     # ---------------- Privi Handshake (cross-organization) ----------------
 
     WRITE = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False)
@@ -324,6 +384,8 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         org = org_from(ctx)
         if not org:
             return unauthorized
+        if blocked := over_limit(org["org_id"]):
+            return blocked
         try:
             return _result(handshakes.offer(org["org_id"], counterparty_org_id.strip(), stream_id, actor, action_type,
                                             summary, resource, details, expires_hours))
@@ -354,6 +416,8 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         org = org_from(ctx)
         if not org:
             return unauthorized
+        if blocked := over_limit(org["org_id"]):
+            return blocked
         try:
             r = await anyio.to_thread.run_sync(
                 lambda: handshakes.accept(handshake_id.strip(), org["org_id"], stream_id, actor, anchor_client))

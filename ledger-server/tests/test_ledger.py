@@ -288,7 +288,8 @@ def test_privi_handshake_between_two_companies(ledger, monkeypatch, tmp_path):
     assert _j.loads(a_log[1]["details"])["handshake"]["counterparty_entry_hash"] == b_log[0]["entry_hash"]
 
     pub = run_("none", "ledger_handshake_verify", {"handshake_id": hid}).structured_content
-    assert pub["both_entries_present"] and pub["pair_hash_valid"] and "terms" not in pub and "4800" not in str(pub)
+    assert pub["both_entries_present"] and pub["pair_hash_valid"] and "terms" not in pub
+    assert "usd" not in str(pub) and "PO-1042" not in str(pub) and "brackets" not in str(pub)  # terms stay private
 
     # one side deletes its record: the public check exposes it
     db = sqlite3.connect(str(tmp_path / "l.db"))
@@ -303,3 +304,51 @@ def test_privi_handshake_between_two_companies(ledger, monkeypatch, tmp_path):
     assert rj.structured_content["status"] == "rejected"
     last = ledger.entries(a["org_id"], "procurement-agent")[-1]
     assert last["outcome"] == "blocked" and "rejected" in last["summary"]
+
+
+def test_self_serve_free_limit_then_paid_pro(ledger, monkeypatch):
+    monkeypatch.setenv("LEDGER_FREE_MONTHLY", "3")
+    fac = FakeFacilitator()
+    srv = build_server(Settings(pay_to=PAY_TO), ledger, fac)
+
+    async def call(key, tool, args, meta=None):
+        if key is None:
+            monkeypatch.delenv("LEDGER_LOCAL_ORG_KEY", raising=False)
+        else:
+            monkeypatch.setenv("LEDGER_LOCAL_ORG_KEY", key)
+        async with Client(srv) as c:
+            return await c.call_tool(tool, args, meta=meta)
+
+    run_ = lambda *a, **k: anyio.run(lambda: call(*a, **k))
+    su = run_(None, "ledger_signup", {"organization_name": "Startup Inc"}).structured_content
+    key = su["api_key"]
+    assert su["plan"]["plan"] == "free" and su["plan"]["monthly_limit"] == 3
+
+    rec = {"stream_id": "agent", "actor": "claude", "action_type": "tool_call", "summary": "did a thing"}
+    for _ in range(3):
+        assert not run_(key, "ledger_record_action", rec).is_error
+    blocked = run_(key, "ledger_record_action", rec)
+    assert blocked.is_error and "ledger_upgrade_pro" in blocked.structured_content["upgrade"]
+
+    need = run_(key, "ledger_upgrade_pro", {})
+    assert need.is_error and need.structured_content["accepts"][0]["amount"] == "29000000"   # $29 USDC
+    pay = {"x402Version": 2, "resource": need.structured_content["resource"],
+           "accepted": need.structured_content["accepts"][0], "payload": {}}
+    up = run_(key, "ledger_upgrade_pro", {}, meta={"x402/payment": pay})
+    assert not up.is_error and up.structured_content["plan"] == "pro" and up.structured_content["paid_until"]
+    assert up.meta["x402/payment-response"]["success"] and fac.calls == ["verify", "settle"]
+
+    assert not run_(key, "ledger_record_action", rec).is_error          # unlimited now
+    plan = run_(key, "ledger_plan", {}).structured_content
+    assert plan["plan"] == "pro" and plan["monthly_limit"] is None
+    org = ledger.org_for_key(key)
+    assert ledger.entries(org["org_id"], "privi-billing")[0]["action_type"] == "payment"
+
+    # a second purchase stacks another 30 days
+    first_until = plan["paid_until"]
+    up2 = run_(key, "ledger_upgrade_pro", {}, meta={"x402/payment": pay}).structured_content
+    assert up2["paid_until"] > first_until
+
+    # admin-created orgs stay unlimited (enterprise)
+    ent = ledger.create_org("Big Co")
+    assert run_(ent["api_key"], "ledger_plan", {}).structured_content["plan"] == "enterprise"

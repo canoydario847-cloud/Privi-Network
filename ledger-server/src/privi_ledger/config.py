@@ -21,6 +21,7 @@ NETWORKS = {
 
 DEFAULT_PRICES_USD = {
     "ledger_audit_stream": "0.02",
+    "ledger_upgrade_pro": "29",
 }
 
 
@@ -61,6 +62,8 @@ class Settings:
             facilitator_auth=os.getenv("LEDGER_FACILITATOR_AUTH", ""),
             admin_key=os.getenv("LEDGER_ADMIN_KEY", ""),
         )
+        if os.getenv("LEDGER_PRICE_PRO_MONTH"):
+            s.prices_usd["ledger_upgrade_pro"] = os.environ["LEDGER_PRICE_PRO_MONTH"]
         if os.getenv("LEDGER_PRICE_AUDIT_STREAM"):
             s.prices_usd["ledger_audit_stream"] = os.environ["LEDGER_PRICE_AUDIT_STREAM"]
         s.validate()

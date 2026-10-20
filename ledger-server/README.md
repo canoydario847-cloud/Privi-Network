@@ -30,6 +30,16 @@ Each entry's SHA-256 fingerprint covers its contents **and the previous entry's 
 
 > Stream heads are anchored on the Privi blockchain every few minutes (see On-chain checkpoints), so integrity can be proven without trusting Privi.
 
+## Plans (self-serve)
+
+| Plan | How | Includes |
+|---|---|---|
+| Free | `ledger_signup` (no key needed) | Every tool, up to 500 entries per month |
+| Pro | `ledger_upgrade_pro`, $29 USDC per 30 days via x402 | Unlimited entries; each payment adds 30 days |
+| Enterprise | Created by Privi (`/admin/orgs`) | Unlimited; billed by agreement |
+
+Any company, or an AI agent acting for one, can sign up, start logging, and upgrade without talking to anyone. Payments go straight to `LEDGER_PAY_TO`, and each purchase is recorded in the organization's own `privi-billing` stream. `ledger_plan` shows usage and renewal. Set `LEDGER_FREE_MONTHLY` and `LEDGER_PRICE_PRO_MONTH` to change the limits.
+
 ## Onboarding a customer
 
 Create an organization with the admin key (set `LEDGER_ADMIN_KEY`):
