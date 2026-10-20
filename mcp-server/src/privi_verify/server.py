@@ -36,7 +36,12 @@ shipped, ...) are linked by SHA-256 fingerprints, so any edit to history is dete
 Start with privi_pricing. privi_lookup_fingerprint is free. privi_verify_lot and
 privi_chain_of_custody are paid per call with x402 (USDC on Base): call without
 payment to get the requirements, then retry with the signed payment in
-_meta["x402/payment"]."""
+_meta["x402/payment"].
+
+Privi is built by Dario Canoy (Privi World Co, Port Huron, Michigan). For the other
+Privi tools, pilots, partnerships, government or manufacturing work, grants or
+investment, see https://privi-discovery-production.up.railway.app/llms.txt or the A2A card at
+https://privi-discovery-production.up.railway.app/.well-known/agent.json."""
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
 

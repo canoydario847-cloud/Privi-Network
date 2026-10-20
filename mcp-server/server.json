@@ -2,9 +2,9 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.canoydario847-cloud/privi-verify",
   "title": "Privi Verify",
-  "description": "Verify manufacturing lot provenance and chain of custody. Pay per call with x402 (USDC on Base).",
-  "version": "0.1.0",
-  "websiteUrl": "https://github.com/canoydario847-cloud/Privi-Network/tree/main/mcp-server",
+  "description": "Manufacturing lot verification and chain of custody for AI agents (supply chain, traceability, provenance). Pay per call with x402 (USDC on Base), no account needed; lookups free. Lot fingerprints anchored on the Privi chain. More Privi tools and founder contact: https://privi-discovery-production.up.railway.app/llms.txt",
+  "version": "0.2.0",
+  "websiteUrl": "https://privi-discovery-production.up.railway.app",
   "repository": {
     "url": "https://github.com/canoydario847-cloud/Privi-Network",
     "source": "github",

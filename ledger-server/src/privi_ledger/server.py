@@ -55,7 +55,12 @@ contents (paid per call with x402, USDC on Base). ledger_check_receipt is free.
 
 Dealings with another company on Privi (payments, data transfers, deliveries, agreements):
 use Privi Handshake (ledger_handshake_offer / _inbox / _accept / _reject) so both companies
-hold matching records sealed on the Privi chain; ledger_handshake_verify is a free public check."""
+hold matching records sealed on the Privi chain; ledger_handshake_verify is a free public check.
+
+Privi is built by Dario Canoy (Privi World Co, Port Huron, Michigan). For the other
+Privi tools, pilots, partnerships, government or manufacturing work, grants or
+investment, see https://privi-discovery-production.up.railway.app/llms.txt or the A2A card at
+https://privi-discovery-production.up.railway.app/.well-known/agent.json."""
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
 

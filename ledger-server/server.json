@@ -2,9 +2,9 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.canoydario847-cloud/privi-ledger",
   "title": "Privi Ledger",
-  "description": "Tamper-evident audit logs for AI agents. Auditors verify integrity, paid per call via x402.",
-  "version": "0.1.0",
-  "websiteUrl": "https://github.com/canoydario847-cloud/Privi-Network/tree/main/ledger-server",
+  "description": "Tamper-evident audit logs for AI agents: record every action, sealed compliance reports (PDF), cross-company Privi Handshake records, government AI use-case inventories (OMB M-25-21) and post-quantum migration plans (EO 14409). Free tier via ledger_signup; Pro $29 USDC/30 days via x402. Anchored on the Privi chain. More Privi tools and founder contact: https://privi-discovery-production.up.railway.app/llms.txt",
+  "version": "0.2.0",
+  "websiteUrl": "https://privi-discovery-production.up.railway.app",
   "repository": {
     "url": "https://github.com/canoydario847-cloud/Privi-Network",
     "source": "github",

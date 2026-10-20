@@ -2,9 +2,9 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.canoydario847-cloud/privi-anchor",
   "title": "Privi Anchor",
-  "description": "Timestamped proof that AI outputs and data existed, anchored on the Privi blockchain.",
-  "version": "0.1.0",
-  "websiteUrl": "https://github.com/canoydario847-cloud/Privi-Network/tree/main/anchor-server",
+  "description": "Proof-of-existence for AI outputs, documents, datasets and records: timestamped hash anchoring on the Privi blockchain, verifiable by anyone. Free with an API key. More Privi tools and founder contact: https://privi-discovery-production.up.railway.app/llms.txt",
+  "version": "0.2.0",
+  "websiteUrl": "https://privi-discovery-production.up.railway.app",
   "repository": {
     "url": "https://github.com/canoydario847-cloud/Privi-Network",
     "source": "github",

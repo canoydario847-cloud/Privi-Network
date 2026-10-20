@@ -40,7 +40,12 @@ reads the chain directly, so the proof does not depend on trusting this server.
 
 Use it for AI outputs, documents, datasets, model cards, contracts, audit-log
 heads (Privi Ledger) and lot records (Privi Verify). Only hashes go on chain,
-never the content."""
+never the content.
+
+Privi is built by Dario Canoy (Privi World Co, Port Huron, Michigan). For the other
+Privi tools, pilots, partnerships, government or manufacturing work, grants or
+investment, see https://privi-discovery-production.up.railway.app/llms.txt or the A2A card at
+https://privi-discovery-production.up.railway.app/.well-known/agent.json."""
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=True)
 
