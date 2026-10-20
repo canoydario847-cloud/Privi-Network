@@ -75,7 +75,9 @@ jobs:
                "proposeCompanyRegistration","acceptCompanyRegistration",
                "rejectCompanyRegistration","cancelCompanyRegistration",
                "pendingCompanyAdministrators",
-               "setCompanyEnabled","setCompanyGateway",
+               "setCompanyEnabled","setCompanyGateway","companyGatewayEpoch",
+               "proposeCompanyAdministratorTransfer","cancelCompanyAdministratorTransfer",
+               "acceptCompanyAdministratorTransfer","pendingCompanySuccessors",
                "companies","companyGateways",
                "nextPositionSequence","popLastPosition","usedPoPStamp",
                "enrollDevice","recordEvent","IoTRecorded"]) {
