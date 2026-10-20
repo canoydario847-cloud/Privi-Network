@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: '22'
       - name: Run gas charged vs treasury revenue accounting checks
-        run: node --test production-network/economics/test_gas_market.cjs production-network/economics/test_receipt_crosscheck.cjs
+        run: node --test production-network/economics/test_gas_market.cjs production-network/economics/test_receipt_crosscheck.cjs production-network/economics/test_agent_call_meter.cjs
       - name: Explicitly prevent any financial launch in fee-policy tests
         run: |
           set -euo pipefail
