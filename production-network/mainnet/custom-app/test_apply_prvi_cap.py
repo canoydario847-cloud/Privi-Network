@@ -211,9 +211,6 @@ class PatcherTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "exact reviewed"):
                 module.apply_patch(self.upstream, self.repo, verify_git=True)
 
-if __name__ == "__main__":
-    unittest.main()
-
     def test_bank_migration_exception_is_unique_and_mint_restricted(self):
         module.apply_patch(self.upstream, self.repo, verify_git=False)
         src = self.app_file.read_text(encoding="utf-8")
@@ -233,3 +230,6 @@ if __name__ == "__main__":
         with self.assertRaisesRegex(ValueError, "raw bank keeper leaked"):
             module.apply_patch(self.upstream, self.repo, verify_git=False)
         self.assertEqual(self.app_file.read_text(encoding="utf-8"),original)
+
+if __name__ == "__main__":
+    unittest.main()
