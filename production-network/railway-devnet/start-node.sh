@@ -51,25 +51,45 @@ fund_anchor() {
   to="$1"; amount="${ANCHOR_FUND_AMOUNT:-1000000000000000000000}"   # default 1000 TEST
   case "$amount" in *[!0-9]*|"") echo "anchor-fund: invalid amount" >&2; return 1;; esac
   case "$to" in *[!a-z0-9]*|"") echo "anchor-fund: invalid address" >&2; return 1;; esac
-  marker="/data/.anchor-funded-$to"
+  marker="/data/.anchor-funded-v2-$to"
   [ -e "$marker" ] && { echo "anchor-fund: already funded $to"; return 0; }
   n=0
   until evmd status >/dev/null 2>&1; do
     n=$((n + 1)); [ "$n" -gt 120 ] && { echo "anchor-fund: node not ready" >&2; return 1; }
     sleep 5
   done
-  sleep 15
+  sleep 45   # let the app mempool finish initializing after restart
   from=$(evmd keys list --keyring-backend test --home "$NODE_HOME" --output json | jq -r '.[0].name')
   from_addr=$(evmd keys show "$from" -a --keyring-backend test --home "$NODE_HOME")
   [ "${from_addr%%1*}" = "${to%%1*}" ] || { echo "anchor-fund: prefix mismatch ${from_addr%%1*} vs ${to%%1*}" >&2; return 1; }
-  out=$(evmd tx bank send "$from" "$to" "${amount}atest" --keyring-backend test --home "$NODE_HOME" \
-    --chain-id "$CHAIN_ID" --gas 300000 --fees 1000000000000000atest -y --output json 2>&1) || true
-  code=$(printf '%s' "$out" | jq -r '.code // empty' 2>/dev/null)
-  if [ "$code" = "0" ]; then
-    touch "$marker"; echo "anchor-fund: sent ${amount}atest to $to tx=$(printf '%s' "$out" | jq -r .txhash)"
-  else
-    echo "anchor-fund: send failed: $out" >&2
-  fi
+  attempt=0
+  while [ "$attempt" -lt 5 ]; do
+    attempt=$((attempt + 1))
+    out=$(evmd tx bank send "$from" "$to" "${amount}atest" --keyring-backend test --home "$NODE_HOME" \
+      --chain-id "$CHAIN_ID" --gas 300000 --fees 1000000000000000atest -y --output json 2>&1) || true
+    code=$(printf '%s' "$out" | jq -r '.code // empty' 2>/dev/null)
+    hash=$(printf '%s' "$out" | jq -r '.txhash // empty' 2>/dev/null)
+    if [ "$code" != "0" ] || [ -z "$hash" ]; then
+      echo "anchor-fund: attempt $attempt rejected: $out" >&2; sleep 20; continue
+    fi
+    echo "anchor-fund: attempt $attempt broadcast tx=$hash, waiting for a block"
+    w=0
+    while [ "$w" -lt 12 ]; do
+      sleep 5; w=$((w + 1))
+      q=$(evmd query tx "$hash" --output json 2>/dev/null) || continue
+      qc=$(printf '%s' "$q" | jq -r '.code // empty')
+      if [ "$qc" = "0" ]; then
+        touch "$marker"
+        echo "anchor-fund: CONFIRMED ${amount}atest to $to tx=$hash height=$(printf '%s' "$q" | jq -r .height)"
+        return 0
+      fi
+      echo "anchor-fund: tx $hash executed with code $qc: $(printf '%s' "$q" | jq -r .raw_log)" >&2
+      break
+    done
+    echo "anchor-fund: attempt $attempt not confirmed" >&2
+  done
+  echo "anchor-fund: giving up after $attempt attempts" >&2
+  return 1
 }
 if [ -n "${ANCHOR_FUND_BECH32:-}" ]; then
   ( fund_anchor "$ANCHOR_FUND_BECH32" ) &
