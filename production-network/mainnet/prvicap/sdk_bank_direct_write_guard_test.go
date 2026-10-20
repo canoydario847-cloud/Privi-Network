@@ -19,6 +19,7 @@ func TestAppFacingBankDeniesDirectNativeWritesButPermitsNormalSend(t *testing.T)
     minter:=authtypes.NewEmptyModuleAccount("genesisfixture",authtypes.Minter)
     // Normal SDK send consults LockedCoins and its account keeper.
     h.account.EXPECT().GetAccount(h.ctx,minter.GetAddress()).Return(minter).AnyTimes()
+    h.account.EXPECT().HasAccount(h.ctx,beneficiary).Return(true).AnyTimes()
     for _,amount:=range []int64{0,1,50} {
         err:=appBank.UncheckedSetBalance(h.ctx,beneficiary,sdk.NewInt64Coin(BaseDenom,amount))
         if !errors.Is(err,ErrDirectNativeBalanceWriteForbidden) {
