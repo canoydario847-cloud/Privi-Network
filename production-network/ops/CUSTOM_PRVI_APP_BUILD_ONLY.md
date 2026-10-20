@@ -43,9 +43,10 @@ module-facing `UncheckedSetBalance` method explicitly refuses native
 dependency to obtain a fresh raw `BaseKeeper` copy. Bank construction
 and object-store setup still happen before wrapping.
 
-This is **not a complete security resolution**: the adapter embeds the
-SDK raw keeper, which can still be extracted by Go type assertion. A
-different or previously retained `BaseKeeper`, direct SDK bank collection
+This is **not a complete security resolution**: the adapter now uses
+an *unexported interface field*, preventing ordinary module code from
+extracting the SDK raw keeper from the exposed wrapper. A different
+or previously retained `BaseKeeper`, direct SDK bank collection
 writes, IBC/EVM module changes, runtime upgrades, and within-block
 unauthorized balance reallocation can bypass the wrapper. A real SDK
 integration regression intentionally demonstrates that the original raw
