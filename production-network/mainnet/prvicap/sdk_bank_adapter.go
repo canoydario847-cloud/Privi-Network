@@ -53,6 +53,15 @@ func (bank *ModuleRestrictedBank) UncheckedSetBalance(
     ctx context.Context, address sdk.AccAddress, balance sdk.Coin,
 ) error {
     if balance.Denom == BaseDenom {
+        // Cosmos EVM x/vm.SetAccount invokes SetBalance even when it is
+        // only registering contract bytecode and the balance stays zero.
+        // Allow exactly a native balance NO-OP, without writing storage,
+        // minting, burning or changing supply. Any DIFFERENT native value
+        // always fails, even during InitChain or for a module address.
+        previous := bank.sealedBankInterface.GetBalance(ctx, address, BaseDenom)
+        if previous.Amount.Equal(balance.Amount) {
+            return nil
+        }
         return ErrDirectNativeBalanceForbidden
     }
     return bank.sealedBankInterface.UncheckedSetBalance(ctx, address, balance)
