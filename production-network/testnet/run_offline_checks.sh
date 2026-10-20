@@ -23,6 +23,19 @@ else
 fi
 # Verify the June 2026 Oracle Always Free CPU, RAM, storage and NO-SPEND policy.
 python3 "$ROOT/ops/oracle_free_pilot_preflight.py" "$ROOT/ops/oracle-always-free-pilot.candidate.json"
+# The founder's public EVM wallet must be the ONLY proposed control wallet.
+# Verify the owner policy, but explicitly prove it NEVER authorizes launch.
+python3 "$ROOT/ops/verify_privi_single_owner.py" "$ROOT/ops/privi_owner_wallet.candidate.json" --mode draft
+if python3 "$ROOT/ops/verify_privi_single_owner.py" "$ROOT/ops/privi_owner_wallet.candidate.json" --mode launch; then
+  echo "FATAL: draft founder wallet manifest authorized real financial mainnet" >&2
+  exit 1
+else
+  status=$?
+  if [[ "$status" -ne 3 ]]; then
+    echo "Owner wallet launch guard returned unexpected code $status" >&2
+    exit 1
+  fi
+fi
 # Owner-operated financial validators are a non-live, secret-free candidate.
 # Accept the four-node draft structure, but prove launch preflight NEVER passes.
 python3 "$ROOT/ops/owner_validator_preflight.py" "$ROOT/ops/owner-operated-validators.candidate.json" --mode draft
