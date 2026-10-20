@@ -61,6 +61,19 @@ Over stdio (e.g. Claude Desktop):
 
 Remote clients connect to `https://<your-host>/mcp`. `GET /health` returns status.
 
+## Make a test payment
+
+`scripts/test_payment.py` pays the live server exactly the way an AI agent would, using a throwaway Base Sepolia wallet (free testnet USDC, no real money):
+
+```bash
+pip install eth-account
+python scripts/test_payment.py --new-wallet   # prints a test wallet address
+# get testnet USDC at https://faucet.circle.com (Base Sepolia), then:
+python scripts/test_payment.py                 # pays $0.01, verifies DEMO-STEEL-0001, prints the tx link
+```
+
+The key is saved to `.agent-wallet` (git-ignored). The script refuses to pay on mainnet unless you pass `--allow-mainnet`.
+
 ## Deploy
 
 The `Dockerfile` runs on Railway, Render, Fly or any container host:

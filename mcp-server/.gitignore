@@ -8,3 +8,4 @@ build/
 .env
 *.db
 .pytest_cache/
+.agent-wallet
