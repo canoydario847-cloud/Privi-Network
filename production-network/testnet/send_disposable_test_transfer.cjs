@@ -11,6 +11,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const {aggregateFeeReceipts}=require("../economics/gas_market.cjs");
+const {assertReceiptAuditAgreement}=require("../economics/receipt_crosscheck.cjs");
 
 function invariant(test, message) { if (!test) throw new Error(message); }
 function localGate(environment, url) {
@@ -107,6 +108,9 @@ async function run(env = process.env) {
   const gross=aggregateFeeReceipts({
     chainId:262144,genesisHash:genesis.hash,receipts:[rawReceipt]
   });
+  const crosscheck=assertReceiptAuditAgreement(gross,audit);
+  invariant(crosscheck.ok===true && crosscheck.treasuryRevenueWei===null,
+    "auditor receipt crosscheck failed or inferred treasury revenue");
   const paid=BigInt(gross.observedChargedGasWei);
   invariant(paid>0n,"zero observed EVM gas charge is invalid");
   invariant(currentBalance-afterSender===amountWei+paid,
@@ -120,6 +124,7 @@ async function run(env = process.env) {
     block_number:receipt.blockNumber,confirmations:audit.confirmations,
     recipient_delta_wei:(got-before).toString(),
     receipt_audit:"PASS",
+    receipt_crosscheck:"PASS",
     fee_accounting:"EVM_REAL_DISPOSABLE_RECEIPT_ONLY",
     gross_gas_paid_wei:gross.observedChargedGasWei,
     verified_privi_treasury_revenue_wei:null,
