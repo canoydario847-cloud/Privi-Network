@@ -11,7 +11,8 @@ function fixture() {
   const {publicKey, privateKey} = crypto.generateKeyPairSync("ed25519");
   const spki = publicKey.export({format:"der",type:"spki"});
   const packet = {
-    version:2,companyId:"PRIVI_TEST_CO",deviceId:"sensor-01",sequence:1,observedAt:1760912345,
+    version:3,companyId:"PRIVI_TEST_CO",deviceId:"sensor-01",sequence:1,
+    positionSequence:1,observedAt:1760912345,
     popZone:"GRID/READINGS",eventType:"temperature",payload:{temperatureC:22,humidityPct:46}
   };
   const signature = crypto.sign(null, Buffer.from(packetDigest(packet).signingText,"utf8"),privateKey);
@@ -44,6 +45,7 @@ function mocks(f, config=configuration()) {
     runner:wallet,
     getAddress:async()=>config.contractAddress,
     developers:async()=>({registered:true,enabled:true}),
+    nextPositionSequence:async()=>1n,
     devices:async()=>({gateway:wallet.address,signingKeyHash:f.signingKeyHash,lastSequence:0n,
                         enabled:true,enrolled:true,companyIdHash:id.companyIdHash}),
     recordEvent:async (...args)=>{
@@ -59,7 +61,7 @@ function mocks(f, config=configuration()) {
       if (log.topic!=="privi-iot") throw Error("Wrong log");
       return {name:"IoTRecorded",args:{
         deviceIdHash:id.deviceIdHash,sequence:1n,eventHash:id.eventHash,
-        popStampHash:id.popStampHash
+        popStampHash:id.popStampHash,positionSequence:1n
       }};
     }}
   };
@@ -105,6 +107,7 @@ test("confirmed IoT event returns Privi tx hash and metadata, never mints",async
   assert.equal(result.payloadHash,packetDigest(f.packet).payloadHash);
   assert.equal(result.popStamp,"PoP:PRIVI_TEST_CO:GRID/READINGS:000001");
   assert.equal(result.popStampHash,packetDigest(f.packet).popStampHash);
+  assert.equal(result.positionSequence,1);
   assert.ok(result.blockTimestamp>0);
   assert.equal(m.getCalls(),1);
 });
@@ -144,6 +147,23 @@ test("revoked or unknown Privi developers are rejected without submitting",async
   m.contract.developers=async()=>({registered:true,enabled:false});
   await assert.rejects(()=>submitEvent(f.packet,{registry:f.registry,config,...m}),/Privi developer registration/);
   assert.equal(m.getCalls(),0);
+});
+
+test("a Privi company-zone PoP position cannot be skipped",async()=>{
+  const f=fixture(),config=configuration(),m=mocks(f,config);
+  m.contract.nextPositionSequence=async()=>2n;
+  await assert.rejects(()=>submitEvent(f.packet,{registry:f.registry,config,...m}),/company-zone position/);
+  assert.equal(m.getCalls(),0);
+});
+
+test("a log from a different contract cannot prove Privi PoP",async()=>{
+  const f=fixture(),config=configuration(),m=mocks(f,config);
+  m.contract.recordEvent=async()=>({
+    hash:"0x"+"9".repeat(64),wait:async()=>({status:1,blockNumber:41,
+    blockHash:"0x"+"8".repeat(64),
+    logs:[{address:"0x"+"7".repeat(40),topic:"privi-iot"}]
+  })});
+  await assert.rejects(()=>submitEvent(f.packet,{registry:f.registry,config,...m}),/matching Privi/);
 });
 
 test("missing matching mined receipt is rejected",async()=>{
