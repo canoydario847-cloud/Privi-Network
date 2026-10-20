@@ -56,6 +56,8 @@ def check(rpc, tx_hash, chain_id, sender, recipient, amount_wei, confirmations=1
     if hexint(receipt.get("status"),"receipt status")!=1:
         raise ValueError("transaction failed or receipt status not successful")
     height=hexint(receipt.get("blockNumber"),"receipt blockNumber")
+    if hexint(tx.get("blockNumber"),"transaction blockNumber")!=height:
+        raise ValueError("transaction and receipt block height disagreement")
     latest=hexint(rpc.call("eth_blockNumber"),"latest block")
     if height<1 or height>latest or (latest-height+1)<confirmations:
         raise ValueError("insufficient confirmations")
