@@ -87,9 +87,9 @@ func TestKeeperFailsClosedOnWrongIdentityOrTampering(t *testing.T){
         "wrong zone":func(p *Position){p.Zone="MARKET/TRADE"},
         "sequence gap":func(p *Position){p.Sequence=2},
         "wrong ancestor":func(p *Position){p.PriorHash="f"+zeroTip()[1:]},
-        "event substitution":func(p *Position){p.EventHash="1"+p.EventHash[1:]},
+        "event substitution":func(p *Position){if p.EventHash[0]=='0'{p.EventHash="1"+p.EventHash[1:]}else{p.EventHash="0"+p.EventHash[1:]}},
         "forged signature":func(p *Position){p.Signature[0]^=1},
-        "forged seal":func(p *Position){p.BlockHash="f"+p.BlockHash[1:]},
+        "forged seal":func(p *Position){if p.BlockHash[0]=='f'{p.BlockHash="0"+p.BlockHash[1:]}else{p.BlockHash="f"+p.BlockHash[1:]}},
         "missing signature":func(p *Position){p.Signature=nil},
     }{
         t.Run(name,func(t *testing.T){
