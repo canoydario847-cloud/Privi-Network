@@ -77,7 +77,7 @@ def check(rpc, tx_hash, chain_id, sender, recipient, amount_wei, confirmations=1
     signed_price=hexint(tx.get("gasPrice"),"transaction gasPrice")
     if signed_price<=0 or effective_price>signed_price:
         raise ValueError("receipt effective price exceeds transaction gas price")
-    return {"ok":True,"evm_chain_id":actual_chain,"genesis_hash":genesis_hash,"tx_hash":tx_hash,
+    return {"ok":True,"execution_succeeded":True,"evm_chain_id":actual_chain,"genesis_hash":genesis_hash,"tx_hash":tx_hash,
             "sender":sender,"recipient":recipient,"value_wei":str(amount_wei),
             "block_height":height,"block_hash":blockhash,"confirmations":latest-height+1,
             "gas_used":str(gas_used),"effective_gas_price_wei":str(effective_price),
