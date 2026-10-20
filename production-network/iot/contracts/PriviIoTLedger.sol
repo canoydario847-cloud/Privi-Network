@@ -78,6 +78,7 @@ contract PriviIoTLedger {
 
     event CompanyRegistrationProposed(bytes32 indexed companyIdHash, address indexed administrator);
     event CompanyRegistrationRejected(bytes32 indexed companyIdHash, address indexed administrator);
+    event CompanyRegistrationCancelled(bytes32 indexed companyIdHash, address indexed administrator);
     event CompanyRegistered(bytes32 indexed companyIdHash, address indexed administrator);
     event CompanyEnabled(bytes32 indexed companyIdHash, bool enabled);
     event CompanyGatewayAuthorized(bytes32 indexed companyIdHash, address indexed gateway, bool authorized);
@@ -160,6 +161,15 @@ contract PriviIoTLedger {
         if (msg.sender != administrator) revert NotCompanyAdministrator();
         delete pendingCompanyAdministrators[companyIdHash];
         emit CompanyRegistrationRejected(companyIdHash, administrator);
+    }
+
+    // The Privi operator can cancel a mistaken/unaccepted invitation.
+    // Cancellation never revokes or modifies an already accepted company.
+    function cancelCompanyRegistration(bytes32 companyIdHash) external onlyOwner {
+        address administrator = pendingCompanyAdministrators[companyIdHash];
+        if (administrator == address(0)) revert CompanyRegistrationNotPending();
+        delete pendingCompanyAdministrators[companyIdHash];
+        emit CompanyRegistrationCancelled(companyIdHash, administrator);
     }
 
     function setCompanyEnabled(bytes32 companyIdHash, bool enabled) external onlyOwner {
