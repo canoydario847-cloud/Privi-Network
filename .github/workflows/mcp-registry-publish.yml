@@ -1,9 +1,11 @@
 name: Publish MCP server to MCP Registry
 
-# Push a tag like mcp-server-v0.1.0 to publish mcp-server/server.json.
+# Publishes mcp-server/server.json whenever it changes on main.
+# Bump "version" in server.json for each new listing; the registry rejects duplicate versions.
 on:
   push:
-    tags: ["mcp-server-v*"]
+    branches: [main]
+    paths: ["mcp-server/server.json", ".github/workflows/mcp-registry-publish.yml"]
   workflow_dispatch:
 
 jobs:
