@@ -262,7 +262,8 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
 
 
 def startup_check(settings: Settings, chain: JsonRpcChain, store: AnchorStore) -> None:
-    """Log chain health; on first boot (ANCHOR_GENESIS=1, empty index) anchor and verify a genesis record."""
+    """Log chain health. With ANCHOR_GENESIS=1 and no confirmed anchor yet, wait (in the background)
+    until the wallet has gas, then anchor and verify a genesis record on chain."""
     log = lambda m: print(f"privi-anchor: {m}", flush=True)  # noqa: E731
     try:
         remote = chain.remote_chain_id()
@@ -271,26 +272,46 @@ def startup_check(settings: Settings, chain: JsonRpcChain, store: AnchorStore) -
         if remote != settings.chain_id:
             log("WARNING: chain ID mismatch; anchors would be signed for the wrong chain")
             return
-        if os.getenv("ANCHOR_GENESIS") != "1" or store.stats()["batches"]:
-            return
-        text = f"Privi Anchor genesis | Privi World Co | chain {settings.chain_id} | {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}"
-        leaf = hashlib.sha256(text.encode()).hexdigest()
-        root, proofs = merkle.build([leaf])
-        bid = store.new_batch(root, proofs, "genesis: " + text, "startup")
-        tx = chain.send_data(merkle.calldata(root))
-        store.update_batch(bid, tx_hash=tx, status="pending")
-        r = wait_receipt(chain, tx, 40)
-        if not r:
-            log(f"genesis anchor sent tx={tx}, not mined yet"); return
-        ok = int(r.get("status", "0x0"), 16) == 1
-        block = int(r["blockNumber"], 16)
-        onchain = merkle.root_from_calldata((chain.transaction(tx) or {}).get("input", ""))
-        ts = chain.block_timestamp(block) if ok else None
-        store.update_batch(bid, status="confirmed" if ok else "failed", block_number=block, block_time=ts)
-        log(f"genesis anchor {'CONFIRMED' if ok and onchain == root else 'FAILED'} text='{text}' hash={leaf} "
-            f"tx={tx} block={block} time={ts} onchain_root_matches={onchain == root}")
-    except Exception as e:  # never block serving
+    except Exception as e:
         log(f"startup check error: {e}")
+        return
+    if os.getenv("ANCHOR_GENESIS") == "1" and not store.stats()["confirmed_batches"]:
+        import threading
+        threading.Thread(target=_genesis, args=(settings, chain, store, log), daemon=True).start()
+
+
+def _genesis(settings: Settings, chain: JsonRpcChain, store: AnchorStore, log) -> None:
+    for _ in range(60):  # up to ~20 minutes for gas to arrive
+        try:
+            if chain.balance_wei() > 0:
+                break
+        except Exception:
+            pass
+        time.sleep(20)
+    else:
+        log("genesis anchor skipped: wallet still has no gas"); return
+    log(f"wallet funded: balance_wei={chain.balance_wei()}")
+    text = (f"Privi Anchor genesis | Privi World Co | chain {settings.chain_id} | "
+            f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}")
+    leaf = hashlib.sha256(text.encode()).hexdigest()
+    root, proofs = merkle.build([leaf])
+    bid = store.new_batch(root, proofs, "genesis: " + text, "startup")
+    try:
+        tx = chain.send_data(merkle.calldata(root))
+    except Exception as e:
+        store.update_batch(bid, status="failed", error=str(e)[:500])
+        log(f"genesis anchor send failed: {e}"); return
+    store.update_batch(bid, tx_hash=tx, status="pending")
+    r = wait_receipt(chain, tx, 60)
+    if not r:
+        log(f"genesis anchor sent tx={tx}, not mined yet"); return
+    ok = int(r.get("status", "0x0"), 16) == 1
+    block = int(r["blockNumber"], 16)
+    onchain = merkle.root_from_calldata((chain.transaction(tx) or {}).get("input", ""))
+    ts = chain.block_timestamp(block) if ok else None
+    store.update_batch(bid, status="confirmed" if ok else "failed", block_number=block, block_time=ts)
+    log(f"genesis anchor {'CONFIRMED' if ok and onchain == root else 'FAILED'} text='{text}' hash={leaf} "
+        f"tx={tx} block={block} time={ts} onchain_root_matches={onchain == root}")
 
 
 def main() -> None:
