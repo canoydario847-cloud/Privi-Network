@@ -47,6 +47,19 @@ regression also confirms an authorized burn never makes minting permissible
   may bypass the mint callback. The block-boundary reconciliation cannot
   detect unauthorized burn/remint cycles when ending net supply remains
   at or below original genesis issuance, nor all within-block mutations.
+  **A real pinned Cosmos SDK + committed LevelDB regression fixture now
+  demonstrates this blind spot:** writing 99 native units back to one
+  account and 1 to another via unchecked setters leaves total supply at
+  100 and `Keeper.Reconcile` passes, including after database reopen.
+  Thus the existing conservation check is NOT an account authorization
+  or transaction provenance check. Financial activation must remain
+  blocked until all native balance writes are restricted to reviewed
+  authorization paths, with invariant/transaction-level tests proving
+  this independently. Neither record of consensus totals nor a
+  third-party legal approval substitutes for this engineering control.
+  A separate corruption fixture writes an invalid immutable cap record
+  into the actual SDK consensus store and verifies native mint and
+  reconciliation fail closed after LevelDB reopen.
 - Walking *all* account balances twice per block is O(number of account
   balance records), not just the number of accounts holding `aprvi`. An
   explicitly synthetic benchmark now runs at 10, 1,000, and 100,000 records
