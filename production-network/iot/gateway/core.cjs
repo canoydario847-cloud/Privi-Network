@@ -8,6 +8,7 @@ const crypto = require("node:crypto");
 
 const HEX32 = /^0x[0-9a-fA-F]{64}$/;
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+const POP_ZONES = new Set(["GRID/READINGS","FLEET/ASSETS","ENERGY/READINGS","IOT/GENERAL","ASSETS/VALUE"]);
 const FORBIDDEN_EVM_CHAINS = new Set([
   1, 10, 56, 97, 137, 250, 42161, 43114, 8453, 84532, 11155111
 ]);
@@ -42,7 +43,11 @@ function canonical(value, depth = 0) {
 
 function packetDigest(packet) {
   must(packet && typeof packet === "object" && !Array.isArray(packet), "Invalid event packet");
-  must(packet.version === 1, "Unsupported event version");
+  must(packet.version === 2, "PoP-v2 signed event required");
+  must(typeof packet.companyId === "string" && /^[A-Z0-9_-]{1,24}$/.test(packet.companyId),
+       "Privi PoP company ID required");
+  must(typeof packet.popZone === "string" && POP_ZONES.has(packet.popZone),
+       "Invalid Privi PoP zone");
   must(typeof packet.deviceId === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(packet.deviceId),
        "Invalid device identifier");
   must(Number.isSafeInteger(packet.sequence) && packet.sequence > 0, "Invalid sequence");
@@ -54,13 +59,18 @@ function packetDigest(packet) {
   const payloadText = canonical(packet.payload);
   must(Buffer.byteLength(payloadText) <= 16384, "Payload too large");
   const payloadHash = sha(Buffer.from(payloadText, "utf8"));
+  const popStamp = `PoP:${packet.companyId}:${packet.popZone}:${String(packet.sequence).padStart(6,"0")}`;
   const signingText = JSON.stringify([
-    packet.version, packet.deviceId, packet.sequence, packet.observedAt, packet.eventType, payloadHash
+    packet.version, packet.companyId, packet.deviceId, packet.sequence,
+    packet.observedAt, packet.popZone, popStamp, packet.eventType, payloadHash
   ]);
   return {
     signingText,
     eventHash: sha(Buffer.from(signingText, "utf8")),
     deviceIdHash: sha(Buffer.from(packet.deviceId, "utf8")),
+    companyIdHash: sha(Buffer.from(packet.companyId, "utf8")),
+    popStamp, popStampHash: sha(Buffer.from(popStamp, "utf8")),
+    popZoneHash: sha(Buffer.from(packet.popZone, "utf8")),
     eventTypeHash: sha(Buffer.from(packet.eventType, "utf8")),
     payloadHash
   };
@@ -163,12 +173,15 @@ async function submitEvent(packet, {registry, config, provider, wallet, contract
        "Gateway not authorized for this device on Privi");
   must(String(field(device, "signingKeyHash", 1)).toLowerCase() === event.signingKeyHash.toLowerCase(),
        "Device key does not match the Privi enrollment");
+  must(String(field(device, "companyIdHash", 5)).toLowerCase() === event.companyIdHash.toLowerCase(),
+       "Privi PoP company position does not match device enrollment");
   must(BigInt(field(device, "lastSequence", 2)) + 1n === event.sequence,
        "Device sequence is not the next Privi transaction");
 
   const tx = await contract.recordEvent(
     event.deviceIdHash, event.sequence, event.observedAt,
-    event.eventTypeHash, event.payloadHash, event.eventHash, event.signatureHash
+    event.eventTypeHash, event.payloadHash, event.eventHash, event.signatureHash,
+    event.popStampHash, event.popZoneHash
   );
   must(tx && /^0x[0-9a-fA-F]{64}$/.test(tx.hash) && typeof tx.wait === "function",
        "No Privi transaction hash returned");
@@ -180,15 +193,18 @@ async function submitEvent(packet, {registry, config, provider, wallet, contract
       return decoded && decoded.name === "IoTRecorded" &&
              String(decoded.args.deviceIdHash || decoded.args[0]).toLowerCase() === event.deviceIdHash.toLowerCase() &&
              BigInt(decoded.args.sequence || decoded.args[1]) === event.sequence &&
-             String(decoded.args.eventHash || decoded.args[2]).toLowerCase() === event.eventHash.toLowerCase();
+             String(decoded.args.eventHash || decoded.args[2]).toLowerCase() === event.eventHash.toLowerCase() &&
+             String(decoded.args.popStampHash || decoded.args[7]).toLowerCase() === event.popStampHash.toLowerCase();
     } catch (_) { return false; }
   });
   must(matched, "Missing matching Privi IoTRecorded receipt log");
   return {chainId: config.chainId, transactionHash: tx.hash, blockNumber: receipt.blockNumber,
           deviceIdHash: event.deviceIdHash, payloadHash: event.payloadHash,
           eventHash: event.eventHash, sequence: packet.sequence,
+          popStamp: event.popStamp, popStampHash: event.popStampHash,
+          popZoneHash: event.popZoneHash, companyIdHash: event.companyIdHash,
           confirmations: config.confirmations};
 }
 
 module.exports = {sha, canonical, packetDigest, verifyDevicePacket, validateNetworkConfig,
-                  assertPriviChain, submitEvent, FORBIDDEN_EVM_CHAINS};
+                  assertPriviChain, submitEvent, FORBIDDEN_EVM_CHAINS, POP_ZONES};
