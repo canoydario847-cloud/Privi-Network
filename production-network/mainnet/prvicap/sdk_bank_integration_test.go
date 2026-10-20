@@ -3,6 +3,7 @@ package prvicap
 import (
  "bytes"
  "errors"
+ "reflect"
  "testing"
  "time"
 
@@ -307,5 +308,24 @@ func TestUnrestrictedRawKeeperStillBypassesModuleFacingSetterDenial(t *testing.T
  }
  if err:=h.cap.Reconcile(h.ctx,guarded);!errors.Is(err,ErrUnexpectedSupply) {
    t.Fatalf("untracked native write must be detected by reconciliation: %v",err)
+ }
+}
+
+func TestModuleBankDoesNotExposeRawSDKBaseKeeperViaPublicStructField(t *testing.T) {
+ h:=newRealBankHarness(t)
+ guarded:=RestrictedBank(h.bank,h.cap)
+ if _,ok:=any(guarded).(bankkeeper.BaseKeeper);ok {
+   t.Fatal("wrapped module dependency cannot itself be a raw SDK BaseKeeper")
+ }
+ typ:=reflect.TypeOf(*guarded)
+ if typ.Kind()!=reflect.Struct {t.Fatal("expected private module wrapper")}
+ for i:=0;i<typ.NumField();i++ {
+   field:=typ.Field(i)
+   if field.IsExported() {
+     t.Fatalf("raw SDK module banking implementation is exposed in public field %s",field.Name)
+   }
+ }
+ if typ.NumField()!=1 || typ.Field(0).Type.Kind()!=reflect.Interface {
+   t.Fatal("module bank must keep its SDK backing keeper in exactly one private interface")
  }
 }
