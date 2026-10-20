@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "network": "privi-financial-candidate-NOT_DEPLOYED",
+  "owner_legal_entity": "Privi World Corp",
+  "owner_founder": "Dario Canoy",
+  "founder_public_wallet": "0x1990589FD200E043b8C6FD9ec5956c61b3071048",
+  "operator": "Privi World Corp",
+  "governance_model": "single-operator-permissioned",
+  "independent_operator_count": 1,
+  "administrator_wallets": [
+    "0x1990589FD200E043b8C6FD9ec5956c61b3071048"
+  ],
+  "network_owner_wallet": "0x1990589FD200E043b8C6FD9ec5956c61b3071048",
+  "governance_admin_wallet": "0x1990589FD200E043b8C6FD9ec5956c61b3071048",
+  "treasury_controller_wallet": "0x1990589FD200E043b8C6FD9ec5956c61b3071048",
+  "recovery_guardians": [],
+  "multisig_owners": [],
+  "delegate_administrators": [],
+  "validator_operator_count": 1,
+  "proposed_native_symbol": "PRVI",
+  "proposed_max_supply_whole_prvi": 1000000000,
+  "third_party_token_bridges": false,
+  "startup_consensus": "Point of Position REQUIRED NOT IMPLEMENTED",
+  "real_prvi_issuance_enabled": false,
+  "financial_launch_enabled": false,
+  "signed_genesis_sha256": "UNASSIGNED",
+  "native_pop_release_sha256": "UNASSIGNED",
+  "production_validator_attestations": "UNASSIGNED",
+  "status": "DRAFT_ONLY_NOT_LIVE",
+  "caution": "Wallet fields are unsigned intentions only. No on-chain control, native PoP genesis, live validators or production issuance."
+}
