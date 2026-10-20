@@ -1,4 +1,4 @@
-package keeper
+package keeper_test
 
 // Compiled only into a disposable copied Cosmos SDK v0.54.3 source tree.
 // Exercises the concrete SDK keeper, its real bank collection store and
@@ -17,6 +17,7 @@ import (
     sdk "github.com/cosmos/cosmos-sdk/types"
     moduletestutil "github.com/cosmos/cosmos-sdk/types/module/testutil"
     authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+    bankkeeper "github.com/cosmos/cosmos-sdk/x/bank/keeper"
     banktestutil "github.com/cosmos/cosmos-sdk/x/bank/testutil"
     banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
     govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
@@ -32,10 +33,11 @@ func TestPriviNativeDirectSetterDeniedWithConcreteBaseKeeper(t *testing.T) {
     ak:=banktestutil.NewMockAccountKeeper(ctrl)
     ak.EXPECT().AddressCodec().Return(address.NewBech32Codec("cosmos")).AnyTimes()
     cfg:=moduletestutil.MakeTestEncodingConfig()
-    k:=NewBaseKeeper(cfg.Codec,runtime.NewKVStoreService(key),ak,
+    k:=bankkeeper.NewBaseKeeper(cfg.Codec,runtime.NewKVStoreService(key),ak,
         map[string]bool{},authtypes.NewModuleAddress(govtypes.ModuleName).String(),
         log.NewNopLogger()).WithObjStoreKey(objKey)
-    src:=sdk.AccAddress(bytes.Repeat([]byte{0x22},20))
+    minter:=authtypes.NewEmptyModuleAccount("genesisfixture",authtypes.Minter)
+    src:=minter.GetAddress()
     dst:=sdk.AccAddress(bytes.Repeat([]byte{0x33},20))
 
     // An idempotent zero write is necessary for EVM precompile genesis.
@@ -44,7 +46,8 @@ func TestPriviNativeDirectSetterDeniedWithConcreteBaseKeeper(t *testing.T) {
     }
     // This protected package-only balance mutation represents reviewed
     // upstream bank internal transfer/mint logic, NOT a public SDK API.
-    if err:=k.priviSetBalanceInternal(ctx,src,sdk.NewInt64Coin("aprvi",100));err!=nil {
+    ak.EXPECT().GetModuleAccount(ctx,"genesisfixture").Return(minter)
+    if err:=k.MintCoins(ctx,"genesisfixture",sdk.NewCoins(sdk.NewInt64Coin("aprvi",100)));err!=nil {
         t.Fatal(err)
     }
     if err:=k.UncheckedSetBalance(ctx,src,sdk.NewInt64Coin("aprvi",100));err!=nil {
@@ -62,7 +65,7 @@ func TestPriviNativeDirectSetterDeniedWithConcreteBaseKeeper(t *testing.T) {
     }
     // Legitimate bank transfers use private bank internals after this patch,
     // rather than the public unchecked setter. Preserve ordinary send behavior.
-    ak.EXPECT().GetAccount(ctx,src).Return(authtypes.NewBaseAccountWithAddress(src))
+    ak.EXPECT().GetAccount(ctx,src).Return(minter)
     ak.EXPECT().HasAccount(ctx,dst).Return(true)
     if err:=k.SendCoins(ctx,src,dst,sdk.NewCoins(sdk.NewInt64Coin("aprvi",1)));err!=nil {
         t.Fatalf("legitimate SDK native send failed: %v",err)
@@ -78,6 +81,6 @@ func TestPriviNativeDirectSetterDeniedWithConcreteBaseKeeper(t *testing.T) {
 }
 
 func TestPriviConcreteBankTypeUnchanged(t *testing.T) {
-    var _ SendKeeper = BaseSendKeeper{}
-    var _ Keeper = BaseKeeper{}
+    var _ bankkeeper.SendKeeper = bankkeeper.BaseSendKeeper{}
+    var _ bankkeeper.Keeper = bankkeeper.BaseKeeper{}
 }
