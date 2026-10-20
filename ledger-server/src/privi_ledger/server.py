@@ -1266,8 +1266,9 @@ def first_report(mcp: MCPServer, ledger: Ledger, delay_s: float = 75.0) -> None:
     """LEDGER_BOOTSTRAP_REPORT=1: once, issue a sealed compliance report for the bootstrap organization."""
     key = os.getenv("LEDGER_BOOTSTRAP_ORG_KEY", "")
     org = ledger.org_for_key(key)
-    if not org or ledger._db.execute("SELECT 1 FROM reports WHERE org_id=?", (org["org_id"],)).fetchone():
-        return
+    if not org or any(json.loads(r["attestation"]).get("anchored") for r in ledger._db.execute(
+            "SELECT attestation FROM reports WHERE org_id=?", (org["org_id"],)).fetchall()):
+        return   # an anchored report already exists; unanchored ones (e.g. issued before gas) are re-issued
 
     def run() -> None:
         time.sleep(delay_s)  # let the checkpoint loop anchor the logs first
@@ -1291,12 +1292,17 @@ def first_report(mcp: MCPServer, ledger: Ledger, delay_s: float = 75.0) -> None:
     threading.Thread(target=run, daemon=True).start()
 
 
-def first_passport(mcp: MCPServer, ledger: Ledger, delay_s: float = 90.0) -> None:
+def first_passport(mcp: MCPServer, ledger: Ledger, delay_s: float = 150.0) -> None:
     """LEDGER_BOOTSTRAP_PASSPORT=1: once, issue an organization passport for the bootstrap organization."""
     key = os.getenv("LEDGER_BOOTSTRAP_ORG_KEY", "")
     org = ledger.org_for_key(key)
-    if not org or ledger._db.execute("SELECT 1 FROM passports WHERE org_id=?", (org["org_id"],)).fetchone():
+    if not org:
         return
+    rows = ledger._db.execute("SELECT passport_id, attestation FROM passports WHERE org_id=? AND revoked_at IS NULL",
+                              (org["org_id"],)).fetchall()
+    if any(json.loads(r["attestation"]).get("anchored") for r in rows):
+        return   # an anchored passport already exists
+    stale = [r["passport_id"] for r in rows]
 
     def run() -> None:
         time.sleep(delay_s)
@@ -1309,6 +1315,14 @@ def first_passport(mcp: MCPServer, ledger: Ledger, delay_s: float = 90.0) -> Non
                     return (await c.call_tool("passport_issue", {})).structured_content
             r = anyio.run(call)
             a = r.get("attestation", {})
+            if a.get("anchored") and stale:
+                with ledger._lock:
+                    ledger._db.executemany(
+                        "UPDATE passports SET revoked_at=?, revoke_reason=? WHERE passport_id=? AND revoked_at IS NULL",
+                        [(time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime()),
+                          f"superseded by {r.get('passport_id')} (issued before on-chain anchoring was funded)", pid)
+                         for pid in stale])
+                    ledger._db.commit()
             print(f"privi-ledger: first passport {r.get('passport_id')} for {org['name']}: grade={r.get('grade')} "
                   f"score={r.get('score')} anchored={a.get('anchored')} tx={a.get('tx_hash')} block={a.get('block_number')} "
                   f"url={r.get('public_url')}", flush=True)
