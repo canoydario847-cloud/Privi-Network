@@ -14,9 +14,10 @@ const { submitEvent, verifyDevicePacket, validateNetworkConfig } = require("./co
 
 const ABI = [
   "function developers(address) view returns (bool registered, bool enabled)",
+  "function nextPositionSequence(bytes32 companyIdHash,bytes32 popZoneHash) view returns (uint64)",
   "function devices(bytes32) view returns (address gateway, bytes32 signingKeyHash, uint64 lastSequence, bool enabled, bool enrolled, bytes32 companyIdHash)",
-  "function recordEvent(bytes32 deviceIdHash,uint64 sequence,uint64 observedAt,bytes32 eventTypeHash,bytes32 payloadHash,bytes32 eventHash,bytes32 signatureHash,bytes32 popStampHash,bytes32 popZoneHash)",
-  "event IoTRecorded(bytes32 indexed deviceIdHash,uint64 indexed sequence,bytes32 indexed eventHash,bytes32 payloadHash,bytes32 eventTypeHash,bytes32 signatureHash,uint64 observedAt,bytes32 popStampHash,bytes32 popZoneHash)"
+  "function recordEvent(bytes32 deviceIdHash,uint64 sequence,uint64 observedAt,bytes32 eventTypeHash,bytes32 payloadHash,bytes32 eventHash,bytes32 signatureHash,bytes32 popStampHash,bytes32 popZoneHash,uint64 positionSequence)",
+  "event IoTRecorded(bytes32 indexed deviceIdHash,uint64 indexed sequence,bytes32 indexed eventHash,bytes32 payloadHash,bytes32 eventTypeHash,bytes32 signatureHash,uint64 observedAt,bytes32 popStampHash,bytes32 popZoneHash,uint64 positionSequence)"
 ];
 
 function parseFile(envKey, maxSize = 131072) {
