@@ -34,6 +34,10 @@ def check(rpc, tx_hash, chain_id, sender, recipient, amount_wei, confirmations=1
     actual_chain=hexint(rpc.call("eth_chainId"),"eth_chainId")
     if actual_chain!=chain_id:
         raise ValueError("EVM chain ID mismatch: expected %d, observed %d"%(chain_id,actual_chain))
+    genesis=rpc.call("eth_getBlockByNumber",["0x0",False])
+    genesis_hash=genesis.get("hash") if isinstance(genesis,dict) else None
+    if not isinstance(genesis_hash,str) or not TXHASH.fullmatch(genesis_hash):
+        raise ValueError("missing valid developer genesis block hash")
     tx=rpc.call("eth_getTransactionByHash",[tx_hash])
     receipt=rpc.call("eth_getTransactionReceipt",[tx_hash])
     if not isinstance(tx,dict) or not isinstance(receipt,dict):
@@ -73,7 +77,7 @@ def check(rpc, tx_hash, chain_id, sender, recipient, amount_wei, confirmations=1
     signed_price=hexint(tx.get("gasPrice"),"transaction gasPrice")
     if signed_price<=0 or effective_price>signed_price:
         raise ValueError("receipt effective price exceeds transaction gas price")
-    return {"ok":True,"evm_chain_id":actual_chain,"tx_hash":tx_hash,
+    return {"ok":True,"evm_chain_id":actual_chain,"genesis_hash":genesis_hash,"tx_hash":tx_hash,
             "sender":sender,"recipient":recipient,"value_wei":str(amount_wei),
             "block_height":height,"block_hash":blockhash,"confirmations":latest-height+1,
             "gas_used":str(gas_used),"effective_gas_price_wei":str(effective_price),
