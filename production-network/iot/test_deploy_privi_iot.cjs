@@ -122,11 +122,30 @@ async function run(env = process.env) {
     to:companyAdmin.address,value:GAS_PRICE * 1000000n,gasLimit:30000n,
     gasPrice:GAS_PRICE,type:0
   }));
-  await confirmed(await contract.registerCompany(e1.companyIdHash,companyAdmin.address,
+  await confirmed(await contract.proposeCompanyRegistration(
+    e1.companyIdHash,companyAdmin.address,
     {gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
+  // Platform proposal must NOT register, activate or grant any company feature.
+  const proposed=await contract.companies(e1.companyIdHash);
+  assert.equal(proposed.registered,false,"Privi administrator proposal is not company opt-in");
+  assert.equal(await contract.pendingCompanyAdministrators(e1.companyIdHash),
+    companyAdmin.address);
+  await assert.rejects(
+    contract.acceptCompanyRegistration.staticCall(e1.companyIdHash),
+    "platform owner cannot accept on behalf of company"
+  );
+  await assert.rejects(
+    contract.enrollDevice.staticCall(e1.deviceIdHash,e1.signingKeyHash,e1.companyIdHash,wallet.address),
+    "company proposal alone cannot authorize its devices"
+  );
+  await confirmed(await contract.connect(companyAdmin).acceptCompanyRegistration(
+    e1.companyIdHash,{gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
+  assert.equal((await contract.companies(e1.companyIdHash)).registered,true);
+  assert.equal(await contract.pendingCompanyAdministrators(e1.companyIdHash),
+    ethers.ZeroAddress);
   await assert.rejects(
     contract.setCompanyGateway.staticCall(e1.companyIdHash,wallet.address,true),
-    "platform owner cannot bypass independent company consent"
+    "platform owner cannot bypass independent company gateway consent"
   );
   await assert.rejects(
     contract.enrollDevice.staticCall(e1.deviceIdHash,e1.signingKeyHash,e1.companyIdHash,wallet.address),
@@ -187,7 +206,7 @@ async function run(env = process.env) {
     first_position:recorded1.popStamp,
     second_position:recorded2.popStamp,
     second_transaction:recorded2.transactionHash,
-    company_enrollment:"enforced",
+    company_enrollment:"two_phase_independent_consent_enforced",
     company_gateway_authorization:"enforced_independent_administrator",
     company_suspension_and_revocation:"enforced",
     developer_enrollment:"enforced",
