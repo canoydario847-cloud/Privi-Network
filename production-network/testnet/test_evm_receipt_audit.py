@@ -61,6 +61,20 @@ class EVMReceiptTests(unittest.TestCase):
         self.rpc.values["eth_getTransactionReceipt"]["effectiveGasPrice"]="1.5"
         with self.assertRaisesRegex(ValueError,"receipt effectiveGasPrice"):
             self.verify()
+    def test_missing_or_malformed_genesis_hash_fails_closed(self):
+        for genesis in (None, {}, {"hash":"invalid"}):
+            with self.subTest(genesis=genesis):
+                original=self.rpc.call
+                def mock_call(method,params=None):
+                    if method=="eth_getBlockByNumber" and params==["0x0",False]:
+                        return genesis
+                    return original(method,params)
+                self.rpc.call=mock_call
+                try:
+                    with self.assertRaisesRegex(ValueError,"genesis block hash"):
+                        self.verify()
+                finally:
+                    self.rpc.call=original
     def test_wrong_network(self):
         with self.assertRaisesRegex(ValueError,"EVM chain ID mismatch"):
             mod.check(self.rpc,HASH,4221,FROM,TO,100)
