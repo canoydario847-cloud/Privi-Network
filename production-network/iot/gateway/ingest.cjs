@@ -14,6 +14,8 @@ const { submitEvent, verifyDevicePacket, validateNetworkConfig } = require("./co
 
 const ABI = [
   "function developers(address) view returns (bool registered, bool enabled)",
+  "function companies(bytes32) view returns (address administrator, bool registered, bool enabled)",
+  "function companyGateways(bytes32,address) view returns (bool)",
   "function nextPositionSequence(bytes32 companyIdHash,bytes32 popZoneHash) view returns (uint64)",
   "function devices(bytes32) view returns (address gateway, bytes32 signingKeyHash, uint64 lastSequence, bool enabled, bool enrolled, bytes32 companyIdHash)",
   "function recordEvent(bytes32 deviceIdHash,uint64 sequence,uint64 observedAt,bytes32 eventTypeHash,bytes32 payloadHash,bytes32 eventHash,bytes32 signatureHash,bytes32 popStampHash,bytes32 popZoneHash,uint64 positionSequence)",

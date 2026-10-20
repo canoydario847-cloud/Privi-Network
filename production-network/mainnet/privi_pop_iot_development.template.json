@@ -16,6 +16,9 @@
     "receipt_and_genesis_verification": true,
     "local_ai_metadata_minimization": true,
     "no_external_bridge_or_pairing": true,
-    "no_automatic_prvi_mint": true
+    "no_automatic_prvi_mint": true,
+    "enterprise_company_registry": true,
+    "company_authorized_gateway": true,
+    "company_suspension_enforced": true
   }
 }

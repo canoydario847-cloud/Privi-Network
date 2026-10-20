@@ -111,6 +111,30 @@ async function run(env = process.env) {
   );
   await confirmed(await contract.registerDeveloper(wallet.address,
     {gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
+  // A registered developer is NOT enough: company participation and
+  // explicit company administrator authorization are separate prerequisites.
+  await assert.rejects(
+    contract.enrollDevice.staticCall(e1.deviceIdHash,e1.signingKeyHash,e1.companyIdHash,wallet.address),
+    "company must be registered and authorize this Privi developer"
+  );
+  const companyAdmin=ethers.Wallet.createRandom().connect(provider);
+  await confirmed(await wallet.sendTransaction({
+    to:companyAdmin.address,value:GAS_PRICE * 1000000n,gasLimit:30000n,
+    gasPrice:GAS_PRICE,type:0
+  }));
+  await confirmed(await contract.registerCompany(e1.companyIdHash,companyAdmin.address,
+    {gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
+  await assert.rejects(
+    contract.setCompanyGateway.staticCall(e1.companyIdHash,wallet.address,true),
+    "platform owner cannot bypass independent company consent"
+  );
+  await assert.rejects(
+    contract.enrollDevice.staticCall(e1.deviceIdHash,e1.signingKeyHash,e1.companyIdHash,wallet.address),
+    "company must approve its Privi developer gateway"
+  );
+  await confirmed(await contract.connect(companyAdmin).setCompanyGateway(
+    e1.companyIdHash,wallet.address,true,
+    {gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
 
   await confirmed(await contract.enrollDevice(e1.deviceIdHash,e1.signingKeyHash,e1.companyIdHash,wallet.address,
     {gasLimit:300000n,gasPrice:GAS_PRICE,type:0}));
@@ -133,9 +157,25 @@ async function run(env = process.env) {
   await assert.rejects(submitEvent(packet1,common),
     "an already sealed PoP event must not be submitted again");
 
-  await confirmed(await contract.setDeveloperEnabled(wallet.address,false,
+  // Company suspension blocks all its developers and devices immediately.
+  await confirmed(await contract.setCompanyEnabled(e1.companyIdHash,false,
     {gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
   const packet3=eventPacket(pair1.privateKey,"grid.sensorA",2,3);
+  await assert.rejects(submitEvent(packet3,common),
+    "suspended Privi companies must not submit");
+  await confirmed(await contract.setCompanyEnabled(e1.companyIdHash,true,
+    {gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
+  await confirmed(await contract.connect(companyAdmin).setCompanyGateway(
+    e1.companyIdHash,wallet.address,false,
+    {gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
+  await assert.rejects(submitEvent(packet3,common),
+    "company revocation of a gateway must block this developer");
+  await confirmed(await contract.connect(companyAdmin).setCompanyGateway(
+    e1.companyIdHash,wallet.address,true,
+    {gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
+
+  await confirmed(await contract.setDeveloperEnabled(wallet.address,false,
+    {gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
   await assert.rejects(submitEvent(packet3,common),
     "revoked Privi developers must be blocked before a transaction");
 
@@ -147,6 +187,9 @@ async function run(env = process.env) {
     first_position:recorded1.popStamp,
     second_position:recorded2.popStamp,
     second_transaction:recorded2.transactionHash,
+    company_enrollment:"enforced",
+    company_gateway_authorization:"enforced_independent_administrator",
+    company_suspension_and_revocation:"enforced",
     developer_enrollment:"enforced",
     developer_revocation:"enforced",
     second_sensor_position:"company-zone ordered",

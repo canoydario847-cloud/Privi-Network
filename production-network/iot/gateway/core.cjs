@@ -160,6 +160,7 @@ async function submitEvent(packet, {registry, config, provider, wallet, contract
   must(contract && wallet.provider === provider && contract.runner === wallet,
        "Gateway signer and contract must use the pinned Privi provider");
   must(typeof contract.developers === "function" && typeof contract.devices === "function" &&
+       typeof contract.companies === "function" && typeof contract.companyGateways === "function" &&
        typeof contract.nextPositionSequence === "function" &&
        typeof contract.recordEvent === "function" &&
        contract.interface && typeof contract.interface.parseLog === "function",
@@ -171,6 +172,11 @@ async function submitEvent(packet, {registry, config, provider, wallet, contract
   must(field(developer, "registered", 0) === true &&
        field(developer, "enabled", 1) === true,
        "Privi developer registration missing or revoked");
+  const company = await contract.companies(event.companyIdHash);
+  must(field(company, "registered", 1) === true && field(company, "enabled", 2) === true,
+       "Company must be registered and enabled on Privi");
+  const companyAuthorized = await contract.companyGateways(event.companyIdHash, wallet.address);
+  must(companyAuthorized === true, "Company administrator has not authorized this Privi developer gateway");
   const device = await contract.devices(event.deviceIdHash);
   must(field(device, "enrolled", 4) === true && field(device, "enabled", 3) === true,
        "Device not enrolled or disabled on Privi");

@@ -9,6 +9,11 @@ contract PriviIoTLedger {
     error DeveloperNotRegistered();
     error DeveloperAlreadyRegistered();
     error DeveloperDisabled();
+    error CompanyNotRegistered();
+    error CompanyAlreadyRegistered();
+    error CompanyDisabled();
+    error CompanyGatewayNotAuthorized();
+    error NotCompanyAdministrator();
     error InvalidDevice();
     error DeviceAlreadyEnrolled();
     error DeviceNotEnrolled();
@@ -54,6 +59,21 @@ contract PriviIoTLedger {
         bool enabled;
     }
     mapping(address => Developer) public developers;
+
+    // Privi-native enterprise participation is an explicit opt-in.
+    // Company access is scoped to official Privi features only, not to
+    // the company's choice of unrelated networks or software.
+    struct Company {
+        address administrator;
+        bool registered;
+        bool enabled;
+    }
+    mapping(bytes32 => Company) public companies;
+    mapping(bytes32 => mapping(address => bool)) public companyGateways;
+
+    event CompanyRegistered(bytes32 indexed companyIdHash, address indexed administrator);
+    event CompanyEnabled(bytes32 indexed companyIdHash, bool enabled);
+    event CompanyGatewayAuthorized(bytes32 indexed companyIdHash, address indexed gateway, bool authorized);
 
     event DeveloperRegistered(address indexed developer);
     event DeveloperEnabled(address indexed developer, bool enabled);
@@ -106,8 +126,42 @@ contract PriviIoTLedger {
         if (!d.enabled) revert DeveloperDisabled();
     }
 
+    function registerCompany(bytes32 companyIdHash, address administrator) external onlyOwner {
+        if (companyIdHash == bytes32(0) || administrator == address(0)) revert InvalidDevice();
+        if (companies[companyIdHash].registered) revert CompanyAlreadyRegistered();
+        companies[companyIdHash] = Company(administrator, true, true);
+        emit CompanyRegistered(companyIdHash, administrator);
+    }
+
+    function setCompanyEnabled(bytes32 companyIdHash, bool enabled) external onlyOwner {
+        if (!companies[companyIdHash].registered) revert CompanyNotRegistered();
+        companies[companyIdHash].enabled = enabled;
+        emit CompanyEnabled(companyIdHash, enabled);
+    }
+
+    function setCompanyGateway(bytes32 companyIdHash, address gateway, bool authorized) external {
+        Company storage company = companies[companyIdHash];
+        if (!company.registered) revert CompanyNotRegistered();
+        if (msg.sender != company.administrator) revert NotCompanyAdministrator();
+        if (authorized) {
+            if (!company.enabled) revert CompanyDisabled();
+            requireActiveDeveloper(gateway);
+        }
+        if (gateway == address(0)) revert InvalidDevice();
+        companyGateways[companyIdHash][gateway] = authorized;
+        emit CompanyGatewayAuthorized(companyIdHash, gateway, authorized);
+    }
+
+    function requireActiveCompanyGateway(bytes32 companyIdHash, address gateway) internal view {
+        Company storage company = companies[companyIdHash];
+        if (!company.registered) revert CompanyNotRegistered();
+        if (!company.enabled) revert CompanyDisabled();
+        if (!companyGateways[companyIdHash][gateway]) revert CompanyGatewayNotAuthorized();
+    }
+
     function enrollDevice(bytes32 deviceIdHash, bytes32 signingKeyHash, bytes32 companyIdHash, address gateway) external onlyOwner {
         requireActiveDeveloper(gateway);
+        requireActiveCompanyGateway(companyIdHash, gateway);
         if (deviceIdHash == bytes32(0) || signingKeyHash == bytes32(0) ||
             companyIdHash == bytes32(0) || gateway == address(0))
             revert InvalidDevice();
@@ -128,6 +182,7 @@ contract PriviIoTLedger {
         if (!d.enrolled) revert DeviceNotEnrolled();
         if (gateway == address(0)) revert InvalidDevice();
         requireActiveDeveloper(gateway);
+        requireActiveCompanyGateway(d.companyIdHash, gateway);
         d.gateway = gateway;
         emit DeviceGatewayChanged(deviceIdHash, gateway);
     }
@@ -157,6 +212,7 @@ contract PriviIoTLedger {
         if (!d.enabled) revert DeviceDisabled();
         if (msg.sender != d.gateway) revert WrongGateway();
         requireActiveDeveloper(msg.sender);
+        requireActiveCompanyGateway(d.companyIdHash, msg.sender);
         if (sequence == 0 || uint256(sequence) != uint256(d.lastSequence) + 1) revert WrongSequence();
         if (positionSequence == 0 || observedAt == 0 || eventTypeHash == bytes32(0) || payloadHash == bytes32(0)
             || eventHash == bytes32(0) || signatureHash == bytes32(0) ||
