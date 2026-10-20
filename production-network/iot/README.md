@@ -35,7 +35,9 @@ No PRVI payment or bridge is required merely to register during testing.
 ## Company onboarding (official Privi enterprise features only)
 
 Companies that opt into the official service must be registered on the
-Privi-native ledger. A Privi developer registration alone is not sufficient:
+Privi-native ledger. The platform first proposes registration; the company
+administrator must explicitly accept it from their separate wallet before
+any IoT device can be enrolled or submit transactions. A Privi developer registration alone is not sufficient:
 the company's own administrator must separately authorize that developer's
 gateway. Only the registered company administrator can authorize or revoke gateways;
 Privi's platform owner cannot authorize gateways on the company's behalf.
@@ -45,7 +47,8 @@ IoT event transactions, even if a device has already been enrolled.
 Owner-side registration sequence on the Privi *developer test contract*:
 
     registerDeveloper(gatewayAddress)
-    registerCompany(sha256CompanyId, companyAdministratorAddress)
+    proposeCompanyRegistration(sha256CompanyId, companyAdministratorAddress)
+    acceptCompanyRegistration(sha256CompanyId)  # called ONLY by company administrator
     setCompanyGateway(sha256CompanyId, gatewayAddress, true)
     enrollDevice(deviceIdHash, deviceEd25519KeyHash, sha256CompanyId, gatewayAddress)
 
@@ -60,8 +63,9 @@ See `production-network/enterprise/PRIVI_NATIVE_COMPANY_POLICY.md`.
 
 ## Pipeline
 
-1. Owner registers an official Privi developer gateway and a company account;
-   company administrator explicitly authorizes the gateway.
+1. Owner registers an official Privi developer gateway and proposes a company
+   account; the company administrator accepts the registration independently
+   and then explicitly authorizes the gateway.
 2. Owner enrolls a named authorized device and its Ed25519 public-key hash
    to that active developer gateway.
 3. Device generates a canonical signed PoP-v3 JSON event containing companyId,
@@ -108,7 +112,9 @@ replayed positions. Device IDs should be pseudonyms.
 A local registry JSON maps deviceId to publicKeySpkiBase64. Only public keys
 go in the registry, never signing secrets. Owner-side Privi contract actions:
 - registerDeveloper(authorizedGatewayEvmAddress)
-- registerCompany(companyIdHash, companyAdministratorAddress)
+- proposeCompanyRegistration(companyIdHash, companyAdministratorAddress)
+- acceptCompanyRegistration(companyIdHash)  // company administrator only
+- rejectCompanyRegistration(companyIdHash)  // optional decline by company administrator
 - setCompanyGateway(companyIdHash, authorizedGatewayEvmAddress, true)
 - enrollDevice(sha256DeviceId, sha256DerEd25519PubKey,
   sha256CompanyId, gatewayAddress)
