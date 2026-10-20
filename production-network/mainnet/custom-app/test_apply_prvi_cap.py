@@ -68,6 +68,10 @@ class PatcherTests(unittest.TestCase):
         (source / "chain_identity.go").write_text(
             "package prvicap\nfunc ValidateEVMChainID(id uint64) error { return nil }\n", encoding="utf-8"
         )
+        pop_source = self.repo / "production-network" / "mainnet" / "pop"
+        pop_source.mkdir(parents=True)
+        for name in ("position.go","keeper.go"):
+            (pop_source / name).write_text("package position\n",encoding="utf-8")
         self.app_file = self.upstream / "evmd" / "app.go"
         self.app_file.write_text(APP, encoding="utf-8")
 
@@ -109,6 +113,14 @@ class PatcherTests(unittest.TestCase):
         self.assertLess(app.index("prvicap.RestrictedBank"), app.index("return app.ModuleManager.InitGenesis")
                         if "return app.ModuleManager.InitGenesis" in app else app.index("response, initErr"))
         self.assertIn("prvicap.StoreKey", app)
+        self.assertIn("prvipop.StoreKey", app)
+        self.assertIn("app.PriviPoPKeeper = popKeeper", app)
+        self.assertIn("app.PriviPoPKeeper.InitGenesis(ctx,popGenesis.ChainID,popGenesis.Authorities)",app)
+        self.assertIn("Privi PoP genesis: authorization registry absent",app)
+        self.assertIn("Privi PoP genesis: Cosmos chain identity mismatch",app)
+        self.assertIn("package position",(self.upstream/"evmd"/"prvipop"/"position.go").read_text())
+        self.assertLess(app.index("Privi PoP genesis: authorization registry absent"),
+                        app.index("app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)"))
         self.assertIn("prvicap.ValidateEVMChainID(evmChainID)", app)
         self.assertIn("PRVI EIP-155 app identity rejected", app)
         self.assertLess(app.index("prvicap.ValidateEVMChainID(evmChainID)"), app.index("bankkeeper.NewBaseKeeper("))
