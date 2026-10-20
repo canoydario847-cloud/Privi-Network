@@ -24,6 +24,12 @@ const DOMAIN = /^[a-z0-9][a-z0-9._-]{1,63}$/;
 const CHAIN = /^privi-pop-research-[a-z0-9-]{1,48}$/;
 const PREFIX = "Privi/PoP/Research/2026/v1";
 const TRUSTED_MODE = "attested-position-research-not-live-consensus";
+// One legal network operator controlling four or more separate signer/host
+// identities, as expressly required for Privi World Corp. These are NOT
+// independent operators and must never be presented as decentralization.
+const OWNER_OPERATOR_ID = "PRIVI_WORLD_CORP";
+const OWNER_COMPANY_ID = "PRIVI_WORLD_CORP";
+const OWNER_EVM_WALLET = "0x1990589FD200E043b8C6FD9ec5956c61b3071048";
 function check(ok, why) { if (!ok) throw Error(why); }
 function hash(data) {
   return "0x" + crypto.createHash("sha256").update(data).digest("hex");
@@ -65,24 +71,28 @@ function positionStamp(company, positionSeq) {
   return "PoP:" + company + ":VALIDATOR/AUTH:" +
     String(positionSeq).padStart(6, "0");
 }
-function admissionFields(chainId, genesisHash, epoch, operator, faultDomain,
+function admissionFields(chainId, genesisHash, epoch, ownerWallet, operator, faultDomain,
                          company, positionSeq, validatorId, anchorBlockHash) {
-  return [chainId,genesisHash,epoch,operator,faultDomain,company,
+  return [chainId,genesisHash,epoch,ownerWallet,operator,faultDomain,company,
           positionSeq,validatorId,anchorBlockHash];
 }
 function parseRegistry(registry, governanceKey) {
   check(registry && typeof registry === "object" && !Array.isArray(registry),
         "PoP registry missing");
-  const {chainId,genesisHash,epoch,mode,validators}=registry;
+  const {chainId,genesisHash,epoch,mode,ownerWallet,operatorId,validators}=registry;
   check(typeof chainId === "string" && CHAIN.test(chainId), "Unexpected PoP research chain");
   check(typeof genesisHash === "string" && HEX.test(genesisHash),
         "Invalid PoP research genesis");
   requireNumber(epoch,"epoch");
   check(mode === TRUSTED_MODE,"Cannot run candidate as mainnet consensus");
+  check(ownerWallet===OWNER_EVM_WALLET,
+        "PoP research owner wallet must match sole proposed Privi founder wallet");
+  check(operatorId===OWNER_OPERATOR_ID,
+        "PoP research must disclose Privi World Corp as the ONE operator");
   check(Array.isArray(validators) && validators.length >= 4 &&
         validators.length <= 31,"PoP requires 4..31 attested research validators");
   const gov = publicKey(governanceKey);
-  const ids = new Set(), operators = new Set(), domains=new Set(), positions=new Set();
+  const ids = new Set(), domains=new Set(), positions=new Set();
   const validated=[];
   for (const v of validators) {
     check(v && typeof v==="object" && !Array.isArray(v), "Invalid validator");
@@ -90,8 +100,10 @@ function parseRegistry(registry, governanceKey) {
       anchorBlockHash,positionHash,admissionSignature}=v;
     const pub=publicKey(keySpkiBase64);
     check(id===pub.id, "Validator ID must bind actual Ed25519 public key");
-    check(typeof operatorId==="string" && ORGANIZATION.test(operatorId),
-          "Invalid operator");
+    check(operatorId===OWNER_OPERATOR_ID,
+          "Only the disclosed Privi World Corp operator may admit research validators");
+    check(companyId===OWNER_COMPANY_ID,
+          "Validator PoP research positions must be Privi World Corp positions");
     check(typeof faultDomain==="string" && DOMAIN.test(faultDomain),
           "Invalid fault domain");
     const stamp=positionStamp(companyId,positionSequence);
@@ -99,14 +111,13 @@ function parseRegistry(registry, governanceKey) {
     check(positionHash===expectedPositionHash, "PoP validator anchor stamp mismatch");
     check(typeof anchorBlockHash==="string" && HEX.test(anchorBlockHash),
           "Verified native Privi position-block commitment missing");
-    check(!ids.has(id) && !operators.has(operatorId) &&
-          !domains.has(faultDomain) && !positions.has(stamp),
-          "Duplicated validator, operator, failure domain, or PoP position");
-    const fields=admissionFields(chainId,genesisHash,epoch,operatorId,faultDomain,
-                companyId,positionSequence,id,anchorBlockHash);
+    check(!ids.has(id) && !domains.has(faultDomain) && !positions.has(stamp),
+          "Duplicated validator, failure domain, or PoP position");
+    const fields=admissionFields(chainId,genesisHash,epoch,ownerWallet,
+                operatorId,faultDomain,companyId,positionSequence,id,anchorBlockHash);
     check(verify(gov.key,"admit",fields,admissionSignature),
           "PoP admission signature invalid or absent");
-    ids.add(id);operators.add(operatorId);domains.add(faultDomain);positions.add(stamp);
+    ids.add(id);domains.add(faultDomain);positions.add(stamp);
     validated.push({id,pub:pub.key,operatorId,faultDomain,stamp,positionHash,
                     anchorBlockHash});
   }
@@ -115,7 +126,7 @@ function parseRegistry(registry, governanceKey) {
   // committee weight. This is *proposed* equal-one-vote research admission.
   const quorum=Math.floor(2*validated.length/3)+1;
   const byId=new Map(validated.map(v=>[v.id,v]));
-  return {chainId,genesisHash,epoch,mode,quorum,validators:validated,byId};
+  return {chainId,genesisHash,epoch,mode,ownerWallet,operatorId,quorum,validators:validated,byId};
 }
 function proposer(committee,height,round) {
   requireNumber(height,"height");requireNumber(round,"round",true);
@@ -193,5 +204,6 @@ class ResearchVoteLock {
 }
 module.exports={
   hash,publicKey,signedMessage,parseRegistry,positionStamp,proposer,
-  proposalFields,verifyProposal,voteFields,verifyCertificate,ResearchVoteLock,TRUSTED_MODE
+  proposalFields,verifyProposal,voteFields,verifyCertificate,ResearchVoteLock,TRUSTED_MODE,
+  OWNER_OPERATOR_ID,OWNER_COMPANY_ID,OWNER_EVM_WALLET
 };
