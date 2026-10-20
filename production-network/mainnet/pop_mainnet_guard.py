@@ -14,6 +14,8 @@ REQUIRED_IOT_CONTROLS = frozenset({
     "enterprise_company_registry",
     "company_authorized_gateway",
     "company_suspension_enforced",
+    "independent_company_admin_handover",
+    "revoke_prior_company_gateway_epoch",
     "device_enrollment",
     "ed25519_gateway_auth",
     "sequence_replay_protection",

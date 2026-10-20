@@ -19,6 +19,8 @@
     "no_automatic_prvi_mint": true,
     "enterprise_company_registry": true,
     "company_authorized_gateway": true,
-    "company_suspension_enforced": true
+    "company_suspension_enforced": true,
+    "independent_company_admin_handover": true,
+    "revoke_prior_company_gateway_epoch": true
   }
 }
