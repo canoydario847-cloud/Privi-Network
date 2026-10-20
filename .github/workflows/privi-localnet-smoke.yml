@@ -104,6 +104,12 @@ jobs:
             "$RUNNER_TEMP/privi-custom-InitChain-TEST-ONLY"
           PRIVI_ERC20_NEGATIVE_PROBE=native-pair \
             "$RUNNER_TEMP/privi-custom-InitChain-TEST-ONLY"
+          # Verify the actual application InitChain rejects hidden post-genesis
+          # PRVI inflation and preloaded mint provisions (fresh app per case).
+          PRIVI_MINT_NEGATIVE_PROBE=inflation \
+            "$RUNNER_TEMP/privi-custom-InitChain-TEST-ONLY"
+          PRIVI_MINT_NEGATIVE_PROBE=provisions \
+            "$RUNNER_TEMP/privi-custom-InitChain-TEST-ONLY"
           # Offline fixtures only: no issued PRVI, wallet or public network.
 
 
