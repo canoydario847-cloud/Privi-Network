@@ -203,20 +203,70 @@ async function run(env = process.env) {
   await assert.rejects(submitEvent(packet1,common),
     "an already sealed PoP event must not be submitted again");
 
+  // Gateway authorizations must NOT survive a confirmed company-admin handover.
+  const successorAdmin=ethers.Wallet.createRandom().connect(provider);
+  const cancelledSuccessor=ethers.Wallet.createRandom().connect(provider);
+  await confirmed(await wallet.sendTransaction({
+    to:successorAdmin.address,value:GAS_PRICE * 1000000n,gasLimit:30000n,
+    gasPrice:GAS_PRICE,type:0
+  }));
+  await assert.rejects(
+    contract.proposeCompanyAdministratorTransfer.staticCall(e1.companyIdHash,successorAdmin.address),
+    "Privi platform owner cannot propose a company administrator transfer"
+  );
+  await confirmed(await contract.connect(companyAdmin).proposeCompanyAdministratorTransfer(
+    e1.companyIdHash,cancelledSuccessor.address,
+    {gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
+  await assert.rejects(
+    contract.connect(successorAdmin).acceptCompanyAdministratorTransfer.staticCall(e1.companyIdHash),
+    "a non-designated successor cannot accept"
+  );
+  await confirmed(await contract.connect(companyAdmin).cancelCompanyAdministratorTransfer(
+    e1.companyIdHash,{gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
+  await assert.rejects(
+    contract.connect(cancelledSuccessor).acceptCompanyAdministratorTransfer.staticCall(e1.companyIdHash),
+    "a cancelled transfer must never succeed"
+  );
+  await confirmed(await contract.connect(companyAdmin).proposeCompanyAdministratorTransfer(
+    e1.companyIdHash,successorAdmin.address,
+    {gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
+  await assert.rejects(
+    contract.acceptCompanyAdministratorTransfer.staticCall(e1.companyIdHash),
+    "Privi owner cannot accept transfer for a company administrator"
+  );
+  await confirmed(await contract.connect(successorAdmin).acceptCompanyAdministratorTransfer(
+    e1.companyIdHash,{gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
+  assert.equal((await contract.companies(e1.companyIdHash)).administrator,successorAdmin.address);
+  assert.equal(await contract.companyGatewayEpoch(e1.companyIdHash),2n,
+    "company gateway epoch must increase on administrator handover");
+  assert.equal(await contract.companyGateways(e1.companyIdHash,wallet.address),false,
+    "previous administrator's gateway permission must be invalidated");
+  await assert.rejects(
+    contract.connect(companyAdmin).setCompanyGateway.staticCall(
+      e1.companyIdHash,wallet.address,true),
+    "former administrator cannot authorize Privi gateways"
+  );
+  const packet3=eventPacket(pair1.privateKey,"grid.sensorA",2,3);
+  await assert.rejects(submitEvent(packet3,common),
+    "old developer permission must not submit following company admin handover");
+  await confirmed(await contract.connect(successorAdmin).setCompanyGateway(
+    e1.companyIdHash,wallet.address,true,
+    {gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
+  assert.equal(await contract.companyGateways(e1.companyIdHash,wallet.address),true);
+
   // Company suspension blocks all its developers and devices immediately.
   await confirmed(await contract.setCompanyEnabled(e1.companyIdHash,false,
     {gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
-  const packet3=eventPacket(pair1.privateKey,"grid.sensorA",2,3);
   await assert.rejects(submitEvent(packet3,common),
     "suspended Privi companies must not submit");
   await confirmed(await contract.setCompanyEnabled(e1.companyIdHash,true,
     {gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
-  await confirmed(await contract.connect(companyAdmin).setCompanyGateway(
+  await confirmed(await contract.connect(successorAdmin).setCompanyGateway(
     e1.companyIdHash,wallet.address,false,
     {gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
   await assert.rejects(submitEvent(packet3,common),
     "company revocation of a gateway must block this developer");
-  await confirmed(await contract.connect(companyAdmin).setCompanyGateway(
+  await confirmed(await contract.connect(successorAdmin).setCompanyGateway(
     e1.companyIdHash,wallet.address,true,
     {gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
 
@@ -235,6 +285,8 @@ async function run(env = process.env) {
     second_transaction:recorded2.transactionHash,
     company_enrollment:"two_phase_independent_consent_enforced",
     company_gateway_authorization:"enforced_independent_administrator",
+    company_admin_handover:"two_party_signoff",
+    former_gateway_authorizations:"invalidated_by_epoch_advance",
     company_suspension_and_revocation:"enforced",
     developer_enrollment:"enforced",
     developer_revocation:"enforced",
