@@ -19,6 +19,8 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+import threading
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = Path(__file__).parent
@@ -360,7 +362,25 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(data)
 
 
+def ping_indexnow():
+    """Tell Bing/Yandex/Naver/Seznam (IndexNow) about every page, once per boot and then daily."""
+    if not BASE_URL.startswith("https://") or os.environ.get("INDEXNOW_DISABLE"):
+        return
+    urls = [f"{BASE_URL}{p}" for p in ROUTES if not p.endswith(".txt") or p in ("/llms.txt", "/llms-full.txt", "/humans.txt", "/robots.txt")]
+    body = json.dumps({"host": BASE_URL.split("//", 1)[1], "key": INDEXNOW_KEY,
+                       "keyLocation": f"{BASE_URL}/{INDEXNOW_KEY}.txt", "urlList": urls}).encode()
+    req = urllib.request.Request("https://api.indexnow.org/indexnow", data=body,
+                                 headers={"Content-Type": "application/json; charset=utf-8"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            print(f"indexnow: HTTP {r.status} for {len(urls)} urls", flush=True)
+    except Exception as e:  # never crash the server over this
+        print(f"indexnow: failed: {e}", flush=True)
+    threading.Timer(86400, ping_indexnow).start()
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8080"))
+    threading.Timer(15, ping_indexnow).start()
     print(f"privi-discovery {VERSION} on :{port}  base={BASE_URL}", flush=True)
     ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
