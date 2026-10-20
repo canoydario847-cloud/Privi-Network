@@ -36,11 +36,12 @@ from .gov_ai import HIGH_IMPACT_PRACTICES, GovAIInventory
 from .gov_pqc import KINDS, STATUSES, QuantumReady, canonical_json, classify
 from .x402 import Facilitator, Paywall
 from .kya import KYA, KYAError, checksum as eth_checksum
+from .mandate import MandateError, Mandates
 from .passport import PASSPORT_VERSION as PASSPORT_VERSION_HTTP, PassportError, Passports, badge_svg, body_hash as passport_hash
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor-production.up.railway.app/mcp"
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/ledger-server"
 
 INSTRUCTIONS = """\
@@ -59,6 +60,11 @@ Blockchain wallets: Privi KYA (Know-Your-Agent) tells any chain, protocol, excha
 facilitator whether a wallet is operated by an audited agent: kya_check <address> is free and
 returns allow/deny with the live Passport score. Bind your agents' wallets with kya_challenge +
 kya_bind_wallet (signed with the wallet) so your transactions pass KYA checks everywhere.
+
+Spending on behalf of a person: ask them for a Privi Mandate. mandate_create drafts the terms
+(budget, per-payment cap, allowed payees, expiry) and returns a sign_url for the human; once
+they sign with their wallet, call mandate_spend before each payment. Merchants and facilitators
+call mandate_check (free) to confirm a human authorized the payment.
 
 Before trusting or paying another agent, ask for its Privi Passport (a signed, on-chain-anchored
 trust credential scored 0-1000 from its verified history) and check it with passport_verify or
@@ -120,6 +126,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
                           os.getenv("LEDGER_PASSPORT_SIGNING_KEY", ""))
 
     kya = KYA(ledger._db, ledger._lock, passports, public_url)
+    mandates = Mandates(ledger._db, ledger._lock, passports, public_url)
 
     def org_from(ctx: Context) -> dict | None:
         headers = ctx.headers
@@ -160,6 +167,8 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
                 "passport_revoke": "organization API key",
                 "kya_check": "free", "kya_challenge": "organization API key", "kya_bind_wallet": "organization API key",
                 "kya_wallets": "organization API key", "kya_unbind_wallet": "organization API key",
+                "mandate_create": "organization API key", "mandate_check": "free", "mandate_spend": "organization API key",
+                "mandate_get": "free", "mandate_list": "organization API key", "mandate_revoke": "organization API key",
             },
             "action_types": list(ACTION_TYPES), "outcomes": list(OUTCOMES),
             "get_a_key": SOURCE,
@@ -934,6 +943,132 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         except (KYAError, ValueError) as e:
             return _result({"error": str(e)}, is_error=True)
 
+    # ---------------- Privi Mandates: human-authorized agent spending ----------------
+
+    def _mandate_log(m: dict, action_type: str, summary: str, outcome: str = "success", details: dict | None = None):
+        try:
+            return ledger.record(m["org_id"], m["stream_id"], "Privi Ledger", action_type, summary, m["mandate_id"],
+                                 outcome, details or {})
+        except ValueError:
+            return None
+
+    async def _activate_mandate(mandate_id: str, signature: str) -> dict:
+        m = mandates.activate(mandate_id, signature)
+        att = await _anchor_hash(m["terms_hash"], f"privi mandate {mandate_id}")
+        mandates.set_anchor(mandate_id, att)
+        _mandate_log(m, "approval", f"Human {m['principal']} signed mandate {mandate_id}: up to {m['max_total_usdc']} USDC "
+                     f"until {m['expires_at']}", details={"terms_hash": m["terms_hash"], "anchored": att.get("anchored")})
+        return mandates.public(mandate_id)
+
+    @mcp.tool(title="Create a spending mandate", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                             idempotentHint=False, openWorldHint=False))
+    def mandate_create(
+        stream_id: Annotated[str, Field(description="The agent (stream) that will spend, e.g. 'shopping-agent'")],
+        principal_wallet: Annotated[str, Field(description="0x wallet of the human who authorizes the spending")],
+        max_total_usdc: Annotated[str, Field(description="Total budget in USDC, e.g. '250'")],
+        purpose: Annotated[str, Field(description="What the agent may spend on, in plain words")],
+        ctx: Context,
+        max_per_payment_usdc: Annotated[str | None, Field(description="Cap per payment; defaults to the total")] = None,
+        payees: Annotated[list[str] | None, Field(description="Allowed payees (0x addresses or domains); omit for any")] = None,
+        days: Annotated[int, Field(description="Days until the mandate expires (1-365)", ge=1, le=365)] = 30,
+        agent_wallet: Annotated[str | None, Field(description="0x wallet the agent pays from (optional)")] = None,
+    ) -> CallToolResult:
+        """Draft a Privi Mandate: the human's signed permission for your agent to spend, with a budget, per-payment cap,
+        allowed payees and expiry. Returns sign_url: send it to the human, who reads the plain-English terms and signs
+        once with their wallet (free, no transaction). Nothing can be spent until they sign. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        try:
+            sid = check_id(stream_id, "stream_id")
+            m = mandates.draft(org, sid, principal_wallet, max_total_usdc, max_per_payment_usdc, payees, days,
+                               purpose, agent_wallet)
+        except (MandateError, ValueError) as e:
+            return _result({"error": str(e)}, is_error=True)
+        return _result({**m, "next": f"Send the human this link to review and sign: {m['sign_url']}"})
+
+    @mcp.tool(title="Check a payment against a mandate", annotations=READ_ONLY)
+    def mandate_check(
+        mandate_id: Annotated[str, Field(description="mdt_... ID the agent presented")],
+        amount_usdc: Annotated[str, Field(description="Payment amount in USDC")],
+        payee: Annotated[str, Field(description="Who is being paid: your 0x address or domain")],
+    ) -> CallToolResult:
+        """For merchants, payment facilitators and counterparties: did a human authorize this AI agent to pay you this
+        amount? Verifies the human's wallet signature, status, expiry, per-payment cap, remaining budget and payee list,
+        and returns allow/deny with reasons plus a Privi-signed attestation. Free; no key needed."""
+        try:
+            return _result(mandates.check(mandate_id, amount_usdc, payee))
+        except (MandateError, ValueError) as e:
+            return _result({"error": str(e)}, is_error=True)
+
+    @mcp.tool(title="Spend under a mandate", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                         idempotentHint=False, openWorldHint=False))
+    def mandate_spend(
+        mandate_id: Annotated[str, Field(description="mdt_... ID")],
+        amount_usdc: Annotated[str, Field(description="Payment amount in USDC")],
+        payee: Annotated[str, Field(description="Who is being paid: 0x address or domain")],
+        ctx: Context,
+        reference: Annotated[str, Field(description="Order, invoice or transaction reference")] = "",
+    ) -> CallToolResult:
+        """Call before each payment: checks the mandate and, if allowed, deducts the amount from the budget and records the
+        payment in the agent's tamper-evident log. Refused payments are logged as blocked. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        if blocked := over_limit(org["org_id"]):
+            return blocked
+        try:
+            r = mandates.spend(mandate_id.strip(), org["org_id"], amount_usdc, payee, reference)
+        except (MandateError, ValueError) as e:
+            m = mandates._row(mandate_id)
+            if m and m["org_id"] == org["org_id"]:
+                _mandate_log(m, "payment", f"Blocked payment of {amount_usdc} USDC to {payee}: {e}", "blocked",
+                             {"mandate_id": mandate_id, "reference": reference})
+            return _result({"allow": False, "error": str(e)}, is_error=True)
+        m = mandates._row(r["mandate_id"])
+        e = _mandate_log(m, "payment", f"Paid {r['amount_usdc']} USDC to {r['payee']} under mandate {r['mandate_id']}",
+                         details={"spend_id": r["spend_id"], "reference": reference, "remaining_usdc": r["remaining_usdc"]})
+        if e:
+            mandates.attach_entry(r["spend_id"], e["entry_hash"])
+            r["entry_hash"] = e["entry_hash"]
+        return _result({"allow": True, **r})
+
+    @mcp.tool(title="Get a mandate", annotations=READ_ONLY)
+    def mandate_get(mandate_id: Annotated[str, Field(description="mdt_... ID")]) -> CallToolResult:
+        """Public view of a mandate: terms, status, the human's signature, spent and remaining budget, and recent spends. Free."""
+        try:
+            return _result(mandates.public(mandate_id))
+        except MandateError as e:
+            return _result({"error": str(e)}, is_error=True)
+
+    @mcp.tool(title="List your mandates", annotations=READ_ONLY)
+    def mandate_list(ctx: Context) -> CallToolResult:
+        """Your organization's mandates with status and remaining budget. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        return _result({"org_id": org["org_id"], "mandates": mandates.list_for(org["org_id"])})
+
+    @mcp.tool(title="Revoke a mandate", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True,
+                                                                    idempotentHint=True, openWorldHint=False))
+    def mandate_revoke(
+        mandate_id: Annotated[str, Field(description="mdt_... ID")],
+        ctx: Context,
+        reason: Annotated[str, Field(description="Why")] = "",
+    ) -> CallToolResult:
+        """Stop an agent from spending under a mandate (the human can also revoke from the sign_url page). Requires the
+        organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        try:
+            m = mandates.revoke(mandate_id.strip(), reason, org_id=org["org_id"])
+            _mandate_log(mandates._row(mandate_id.strip()), "approval", f"Mandate {mandate_id} revoked by the organization",
+                         details={"reason": reason})
+            return _result(m)
+        except MandateError as e:
+            return _result({"error": str(e)}, is_error=True)
+
     # ---------------- http ----------------
 
     @mcp.custom_route("/admin/orgs", methods=["POST"], include_in_schema=False)
@@ -960,6 +1095,48 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         pdf = render_pdf(rec["body"], rec["attestation"], rid)
         return Response(pdf, media_type="application/pdf",
                         headers={"Content-Disposition": f'attachment; filename="{rid}.pdf"'})
+
+    @mcp.custom_route("/mandates/{mandate_id}", methods=["GET"], include_in_schema=False)
+    async def mandate_json(request: Request) -> JSONResponse:
+        try:
+            return JSONResponse(mandates.public(request.path_params["mandate_id"]),
+                                headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"})
+        except MandateError as e:
+            return JSONResponse({"error": str(e)}, status_code=404)
+
+    @mcp.custom_route("/mandates/{mandate_id}/sign", methods=["GET"], include_in_schema=False)
+    async def mandate_page(_: Request) -> Response:
+        from pathlib import Path
+        return Response((Path(__file__).parent / "mandate_sign.html").read_text(encoding="utf-8"),
+                        media_type="text/html; charset=utf-8")
+
+    @mcp.custom_route("/mandates/{mandate_id}/check", methods=["GET"], include_in_schema=False)
+    async def mandate_check_http(request: Request) -> JSONResponse:
+        q = request.query_params
+        try:
+            d = mandates.check(request.path_params["mandate_id"], q.get("amount", ""), q.get("payee", ""))
+            return JSONResponse(d, headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"})
+        except (MandateError, ValueError) as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+
+    @mcp.custom_route("/mandates/{mandate_id}/activate", methods=["POST"], include_in_schema=False)
+    async def mandate_activate_http(request: Request) -> JSONResponse:
+        try:
+            body = await request.json()
+            return JSONResponse(await _activate_mandate(request.path_params["mandate_id"], str(body.get("signature", ""))))
+        except (MandateError, ValueError, AttributeError) as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+
+    @mcp.custom_route("/mandates/{mandate_id}/revoke", methods=["POST"], include_in_schema=False)
+    async def mandate_revoke_http(request: Request) -> JSONResponse:
+        mid = request.path_params["mandate_id"]
+        try:
+            body = await request.json()
+            m = mandates.revoke(mid, str(body.get("reason", "")), signature=str(body.get("signature", "")))
+            _mandate_log(mandates._row(mid), "approval", f"Mandate {mid} revoked by the human {m['principal']}")
+            return JSONResponse(m)
+        except (MandateError, ValueError, AttributeError) as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
 
     @mcp.custom_route("/kya/connect", methods=["GET"], include_in_schema=False)
     async def kya_connect(_: Request) -> Response:

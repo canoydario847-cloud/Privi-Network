@@ -673,3 +673,84 @@ def test_kya_connect_page_and_http_bind(ledger):
                                          "signature": sign(ch["message"]), "label": "owner"}, headers=auth).json()
         assert b["bound"] and b["proof"] == "signature"
         assert http.get(f"/kya/{addr}?min_score=0").json()["known"] is True
+
+
+# ---------------- Privi Mandates ----------------
+
+def test_mandate_lifecycle(ledger, monkeypatch):
+    from starlette.testclient import TestClient
+    shop = ledger.create_org("ShopBot Inc")
+    human, human_sign = _eth_wallet()
+    stranger, stranger_sign = _eth_wallet()
+
+    def run_(key, name, args):
+        as_org(monkeypatch, key)
+
+        async def go():
+            async with Client(server(ledger)) as c:
+                return await c.call_tool(name, args)
+        return anyio.run(go)
+
+    # draft: validation
+    assert run_(shop["api_key"], "mandate_create", {"stream_id": "shopper", "principal_wallet": human,
+                                                    "max_total_usdc": "10", "max_per_payment_usdc": "20",
+                                                    "purpose": "x"}).is_error
+    assert run_(None, "mandate_create", {"stream_id": "shopper", "principal_wallet": human,
+                                         "max_total_usdc": "10", "purpose": "x"}).is_error
+    d = run_(shop["api_key"], "mandate_create", {
+        "stream_id": "shopper", "principal_wallet": human, "max_total_usdc": "100", "max_per_payment_usdc": "40",
+        "payees": ["https://store.example.com/checkout", "0x1990589FD200E043b8C6FD9ec5956c61b3071048"],
+        "purpose": "Buy office supplies", "days": 7}).structured_content
+    mid = d["mandate_id"]
+    assert d["status"] == "draft" and "store.example.com" in d["message"] and d["sign_url"].endswith(f"/mandates/{mid}/sign")
+
+    # not spendable until signed
+    assert run_(shop["api_key"], "mandate_spend", {"mandate_id": mid, "amount_usdc": "5",
+                                                   "payee": "store.example.com"}).is_error
+    c0 = run_(None, "mandate_check", {"mandate_id": mid, "amount_usdc": "5", "payee": "store.example.com"}).structured_content
+    assert not c0["allow"] and "not signed" in c0["reasons"][0]
+
+    app = server(ledger).streamable_http_app(stateless_http=True, json_response=True)
+    with TestClient(app) as http:
+        assert "personal_sign" in http.get(f"/mandates/{mid}/sign").text
+        # wrong signer refused
+        assert http.post(f"/mandates/{mid}/activate", json={"signature": stranger_sign(d["message"])}).status_code == 400
+        act = http.post(f"/mandates/{mid}/activate", json={"signature": human_sign(d["message"])}).json()
+        assert act["status"] == "active" and act["principal_signature_valid"] and act["privi_signature"]
+        assert http.post(f"/mandates/{mid}/activate", json={"signature": human_sign(d["message"])}).status_code == 400
+        chk = http.get(f"/mandates/{mid}/check", params={"amount": "30", "payee": "store.example.com"}).json()
+        assert chk["allow"] and chk["remaining_usdc"] == "100" and len(chk["signature"]) == 128
+
+    # limits
+    ok = lambda amt, payee="store.example.com": run_(shop["api_key"], "mandate_spend", {
+        "mandate_id": mid, "amount_usdc": amt, "payee": payee, "reference": "order-1"})
+    s1 = ok("40").structured_content
+    assert s1["allow"] and s1["remaining_usdc"] == "60" and s1["entry_hash"]
+    assert "per-payment" in ok("40.01").structured_content["error"]
+    assert "not on the mandate" in ok("1", "evil.example").structured_content["error"]
+    assert ok("40", "0x1990589fd200e043b8c6fd9ec5956c61b3071048").structured_content["remaining_usdc"] == "20"
+    assert "remaining budget" in ok("25").structured_content["error"]
+    assert ok("19.5").structured_content["remaining_usdc"] == "0.5"
+
+    # merchant check reflects spend; other orgs can't spend it
+    c1 = run_(None, "mandate_check", {"mandate_id": mid, "amount_usdc": "1", "payee": "store.example.com"}).structured_content
+    assert not c1["allow"] and c1["remaining_usdc"] == "0.5"
+    other = ledger.create_org("Other")
+    assert run_(other["api_key"], "mandate_spend", {"mandate_id": mid, "amount_usdc": "0.1",
+                                                    "payee": "store.example.com"}).is_error
+
+    # log: approval + 3 payments + blocked attempts, chain intact
+    evs = ledger.entries(shop["org_id"], "shopper")
+    assert sum(e["action_type"] == "approval" for e in evs) == 1
+    assert sum(e["outcome"] == "success" and e["action_type"] == "payment" for e in evs) == 3
+    assert sum(e["outcome"] == "blocked" for e in evs) >= 3 and ledger.check_chain(evs).valid
+
+    # human revokes by signature; stranger cannot
+    app = server(ledger).streamable_http_app(stateless_http=True, json_response=True)
+    with TestClient(app) as http:
+        assert http.post(f"/mandates/{mid}/revoke", json={"signature": stranger_sign(f"Revoke Privi Mandate {mid}")}).status_code == 400
+        rv = http.post(f"/mandates/{mid}/revoke", json={"signature": human_sign(f"Revoke Privi Mandate {mid}")}).json()
+        assert rv["status"] == "revoked"
+    assert "revoked" in ok("0.1").structured_content["error"]
+    lst = run_(shop["api_key"], "mandate_list", {}).structured_content["mandates"]
+    assert lst[0]["mandate_id"] == mid and lst[0]["spent_usdc"] == "99.5"

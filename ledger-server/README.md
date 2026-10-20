@@ -126,6 +126,18 @@ As AI agents become the main senders of on-chain transactions, every chain, DeFi
 
 Integration pattern for a chain or protocol: before accepting an agent transaction, `GET /kya/<from>`; require `allow: true` (and optionally `proof: "signature"`); keep the `attestation` + `signature` as your compliance record.
 
+## Privi Mandates (human-authorized agent spending)
+
+Signed proof that a person authorized an AI agent to spend, which any merchant or payment facilitator can check before taking the agent's money.
+
+1. `mandate_create` (org key) drafts the terms: budget, per-payment cap, allowed payees (0x addresses or domains), expiry, purpose. It returns a `sign_url`.
+2. The human opens `/mandates/<id>/sign`, reads the plain-English terms, and signs once with their wallet (EIP-191; free, no transaction). The terms hash is countersigned by Privi and anchored on the Privi chain, and the approval is logged.
+3. Before each payment the agent calls `mandate_spend`, which enforces the caps, payee list, expiry and remaining budget atomically and writes the payment (or the blocked attempt) to the agent's tamper-evident log.
+4. Merchants and facilitators call `mandate_check` or `GET /mandates/<id>/check?amount=&payee=` (free) and get allow/deny with reasons plus a Privi-signed attestation.
+5. The human revokes from the same page with one signature, or the organization calls `mandate_revoke`.
+
+Public: `GET /mandates/<id>` (terms, signatures, budget, recent spends).
+
 ## Privi Handshake
 
 A dealing between two companies, such as a payment, a data transfer, a delivery or an agreement, gets recorded by **both** of them, with neither able to deny or rewrite it alone.
