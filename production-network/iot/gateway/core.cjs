@@ -138,6 +138,7 @@ async function submitEvent(packet, {registry, config, provider, wallet, contract
   const event = verifyDevicePacket(packet, registry);
   await assertPriviChain(provider, config); // always check before any signed transaction
   must(wallet && ADDRESS.test(wallet.address), "Gateway wallet required");
+  must(wallet.provider === provider && contract.runner === wallet, "Gateway signer and contract must use the pinned Privi provider");
   must(contract && typeof contract.devices === "function" &&
        typeof contract.recordEvent === "function" &&
        contract.interface && typeof contract.interface.parseLog === "function",
@@ -174,7 +175,8 @@ async function submitEvent(packet, {registry, config, provider, wallet, contract
   });
   must(matched, "Missing matching Privi IoTRecorded receipt log");
   return {chainId: config.chainId, transactionHash: tx.hash, blockNumber: receipt.blockNumber,
-          deviceIdHash: event.deviceIdHash, eventHash: event.eventHash, sequence: packet.sequence,
+          deviceIdHash: event.deviceIdHash, payloadHash: event.payloadHash,
+          eventHash: event.eventHash, sequence: packet.sequence,
           confirmations: config.confirmations};
 }
 
