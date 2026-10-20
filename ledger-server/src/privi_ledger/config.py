@@ -22,6 +22,7 @@ NETWORKS = {
 DEFAULT_PRICES_USD = {
     "ledger_audit_stream": "0.02",
     "ledger_upgrade_pro": "29",
+    "passport_issue": "1",       # free-plan organizations; Pro and enterprise issue for free
 }
 
 
@@ -68,6 +69,8 @@ class Settings:
         )
         if os.getenv("LEDGER_PRICE_PRO_MONTH"):
             s.prices_usd["ledger_upgrade_pro"] = os.environ["LEDGER_PRICE_PRO_MONTH"]
+        if os.getenv("LEDGER_PRICE_PASSPORT"):
+            s.prices_usd["passport_issue"] = os.environ["LEDGER_PRICE_PASSPORT"]
         if os.getenv("LEDGER_PRICE_AUDIT_STREAM"):
             s.prices_usd["ledger_audit_stream"] = os.environ["LEDGER_PRICE_AUDIT_STREAM"]
         s.validate()

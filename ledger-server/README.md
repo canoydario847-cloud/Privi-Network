@@ -90,6 +90,30 @@ Executive Order 14409 (June 2026) requires federal key establishment to move to 
 
 > The rules follow public summaries of EO 14409 and OMB M-26-15. Confirm them against the official texts and NIST IR 8547 before relying on them. This tool supports compliance work; it is not legal advice.
 
+## Privi Passport (trust credentials for AI agents)
+
+The feature no one else can copy: a **signed, on-chain-anchored credential that says how much an AI agent can be trusted**, scored 0-1000 from evidence only Privi Ledger holds.
+
+| Component | Max | Evidence |
+|---|---|---|
+| history | 300 | verified entries and days of activity |
+| integrity | 250 | every hash chain still verifies (all or nothing) |
+| anchoring | 150 | share of streams whose on-chain checkpoint matches the record |
+| reliability | 100 | 1 - failure rate |
+| oversight | 50 | human approvals on sensitive actions |
+| compliance | 100 | a sealed compliance report exists and is clean |
+| handshakes | 50 | deals other Privi organizations confirmed |
+
+Grades: A >= 850, B >= 700, C >= 550, D >= 400, E below. Valid 30 days.
+
+- `passport_issue` (org key; free on Pro/enterprise, `$LEDGER_PRICE_PASSPORT` via x402 on the free plan) - Ed25519-signed by the server, hash anchored on the Privi chain, every component itemised.
+- `passport_verify` (free) - signature, content, expiry, revocation, chain anchor, **and a live re-score**: if the agent's history is tampered with after issue, the passport fails.
+- `passport_gate` (free) - one-call allow/deny with your minimums (`min_score`, `min_grade`, `require_anchored`); send your own key and the decision is written to your log as due-diligence evidence.
+- `passport_list`, `passport_revoke` (org key).
+- Public: `GET /passports/<id>` (JSON + live verification), `GET /passports/<id>/badge.svg` (embeddable badge), `GET /.well-known/privi-passport.json` (issuer public key).
+
+Why it compounds: agents that gate on passports push their counterparties onto Privi Ledger; every logged action, report and handshake raises the score; a better score wins more deals. Set `LEDGER_PASSPORT_SIGNING_KEY` (32-byte hex Ed25519 seed) to pin the issuer key across redeploys; otherwise one is generated and stored in the database.
+
 ## Privi Handshake
 
 A dealing between two companies, such as a payment, a data transfer, a delivery or an agreement, gets recorded by **both** of them, with neither able to deny or rewrite it alone.

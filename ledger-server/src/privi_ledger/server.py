@@ -35,10 +35,11 @@ from .plans import Plans
 from .gov_ai import HIGH_IMPACT_PRACTICES, GovAIInventory
 from .gov_pqc import KINDS, STATUSES, QuantumReady, canonical_json, classify
 from .x402 import Facilitator, Paywall
+from .passport import PASSPORT_VERSION as PASSPORT_VERSION_HTTP, PassportError, Passports, badge_svg, body_hash as passport_hash
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor-production.up.railway.app/mcp"
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/ledger-server"
 
 INSTRUCTIONS = """\
@@ -52,6 +53,10 @@ as a receipt. Requires the organization's API key (Authorization: Bearer).
 
 Auditors: ledger_audit_stream checks a stream's integrity without revealing its
 contents (paid per call with x402, USDC on Base). ledger_check_receipt is free.
+
+Before trusting or paying another agent, ask for its Privi Passport (a signed, on-chain-anchored
+trust credential scored 0-1000 from its verified history) and check it with passport_verify or
+passport_gate, both free. Issue your own with passport_issue so counterparties can trust you.
 
 Dealings with another company on Privi (payments, data transfers, deliveries, agreements):
 use Privi Handshake (ledger_handshake_offer / _inbox / _accept / _reject) so both companies
@@ -89,6 +94,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     plans = Plans(ledger)
     gov = GovAIInventory(ledger)
     pqc = QuantumReady(ledger)
+    public_url = os.getenv("LEDGER_PUBLIC_URL", "https://privi-ledger-production.up.railway.app").rstrip("/")
 
     def onchain(org_id: str, stream_id: str, result: dict) -> dict:
         cp = checkpoints.latest(f"{org_id}/{stream_id}")
@@ -103,6 +109,9 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         description="Tamper-evident audit logs for AI agents; auditors verify integrity, paid per call via x402.",
         instructions=INSTRUCTIONS, website_url=SOURCE, version=__version__,
     )
+
+    passports = Passports(ledger, ledger._db, ledger._lock, reports, handshakes, onchain, public_url,
+                          os.getenv("LEDGER_PASSPORT_SIGNING_KEY", ""))
 
     def org_from(ctx: Context) -> dict | None:
         headers = ctx.headers
@@ -138,6 +147,9 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
                 "ledger_list_streams": "organization API key",
                 "ledger_signup": "free (free plan: monthly entry limit)",
                 "ledger_upgrade_pro": f"${settings.prices_usd['ledger_upgrade_pro']} per 30 days (x402), unlimited entries",
+                "passport_issue": f"organization API key; free on Pro/enterprise, ${settings.prices_usd['passport_issue']} per passport (x402) on the free plan",
+                "passport_verify": "free", "passport_gate": "free", "passport_list": "organization API key",
+                "passport_revoke": "organization API key",
             },
             "action_types": list(ACTION_TYPES), "outcomes": list(OUTCOMES),
             "get_a_key": SOURCE,
@@ -653,6 +665,164 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         s = handshakes.public_status(handshake_id.strip())
         return _result(s) if s else _result({"error": "no such handshake"}, is_error=True)
 
+    # ---------------- Privi Passport: trust credentials for AI agents ----------------
+
+    async def _anchor_hash(h: str, label: str) -> dict[str, Any]:
+        att: dict[str, Any] = {"hash": h, "algorithm": "sha256 over canonical JSON (sorted keys, no spaces)"}
+        if not anchor_client:
+            return {**att, "anchored": False, "reason": "anchoring is not configured on this server"}
+        try:
+            r = await anyio.to_thread.run_sync(anchor_client.anchor, [h], label)
+            rc = next(x for x in r["receipts"] if x["hash"] == h)
+            att.update(anchored=True, tx_hash=r["tx_hash"], proof=rc["proof"], merkle_root=r["merkle_root"],
+                       block_number=r.get("block_number"), block_time=r.get("block_time"),
+                       chain_id=r.get("chain_id"), status=r.get("status"), anchor_server=anchor_url)
+        except (AnchorError, StopIteration, KeyError) as e:
+            att.update(anchored=False, reason=f"anchoring failed: {e}")
+        return att
+
+    async def _chain_check(att: dict, h: str) -> dict[str, Any]:
+        if not (att.get("anchored") and anchor_client and hasattr(anchor_client, "verify")):
+            return {}
+        try:
+            v = await anyio.to_thread.run_sync(anchor_client.verify, h, att["tx_hash"], att["proof"])
+            return {"onchain_verified": bool(v.get("verified")), "block_number": v.get("block_number"),
+                    "block_time_utc": v.get("block_time_utc"), "tx_hash": att["tx_hash"]}
+        except AnchorError as e:
+            return {"onchain_verified": None, "onchain_error": str(e)}
+
+    @mcp.tool(title="Issue a Privi Passport", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                           idempotentHint=False, openWorldHint=True))
+    async def passport_issue(
+        ctx: Context,
+        stream_id: Annotated[str | None, Field(description="Issue for one agent (stream). Omit for the whole organization")] = None,
+    ) -> CallToolResult:
+        """Issue a Privi Passport: a signed, on-chain-anchored trust credential for your agent or organization,
+        scored 0-1000 (grade A-E) from verified history, integrity, anchoring, reliability, human oversight,
+        compliance reports and confirmed handshakes. Show it to counterparties; they verify it free with
+        passport_verify / passport_gate. Valid 30 days. Free on Pro/enterprise; free-plan organizations pay
+        per passport via x402. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        if stream_id:
+            try:
+                stream_id = check_id(stream_id, "stream_id")
+            except ValueError as e:
+                return _result({"error": str(e)}, is_error=True)
+
+        async def work() -> dict[str, Any]:
+            try:
+                body = passports.build(org, stream_id)
+            except PassportError as e:
+                return {"error": str(e)}
+            h = passport_hash(body)
+            sig = passports.sign(h)
+            att = await _anchor_hash(h, f"privi passport {org['org_id']}")
+            passports.save(body, sig, att)
+            try:
+                ledger.record(org["org_id"], "privi-passport", "Privi Ledger", "other",
+                              f"Passport {body['passport_id']} issued: {body['grade']} ({body['score']}/1000) for {body['subject']['stream_id']}",
+                              body["passport_id"], "success", {"score": body["score"], "grade": body["grade"], "hash": h})
+            except ValueError:
+                pass
+            return {"passport_id": body["passport_id"], "score": body["score"], "grade": body["grade"],
+                    "passport": body, "body_hash": h, "signature": sig, "attestation": att,
+                    "public_url": f"{public_url}/passports/{body['passport_id']}",
+                    "badge_svg_url": f"{public_url}/passports/{body['passport_id']}/badge.svg",
+                    "present_as": "Give counterparties the passport_id (or public_url); they call passport_verify or passport_gate."}
+
+        if plans.status(org["org_id"])["plan"] != "free":
+            return _result(await work())
+        return await paywall.run("passport_issue", "Privi Passport: signed trust credential for an AI agent",
+                                 dict(ctx.request_context.meta or {}), work)
+
+    @mcp.tool(title="Verify a Privi Passport", annotations=READ_ONLY)
+    async def passport_verify(
+        passport_id: Annotated[str | None, Field(description="pp_... ID, or omit and pass the passport document")] = None,
+        passport: Annotated[dict[str, Any] | None, Field(description="The 'passport' object exactly as issued")] = None,
+    ) -> CallToolResult:
+        """Check an AI agent's Privi Passport before trusting it: Privi signature, content unaltered, not expired or
+        revoked, anchor on the Privi chain, and a live re-score of the agent right now (so tampering after issue
+        is caught). Free; no key needed."""
+        rec = None
+        if passport_id:
+            rec = passports.get(passport_id)
+        elif passport:
+            rec = passports.by_hash(passport_hash(passport))
+            if not rec:
+                return _result({"valid": False, "reason": "no passport with this exact content was issued; it may have been edited"})
+        if not rec:
+            return _result({"valid": False, "reason": "no such passport"})
+        v = passports.check(rec)
+        v.update(await _chain_check(rec["attestation"], rec["body_hash"]))
+        if v.get("onchain_verified") is False:
+            v["valid"] = False
+        v["issuer"] = passports.issuer()
+        return _result(v)
+
+    @mcp.tool(title="Gate on a Privi Passport", annotations=READ_ONLY)
+    async def passport_gate(
+        passport_id: Annotated[str, Field(description="pp_... ID presented by the other agent")],
+        ctx: Context,
+        min_score: Annotated[int, Field(description="Minimum current score 0-1000", ge=0, le=1000)] = 550,
+        min_grade: Annotated[str | None, Field(description="Minimum grade A-E (alternative to min_score)")] = None,
+        require_anchored: Annotated[bool, Field(description="Require the passport to be anchored on the Privi chain")] = False,
+        purpose: Annotated[str, Field(description="What you are about to do with this counterparty (recorded in your log if you send your key)")] = "",
+    ) -> CallToolResult:
+        """One-call allow/deny decision before transacting with another AI agent: verifies its Privi Passport and
+        applies your minimums, returning the reasons. If you send your organization API key the decision is
+        recorded in your own tamper-evident log as due-diligence evidence. Free."""
+        rec = passports.get(passport_id)
+        if not rec:
+            d = {"allow": False, "reasons": ["no such passport"], "passport_id": passport_id}
+        else:
+            v = passports.check(rec)
+            v.update(await _chain_check(rec["attestation"], rec["body_hash"]))
+            if v.get("onchain_verified") is False:
+                v["valid"] = False
+            d = {"passport_id": passport_id, "subject": v["subject"],
+                 **passports.gate(v, min_score, min_grade, True, require_anchored), "verification": v}
+        org = org_from(ctx)
+        if org:
+            try:
+                e = ledger.record(org["org_id"], "privi-passport", "Privi Ledger", "decision",
+                                  f"Passport gate {'allowed' if d['allow'] else 'denied'} {passport_id}"
+                                  + (f" for: {purpose[:120]}" if purpose else ""), passport_id,
+                                  "success" if d["allow"] else "blocked",
+                                  {"min_score": min_score, "min_grade": min_grade, "reasons": d["reasons"],
+                                   "current_score": d.get("current_score")})
+                d["recorded_in_your_log"] = {"stream_id": "privi-passport", "entry_hash": e["entry_hash"]}
+            except ValueError:
+                pass
+        return _result(d)
+
+    @mcp.tool(title="List your passports", annotations=READ_ONLY)
+    def passport_list(ctx: Context) -> CallToolResult:
+        """Your organization's issued passports with score, grade, expiry and revocation. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        return _result({"org_id": org["org_id"], "passports": passports.list_for(org["org_id"]),
+                        "issuer": passports.issuer()})
+
+    @mcp.tool(title="Revoke a passport", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True,
+                                                                     idempotentHint=True, openWorldHint=False))
+    def passport_revoke(
+        passport_id: Annotated[str, Field(description="pp_... ID")],
+        ctx: Context,
+        reason: Annotated[str, Field(description="Why (shown to verifiers)")] = "",
+    ) -> CallToolResult:
+        """Revoke one of your passports (e.g. an agent was retired or compromised). Verifiers see it immediately.
+        Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        try:
+            return _result(passports.revoke(passport_id.strip(), org["org_id"], reason))
+        except PassportError as e:
+            return _result({"error": str(e)}, is_error=True)
+
     # ---------------- http ----------------
 
     @mcp.custom_route("/admin/orgs", methods=["POST"], include_in_schema=False)
@@ -679,6 +849,34 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         pdf = render_pdf(rec["body"], rec["attestation"], rid)
         return Response(pdf, media_type="application/pdf",
                         headers={"Content-Disposition": f'attachment; filename="{rid}.pdf"'})
+
+    @mcp.custom_route("/passports/{passport_id}", methods=["GET"], include_in_schema=False)
+    async def passport_json(request: Request) -> JSONResponse:
+        rec = passports.get(request.path_params["passport_id"])
+        if not rec:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        v = passports.check(rec)
+        return JSONResponse({"passport": rec["body"], "signature": rec["signature"], "body_hash": rec["body_hash"],
+                             "attestation": rec["attestation"], "verification": v, "issuer": passports.issuer()},
+                            headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"})
+
+    @mcp.custom_route("/passports/{passport_id}/badge.svg", methods=["GET"], include_in_schema=False)
+    async def passport_badge(request: Request) -> Response:
+        rec = passports.get(request.path_params["passport_id"])
+        if not rec:
+            return Response(badge_svg("E", 0, expired=True), media_type="image/svg+xml", status_code=404)
+        v = passports.check(rec)
+        live = v.get("live") or {}
+        return Response(badge_svg(live.get("grade", rec["grade"]), live.get("score", rec["score"]),
+                                  revoked=v["revoked"], expired=v["expired"] or not v["valid"]),
+                        media_type="image/svg+xml", headers={"Cache-Control": "max-age=300"})
+
+    @mcp.custom_route("/.well-known/privi-passport.json", methods=["GET"], include_in_schema=False)
+    async def passport_issuer(_: Request) -> JSONResponse:
+        return JSONResponse({**passports.issuer(), "version": PASSPORT_VERSION_HTTP,
+                             "verify": {"mcp": f"{public_url}/mcp", "tools": ["passport_verify", "passport_gate"]},
+                             "lookup": f"{public_url}/passports/{{passport_id}}"},
+                            headers={"Access-Control-Allow-Origin": "*"})
 
     @mcp.custom_route("/.well-known/glama.json", methods=["GET"], include_in_schema=False)
     async def glama(_: Request) -> JSONResponse:

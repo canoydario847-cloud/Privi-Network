@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 
@@ -460,3 +461,95 @@ def test_quantum_ready_pqc_plan(ledger, monkeypatch):
     assert run_("gov_pqc_verify_export", {"document": doc2}).structured_content["valid"] is False
     assert [e["summary"].split(" (")[0] for e in ledger.entries(agency["org_id"], "pqc-inventory")][:2] == [
         "Added cryptographic inventory for BEN-01", "Added cryptographic inventory for INT-09"]
+
+
+# ---------------- Privi Passport ----------------
+
+def test_passport_issue_verify_gate_revoke(ledger, monkeypatch):
+    acme, other = ledger.create_org("Acme"), ledger.create_org("Other")
+    for i in range(20):
+        ledger.record(acme["org_id"], "ops-agent", "claude", "payment" if i % 4 else "approval",
+                      f"step {i}", "", "failure" if i == 7 else "success")
+
+    def run_(key, name, args):
+        as_org(monkeypatch, key)
+
+        async def go():
+            async with Client(server(ledger)) as c:
+                return await c.call_tool(name, args)
+        return anyio.run(go)
+
+    # enterprise orgs (create_org default) issue for free
+    r = run_(acme["api_key"], "passport_issue", {"stream_id": "ops-agent"})
+    assert not r.is_error, r
+    pp = r.structured_content
+    assert pp["passport_id"].startswith("pp_") and 0 < pp["score"] <= 1000 and pp["grade"] in "ABCDE"
+    assert pp["passport"]["components"]["integrity"]["points"] == 250
+    assert pp["passport"]["facts"]["entry_count"] == 20 and pp["passport"]["facts"]["failures"] == 1
+    assert pp["attestation"]["anchored"] is False  # no anchor client in tests
+
+    # whole-org passport, and empty stream refused
+    assert not run_(acme["api_key"], "passport_issue", {}).is_error
+    assert "error" in run_(acme["api_key"], "passport_issue", {"stream_id": "nothing"}).structured_content
+
+    # anyone can verify, by id or by document
+    v = run_(None, "passport_verify", {"passport_id": pp["passport_id"]}).structured_content
+    assert v["valid"] and v["signature_valid"] and v["hash_matches_issued"] and not v["expired"]
+    assert v["live"]["score"] == pp["score"] and v["live"]["drift"] == 0
+    v2 = run_(None, "passport_verify", {"passport": pp["passport"]}).structured_content
+    assert v2["valid"] and v2["passport_id"] == pp["passport_id"]
+    edited = dict(pp["passport"], score=1000)
+    assert run_(None, "passport_verify", {"passport": edited}).structured_content["valid"] is False
+    assert run_(None, "passport_verify", {"passport_id": "pp_nope"}).structured_content["valid"] is False
+
+    # gate: allow at a reachable bar, deny above it; decision is logged when the checker sends a key
+    g = run_(other["api_key"], "passport_gate", {"passport_id": pp["passport_id"], "min_score": 100,
+                                                 "purpose": "pay invoice"}).structured_content
+    assert g["allow"] and g["recorded_in_your_log"]["stream_id"] == "privi-passport"
+    g2 = run_(None, "passport_gate", {"passport_id": pp["passport_id"], "min_score": 1000}).structured_content
+    assert not g2["allow"] and "below the required 1000" in g2["reasons"][0]
+    g3 = run_(None, "passport_gate", {"passport_id": pp["passport_id"], "min_grade": "A", "min_score": 0}).structured_content
+    assert g3["allow"] == (pp["grade"] == "A")
+    assert run_(None, "passport_gate", {"passport_id": pp["passport_id"], "require_anchored": True,
+                                        "min_score": 0}).structured_content["allow"] is False
+
+    # tampering after issue is caught by the live re-score
+    ledger._db.execute("UPDATE entries SET summary='edited' WHERE org_id=? AND seq=3", (acme["org_id"],))
+    ledger._db.commit()
+    v3 = run_(None, "passport_verify", {"passport_id": pp["passport_id"]}).structured_content
+    assert v3["valid"] is False and v3["history_still_intact"] is False and v3["live"]["score"] < pp["score"]
+
+    # list and revoke (only the owner)
+    lst = run_(acme["api_key"], "passport_list", {}).structured_content
+    assert len(lst["passports"]) == 2 and lst["issuer"]["public_key_hex"]
+    assert run_(other["api_key"], "passport_revoke", {"passport_id": pp["passport_id"]}).is_error
+    rv = run_(acme["api_key"], "passport_revoke", {"passport_id": pp["passport_id"], "reason": "retired"}).structured_content
+    assert rv["revoked"]
+    assert run_(None, "passport_verify", {"passport_id": pp["passport_id"]}).structured_content["revoked"] is True
+
+
+def test_passport_free_plan_pays(ledger, monkeypatch):
+    fac = FakeFacilitator()
+    as_org(monkeypatch, None)
+
+    async def go():
+        async with Client(server(ledger, fac)) as c:
+            org = (await c.call_tool("ledger_signup", {"organization_name": "Tiny Co"})).structured_content
+            monkeypatch.setenv("LEDGER_LOCAL_ORG_KEY", org["api_key"])
+            await c.call_tool("ledger_record_action", {"stream_id": "a", "actor": "x", "action_type": "tool_call", "summary": "s"})
+            r = await c.call_tool("passport_issue", {})
+            assert r.is_error  # 402: payment required on the free plan
+            assert "payment" in json.dumps(r.structured_content).lower()
+    anyio.run(go)
+
+
+def test_passport_badge_and_issuer_routes(ledger):
+    from starlette.testclient import TestClient
+    acme = ledger.create_org("Acme")
+    ledger.record(acme["org_id"], "a", "x", "tool_call", "s")
+    app = server(ledger).streamable_http_app(stateless_http=True, json_response=True)
+    with TestClient(app) as http:
+        iss = http.get("/.well-known/privi-passport.json").json()
+        assert iss["public_key_hex"] and iss["key_id"].startswith("pk_")
+        assert http.get("/passports/pp_missing").status_code == 404
+        assert http.get("/passports/pp_missing/badge.svg").headers["content-type"].startswith("image/svg")
