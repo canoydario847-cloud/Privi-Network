@@ -24,6 +24,8 @@ class FakeRPC:
           "eth_getBlockByNumber":{"hash":BHASH,"transactions":[HASH]}
         }
     def call(self,method,params=None):
+        if method=="eth_getBlockByNumber" and params==["0x0",False]:
+            return {"hash":"0x"+"5"*64}
         return self.values[method]
 
 class EVMReceiptTests(unittest.TestCase):
@@ -33,6 +35,8 @@ class EVMReceiptTests(unittest.TestCase):
     def test_valid_native_receipt(self):
         out=self.verify()
         self.assertEqual(out["confirmations"],2)
+        self.assertIs(out["execution_succeeded"],True)
+        self.assertEqual(out["genesis_hash"],"0x"+"5"*64)
         self.assertEqual(out["evm_chain_id"],262144)
         self.assertEqual(out["gas_used"],"21000")
         self.assertEqual(out["effective_gas_price_wei"],"1000000000")
