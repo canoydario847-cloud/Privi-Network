@@ -25,6 +25,36 @@ def validator_set(url,height):
         page+=1
         if page>1000:raise ValueError('Validator pagination excessive')
 
+def signed_power_from_commit(commit, height, block_hash, voters):
+    """Count unique commit votes on one endpoint; never assert native PoP finality."""
+    if not isinstance(commit, dict) or str(commit.get('height'))!=str(height):
+        raise ValueError('Commit height mismatch')
+    block_id=commit.get('block_id')
+    if not isinstance(block_id,dict) or block_id.get('hash')!=block_hash:
+        raise ValueError('Commit hash mismatch')
+    signatures=commit.get('signatures')
+    if not isinstance(signatures,list):
+        raise ValueError('Missing commit signatures')
+    seen=set()
+    signed_power=0
+    for sig in signatures:
+        if not isinstance(sig,dict):
+            raise ValueError('Malformed commit vote')
+        key=str(sig.get('validator_address','')).upper()
+        if key:
+            if key in seen:
+                raise ValueError('Duplicate validator vote in commit')
+            seen.add(key)
+        if str(sig.get('block_id_flag')) not in ('2','BLOCK_ID_FLAG_COMMIT'):
+            continue
+        if key not in voters or not isinstance(sig.get('signature'),str) or not sig['signature']:
+            raise ValueError('Unknown or unsigned commit validator')
+        signed_power+=voters[key]
+    total=sum(voters.values())
+    if 3*signed_power<=2*total:
+        raise ValueError('Insufficient signatures')
+    return signed_power
+
 def audit(urls,expected='local-4221'):
     if len(urls)<4:raise ValueError('Provide >=4 CometBFT endpoints')
     statuses=[get(u,'/status') for u in urls]
@@ -42,17 +72,24 @@ def audit(urls,expected='local-4221'):
     if any(v!=sets[0] for v in sets[1:]):raise ValueError('Validator sets disagree')
     voters={k:v for k,v in sets[0].items() if v>0}
     if len(voters)<4:raise ValueError('Fewer than four voting validators')
-    commit=get(urls[0],'/commit?height='+str(height))['signed_header']['commit']
-    if commit['block_id']['hash']!=hashes[0]:raise ValueError('Commit hash mismatch')
-    signed={s.get('validator_address','').upper() for s in commit['signatures']
-            if str(s.get('block_id_flag')) in ('2','BLOCK_ID_FLAG_COMMIT') and s.get('signature')}
+    # Every RPC must independently report a matching height/hash and a
+    # >2/3 unique-voting-power commit. One healthy endpoint is not evidence
+    # that every node agrees. RPC-provided signatures are not independently
+    # cryptographically verified here; this is NOT native Point of Position.
+    powers=[]
+    for url in urls:
+        response=get(url,'/commit?height='+str(height))
+        header=response.get('signed_header') if isinstance(response,dict) else None
+        if not isinstance(header,dict):
+            raise ValueError('Missing signed commit header')
+        powers.append(signed_power_from_commit(header.get('commit'),height,hashes[0],voters))
     total=sum(voters.values())
-    signed_power=sum(power for key,power in voters.items() if key in signed)
-    if 3*signed_power<=2*total:raise ValueError('Insufficient signatures')
     return {'cosmosChainId':chains[0],'blockHeight':height,'blockHash':hashes[0],
             'nodes':len(urls),'votingValidators':len(voters),
-            'signedVotingPower':signed_power,'totalVotingPower':total,
-            'warning':'Four local validator processes are NOT four independent operators'}
+            'signedVotingPower':min(powers),'totalVotingPower':total,
+            'commitEndpointsChecked':len(powers),
+            'consensusType':'UPSTREAM_COMETBFT_NOT_NATIVE_POP',
+            'warning':'RPC commit evidence is not cryptographically verified here; four local validator processes are NOT four independent operators or native PoP finality'}
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
