@@ -112,6 +112,7 @@ def assess(snapshot):
     blocks.extend([
         "upstream disposable TEST chain rather than custom native PRVI financial binary",
         "only one observed Railway geographic region/fault domain",
+        "Railway disposable bootstrap coordinator has custody copies of every TEST validator private signing key; unsuitable for financial consensus",
         "no four-host independently verified production signer or key attestations",
         "no signed and independently reviewed financial genesis/release hashes",
         "no approved independent financial security assessment",
