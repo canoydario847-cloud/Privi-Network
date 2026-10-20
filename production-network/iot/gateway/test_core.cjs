@@ -23,6 +23,7 @@ function fixture() {
 function configuration() {
   return {
     rpcUrl:"http://127.0.0.1:8545",mode:"development",chainId:262144,
+    network:"privi-native",settlementChain:"privi",bridgeMode:"disabled",pairingMode:"disabled",
     genesisHash:"0x"+"a".repeat(64),contractAddress:"0x"+"1".repeat(40),
     contractCodeSha256:sha(Buffer.from("60006000","hex")),confirmations:2
   };
@@ -74,9 +75,14 @@ test("Privi-only configuration rejects known foreign networks and public HTTP",(
   assert.equal(validateNetworkConfig(config).chainId,262144);
   assert.throws(()=>validateNetworkConfig({...config,chainId:56}),/Third-party/);
   assert.throws(()=>validateNetworkConfig({...config,chainId:8453}),/Third-party/);
-  assert.throws(()=>validateNetworkConfig({...config,rpcUrl:"http://example.org:8545"}),/HTTPS/);
+  assert.throws(()=>validateNetworkConfig({...config,rpcUrl:"http://example.org:8545"}),/loopback/);
   assert.throws(()=>validateNetworkConfig({...config,genesisHash:"0x00"}),/genesis/);
-  assert.throws(()=>validateNetworkConfig({...config,mode:"production"}),/development-only/);
+  assert.throws(()=>validateNetworkConfig({...config,mode:"production"}),/Production IoT submission blocked/);
+  assert.throws(()=>validateNetworkConfig({...config,chainId:99999}),/Only Privi disposable/);
+  assert.throws(()=>validateNetworkConfig({...config,network:"ethereum"}),/Only native Privi/);
+  assert.throws(()=>validateNetworkConfig({...config,settlementChain:"base"}),/Only native Privi/);
+  assert.throws(()=>validateNetworkConfig({...config,bridgeMode:"enabled"}),/forbids automatic/);
+  assert.throws(()=>validateNetworkConfig({...config,pairingMode:"enabled"}),/forbids automatic/);
 });
 
 test("refuses incorrect Privi genesis and wrong on-chain runtime",async()=>{
