@@ -411,3 +411,52 @@ def test_gov_ai_inventory_m25_21(ledger, monkeypatch):
     assert ok["valid"] and ok["rows"] == 1
     bad = run_("gov_ai_verify_export", {"csv_text": ex["csv"].replace("Yes", "No", 1)}).structured_content
     assert bad["valid"] is False
+
+
+def test_quantum_ready_pqc_plan(ledger, monkeypatch):
+    agency = ledger.create_org("Department of Examples")
+    monkeypatch.setenv("LEDGER_LOCAL_ORG_KEY", agency["api_key"])
+    fake = FakeAnchorWithVerify()
+    srv = build_server(Settings(pay_to=PAY_TO), ledger, FakeFacilitator(), anchor_client=fake)
+
+    async def call(tool, args):
+        async with Client(srv) as c:
+            return await c.call_tool(tool, args)
+
+    run_ = lambda tool, args: anyio.run(call, tool, args)
+
+    cls = run_("gov_pqc_classify", {"algorithms": ["RSA-2048", "X25519MLKEM768", "ML-DSA-65"]}).structured_content
+    assert [r["class"] for r in cls["results"]] == ["quantum_vulnerable", "hybrid", "post_quantum"]
+
+    hva = {"system_id": "BEN-01", "name": "Benefits portal", "high_value_asset": True, "high_impact": True,
+           "sensitive_until_year": 2045, "assets": [
+               {"asset_id": "tls-edge", "kind": "protocol", "algorithm": "ECDHE-RSA-AES256-GCM", "protocol": "TLS 1.2"},
+               {"asset_id": "doc-sign", "kind": "signature", "algorithm": "RSA-3072", "target_date": "2032-06-30"},
+               {"asset_id": "vpn", "kind": "key_establishment", "algorithm": "X25519MLKEM768", "status": "hybrid"},
+               {"asset_id": "db-enc", "kind": "symmetric", "algorithm": "AES-256-GCM"}]}
+    low = {"system_id": "INT-09", "name": "Internal wiki", "assets": [
+               {"asset_id": "tls", "kind": "protocol", "algorithm": "ECDHE-ECDSA", "protocol": "TLS 1.3",
+                "target_date": "2029-06-30"}]}
+    assert run_("gov_pqc_system_save", {"system": hva, "actor": "scanner"}).structured_content["quantum_vulnerable_assets"] == 2
+    run_("gov_pqc_system_save", {"system": low, "actor": "scanner"})
+    assert run_("gov_pqc_system_save", {"system": {**low, "assets": [{"asset_id": "x", "kind": "magic", "algorithm": "RSA"}]},
+                                        "actor": "s"}).is_error
+
+    plan = run_("gov_pqc_plan", {}).structured_content
+    q = plan["migration_queue"]
+    assert [(i["system_id"], i["asset_id"]) for i in q][:2] == [("BEN-01", "tls-edge"), ("BEN-01", "doc-sign")]
+    assert q[0]["deadline"] == "2030-12-31" and q[1]["deadline"] == "2031-12-31" and q[-1]["system_id"] == "INT-09"
+    m = plan["metrics"]
+    assert m["quantum_vulnerable"] == 3 and m["hybrid"] == 1 and m["tls_below_1_3"] == 1 and m["migration_progress_pct"] == 25.0
+    texts = [f["finding"] for f in plan["findings"]]
+    assert any("after the 2031-12-31 deadline" in t for t in texts)          # signature target 2032 is too late
+    assert any("TLS 1.2" in t for t in texts) and any("no target date" in t for t in texts)
+
+    ex = run_("gov_pqc_export", {}).structured_content
+    assert ex["attestation"]["anchored"] and fake.calls[-1] == [ex["attestation"]["export_hash"]]
+    assert run_("gov_pqc_verify_export", {"document": ex["document"]}).structured_content["valid"]
+    import copy
+    doc2 = copy.deepcopy(ex["document"]); doc2["plan"]["metrics"]["quantum_vulnerable"] = 0
+    assert run_("gov_pqc_verify_export", {"document": doc2}).structured_content["valid"] is False
+    assert [e["summary"].split(" (")[0] for e in ledger.entries(agency["org_id"], "pqc-inventory")][:2] == [
+        "Added cryptographic inventory for BEN-01", "Added cryptographic inventory for INT-09"]

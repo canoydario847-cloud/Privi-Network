@@ -33,6 +33,7 @@ from .pdf import render_pdf
 from .handshake import HandshakeError, Handshakes
 from .plans import Plans
 from .gov_ai import HIGH_IMPACT_PRACTICES, GovAIInventory
+from .gov_pqc import KINDS, STATUSES, QuantumReady, canonical_json, classify
 from .x402 import Facilitator, Paywall
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor-production.up.railway.app/mcp"
@@ -82,6 +83,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     handshakes = Handshakes(ledger, ledger._db, ledger._lock)
     plans = Plans(ledger)
     gov = GovAIInventory(ledger)
+    pqc = QuantumReady(ledger)
 
     def onchain(org_id: str, stream_id: str, result: dict) -> dict:
         cp = checkpoints.latest(f"{org_id}/{stream_id}")
@@ -455,6 +457,104 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         return its on-chain seal. Free; no key needed."""
         h = hashlib.sha256(csv_text.encode("utf-8")).hexdigest()
         rec = gov.find_export(h)
+        if not rec:
+            return _result({"valid": False, "export_hash": h, "reason": "no export with this exact content; it may have been edited"})
+        return _result({"valid": True, "export_hash": h, **rec})
+
+    # ---------------- Privi Quantum-Ready (post-quantum migration, OMB M-26-15) ----------------
+
+    @mcp.tool(title="Classify an algorithm", annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False))
+    def gov_pqc_classify(
+        algorithms: Annotated[list[str], Field(description="Algorithm or cipher-suite names, e.g. 'RSA-2048', 'ECDHE-RSA-AES256-GCM', 'X25519MLKEM768'")],
+    ) -> CallToolResult:
+        """Classify cryptographic algorithms as quantum-vulnerable (RSA, ECDH, ECDSA, EdDSA, DH, DSA, MQV),
+        post-quantum (ML-KEM, ML-DSA, SLH-DSA), hybrid, symmetric/hash, or unknown. Free."""
+        return _result({"results": [classify(a) for a in algorithms[:200]]})
+
+    @mcp.tool(title="Save a system's crypto inventory", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                                   idempotentHint=True, openWorldHint=False))
+    def gov_pqc_system_save(
+        system: Annotated[dict[str, Any], Field(description=(
+            "System record: system_id, name, bureau, owner, high_value_asset, high_impact, sensitive_until_year, "
+            "fedramp_cloud, notes, assets [{asset_id, kind (" + "|".join(KINDS) + "), algorithm, key_size, protocol, "
+            "location, product, vendor, status (" + "|".join(STATUSES) + "), target_date (YYYY-MM-DD), replacement, evidence}]. "
+            "Replaces the system's previous inventory."))],
+        actor: Annotated[str, Field(description="Who made the change (person, scanner or agent)")],
+        ctx: Context,
+    ) -> CallToolResult:
+        """Record the cryptographic inventory (CBOM) of one system for post-quantum migration. Every change creates
+        a new version and is written to the agency's tamper-evident 'pqc-inventory' log. Scanners and agents can
+        submit results directly. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        if blocked := over_limit(org["org_id"]):
+            return blocked
+        try:
+            return _result(pqc.save(org["org_id"], actor, system))
+        except ValueError as e:
+            return _result({"error": str(e)}, is_error=True)
+
+    @mcp.tool(title="Crypto inventory", annotations=READ_ONLY)
+    def gov_pqc_inventory(
+        ctx: Context,
+        system_id: Annotated[str | None, Field(description="One system; omit for all")] = None,
+    ) -> CallToolResult:
+        """Current cryptographic inventory of your systems. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        return _result({"org_id": org["org_id"], "systems": pqc.latest(org["org_id"], system_id)})
+
+    @mcp.tool(title="Post-quantum migration plan", annotations=READ_ONLY)
+    def gov_pqc_plan(ctx: Context) -> CallToolResult:
+        """Prioritized post-quantum migration plan: every quantum-vulnerable asset ranked (High Value Assets,
+        high-impact systems and long-lived sensitive data first; key establishment before signatures), with its
+        deadline (key establishment Dec 31 2030, signatures Dec 31 2031), recommended NIST replacement, progress
+        metrics, and findings (missed deadlines, TLS below 1.3, no target dates, unrecognized algorithms).
+        Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        return _result(pqc.plan(org["org_id"]))
+
+    @mcp.tool(title="Export sealed CBOM and plan", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                              idempotentHint=False, openWorldHint=True))
+    async def gov_pqc_export(ctx: Context) -> CallToolResult:
+        """Export the full cryptographic inventory (CBOM) and migration plan as one JSON document for OMB, the
+        CIO or auditors, with its SHA-256 sealed on the Privi blockchain. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        doc = {"document_type": "privi/pqc-cbom-and-migration-plan", "version": 1,
+               "organization": {"org_id": org["org_id"], "name": org["name"]},
+               "systems": [s["record"] for s in pqc.latest(org["org_id"])], "plan": pqc.plan(org["org_id"])}
+        h = hashlib.sha256(canonical_json(doc).encode("utf-8")).hexdigest()
+        att: dict[str, Any] = {"export_hash": h, "algorithm": "sha256 over canonical JSON (sorted keys, no spaces)"}
+        if anchor_client:
+            try:
+                r = await anyio.to_thread.run_sync(anchor_client.anchor, [h], f"PQC CBOM export {org['org_id']}")
+                rc = next(x for x in r["receipts"] if x["hash"] == h)
+                att.update(anchored=True, tx_hash=r["tx_hash"], proof=rc["proof"], block_number=r.get("block_number"),
+                           chain_id=r.get("chain_id"))
+            except (AnchorError, StopIteration, KeyError) as e:
+                att.update(anchored=False, reason=f"anchoring failed: {e}")
+        else:
+            att.update(anchored=False, reason="anchoring is not configured on this server")
+        pqc.save_export(org["org_id"], h, att)
+        ledger.record(org["org_id"], "pqc-inventory", "Privi Ledger", "data_access",
+                      f"Exported CBOM and PQC migration plan ({len(doc['systems'])} system(s))", "pqc-export", "success",
+                      {"export_hash": h, "anchored": att.get("anchored")})
+        return _result({"document": doc, "attestation": att})
+
+    @mcp.tool(title="Verify a CBOM export", annotations=READ_ONLY)
+    def gov_pqc_verify_export(
+        document: Annotated[dict[str, Any], Field(description="The 'document' object exactly as exported")],
+    ) -> CallToolResult:
+        """Check that a CBOM and migration-plan document is exactly what was exported from Privi Ledger and return
+        its on-chain seal. Free; no key needed."""
+        h = hashlib.sha256(canonical_json(document).encode("utf-8")).hexdigest()
+        rec = pqc.find_export(h)
         if not rec:
             return _result({"valid": False, "export_hash": h, "reason": "no export with this exact content; it may have been edited"})
         return _result({"valid": True, "export_hash": h, **rec})

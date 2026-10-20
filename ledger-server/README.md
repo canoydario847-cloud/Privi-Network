@@ -75,6 +75,21 @@ The inventory links to agents' Privi Ledger activity logs (`monitoring_streams`)
 
 > Field names follow OMB's published reporting fields. Confirm them against OMB's current template before submitting. This tool supports compliance work; it is not legal advice or an OMB-approved system.
 
+## Privi Quantum-Ready (post-quantum migration)
+
+Executive Order 14409 (June 2026) requires federal key establishment to move to post-quantum cryptography by **Dec 31, 2030**, and digital signatures by **Dec 31, 2031**. OMB M-26-15 asks every agency for a migration plan built on a cryptographic inventory (CBOM), prioritizing High Value Assets, high-impact systems and data that must stay sensitive past 2030, plus TLS 1.3 support by Jan 2, 2030.
+
+| Tool | What it does |
+|---|---|
+| `gov_pqc_classify` (free) | Classifies algorithms and cipher suites: quantum-vulnerable (RSA, ECDH, ECDSA, EdDSA, DH, DSA, MQV), post-quantum (ML-KEM, ML-DSA, SLH-DSA), hybrid, symmetric/hash, or unknown |
+| `gov_pqc_system_save` | Records one system's cryptographic assets (from people, scanners or agents). Versioned and written to a tamper-evident `pqc-inventory` log |
+| `gov_pqc_inventory` | Current inventory |
+| `gov_pqc_plan` | Ranked migration queue with per-asset deadlines and NIST replacements, progress metrics, and findings: targets past the deadline, TLS below 1.3, priority assets with no target date, unrecognized algorithms |
+| `gov_pqc_export` | The CBOM plus plan as one JSON document, sealed on the Privi chain |
+| `gov_pqc_verify_export` (free) | Proves an exported document is unaltered |
+
+> The rules follow public summaries of EO 14409 and OMB M-26-15. Confirm them against the official texts and NIST IR 8547 before relying on them. This tool supports compliance work; it is not legal advice.
+
 ## Privi Handshake
 
 A dealing between two companies, such as a payment, a data transfer, a delivery or an agreement, gets recorded by **both** of them, with neither able to deny or rewrite it alone.
