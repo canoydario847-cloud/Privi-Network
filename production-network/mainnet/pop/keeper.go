@@ -144,32 +144,58 @@ func readTip(kv corestore.KVStore,key []byte) (uint64,string,error) {
     return seq,hex.EncodeToString(hash),nil
 }
 
-// Apply authenticates one next position against the consensus-backed
-// genesis authority and persists its new sequence + tip in ONE KV write.
-// SDK execution MUST ensure a failed call cannot commit partial transaction
-// state; batch application and transaction routing are not yet implemented.
+// Apply preserves the single-position API using the same fail-closed path
+// as a batch. Both operations make only ONE consensus KV write.
 func (k Keeper) Apply(ctx context.Context,p Position) (Verified,error) {
-    author,kv,err:=k.authorAndStore(ctx,p);if err!=nil{return Verified{},err}
-    key:=stateKey(p.Company,p.Zone)
-    seq,prior,err:=readTip(kv,key);if err!=nil{return Verified{},err}
-    if seq==^uint64(0)||p.Sequence!=seq+1||p.PriorHash!=prior {
-        return Verified{},ErrSequence
+    return k.ApplyBatch(ctx,[]Position{p})
+}
+
+// ApplyBatch verifies consecutive positions from ONE company/zone stream
+// against the committed genesis author. It validates ALL signed records and
+// ancestry in memory before issuing a SINGLE consensus KV write. A bad later
+// signature, replay, sequence gap or KV error cannot partially advance this
+// stream. Other company/zone streams must be executed in separate cached
+// SDK transactions; this is not a BFT consensus or ABCI transaction router.
+func (k Keeper) ApplyBatch(ctx context.Context,positions []Position) (Verified,error) {
+    if len(positions)==0||len(positions)>128 {
+        return Verified{},errors.New("PoP batch must contain 1..128 positions")
     }
-    if !bytes.Equal(p.Signer,author) {return Verified{},ErrUnapprovedAuthor}
-    message,err:=CanonicalMessage(p);if err!=nil{return Verified{},err}
-    if len(p.Signature)!=ed25519.SignatureSize||!ed25519.Verify(author,message,p.Signature) {
-        return Verified{},errors.New("PoP author signature invalid")
-    }
-    want,err:=SealedHash(p)
+    first:=positions[0]
+    author,kv,err:=k.authorAndStore(ctx,first)
     if err!=nil{return Verified{},err}
-    if p.BlockHash!=want {return Verified{},errors.New("PoP sealed position hash mismatch")}
-    digest,err:=hex.DecodeString(want)
+    key:=stateKey(first.Company,first.Zone)
+    seq,prior,err:=readTip(kv,key)
+    if err!=nil{return Verified{},err}
+    for _,p:=range positions {
+        if p.ChainID!=first.ChainID||p.Company!=first.Company||p.Zone!=first.Zone {
+            return Verified{},errors.New("PoP batch cannot cross chain, company or zone streams")
+        }
+        if seq==^uint64(0)||p.Sequence!=seq+1||p.PriorHash!=prior {
+            return Verified{},ErrSequence
+        }
+        if !bytes.Equal(p.Signer,author) {return Verified{},ErrUnapprovedAuthor}
+        message,err:=CanonicalMessage(p)
+        if err!=nil{return Verified{},err}
+        if len(p.Signature)!=ed25519.SignatureSize||!ed25519.Verify(author,message,p.Signature) {
+            return Verified{},errors.New("PoP author signature invalid")
+        }
+        want,err:=SealedHash(p)
+        if err!=nil{return Verified{},err}
+        if p.BlockHash!=want {
+            return Verified{},errors.New("PoP sealed position hash mismatch")
+        }
+        seq=p.Sequence
+        prior=want
+    }
+    digest,err:=hex.DecodeString(prior)
     if err!=nil{return Verified{},err}
     state:=make([]byte,8+sha256.Size)
-    binary.BigEndian.PutUint64(state[:8],p.Sequence)
+    binary.BigEndian.PutUint64(state[:8],seq)
     copy(state[8:],digest)
     if err=kv.Set(key,state);err!=nil{return Verified{},err}
-    return Verified{PoPVerified:true,Stamp:p.Stamp,TipHash:want,Sequence:p.Sequence,Records:1},nil
+    last:=positions[len(positions)-1]
+    return Verified{PoPVerified:true,Stamp:last.Stamp,TipHash:prior,
+        Sequence:seq,Records:len(positions)},nil
 }
 
 // AssertInitialized must be called at each real ABCI block boundary.

@@ -80,6 +80,85 @@ func TestKeeperTwoTransitionsAcrossRestart(t *testing.T){
     }
     if !bytes.Equal(pub,first.Signer){t.Fatal("unexpected signer")}
 }
+// Batch verification must be atomic for one native PoP company-zone stream.
+// A valid first record must never be stored if the second is forged.
+func TestKeeperAtomicBatchCommitsOneVerifiedTip(t *testing.T) {
+    k,db,_,priv:=setupPosition(t)
+    ctx:=context.Background()
+    first:=makePosition(t,priv,1,zeroTip())
+    second:=makePosition(t,priv,2,first.BlockHash)
+    result,err:=k.ApplyBatch(ctx,[]Position{first,second})
+    if err!=nil||!result.PoPVerified||result.Records!=2||result.Sequence!=2||
+        result.TipHash!=second.BlockHash {
+        t.Fatalf("valid PoP batch failed: result=%+v err=%v",result,err)
+    }
+    if len(db.entries)!=2 {t.Fatalf("expected immutable registry and ONE position tip, got %d keys",len(db.entries))}
+    restarted,err:=NewKeeper(mockService{db});if err!=nil{t.Fatal(err)}
+    seq,tip,err:=restarted.Snapshot(ctx,"UTQ4JJ20","GRID/READINGS")
+    if err!=nil||seq!=2||tip!=second.BlockHash {t.Fatalf("batch not durable after keeper restart: %d %s %v",seq,tip,err)}
+    if _,err:=restarted.ApplyBatch(ctx,[]Position{first,second});!errors.Is(err,ErrSequence) {
+        t.Fatalf("accepted replayed PoP batch: %v",err)
+    }
+    third:=makePosition(t,priv,3,second.BlockHash)
+    if out,err:=restarted.Apply(ctx,third);err!=nil||out.Sequence!=3||out.Records!=1{
+        t.Fatalf("single-position API broke after batch: %+v %v",out,err)
+    }
+}
+
+func TestKeeperAtomicBatchRejectsForgedLaterRecordWithoutPartialWrite(t *testing.T) {
+    mutators:=map[string]func(*Position){
+        "forged signature":func(p *Position){p.Signature[0]^=1},
+        "changed event hash":func(p *Position){p.EventHash="f"+p.EventHash[1:]},
+        "sequence gap":func(p *Position){p.Sequence=3},
+        "replayed sequence":func(p *Position){p.Sequence=1},
+        "wrong prior tip":func(p *Position){p.PriorHash=zeroTip()},
+        "different company":func(p *Position){p.Company="ATTACKER"},
+        "different zone":func(p *Position){p.Zone="FLEET/ASSETS"},
+        "cross-chain record":func(p *Position){p.ChainID="privi-other-1"},
+    }
+    for name,mutate:=range mutators {
+        t.Run(name,func(t *testing.T) {
+            k,db,_,priv:=setupPosition(t);ctx:=context.Background()
+            first:=makePosition(t,priv,1,zeroTip())
+            second:=makePosition(t,priv,2,first.BlockHash)
+            mutate(&second)
+            if _,err:=k.ApplyBatch(ctx,[]Position{first,second});err==nil {
+                t.Fatal("invalid second record accepted in atomic PoP batch")
+            }
+            seq,tip,err:=k.Snapshot(ctx,"UTQ4JJ20","GRID/READINGS")
+            if err!=nil||seq!=0||tip!=zeroTip() {
+                t.Fatalf("invalid batch partially advanced PoP state: %d %s %v",seq,tip,err)
+            }
+            if len(db.entries)!=1 {t.Fatal("invalid batch wrote more than genesis registry")}
+            valid:=makePosition(t,priv,2,first.BlockHash)
+            if _,err:=k.ApplyBatch(ctx,[]Position{first,valid});err!=nil {
+                t.Fatalf("rejected valid retry after invalid batch: %v",err)
+            }
+        })
+    }
+}
+
+func TestKeeperAtomicBatchSizeAndStoreWriteFailure(t *testing.T) {
+    k,db,_,priv:=setupPosition(t);ctx:=context.Background()
+    if _,err:=k.ApplyBatch(ctx,nil);err==nil{t.Fatal("accepted empty batch")}
+    oversized:=make([]Position,129)
+    if _,err:=k.ApplyBatch(ctx,oversized);err==nil{t.Fatal("accepted unbounded batch")}
+    first:=makePosition(t,priv,1,zeroTip())
+    second:=makePosition(t,priv,2,first.BlockHash)
+    db.writeError=errors.New("disposable storage write unavailable")
+    if _,err:=k.ApplyBatch(ctx,[]Position{first,second});err==nil {
+        t.Fatal("swallowed batch KV write error")
+    }
+    db.writeError=nil
+    seq,tip,err:=k.Snapshot(ctx,"UTQ4JJ20","GRID/READINGS")
+    if err!=nil||seq!=0||tip!=zeroTip() {
+        t.Fatalf("failed batch KV write advanced sequence: %d %s %v",seq,tip,err)
+    }
+    if _,err:=k.ApplyBatch(ctx,[]Position{first,second});err!=nil{
+        t.Fatalf("valid batch could not retry after storage recovery: %v",err)
+    }
+}
+
 func TestKeeperFailsClosedOnWrongIdentityOrTampering(t *testing.T){
     for name,mutate:=range map[string]func(*Position){
         "wrong chain":func(p *Position){p.ChainID="privi-other-1"},
