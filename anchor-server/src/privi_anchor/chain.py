@@ -40,6 +40,7 @@ class JsonRpcChain:
         self.address = self._acct.address
         self._lock = threading.Lock()
         self._id = 0
+        self._next_nonce: int | None = None   # local view: some RPC nodes report a stale "pending" count
 
     def _rpc(self, method: str, params: list) -> Any:
         self._id += 1
@@ -66,24 +67,37 @@ class JsonRpcChain:
     def balance_wei(self) -> int:
         return int(self._rpc("eth_getBalance", [self.address, "latest"]), 16)
 
+    NONCE_ERRORS = ("underpriced", "nonce too low", "already known", "known transaction")
+
     def send_data(self, data_hex: str) -> str:
         with self._lock:  # one nonce at a time
-            nonce = int(self._rpc("eth_getTransactionCount", [self.address, "pending"]), 16)
+            remote = int(self._rpc("eth_getTransactionCount", [self.address, "pending"]), 16)
+            nonce = max(remote, self._next_nonce or 0)
             gas_price = int(self._rpc("eth_gasPrice", []), 16)
             tx = {"from": self.address, "to": self.address, "value": "0x0", "data": data_hex}
             try:
                 gas = int(int(self._rpc("eth_estimateGas", [tx]), 16) * 1.3)
             except RpcError:
                 gas = 21000 + 16 * (len(data_hex) // 2) + 10000
-            signed = self._acct.sign_transaction({
-                "nonce": nonce, "gasPrice": int(gas_price * 1.2) + 1, "gas": gas,
-                "to": self.address, "value": 0, "data": data_hex, "chainId": self.chain_id,
-            })
-            raw = getattr(signed, "raw_transaction", None) or getattr(signed, "rawTransaction")
-            raw_hex = raw.hex() if isinstance(raw, (bytes, bytearray)) else str(raw)
-            if not raw_hex.startswith("0x"):
-                raw_hex = "0x" + raw_hex
-            return self._rpc("eth_sendRawTransaction", [raw_hex])
+            for attempt in range(3):
+                try:
+                    h = self._rpc("eth_sendRawTransaction", [self._sign(nonce, gas_price, gas, data_hex)])
+                    self._next_nonce = nonce + 1
+                    return h
+                except RpcError as e:
+                    if attempt == 2 or not any(k in str(e).lower() for k in self.NONCE_ERRORS):
+                        raise
+                    nonce += 1          # that nonce is taken (our own earlier tx not yet visible): use the next one
+            raise RpcError("eth_sendRawTransaction: could not find a free nonce")
+
+    def _sign(self, nonce: int, gas_price: int, gas: int, data_hex: str) -> str:
+        signed = self._acct.sign_transaction({
+            "nonce": nonce, "gasPrice": int(gas_price * 1.2) + 1, "gas": gas,
+            "to": self.address, "value": 0, "data": data_hex, "chainId": self.chain_id,
+        })
+        raw = getattr(signed, "raw_transaction", None) or getattr(signed, "rawTransaction")
+        raw_hex = raw.hex() if isinstance(raw, (bytes, bytearray)) else str(raw)
+        return raw_hex if raw_hex.startswith("0x") else "0x" + raw_hex
 
     def receipt(self, tx_hash: str) -> dict | None:
         return self._rpc("eth_getTransactionReceipt", [tx_hash])

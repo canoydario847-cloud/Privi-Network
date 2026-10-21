@@ -26,7 +26,7 @@ from .x402 import Facilitator, Paywall
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor.onrender.com/mcp"
 
-__version__ = "0.1.0"
+__version__ = "0.3.1"
 
 INSTRUCTIONS = """\
 Privi Verify checks where a manufactured lot came from and whether its records
@@ -226,7 +226,8 @@ def build_server(
 
     @mcp.custom_route("/health", methods=["GET"], include_in_schema=False)
     async def health(_: Request) -> JSONResponse:
-        return JSONResponse({"ok": True, "service": "privi-verify", "version": __version__})
+        return JSONResponse({"ok": True, "service": "privi-verify", "version": __version__},
+                            headers={"Access-Control-Allow-Origin": "*"})
 
     @mcp.custom_route("/", methods=["GET"], include_in_schema=False)
     async def index(_: Request) -> JSONResponse:

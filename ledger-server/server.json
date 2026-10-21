@@ -3,7 +3,7 @@
   "name": "io.github.canoydario847-cloud/privi-ledger",
   "title": "Privi Ledger",
   "description": "Privi Fortress: post-quantum (ML-DSA-87, FIPS 204) co-signed audit logs, an RFC 9162 transparency log with free inclusion and consistency proofs, two-person integrity for sensitive agent actions, and offline-verifiable evidence bundles. Plus Privi Live (WebSocket/SSE trust feed, human approvals with a kill switch, a metered MCP gateway, paid agent-to-agent rooms), Mandates, KYA wallet checks and Passport trust credentials for AI agents. Free tier; Pro $29 USDC/30 days.",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "websiteUrl": "https://privi-discovery.onrender.com",
   "repository": {
     "url": "https://github.com/canoydario847-cloud/Privi-Network",

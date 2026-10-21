@@ -114,6 +114,9 @@ def test_sync_probe_score_and_evidence(ledger, monkeypatch):
     assert set(w.methods) <= {"initialize", "notifications/initialized", "tools/list"}   # never tools/call
     st = scan.stats()
     assert st["by_status"] == {"ok": 3, "auth_required": 1} and st["servers_with_high_risk_findings"] == 1
+    dz = scan.search(verdict="danger")
+    assert dz["total"] == 1 and len(dz["items"]) == 1 and dz["items"][0]["findings"]["high"] >= 3
+    assert scan.search(verdict="ok")["total"] == 2 and scan.search(verdict="unverified")["total"] == 1
     evil = scan.search("evil")["items"][0]
     assert evil["verdict"] == "danger" and evil["grade"] == "F"
     clean = scan.check("https://clean.example.com/mcp")
@@ -271,3 +274,18 @@ def test_mcp_tools_and_http(ledger, monkeypatch):
         assert http.get("/scan/api/check?url=ftp://x").status_code == 400
         assert http.get("/scan/api/stats").json()["servers"] == 4
         assert http.get("/scan/api/changes").json() == []
+
+
+def test_schema_migration_adds_summary_columns(ledger):
+    """A database written by Scan 0.9.0 (no verdict / count columns) is upgraded in place and back-filled."""
+    ledger._db.executescript(sc.SCHEMA)
+    ledger._db.execute("INSERT INTO scan_servers (server_id, url, source, first_seen, status, tools, findings, score, grade, "
+                       "tools_hash, tool_count) VALUES ('mcp_aaaaaaaaaaaa', 'https://x.example.com/mcp', 'registry', "
+                       "'2026-10-21T00:00:00+00:00', 'ok', ?, '[]', 100, 'A', 'h', 2)", (json.dumps(POISON),))
+    ledger._db.commit()
+    scan = sc.Scanner(ledger)
+    cols = {r[1] for r in ledger._db.execute("PRAGMA table_info(scan_servers)").fetchall()}
+    assert {"verdict", "n_high", "n_med", "n_low"} <= cols
+    assert scan.reanalyze_all() == 1
+    item = scan.search(verdict="danger")["items"][0]
+    assert item["grade"] == "F" and item["findings"]["high"] >= 3

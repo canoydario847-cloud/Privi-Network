@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "privi-anchor-mcp"
-version = "0.1.0"
+version = "0.3.1"
 description = "Timestamped proof-of-existence for AI outputs and data, anchored on the Privi blockchain, as an MCP server."
 readme = "README.md"
 license = "MIT"

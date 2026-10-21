@@ -47,7 +47,7 @@ from .passport import PASSPORT_VERSION as PASSPORT_VERSION_HTTP, PassportError, 
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor.onrender.com/mcp"
 
-__version__ = "0.9.0"
+__version__ = "0.9.1"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/ledger-server"
 
 INSTRUCTIONS = """\
@@ -1543,7 +1543,8 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
 
     @mcp.custom_route("/health", methods=["GET"], include_in_schema=False)
     async def health(_: Request) -> JSONResponse:
-        return JSONResponse({"ok": True, "service": "privi-ledger", "version": __version__})
+        return JSONResponse({"ok": True, "service": "privi-ledger", "version": __version__},
+                            headers={"Access-Control-Allow-Origin": "*"})
 
     @mcp.custom_route("/", methods=["GET"], include_in_schema=False)
     async def index(_: Request) -> JSONResponse:

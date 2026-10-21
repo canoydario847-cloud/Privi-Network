@@ -152,3 +152,51 @@ def test_eth_account_signing_roundtrip():
     assert c.send_data(data) == "0x" + "ab" * 32
     assert eth_account.Account.recover_transaction(sent["raw"]) == c.address
     assert sent["raw"].startswith("0x") and data[2:] in sent["raw"]
+
+
+def test_nonce_tracking_survives_stale_pending_count():
+    """Some RPC nodes report a stale 'pending' nonce right after a send; the client must not reuse it."""
+    from privi_anchor.chain import JsonRpcChain, RpcError
+
+    c = JsonRpcChain.__new__(JsonRpcChain)
+    import threading
+    c._lock, c._id, c._next_nonce, c.address, c.chain_id = threading.Lock(), 0, None, "0xabc", 1
+    used, sent = set(), []
+
+    def rpc(method, params):
+        if method == "eth_getTransactionCount":
+            return hex(5)                          # node never catches up
+        if method == "eth_gasPrice":
+            return hex(10)
+        if method == "eth_estimateGas":
+            return hex(21000)
+        n = int(params[0])
+        if n in used:
+            raise RpcError("eth_sendRawTransaction: replacement transaction underpriced")
+        used.add(n)
+        sent.append(n)
+        return f"0xtx{n}"
+
+    c._rpc = rpc
+    c._sign = lambda nonce, gp, gas, data: str(nonce)
+    assert [c.send_data("0x01") for _ in range(3)] == ["0xtx5", "0xtx6", "0xtx7"]
+    used.add(8)                                    # someone else (an older process) took 8
+    assert c.send_data("0x01") == "0xtx9"
+    c._rpc = lambda m, p: (_ for _ in ()).throw(RpcError("eth_sendRawTransaction: insufficient funds")) \
+        if m == "eth_sendRawTransaction" else rpc(m, p)
+    try:
+        c.send_data("0x01")
+        assert False
+    except RpcError as e:
+        assert "insufficient" in str(e)
+
+
+def test_public_status_and_health_cors(store, monkeypatch):
+    from starlette.testclient import TestClient
+    s = build_server(Settings(), None, store)
+    app = s.streamable_http_app(host="0.0.0.0", stateless_http=True, json_response=True)
+    with TestClient(app) as http:
+        h = http.get("/health")
+        assert h.headers["access-control-allow-origin"] == "*"
+        st = http.get("/status").json()
+        assert st["service"] == "privi-anchor" and st["anchoring_enabled"] is False and "last_confirmed_block_time" in st

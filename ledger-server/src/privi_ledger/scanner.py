@@ -50,7 +50,7 @@ CHANGE_FLAG_DAYS = 30
 UA = "PriviScan/1.0 (read-only MCP trust probe; never calls tools; +https://privi-ledger.onrender.com/scan)"
 PROTOCOL = "2025-06-18"
 LISTED = ("ok", "auth_required", "paid_gate")
-ANALYZER_VERSION = "4"     # bump when rules change; stored servers are re-graded from their saved tools
+ANALYZER_VERSION = "5"     # bump when rules change; stored servers are re-graded from their saved tools
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS scan_servers (
@@ -264,6 +264,17 @@ def score_of(findings: list[dict]) -> tuple[int, str]:
     return s, g
 
 
+LIGHT_COLS = ("server_id, url, name, title, description, source, first_seen, last_probe, status, detail, auth, server_name, "
+              "tools_hash, tool_count, score, grade, changes, last_change_at, claimed_org, hidden, verdict, n_high, n_med, n_low")
+
+
+def summary_of(status: str, findings: list[dict], score) -> dict:
+    return {"verdict": verdict_of({"status": status, "findings": findings, "score": score}),
+            "n_high": sum(1 for x in findings if x["severity"] == "high"),
+            "n_med": sum(1 for x in findings if x["severity"] == "medium"),
+            "n_low": sum(1 for x in findings if x["severity"] == "low")}
+
+
 def verdict_of(row: dict) -> str:
     st = row.get("status")
     if st not in LISTED:
@@ -292,6 +303,13 @@ class Scanner:
         self._pl = threading.Lock()
         with self.lock:
             self.db.executescript(SCHEMA)
+            cols = {r[1] for r in self.db.execute("PRAGMA table_info(scan_servers)").fetchall()}
+            for c, t in (("verdict", "TEXT"), ("n_high", "INTEGER NOT NULL DEFAULT 0"), ("n_med", "INTEGER NOT NULL DEFAULT 0"),
+                         ("n_low", "INTEGER NOT NULL DEFAULT 0")):
+                if c not in cols:
+                    self.db.execute(f"ALTER TABLE scan_servers ADD COLUMN {c} {t}")
+            self.db.execute("CREATE INDEX IF NOT EXISTS idx_scan_verdict ON scan_servers (verdict)")
+            self.db.execute("CREATE INDEX IF NOT EXISTS idx_scan_status ON scan_servers (status, hidden)")
             if not self.db.execute("SELECT 1 FROM orgs WHERE org_id=?", (SCAN_ORG_ID,)).fetchone():
                 self.db.execute("INSERT INTO orgs (org_id, name, key_hash, created_at) VALUES (?,?,?,?)",
                                 (SCAN_ORG_ID, "Privi Scan (public MCP trust registry)", "!" + secrets.token_hex(32), _iso()))
@@ -576,6 +594,9 @@ class Scanner:
                        score=score, grade=grade, changed_tools=canon(changed_tools))
         elif p["status"] in ("auth_required", "paid_gate"):
             upd.update(findings=canon([]), score=None, grade=None)
+        final_findings = (findings if tools is not None else [] if p["status"] in ("auth_required", "paid_gate")
+                          else (prev.get("findings") or []))
+        upd.update(summary_of(p["status"], final_findings, upd.get("score", prev.get("score"))))
         if kind == "changed":
             upd.update(changes=(prev.get("changes") or 0) + 1, last_change_at=_iso(now))
         if seq:
@@ -637,18 +658,23 @@ class Scanner:
             m = self.db.execute("SELECT v FROM scan_meta WHERE k='analyzer'").fetchone()
             if m and m["v"] == ANALYZER_VERSION:
                 return 0
-            ids = [r["server_id"] for r in self.db.execute("SELECT server_id FROM scan_servers WHERE tools IS NOT NULL").fetchall()]
+            ids = [r["server_id"] for r in self.db.execute("SELECT server_id FROM scan_servers").fetchall()]
         n = 0
         for sid in ids:
             row = self._row(sid)
-            if row is None or row.get("tools") is None:
+            if row is None:
                 continue
             try:
-                f = analyze(row["tools"], row["status"], row.get("auth"), row.get("changed_tools") or [])
-                sc, g = score_of(f)
+                if row.get("tools") is not None:
+                    f = analyze(row["tools"], row["status"], row.get("auth"), row.get("changed_tools") or [])
+                    sc, g = score_of(f)
+                    n += 1
+                else:
+                    f, sc, g = row.get("findings") or [], row.get("score"), row.get("grade")
+                sm = summary_of(row["status"], f, sc)
                 with self.lock:
-                    self.db.execute("UPDATE scan_servers SET findings=?, score=?, grade=? WHERE server_id=?", (canon(f), sc, g, sid))
-                n += 1
+                    self.db.execute("UPDATE scan_servers SET findings=?, score=?, grade=?, verdict=?, n_high=?, n_med=?, n_low=? "
+                                    "WHERE server_id=?", (canon(f), sc, g, sm["verdict"], sm["n_high"], sm["n_med"], sm["n_low"], sid))
             except Exception as e:
                 print(f"privi-scan: re-grade {sid} failed: {e}", flush=True)
         with self.lock:
@@ -751,14 +777,19 @@ class Scanner:
 
     def public(self, row: dict, full: bool = True) -> dict:
         sid = row["server_id"]
-        f = row.get("findings") or []
+        f = row.get("findings")
+        if f is None and "n_high" in row and not full:
+            counts = {"high": row.get("n_high") or 0, "medium": row.get("n_med") or 0, "low": row.get("n_low") or 0}
+            verdict = row.get("verdict") or verdict_of({**row, "findings": []})
+        else:
+            f = f or []
+            counts = {k: sum(1 for x in f if x["severity"] == k) for k in ("high", "medium", "low")}
+            verdict = verdict_of({**row, "findings": f})
         d = {"server_id": sid, "name": row.get("name"), "title": row.get("title") or row.get("server_name"),
              "url": row["url"], "description": row.get("description"), "status": row["status"], "detail": row.get("detail"),
-             "verdict": verdict_of(row), "score": row.get("score"), "grade": row.get("grade"),
+             "verdict": verdict, "score": row.get("score"), "grade": row.get("grade"),
              "tool_count": row.get("tool_count"), "tools_hash": row.get("tools_hash"), "auth": row.get("auth"),
-             "findings": {"high": sum(1 for x in f if x["severity"] == "high"),
-                          "medium": sum(1 for x in f if x["severity"] == "medium"),
-                          "low": sum(1 for x in f if x["severity"] == "low")},
+             "findings": counts,
              "changes": row.get("changes") or 0, "last_change_at": row.get("last_change_at"),
              "first_seen": row["first_seen"], "last_probe": row.get("last_probe"), "source": row["source"],
              "owner_verified": bool(row.get("claimed_org")),
@@ -813,17 +844,18 @@ class Scanner:
         if grade:
             where.append("grade=?")
             args.append(grade.upper()[:1])
+        if verdict:
+            where.append("verdict=?")
+            args.append(verdict[:20])
         order = {"name": "COALESCE(title, name, server_name, url) COLLATE NOCASE",
                  "score": "score IS NULL, score DESC", "risk": "score IS NULL, score ASC",
                  "changed": "last_change_at IS NULL, last_change_at DESC", "new": "first_seen DESC"}.get(sort, "name")
         sql_w = " AND ".join(where)
         with self.lock:
             total = self.db.execute(f"SELECT COUNT(*) FROM scan_servers WHERE {sql_w}", args).fetchone()[0]
-            rows = self.db.execute(f"SELECT server_id FROM scan_servers WHERE {sql_w} ORDER BY {order} LIMIT ? OFFSET ?",
+            rows = self.db.execute(f"SELECT {LIGHT_COLS} FROM scan_servers WHERE {sql_w} ORDER BY {order} LIMIT ? OFFSET ?",
                                    (*args, max(1, min(limit, 200)), max(0, offset))).fetchall()
-        items = [self.public(self._row(r["server_id"]), full=False) for r in rows]
-        if verdict:
-            items = [i for i in items if i["verdict"] == verdict]
+        items = [self.public(dict(r), full=False) for r in rows]
         return {"total": total, "offset": offset, "items": items}
 
     def changes(self, limit: int = 50) -> list[dict]:
@@ -843,7 +875,7 @@ class Scanner:
                 "SELECT grade, COUNT(*) n FROM scan_servers WHERE hidden=0 AND grade IS NOT NULL GROUP BY grade").fetchall()}
             tools = self.db.execute("SELECT COALESCE(SUM(tool_count),0) FROM scan_servers WHERE hidden=0 AND status='ok'").fetchone()[0]
             ch = self.db.execute("SELECT COUNT(*) FROM scan_history WHERE kind='changed'").fetchone()[0]
-            high = self.db.execute("SELECT COUNT(*) FROM scan_servers WHERE hidden=0 AND findings LIKE '%\"severity\":\"high\"%'").fetchone()[0]
+            high = self.db.execute("SELECT COUNT(*) FROM scan_servers WHERE hidden=0 AND n_high > 0").fetchone()[0]
             m = self.db.execute("SELECT v FROM scan_meta WHERE k='registry_synced'").fetchone()
         return {"servers": sum(by_status.values()), "by_status": by_status, "by_grade": by_grade,
                 "tools_indexed": tools, "tool_changes_recorded": ch, "servers_with_high_risk_findings": high,

@@ -78,6 +78,8 @@ class AnchorStore:
 
     def stats(self) -> dict:
         r = self._db.execute(
-            "SELECT COUNT(*) AS batches, SUM(status='confirmed') AS confirmed FROM batches").fetchone()
+            "SELECT COUNT(*) AS batches, SUM(status='confirmed') AS confirmed, "
+            "MAX(CASE WHEN status='confirmed' THEN block_time END) AS last_time FROM batches").fetchone()
         n = self._db.execute("SELECT COUNT(*) FROM leaves").fetchone()[0]
-        return {"batches": r["batches"] or 0, "confirmed_batches": r["confirmed"] or 0, "hashes": n}
+        return {"batches": r["batches"] or 0, "confirmed_batches": r["confirmed"] or 0, "hashes": n,
+                "last_confirmed_block_time": r["last_time"]}

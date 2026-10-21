@@ -31,9 +31,10 @@ URLS = {
     "developers": "https://developers.priviflow.us",
     "live": "https://live.priviflow.us",
     "scan": "https://privi-ledger.onrender.com/scan",
+    "hub": "https://hub.priviflow.us",
 }
 NAV = [("home", "Privi"), ("fortress", "Fortress"), ("passport", "Passport"), ("kya", "KYA"),
-       ("mandates", "Mandates"), ("gov", "Government"), ("live", "Live"), ("scan", "Scan"), ("chainflow", "ChainFlow"), ("developers", "Developers")]
+       ("mandates", "Mandates"), ("gov", "Government"), ("live", "Live"), ("scan", "Scan"), ("hub", "Hub"), ("chainflow", "ChainFlow"), ("developers", "Developers")]
 
 e = html.escape
 
@@ -381,6 +382,7 @@ SITES["developers"] = page(
         ("Trust", "passport_issue, passport_verify, passport_gate, kya_check, kya_bind_wallet"),
         ("Payments", "mandate_create, mandate_spend, mandate_check, ledger_upgrade_pro"),
         ("Live", "live_info, live_kill, live_resume, approval_policy_set, approval_request, approval_wait, trust_events, gateway_create, room_open, room_verify"),
+        ("Scan", "mcp_server_check (free), scan_search, scan_server, scan_changes, scan_watch, scan_claim_start, scan_rescan"),
         ("Between companies", "ledger_handshake_offer, ledger_handshake_accept, ledger_handshake_verify"),
         ("Government", "gov_ai_usecase_save, gov_ai_inventory_check, gov_pqc_plan, gov_pqc_export"),
         ("Proof of existence", "anchor_hash_text, anchor_hashes, anchor_verify (Privi Anchor)"),
@@ -390,6 +392,126 @@ SITES["developers"] = page(
         ("Pro", "29 USDC per 30 days through x402, unlimited entries, passports included."),
         ("Pay per check", "Audits and lot verification cost cents in USDC, no account needed."),
     ])),
+)
+
+HUB_CSS = """<style>
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;margin:18px 0}
+.svc{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:6px;min-height:150px}
+.svc h3{display:flex;align-items:center;gap:8px;margin:0}.svc .k{font:500 13px "IBM Plex Mono",monospace;color:var(--steel)}
+.svc .big{font:600 26px "IBM Plex Sans Condensed",sans-serif}.svc a{font-size:14px;margin-top:auto}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--rule);flex:none}.dot.up{background:var(--verified)}.dot.down{background:#d0342c}.dot.slow{background:#c98a0b}
+.prod{width:100%;border-collapse:collapse;font-size:15px}.prod th,.prod td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--rule);vertical-align:top}
+.prod th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--steel)}.prod code{font-size:13px}
+.tw{overflow-x:auto}.sum{font:600 44px "IBM Plex Sans Condensed",sans-serif;line-height:1}.sum small{font:400 15px "IBM Plex Sans",sans-serif;color:var(--steel);display:block;margin-top:6px}
+</style>"""
+
+HUB_SERVICES = [
+    # id, name, health url, details url, kind, link
+    ("ledger", "Privi Ledger", f"{LEDGER}/health", f"{LEDGER}/stats", "stats", f"{LEDGER}/"),
+    ("verify", "Privi Verify", f"{VERIFY}/health", f"{VERIFY}/stats", "stats", f"{VERIFY}/"),
+    ("anchor", "Privi Anchor", f"{ANCHOR}/health", f"{ANCHOR}/status", "anchor", f"{ANCHOR}/"),
+    ("scan", "Privi Scan", f"{LEDGER}/scan/api/stats", None, "scan", f"{LEDGER}/scan"),
+    ("log", "Transparency log", f"{LEDGER}/log/sth", None, "log", f"{LEDGER}/log/sth"),
+    ("live", "Privi Live", "wss://privi-ledger.onrender.com/live/ws", None, "ws", f"{LEDGER}/live"),
+    ("discovery", "Discovery (llms.txt, A2A)", f"{HUB}/health", None, "plain", f"{HUB}/"),
+]
+
+HUB_ASIDE = f"""<div class="proof" id="hub-sum" aria-live="polite"><div class="sum" id="sum-n">…<small>checking every Privi service from your browser</small></div>
+<p class="note" id="sum-t" style="margin-top:14px"></p><button class="btn alt" id="recheck" type="button">Check again</button></div>"""
+
+HUB_JS = """<script>
+const SVC = __SVC__;
+const $ = id => document.getElementById(id);
+const fmt = n => (n ?? 0).toLocaleString();
+const ago = t => { if (!t) return "never"; const s = Date.now() / 1000 - t; return s < 90 ? "just now" : s < 5400 ? Math.round(s / 60) + " min ago" : s < 172800 ? Math.round(s / 3600) + " h ago" : Math.round(s / 86400) + " days ago"; };
+function set(id, state, big, k) { const c = $("svc-" + id); c.querySelector(".dot").className = "dot " + state; c.querySelector(".big").textContent = big; c.querySelector(".k").textContent = k; }
+async function getJSON(u, ms) { const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms); const t0 = performance.now();
+  try { const r = await fetch(u, { signal: ctl.signal, cache: "no-store" }); if (!r.ok) throw new Error("HTTP " + r.status); return [await r.json(), Math.round(performance.now() - t0)]; } finally { clearTimeout(t); } }
+function wsCheck(u) { return new Promise(res => { let done = false; const t0 = performance.now(); let w;
+  try { w = new WebSocket(u); } catch (e) { return res([false, 0]); }
+  const fin = ok => { if (!done) { done = true; try { w.close(); } catch (e) {} res([ok, Math.round(performance.now() - t0)]); } };
+  w.onopen = () => w.send(JSON.stringify({ type: "subscribe", channels: ["trust"], replay: 1 }));
+  w.onmessage = () => fin(true); w.onerror = () => fin(false); setTimeout(() => fin(false), 12000); }); }
+async function one([id, name, health, detail, kind]) {
+  try {
+    if (kind === "ws") { const [ok, ms] = await wsCheck(health); set(id, ok ? "up" : "down", ok ? "Streaming" : "No stream", ok ? `WebSocket answered in ${ms} ms` : "WebSocket did not answer"); return ok; }
+    const [h, ms] = await getJSON(health, id === "discovery" ? 70000 : 20000);
+    const slow = ms > 4000 ? "slow" : "up";
+    if (kind === "stats") { const [d] = await getJSON(detail, 20000);
+      set(id, slow, fmt(d.last_30_days) + " calls", `30 days · ${fmt(d.today)} today · v${h.version} · ${ms} ms`); }
+    else if (kind === "anchor") { const [d] = await getJSON(detail, 20000);
+      const ok = d.chain_reachable !== false && d.gas_ok !== false;
+      set(id, ok ? slow : "down", fmt(d.confirmed_batches) + " anchors", (d.anchoring_enabled === false ? "anchoring off" : d.chain_reachable === false ? "chain unreachable" : `block ${fmt(d.latest_block)}`) +
+        ` · last ${ago(d.last_confirmed_block_time)}` + (d.gas_ok === false ? " · GAS LOW" : "") + ` · v${h.version}`); return ok; }
+    else if (kind === "scan") { set(id, slow, fmt(h.servers) + " servers", `${fmt(h.tools_indexed)} tools indexed · ${fmt(h.tool_changes_recorded)} changes recorded`); }
+    else if (kind === "log") { const th = h.tree_head || {}; set(id, slow, fmt(th.tree_size) + " entries", "signed tree head (Ed25519 + ML-DSA-87)" + (h.anchor ? " · anchored on-chain" : "")); }
+    else { set(id, slow, "Online", `v${h.version || "?"} · ${ms} ms` + (ms > 4000 ? " (free plan was asleep)" : "")); }
+    return true;
+  } catch (e) { set(id, "down", "Not answering", String(e.message || e).slice(0, 80)); return false; }
+}
+async function run() {
+  $("sum-n").innerHTML = "…<small>checking every Privi service from your browser</small>";
+  SVC.forEach(s => set(s[0], "", "…", "checking"));
+  const res = await Promise.all(SVC.map(one));
+  const up = res.filter(Boolean).length;
+  $("sum-n").innerHTML = `${up} / ${SVC.length}<small>${up === SVC.length ? "every service is answering" : "services answering; see red cards below"}</small>`;
+  $("sum-t").textContent = "Checked " + new Date().toLocaleTimeString() + ". Refreshes every 60 seconds while this page is open.";
+}
+$("recheck").onclick = run; run(); setInterval(run, 60000);
+</script>"""
+
+def hub_body():
+    cards = "".join(f'<div class="svc" id="svc-{i}"><h3><span class="dot"></span>{e(n)}</h3><div class="big">…</div>'
+                    f'<div class="k">checking</div><a href="{link}">Open</a></div>' for i, n, _, _, _, link in HUB_SERVICES)
+    rows = [
+        ("Ledger", "Tamper-evident audit log for agent actions, Merkle transparency log, on-chain checkpoints",
+         "ledger_signup, ledger_record_action", f"{LEDGER}/mcp", URLS["developers"]),
+        ("Fortress", "Post-quantum co-signatures (Ed25519 + ML-DSA-87), inclusion proofs, air-gapped evidence bundles",
+         "fortress_keys, ledger_evidence_bundle", f"{LEDGER}/mcp", URLS["fortress"]),
+        ("Passport", "A verifiable 0-1000 trust score for an agent, with a badge", "passport_issue, passport_gate",
+         f"{LEDGER}/mcp", URLS["passport"]),
+        ("KYA", "Know Your Agent: check whether a wallet belongs to an accountable agent", "kya_check (free), kya_bind_wallet",
+         f"{LEDGER}/mcp", URLS["kya"]),
+        ("Mandates", "A human signs an agent's spending limit; merchants verify it", "mandate_create, mandate_check (free)",
+         f"{LEDGER}/mcp", URLS["mandates"]),
+        ("Live", "Kill switch, wallet-signed approvals, trust feed, metered MCP gateway, paid rooms", "live_info, live_kill, gateway_create",
+         f"{LEDGER}/live", URLS["live"]),
+        ("Scan", "Safety grades and tamper-evident tool history for every public MCP server", "mcp_server_check (free), scan_watch",
+         f"{LEDGER}/scan", URLS["scan"]),
+        ("Verify", "Manufacturing lot verification and chain of custody, pay per call in USDC", "privi_verify_lot, privi_chain_of_custody",
+         f"{VERIFY}/mcp", URLS["chainflow"]),
+        ("Anchor", "Proof of existence: anchor any hash on the Privi chain", "anchor_hashes, anchor_verify (free)",
+         f"{ANCHOR}/mcp", URLS["developers"]),
+        ("Government", "AI use-case inventory (OMB M-25-21) and post-quantum migration plans", "gov_ai_inventory_check, gov_pqc_plan",
+         f"{LEDGER}/mcp", URLS["gov"]),
+    ]
+    table = ('<div class="tw"><table class="prod"><thead><tr><th>Product</th><th>What it does</th><th>Start with</th><th>Endpoint</th></tr></thead><tbody>'
+             + "".join(f'<tr><td><a href="{site}">{e(n)}</a></td><td>{e(w)}</td><td><code>{e(t)}</code></td><td><code>{e(ep)}</code></td></tr>'
+                       for n, w, t, ep, site in rows) + "</tbody></table></div>")
+    links = defs([
+        ("For agents", f'<a href="{HUB}/llms.txt">llms.txt</a> · <a href="{HUB}/.well-known/agent.json">A2A agent card</a> · '
+                       f'<a href="{HUB}/.well-known/mcp.json">MCP manifest</a> · <a href="{HUB}/openapi.json">OpenAPI</a>'),
+        ("Evidence", f'<a href="{LEDGER}/log/sth">Signed tree head</a> · <a href="{LEDGER}/tools/verify_bundle.py">Offline verifier</a> · '
+                     f'<a href="{ANCHOR}/status">Anchor status</a>'),
+        ("Usage", f'<a href="{LEDGER}/stats">Ledger stats</a> · <a href="{VERIFY}/stats">Verify stats</a> · <a href="{LEDGER}/scan/api/stats">Scan stats</a>'),
+        ("Source", f'<a href="{REPO}">GitHub</a> · <a href="{REPO}/actions">CI runs</a> · '
+                   f'<a href="https://registry.modelcontextprotocol.io/v0/servers?search=privi">MCP Registry listing</a>'),
+        ("Contact", f'<a href="mailto:{EMAIL}">{EMAIL}</a>'),
+    ])
+    return (sec("Live status", f'<div class="grid">{cards}</div>',
+                "Every card is checked live from your browser against the public endpoint, so this page never shows a cached green.")
+            + sec("Every product", table)
+            + f'<section id="connect"><h2>Connect an agent</h2>{MCP_SNIPPET}</section>'
+            + sec("Links", links))
+
+SITES["hub"] = page(
+    "hub", "Privi Hub: every Privi service, live",
+    "Live status, usage and links for every Privi service: Ledger, Fortress, Passport, KYA, Mandates, Live, Scan, Verify, Anchor and the agent discovery files.",
+    "Everything Privi, live",
+    "One place for every Privi service: whether it is answering right now, how much it is being used, where the evidence lives and how an agent connects.",
+    [("Live status", "#svc-ledger"), ("Connect an agent", "#connect")],
+    HUB_ASIDE, hub_body() + HUB_JS.replace("__SVC__", json.dumps([list(x[:5]) for x in HUB_SERVICES])),
+    extra_head=HUB_CSS,
 )
 
 

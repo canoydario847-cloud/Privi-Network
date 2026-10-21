@@ -27,7 +27,7 @@ from . import merkle
 from .chain import Chain, JsonRpcChain, RpcError, wait_receipt
 from .store import AnchorStore
 
-__version__ = "0.1.0"
+__version__ = "0.3.1"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/anchor-server"
 MAX_HASHES = 100
 
@@ -261,7 +261,32 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
     @mcp.custom_route("/health", methods=["GET"], include_in_schema=False)
     async def health(_: Request) -> JSONResponse:
         return JSONResponse({"ok": True, "service": "privi-anchor", "version": __version__,
-                             "anchor_wallet": chain.address if chain else None, "chain_id": settings.chain_id})
+                             "anchor_wallet": chain.address if chain else None, "chain_id": settings.chain_id},
+                            headers={"Access-Control-Allow-Origin": "*"})
+
+    status_cache: dict[str, Any] = {}
+
+    @mcp.custom_route("/status", methods=["GET"], include_in_schema=False)
+    async def status(_: Request) -> JSONResponse:
+        """Public operational status (cached 60 s so it never hammers the RPC): chain reachability, gas, totals."""
+        now = time.time()
+        if not status_cache or now - status_cache["at"] > 60:
+            info: dict[str, Any] = {"service": "privi-anchor", "version": __version__, "network": settings.network_name,
+                                    "chain_id": settings.chain_id, "anchor_wallet": chain.address if chain else None,
+                                    "anchoring_enabled": chain is not None, **store.stats()}
+            if chain:
+                try:
+                    info["latest_block"] = await anyio.to_thread.run_sync(chain.latest_block)
+                    bal = await anyio.to_thread.run_sync(chain.balance_wei)
+                    info["wallet_balance_wei"] = str(bal)
+                    info["gas_ok"] = bal > 10 ** 15
+                    info["chain_reachable"] = True
+                except RpcError as e:
+                    info.update(chain_reachable=False, chain_error=str(e)[:200])
+            info["checked_at"] = int(now)
+            status_cache.clear()
+            status_cache.update(at=now, info=info)
+        return JSONResponse(status_cache["info"], headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"})
 
     @mcp.custom_route("/", methods=["GET"], include_in_schema=False)
     async def index(_: Request) -> JSONResponse:

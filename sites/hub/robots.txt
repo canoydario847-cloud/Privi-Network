@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://hub.priviflow.us/sitemap.xml

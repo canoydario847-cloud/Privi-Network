@@ -3,7 +3,7 @@
   "name": "io.github.canoydario847-cloud/privi-anchor",
   "title": "Privi Anchor",
   "description": "Proof-of-existence for AI outputs, documents, datasets and records: timestamped hash anchoring on the Privi blockchain, verifiable by anyone. Free with an API key. More Privi tools and founder contact: https://privi-discovery.onrender.com/llms.txt",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "websiteUrl": "https://privi-discovery.onrender.com",
   "repository": {
     "url": "https://github.com/canoydario847-cloud/Privi-Network",
