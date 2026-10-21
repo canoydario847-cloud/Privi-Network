@@ -88,6 +88,54 @@ means the manifest structure is valid. This is a release candidate
 *preflight*, not an executable validator daemon, Render Blueprint, funded
 hosting order, or a mainnet activation script.
 
+## Fast-track unsigned node release integrity gate
+
+The **valueless custom Privi node** CI already produces a short-lived,
+**unsigned, not-for-production** artifact named
+`privi-unsigned-custom-node-TEST-ONLY`, containing
+`privi-evmd-UNSIGNED-TEST-ONLY`, `BUILD-PROVENANCE.txt`,
+`GO-BUILD-INFO.txt`, `READ-ME-FIRST.txt`, and `SHA256SUMS`.
+Before this test artifact is used by any future Render candidate, verify
+its exact bytes against a separately reviewed test-genesis SHA-256 and a
+source-commit manifest.
+
+[Verifier source](verify_render_release_bundle.py) |
+[18 adversarial tests](test_verify_render_release_bundle.py) |
+[Dedicated fast offline CI](../../.github/workflows/privi-render-validator-preflight.yml).
+
+Example (an operator must create the **nonfinancial** review JSON from
+actual file digests, not paste placeholders or keys):
+
+```bash
+python3 production-network/ops/verify_render_release_bundle.py \
+  --bundle /tmp/privi-unsigned-custom-node-TEST-ONLY \
+  --genesis /tmp/disposable-reviewed-genesis.json \
+  --manifest /tmp/unsigned-review-manifest.json
+```
+
+The manifest contains exactly
+`schema_version` (=1), `stage` (=`UNSIGNED_CI_REVIEW_ONLY`),
+`operator` (=`Privi World Corp`), `node_binary_sha256`,
+`genesis_sha256`, `privi_source_commit`, `cosmos_chain_id`,
+`evm_chain_id`, `native_denom` (=`aprvi`),
+`financial_launch_enabled` (=false), `production_ready` (=false), and
+`validator_service_id` (=`UNASSIGNED`). These fingerprints and
+identities must reflect actual reviewed *test-only* files and be
+independently verified; do not derive trust from a file's own
+self-reported SHA256 alone. The verifier does not infer custody or
+approval from matching bytes and it **never starts a node**.
+
+This catches checksum substitution, duplicate or unapproved checksum
+entries, changed pinned `cosmos/evm@v0.7.3` provenance, binary/genesis
+drift, accidental wrong Cosmos/EVM chain IDs, and attempts to pass
+signed/financial flags using an unsigned artifact. **A pass is a
+review-artifact match, not a security audit, a signed production release,
+a functioning Cosmos genesis, or a permission to spend or activate.**
+The candidate genesis still requires the actual bank/PoP cap, staking,
+fee denom, PoP signer registry and Cosmos EVM chain-ID checks provided
+by separate native app tests. The existing unsigned artifact has no
+financially approved genesis attached.
+
 ## Candidate topology
 
 - Four independently configured, paid **Render private services**, ideally in distinct failure domains; one `priv_validator_key` / remote signing identity per service, **never shared or cloned**. Do not use a Render autoscaled service to represent multiple validators, especially not with attached disk.
