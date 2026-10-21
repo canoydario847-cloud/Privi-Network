@@ -4,6 +4,8 @@
 package main
 
 import (
+    "crypto/ed25519"
+    "crypto/rand"
     "encoding/json"
     "fmt"
     "math/big"
@@ -17,6 +19,7 @@ import (
     dbm "github.com/cosmos/cosmos-db"
     "github.com/cosmos/evm/evmd"
     "github.com/cosmos/evm/evmd/prvicap"
+    prvipop "github.com/cosmos/evm/evmd/prvipop"
     srvflags "github.com/cosmos/evm/server/flags"
     "github.com/cosmos/cosmos-sdk/baseapp"
     simtestutil "github.com/cosmos/cosmos-sdk/testutil/sims"
@@ -146,6 +149,21 @@ func main() {
             if err:=app.AppCodec().UnmarshalJSON(state[banktypes.ModuleName],&bank);err!=nil {return err}
             bank.Supply=sdk.NewCoins(sdk.NewInt64Coin(prvicap.BaseDenom,1))
             state[banktypes.ModuleName]=app.AppCodec().MustMarshalJSON(&bank)
+            // Pin valid, valueless PoP author genesis so this particular
+            // negative case reaches the EVM-gas-denomination guard rather
+            // than failing early for an absent PoP registry.
+            author,_,err:=ed25519.GenerateKey(rand.Reader)
+            if err!=nil{return err}
+            popFixture:=struct{
+                ChainID string `json:"chain_id"`
+                Authorities []prvipop.Authority `json:"authorities"`
+            }{
+                ChainID:"privi-valueless-genesis-probe-1",
+                Authorities:[]prvipop.Authority{{Company:"TESTCO",Zone:"GRID/READINGS",PublicKey:author}},
+            }
+            encoded,err:=json.Marshal(popFixture)
+            if err!=nil{return err}
+            state[prvipop.StoreKey]=encoded
             return nil
         },"PRVI native genesis: EVM gas denomination must be aprvi");err!=nil {
         fmt.Fprintln(os.Stderr,err);os.Exit(1)
