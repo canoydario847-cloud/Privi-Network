@@ -35,13 +35,25 @@ test("receipts cannot fake an external chain, missing confirmation or duplicate 
   assert.throws(()=>aggregateFeeReceipts({...valid,receipts:[{...receipt(1),effectiveGasPrice:"0x0"}]}),/Zero/);
   assert.throws(()=>aggregateFeeReceipts({...valid,receipts:[{...receipt(1),gasUsed:"-1"}]}),/Invalid unsigned/);
 });
-test("treasury revenue can be claimed only if all actual allocations reconcile",()=>{
-  assert.deepEqual(
-    reconcileActualFeeAllocation({
-      observedChargedGasWei:"10000",actualBurnedWei:"4000",
-      actualValidatorPaymentsWei:"2000",actualTreasuryReceiptsWei:"3000",
-      actualOtherDestinationsWei:"1000"
-    }).treasuryRevenueWei,"3000");
+test("balanced caller-supplied fee allocations never prove treasury revenue",()=>{
+  const allocation=reconcileActualFeeAllocation({
+    observedChargedGasWei:"10000",actualBurnedWei:"4000",
+    actualValidatorPaymentsWei:"2000",actualTreasuryReceiptsWei:"3000",
+    actualOtherDestinationsWei:"1000"
+  });
+  assert.equal(allocation.reportedTreasuryAllocationWei,"3000");
+  assert.equal(allocation.treasuryRevenueWei,null);
+  assert.equal(allocation.verifiedBurnedWei,null);
+  assert.equal(allocation.verifiedValidatorPaymentsWei,null);
+  assert.equal(allocation.evidenceLevel,"UNVERIFIED_CALLER_SUPPLIED_ALLOCATIONS");
+  const fabricated=reconcileActualFeeAllocation({
+    observedChargedGasWei:"10000",actualBurnedWei:"0",
+    actualValidatorPaymentsWei:"0",actualTreasuryReceiptsWei:"10000",
+    actualOtherDestinationsWei:"0"
+  });
+  assert.equal(fabricated.reportedTreasuryAllocationWei,"10000");
+  assert.equal(fabricated.treasuryRevenueWei,null,
+    "balanced fabricated allocations cannot create verified treasury revenue");
   assert.throws(()=>reconcileActualFeeAllocation({
       observedChargedGasWei:"10000",actualBurnedWei:"4000",
       actualValidatorPaymentsWei:"2000",actualTreasuryReceiptsWei:"6000",

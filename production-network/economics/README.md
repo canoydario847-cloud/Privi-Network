@@ -26,11 +26,12 @@ client is necessary before calling the output verified on-chain evidence.
 
 **Gross gas fees are NOT founder/operator or treasury revenue.** They may be
 burned, sent to validators or fee collectors, redistributed or accounted for
-under other SDK/EVM modules. `reconcileActualFeeAllocation` only reports
-actual treasury receipts when *every* burned, validator, treasury and other
-allocation is known and sums exactly to the charged fees. The caller must
-obtain those values from audited and verified chain bank/module state;
-hand-entered made-up values are not proof of revenue. PRVI has no real-issued
+under other SDK/EVM modules. `reconcileActualFeeAllocation` only verifies
+that **caller-reported** burned, validator, treasury and other allocations
+sum to charged gas. Even perfectly balanced amounts are unverified and
+`treasuryRevenueWei` remains `null`. Actual treasury, burn and validator
+receipts require independent authenticated chain bank/module state evidence
+and an audited fee-routing proof; hand-entered numbers are not that proof. PRVI has no real-issued
 financial supply or publicly verified market price, so this tool does NOT
 quote dollar revenue, dollars per PRVI, or promise profitability.
 

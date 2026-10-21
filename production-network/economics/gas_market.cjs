@@ -66,7 +66,7 @@ function aggregateFeeReceipts({chainId,genesisHash,receipts}){
     evidenceLevel:"USER_SUPPLIED_DEV_RECEIPTS_NOT_INDEPENDENTLY_VALIDATED",
     financialMainnet:false});
 }
-/** Only externally reconciled accounting deltas can be labeled net collector revenue. */
+/** Arithmetic of caller-supplied allocations is NOT authenticated bank-state evidence. */
 function reconcileActualFeeAllocation({observedChargedGasWei,actualBurnedWei,
   actualValidatorPaymentsWei,actualTreasuryReceiptsWei,actualOtherDestinationsWei}){
   const paid=unsigned(observedChargedGasWei,"gas charged");
@@ -76,10 +76,14 @@ function reconcileActualFeeAllocation({observedChargedGasWei,actualBurnedWei,
   const other=unsigned(actualOtherDestinationsWei,"other actual fee destinations");
   need(burned+validators+treasury+other===paid,
     "Fee accounting mismatch: no invented treasury revenue or untracked burned gas");
-  return Object.freeze({chargedWei:paid.toString(),burnedWei:burned.toString(),
-    validatorAllocationWei:validators.toString(),
-    treasuryRevenueWei:treasury.toString(),otherDestinationsWei:other.toString(),
-    note:"Numbers MUST be sourced from authentic chain module bank-state evidence, not forecasts"});
+  return Object.freeze({chargedWei:paid.toString(),
+    reportedBurnedWei:burned.toString(),
+    reportedValidatorAllocationWei:validators.toString(),
+    reportedTreasuryAllocationWei:treasury.toString(),
+    reportedOtherDestinationsWei:other.toString(),
+    treasuryRevenueWei:null,verifiedBurnedWei:null,verifiedValidatorPaymentsWei:null,
+    evidenceLevel:"UNVERIFIED_CALLER_SUPPLIED_ALLOCATIONS",
+    note:"Balanced caller-supplied allocations are NOT authenticated SDK bank-state fee destinations"});
 }
 /**
  * Advisory quotes only. Caller-signed fee caps always win. Raising prices
