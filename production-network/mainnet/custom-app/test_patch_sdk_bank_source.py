@@ -1,6 +1,5 @@
 """Fail-closed source-pinned bank overlay tests (no real SDK or chain)."""
 import importlib.util
-import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -49,12 +48,14 @@ class BankSDKOverlayTests(unittest.TestCase):
         (self.keeper/"send.go").write_text(SEND)
         (self.keeper/"keeper.go").write_text(KEEPER)
         self.output=Path(self.temp.name)/"overlay"
-    def test_patches_only_private_sdk_bank_mutations_with_no_module_cache_edit(self):
+    def test_patches_disposable_local_sdk_clone_without_module_cache_edit(self):
         baseline=[(self.keeper/name).read_text() for name in ("send.go","keeper.go")]
         result=mod.build_overlay(self.root,self.output)
-        overlay=json.loads(Path(result["overlay"]).read_text())["Replace"]
-        changed_send=Path(overlay[str(self.keeper/"send.go")]).read_text()
-        changed_keeper=Path(overlay[str(self.keeper/"keeper.go")]).read_text()
+        module_copy=Path(result["module_dir"])
+        self.assertEqual(module_copy,self.output)
+        self.assertTrue((module_copy/"x"/"bank"/"keeper").is_dir())
+        changed_send=(module_copy/"x"/"bank"/"keeper"/"send.go").read_text()
+        changed_keeper=(module_copy/"x"/"bank"/"keeper"/"keeper.go").read_text()
         self.assertIn("func (k BaseSendKeeper) setBalanceForBankOperation(",changed_send)
         self.assertIn("func (k BaseSendKeeper) UncheckedSetBalance(",changed_send)
         self.assertIn('balance.Denom == "aprvi"',changed_send)
@@ -62,7 +63,7 @@ class BankSDKOverlayTests(unittest.TestCase):
         self.assertIn("k.setBalanceForBankOperation(ctx, delegatorAddr",changed_keeper)
         self.assertIn('amounts.AmountOf("aprvi").IsPositive()',changed_keeper)
         self.assertEqual(baseline,[(self.keeper/name).read_text() for name in ("send.go","keeper.go")])
-    def test_denies_unreviewed_sdk_signatures_and_does_not_write_overlay(self):
+    def test_denies_unreviewed_sdk_signatures_and_does_not_create_module_copy(self):
         (self.keeper/"send.go").write_text(SEND.replace("k.UncheckedSetBalance(ctx, addr, newBalance)", "k.AlternateSetBalance(ctx, addr, newBalance)",1))
         with self.assertRaisesRegex(ValueError,"source drift"):
             mod.build_overlay(self.root,self.output)
