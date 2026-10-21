@@ -65,9 +65,19 @@ def check(rpc, tx_hash, chain_id, sender, recipient, amount_wei, confirmations=1
         raise ValueError("block hash disagreement")
     if tx_hash.lower() not in [str(h).lower() for h in block.get("transactions",[])]:
         raise ValueError("transaction not included in claimed block")
+    gas_limit=hexint(tx.get("gas"),"transaction gas limit")
+    gas_used=hexint(receipt.get("gasUsed"),"receipt gasUsed")
+    effective_price=hexint(receipt.get("effectiveGasPrice"),"receipt effectiveGasPrice")
+    if gas_limit<=0 or gas_used<=0 or gas_used>gas_limit or effective_price<=0:
+        raise ValueError("invalid EVM gas usage or effective price")
+    signed_price=hexint(tx.get("gasPrice"),"transaction gasPrice")
+    if signed_price<=0 or effective_price>signed_price:
+        raise ValueError("receipt effective price exceeds transaction gas price")
     return {"ok":True,"evm_chain_id":actual_chain,"tx_hash":tx_hash,
             "sender":sender,"recipient":recipient,"value_wei":str(amount_wei),
             "block_height":height,"block_hash":blockhash,"confirmations":latest-height+1,
+            "gas_used":str(gas_used),"effective_gas_price_wei":str(effective_price),
+            "gross_gas_paid_wei":str(gas_used*effective_price),
             "warning":"Only a disposable, valueless developer transaction is verified; does not certify production or prove balance changes"}
 
 def main():
