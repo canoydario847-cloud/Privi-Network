@@ -93,10 +93,7 @@ func (k Keeper) loadRegistry(ctx context.Context) (registry,corestore.KVStore,er
 // so any unexpected DB write failure aborts application initialization.
 // No external call can register or revoke company keys after this point.
 // Future key rotation needs a separately specified consensus transaction.
-func (k Keeper) InitGenesis(ctx context.Context,chainID string,entries []Authority) error {
-    kv,err:=k.kv(ctx);if err!=nil{return err}
-    existing,err:=kv.Get(registryKey);if err!=nil{return err}
-    if existing!=nil {return errors.New("PoP genesis registry already initialized")}
+func canonicalGenesis(chainID string,entries []Authority) (registry,error) {
     r:=registry{Version:1,ChainID:chainID,Authorities:make([]Authority,len(entries))}
     for i,a:=range entries {
         r.Authorities[i]=Authority{Company:a.Company,Zone:a.Zone,PublicKey:bytes.Clone(a.PublicKey)}
@@ -105,7 +102,21 @@ func (k Keeper) InitGenesis(ctx context.Context,chainID string,entries []Authori
         a,b:=r.Authorities[i],r.Authorities[j]
         return authorityKey(a.Company,a.Zone)<authorityKey(b.Company,b.Zone)
     })
-    if err=validateRegistry(r);err!=nil{return fmt.Errorf("PoP genesis invalid: %w",err)}
+    if err:=validateRegistry(r);err!=nil{return registry{},fmt.Errorf("PoP genesis invalid: %w",err)}
+    return r,nil
+}
+// ValidateGenesis is pure: the native app calls it BEFORE x/bank or other
+// InitGenesis state transitions. Invalid signers or duplicate position
+// authorities cannot trigger a partial SDK genesis initialization.
+func ValidateGenesis(chainID string,entries []Authority) error {
+    _,err:=canonicalGenesis(chainID,entries)
+    return err
+}
+func (k Keeper) InitGenesis(ctx context.Context,chainID string,entries []Authority) error {
+    r,err:=canonicalGenesis(chainID,entries);if err!=nil{return err}
+    kv,err:=k.kv(ctx);if err!=nil{return err}
+    existing,err:=kv.Get(registryKey);if err!=nil{return err}
+    if existing!=nil {return errors.New("PoP genesis registry already initialized")}
     data,err:=json.Marshal(r);if err!=nil{return err}
     // Consensus-visible authorization is one atomic KV value. Never
     // write individual author entries before full genesis validation.
