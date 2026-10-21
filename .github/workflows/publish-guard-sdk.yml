@@ -33,6 +33,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - run: echo "::notice::PYPI_API_TOKEN secret visible to this job = $HAS_TOKEN"
       - run: pip install -e ".[dev]" && pytest -q
       - run: pip install build && python -m build
       - name: Publish with API token
@@ -52,6 +53,8 @@ jobs:
   npm:
     if: ${{ inputs.npm }}
     runs-on: ubuntu-latest
+    env:
+      HAS_NPM: ${{ secrets.NPM_TOKEN != '' }}
     permissions:
       id-token: write
       contents: read
@@ -65,6 +68,9 @@ jobs:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
       - run: node --test test.mjs
-      - run: npm publish --access public
+      - run: echo "::notice::NPM_TOKEN secret visible to this job = $HAS_NPM"
+      - run: |
+          set -o pipefail
+          npm publish --access public 2>&1 | tee /tmp/npm.out || { echo "::error::$(grep -iE 'npm (error|ERR)' /tmp/npm.out | head -6 | tr '\n' ' ')"; exit 1; }
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
