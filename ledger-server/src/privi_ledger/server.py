@@ -49,7 +49,7 @@ from .passport import PASSPORT_VERSION as PASSPORT_VERSION_HTTP, PassportError, 
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor.onrender.com/mcp"
 
-__version__ = "0.10.0"
+__version__ = "0.10.1"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/ledger-server"
 
 INSTRUCTIONS = """\
@@ -1734,7 +1734,9 @@ def main() -> None:
     from .usage import UsageMiddleware
     inner = mcp.streamable_http_app(host=args.host, stateless_http=True, json_response=True)
     mount_ws(inner, mcp.privi_ws_routes)
-    app = UsageMiddleware(inner, ledger._db, ledger._lock, "privi-ledger")
+    from .front import QuickGet
+    app = QuickGet(UsageMiddleware(inner, ledger._db, ledger._lock, "privi-ledger"), "Privi Ledger", "privi-ledger",
+                   os.getenv("LEDGER_PUBLIC_URL", "https://privi-ledger.onrender.com"))
     uvicorn.run(app, host=args.host, port=args.port)
 
 

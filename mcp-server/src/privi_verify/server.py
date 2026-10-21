@@ -26,7 +26,7 @@ from .x402 import Facilitator, Paywall
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor.onrender.com/mcp"
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 INSTRUCTIONS = """\
 Privi Verify checks where a manufactured lot came from and whether its records
@@ -280,6 +280,8 @@ def main() -> None:
     from .usage import UsageMiddleware
     app = UsageMiddleware(mcp.streamable_http_app(host=args.host, stateless_http=True, json_response=True),
                           store._db, store._lock, "privi-verify")
+    from .front import QuickGet
+    app = QuickGet(app, "Privi Verify", "privi-verify", "https://privi-verify.onrender.com")
     uvicorn.run(app, host=args.host, port=args.port)
 
 

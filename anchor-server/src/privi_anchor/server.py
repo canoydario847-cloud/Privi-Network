@@ -27,7 +27,7 @@ from . import merkle
 from .chain import Chain, JsonRpcChain, RpcError, wait_receipt
 from .store import AnchorStore
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/anchor-server"
 MAX_HASHES = 100
 
@@ -377,7 +377,9 @@ def main() -> None:
         mcp.run("stdio")
         return
     import uvicorn
-    uvicorn.run(mcp.streamable_http_app(host=args.host, stateless_http=True, json_response=True),
+    from .front import QuickGet
+    uvicorn.run(QuickGet(mcp.streamable_http_app(host=args.host, stateless_http=True, json_response=True),
+                         "Privi Anchor", "privi-anchor", "https://privi-anchor.onrender.com"),
                 host=args.host, port=args.port)
 
 

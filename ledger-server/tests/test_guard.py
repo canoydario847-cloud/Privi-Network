@@ -200,3 +200,20 @@ def test_gateway_guard_modes(ledger, monkeypatch):
         assert r["_meta"]["privi/guard"]["checked"] is False and ATTACK in r["content"][0]["text"]
     assert s.privi_guard.balance(org["org_id"])["used_this_month"] == 5
     assert run_(org["api_key"], "gateway_info", {"gw_id": gid}).structured_content["guard"]["mode"] == "block"
+
+
+def test_quick_get_on_mcp_endpoint(ledger):
+    from privi_ledger.front import QuickGet
+    s = server(ledger)
+    app = QuickGet(s.streamable_http_app(host="0.0.0.0", stateless_http=True, json_response=True), "Privi Ledger", "privi-ledger",
+                   "https://privi-ledger.onrender.com")
+    with TestClient(app) as http:
+        r = http.get("/mcp", headers={"accept": "application/json, text/event-stream"})
+        assert r.status_code == 405 and r.json()["error"]["code"] == -32000 and "POST" in r.headers["allow"]
+        assert http.head("/mcp").status_code == 405
+        page = http.get("/mcp", headers={"accept": "text/html,application/xhtml+xml"})
+        assert page.status_code == 200 and "privi-ledger.onrender.com/mcp" in page.text
+        init = {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {},
+                "clientInfo": {"name": "t", "version": "1"}}}
+        r = http.post("/mcp", json=init, headers={"accept": "application/json, text/event-stream"})
+        assert r.status_code == 200 and r.json()["result"]["serverInfo"]["name"] == "privi-ledger"
