@@ -45,6 +45,8 @@ func newRealBankHarness(t *testing.T) bankHarness {
  ctrl:=gomock.NewController(t)
  ak:=banktestutil.NewMockAccountKeeper(ctrl)
  ak.EXPECT().AddressCodec().Return(address.NewBech32Codec("cosmos")).AnyTimes()
+ // SDK send keeper checks destination existence before completing transfers.
+ ak.EXPECT().HasAccount(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
  codec:=moduletestutil.MakeTestEncodingConfig()
  raw:=bankkeeper.NewBaseKeeper(codec.Codec,runtime.NewKVStoreService(bankKey),
    ak,map[string]bool{},authtypes.NewModuleAddress(govtypes.ModuleName).String(),log.NewNopLogger())
