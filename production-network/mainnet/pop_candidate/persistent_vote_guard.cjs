@@ -54,7 +54,11 @@ function recordFor(committee, height, validatorId, blockHash) {
   };
 }
 function lockedFileName(record) {
-  const key = [record.chainId,record.genesisHash,record.epoch,record.height,record.validatorId];
+  // Domain transitions cannot make a signer forget a previous commitment
+  // at the SAME height. Lock across membership epochs for the same chain
+  // and genesis; any epoch mismatch fails closed unless a future formally
+  // reviewed joint-consensus transition explicitly handles signer recovery.
+  const key = [record.chainId,record.genesisHash,record.height,record.validatorId];
   return hash(Buffer.from(JSON.stringify(key),"utf8")).slice(2) + ".json";
 }
 function reservePosition(dir, committee, height, validatorId, blockHash) {
