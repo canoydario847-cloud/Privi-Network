@@ -48,6 +48,11 @@ func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {
 func (app *EVMD) EndBlocker(ctx sdk.Context) (sdk.EndBlock, error) {
     return app.ModuleManager.EndBlock(ctx)
 }
+func (app *EVMD) setPostHandler() {
+    postHandler, err := posthandler.NewPostHandler(posthandler.HandlerOptions{})
+    if err != nil { panic(err) }
+    app.SetPostHandler(postHandler)
+}
 '''
 APP = "\n".join(("\t" * ((len(line) - len(line.lstrip(" "))) // 4)) + line.lstrip(" ") for line in APP.split("\n"))
 
