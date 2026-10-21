@@ -14,7 +14,7 @@ const {
 function fixture(n=4) {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),"privi-unsigned-release-test-"));
   const genesisPath=path.join(dir,"genesis.json"),binaryPath=path.join(dir,"candidate.bin");
-  const cosmosId="privi-test-fixture-1";
+  const cosmosId="privi-candidate-fixture-1";
   fs.writeFileSync(genesisPath,JSON.stringify({chain_id:cosmosId,app_state:{}}));
   fs.writeFileSync(binaryPath,Buffer.from("PRIVI UNSIGNED BUILD-ONLY TEST BYTES\n"));
   const keys=Array.from({length:n},()=>crypto.generateKeyPairSync("ed25519"));
@@ -108,6 +108,12 @@ caseWithFixture("reject a reused signer key despite different operator names",f=
 caseWithFixture("reject same self-reported fault domain",f=>{
   f.trustRoster.operators[1].fault_domain=f.trustRoster.operators[0].fault_domain;
   assert.throws(()=>f.verify(),/Duplicate claimed fault domain/);
+});
+caseWithFixture("reject local/test/dev/staging Cosmos identities",f=>{
+  for(const id of ["privi-test-1","privi-dev-1","privi-local-4221","privi-staging-2"]) {
+    f.manifest.release.cosmos_chain_id=id;
+    assert.throws(()=>f.sign(),/Non-developer Privi Cosmos chain identity/);
+  }
 });
 caseWithFixture("reject dev EVM chain IDs even if every test key signs them",f=>{
   for(const id of [1,56,97,1337,31337,4221,262144]) {
