@@ -174,6 +174,19 @@ func (k Keeper) Apply(ctx context.Context,p Position) (Verified,error) {
     return Verified{PoPVerified:true,Stamp:p.Stamp,TipHash:want,Sequence:p.Sequence,Records:1},nil
 }
 
+// AssertInitialized must be called at each real ABCI block boundary.
+// It rejects removal, corruption, or cross-chain replacement of the
+// persisted PoP signer registry. This does not yet route PoP transactions
+// through the Cosmos SDK execution pipeline.
+func (k Keeper) AssertInitialized(ctx context.Context, expectedChain string) error {
+   r,_,err:=k.loadRegistry(ctx)
+   if err!=nil{return err}
+   if !chainPattern.MatchString(expectedChain)||r.ChainID!=expectedChain {
+       return errors.New("PoP committed registry chain identity mismatch")
+   }
+   return nil
+}
+
 // Snapshot is a bounded consensus-store read, NOT verification of BFT votes,
 // sensor authenticity, treasury income or PoP economic value.
 func (k Keeper) Snapshot(ctx context.Context,company,zone string) (uint64,string,error) {
