@@ -1,0 +1,70 @@
+name: Publish Privi Guard SDKs
+
+# Run from the Actions tab (or `gh workflow run publish-guard-sdk.yml`).
+# PyPI: uses the PYPI_API_TOKEN repository secret if set, otherwise PyPI Trusted Publishing (no secret).
+# npm:  needs the NPM_TOKEN repository secret; skipped when it is missing.
+on:
+  workflow_dispatch:
+    inputs:
+      pypi:
+        description: "Publish privi-guard to PyPI"
+        type: boolean
+        default: true
+      npm:
+        description: "Publish privi-guard to npm"
+        type: boolean
+        default: false
+
+jobs:
+  pypi:
+    if: ${{ inputs.pypi }}
+    runs-on: ubuntu-latest
+    environment: pypi
+    env:
+      HAS_TOKEN: ${{ secrets.PYPI_API_TOKEN != '' }}
+    permissions:
+      id-token: write
+      contents: read
+    defaults:
+      run:
+        working-directory: guard-sdk/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]" && pytest -q
+      - run: pip install build && python -m build
+      - name: Publish with API token
+        if: ${{ env.HAS_TOKEN == 'true' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: guard-sdk/python/dist
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          skip-existing: true
+      - name: Publish with Trusted Publishing
+        if: ${{ env.HAS_TOKEN != 'true' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: guard-sdk/python/dist
+          skip-existing: true
+
+  npm:
+    if: ${{ inputs.npm }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    defaults:
+      run:
+        working-directory: guard-sdk/js
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - run: node --test test.mjs
+      - run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
