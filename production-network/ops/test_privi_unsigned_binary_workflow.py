@@ -13,12 +13,15 @@ REQUIRED_ORDER = (
     'test "$(git -C "$RUNNER_TEMP/.upstream-capbuild" rev-parse HEAD)"',
     "production-network/mainnet/custom-app/apply_prvi_cap.py",
     "production-network/mainnet/custom-app/patch_pinned_erc20_mutations.py",
+    "production-network/mainnet/custom-app/patch_sdk_bank_source.py",
+    "GOTOOLCHAIN=local go list -m -json github.com/cosmos/cosmos-sdk",
     "GOTOOLCHAIN=local go test",
     "cmp \"$RUNNER_TEMP/privi-unsigned-test-binary/privi-evmd-UNSIGNED-TEST-ONLY\"",
     "privi_cap_genesis_probe_main.go",
     "privi_cap_genesis_positive_probe_main.go",
     "PRIVI_ERC20_NEGATIVE_PROBE=permissionless",
     "PRIVI_ERC20_NEGATIVE_PROBE=native-pair",
+    "production-network/mainnet/custom-app/verify_privi_sdk_binary.py",
     "sha256sum -c SHA256SUMS",
     "uses: actions/upload-artifact@v4",
 )
@@ -68,6 +71,14 @@ class UnsignedNodeWorkflowTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_workflow(self.good.replace("privi_cap_genesis_probe_main.go",
                                                 "disabled-negative-test.go", 1))
+
+    def test_hardened_sdk_and_artifact_proof_are_mandatory(self):
+        for marker in ("production-network/mainnet/custom-app/patch_sdk_bank_source.py",
+                       "GOTOOLCHAIN=local go list -m -json github.com/cosmos/cosmos-sdk",
+                       "production-network/mainnet/custom-app/verify_privi_sdk_binary.py"):
+            with self.subTest(marker=marker):
+                with self.assertRaises(ValueError):
+                    validate_workflow(self.good.replace(marker,"SECURITY_BYPASS",1))
 
     def test_checksum_validation_cannot_be_removed(self):
         with self.assertRaises(ValueError):
