@@ -19,16 +19,16 @@ EMAIL = "dariocanoy@priviflow.us"
 PASSPORT_ID = "pp_0be5f707a050950e"
 OWNER_WALLET = "0x1990589FD200E043b8C6FD9ec5956c61b3071048"
 
-# Public URL of each site. Replace with custom domains once attached in Render.
+# Public URL of each site (custom domains on Render; each also answers at privi-<name>.onrender.com).
 URLS = {
-    "home": "https://privi-world.onrender.com",
-    "fortress": "https://privi-fortress.onrender.com",
-    "passport": "https://privi-passport.onrender.com",
-    "kya": "https://privi-kya.onrender.com",
-    "mandates": "https://privi-mandates.onrender.com",
-    "gov": "https://privi-gov.onrender.com",
-    "chainflow": "https://privi-chainflow.onrender.com",
-    "developers": "https://privi-developers.onrender.com",
+    "home": "https://priviflow.us",
+    "fortress": "https://fortress.priviflow.us",
+    "passport": "https://passport.priviflow.us",
+    "kya": "https://kya.priviflow.us",
+    "mandates": "https://mandates.priviflow.us",
+    "gov": "https://gov.priviflow.us",
+    "chainflow": "https://chainflow.priviflow.us",
+    "developers": "https://developers.priviflow.us",
 }
 NAV = [("home", "Privi"), ("fortress", "Fortress"), ("passport", "Passport"), ("kya", "KYA"),
        ("mandates", "Mandates"), ("gov", "Government"), ("chainflow", "ChainFlow"), ("developers", "Developers")]

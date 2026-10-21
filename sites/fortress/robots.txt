@@ -1,3 +1,3 @@
 User-agent: *
 Allow: /
-Sitemap: https://privi-fortress.onrender.com/sitemap.xml
+Sitemap: https://fortress.priviflow.us/sitemap.xml
