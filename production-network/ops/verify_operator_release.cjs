@@ -87,7 +87,7 @@ function canonicalPayload(release) {
   ],"release commitment");
   need(typeof release.cosmos_chain_id==="string" &&
        /^privi-[a-z0-9-]{3,60}$/.test(release.cosmos_chain_id) &&
-       release.cosmos_chain_id!=="privi-local-4221",
+       !/^privi-(?:dev|test|local|staging)(?:-|$)/.test(release.cosmos_chain_id),
        "Non-developer Privi Cosmos chain identity required");
   need(Number.isSafeInteger(release.evm_chain_id) &&
        release.evm_chain_id>0 &&
