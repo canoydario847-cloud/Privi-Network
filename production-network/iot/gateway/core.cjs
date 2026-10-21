@@ -153,7 +153,8 @@ function field(row, name, index) {
   return row && row[name] !== undefined ? row[name] : row[index];
 }
 
-async function submitEvent(packet, {registry, config, provider, wallet, contract}) {
+async function submitEvent(packet, {registry, config, provider, wallet, contract,
+                                    intentCapsule, ethers}) {
   const event = verifyDevicePacket(packet, registry);
   await assertPriviChain(provider, config); // always check before any signed transaction
   must(wallet && ADDRESS.test(wallet.address), "Gateway wallet required");
@@ -192,11 +193,30 @@ async function submitEvent(packet, {registry, config, provider, wallet, contract
   must(BigInt(nextPosition) === event.positionSequence,
        "PoP company-zone position is not the next Privi ledger position");
 
-  const tx = await contract.recordEvent(
+  // Non-Turing-complete, signed Privi Intent Capsule (opt-in development
+  // preview) adds company-specific rules without deploying business code.
+  // When required by gateway configuration, omission is fail-closed.
+  must(config.requireIntentCapsules === undefined ||
+       typeof config.requireIntentCapsules === "boolean",
+       "Privi Intent Capsule policy flag must be boolean");
+  must(!config.requireIntentCapsules || intentCapsule,
+       "Privi Intent Capsule is required by this development gateway");
+  let intent;
+  if (intentCapsule) {
+    const {verifyIntentCapsule} = require("../intents/capsule.cjs");
+    intent = await verifyIntentCapsule({
+      ...intentCapsule,event,packet,config,wallet,contract,provider,ethers
+    });
+  }
+  const fields = [
     event.deviceIdHash, event.sequence, event.observedAt,
     event.eventTypeHash, event.payloadHash, event.eventHash, event.signatureHash,
     event.popStampHash, event.popZoneHash, event.positionSequence
-  );
+  ];
+  // EIP-191 company approval includes maximum gas price and gas limit.
+  // The entire bounded pair is submitted as the actual EVM tx overrides.
+  if (intent) fields.push(intent.overrides);
+  const tx = await contract.recordEvent(...fields);
   must(tx && /^0x[0-9a-fA-F]{64}$/.test(tx.hash) && typeof tx.wait === "function",
        "No Privi transaction hash returned");
   const receipt = await tx.wait(config.confirmations);
@@ -232,7 +252,9 @@ async function submitEvent(packet, {registry, config, provider, wallet, contract
           positionSequence: packet.positionSequence,
           popStamp: event.popStamp, popStampHash: event.popStampHash,
           popZoneHash: event.popZoneHash, companyIdHash: event.companyIdHash,
-          confirmations: config.confirmations};
+          confirmations: config.confirmations,
+          ...(intent ? {intentCapsuleDigest:intent.capsuleDigest,
+                        intentWorstCaseFeeWei:intent.worstCaseFeeWei}: {})};
 }
 
 module.exports = {sha, canonical, packetDigest, verifyDevicePacket, validateNetworkConfig,

@@ -11,6 +11,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { localGate, exportDevKey } = require("../testnet/send_disposable_test_transfer.cjs");
 const { sha, packetDigest, verifyDevicePacket, submitEvent } = require("./gateway/core.cjs");
+const {intentMessage,issuerBoundDigest}=require("./intents/capsule.cjs");
 
 const RPC = "http://127.0.0.1:8545";
 const EVM_ID = 262144n;
@@ -270,9 +271,55 @@ async function run(env = process.env) {
     e1.companyIdHash,wallet.address,true,
     {gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
 
+  // Declarative Intent Capsule: an independently controlled company wallet
+  // signs the exact PoP event hash and rule bounds. No Solidity business
+  // logic is deployed for each policy and no real financial PRVI is issued.
+  const head=await provider.send("eth_getBlockByNumber",["latest",false]);
+  const now=Number(BigInt(head.timestamp));
+  const proposalDigest=packetDigest(packet3);
+  const capsule={
+    version:1,type:"privi.iot.record",chainId:262144,
+    genesisHash:config.genesisHash,contractAddress:config.contractAddress,
+    companyIdHash:proposalDigest.companyIdHash,
+    deviceIdHash:proposalDigest.deviceIdHash,
+    eventHash:proposalDigest.eventHash,
+    popStampHash:proposalDigest.popStampHash,
+    gateway:wallet.address,
+    companyEpoch:Number(await contract.companyGatewayEpoch(e1.companyIdHash)),
+    notBefore:now-10,expiresAt:now+300,
+    nonce:"0x"+crypto.randomBytes(32).toString("hex"),
+    maxGasPriceWei:GAS_PRICE.toString(),maxGasLimit:450000,
+    maxTotalWei:(450000n*GAS_PRICE).toString(),
+    predicates:[{field:"temperatureCentidegrees",min:2200,max:2400}]
+  };
+  const intentConfig={...config,requireIntentCapsules:true};
+  const baseline={...common,config:intentConfig,ethers};
+  await assert.rejects(submitEvent(packet3,baseline),
+    /Intent Capsule is required/,
+    "configured Privi gateway must never submit with an omitted signed intent");
+  const formerAdminSignature=await companyAdmin.signMessage(intentMessage(capsule));
+  await assert.rejects(submitEvent(packet3,{
+      ...baseline,intentCapsule:{capsule,signature:formerAdminSignature}
+    }),/current company administrator/,
+    "former company administrator must not authorize an intent");
+  const signature=await successorAdmin.signMessage(intentMessage(capsule));
+  const intentResult=await submitEvent(packet3,{
+    ...baseline,intentCapsule:{capsule,signature}
+  });
+  assert.equal(intentResult.intentCapsuleDigest,issuerBoundDigest(capsule),
+    "receipt must bind to verified company intent policy");
+  assert.equal(intentResult.intentWorstCaseFeeWei,capsule.maxTotalWei,
+    "signed gas limit and signed unit fee must bound worst-case devnet cost");
+  assert.equal(await contract.nextPositionSequence(e1.companyIdHash,e1.popZoneHash),4n);
+  await assert.rejects(submitEvent(packet3,{
+    ...baseline,intentCapsule:{capsule,signature}
+  }),/sequence/,
+    "replay of a signed capsule must not resubmit a sealed Privi event");
+
   await confirmed(await contract.setDeveloperEnabled(wallet.address,false,
     {gasLimit:200000n,gasPrice:GAS_PRICE,type:0}));
-  await assert.rejects(submitEvent(packet3,common),
+  const packet4=eventPacket(pair1.privateKey,"grid.sensorA",3,4);
+  await assert.rejects(submitEvent(packet4,common),
     "revoked Privi developers must be blocked before a transaction");
 
   console.log(JSON.stringify({
@@ -287,6 +334,8 @@ async function run(env = process.env) {
     company_gateway_authorization:"enforced_independent_administrator",
     company_admin_handover:"two_party_signoff",
     former_gateway_authorizations:"invalidated_by_epoch_advance",
+    signed_intent_capsule:"admin_EIP191_bounded_non_turing_complete_IoT_action",
+    company_intent_fee_cap:"enforced_at_submit_on_valueless_devnet",
     company_suspension_and_revocation:"enforced",
     developer_enrollment:"enforced",
     developer_revocation:"enforced",

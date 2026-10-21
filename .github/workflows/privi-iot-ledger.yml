@@ -30,6 +30,14 @@ jobs:
           python-version: '3.12'
       - name: Verify device signatures, developer access and Privi-only RPC pinning
         run: node --test production-network/iot/gateway/test_core.cjs
+      - name: Verify Privi Intent Capsules with signed rules (NO FINANCIAL EXECUTION)
+        run: |
+          set -euo pipefail
+          TEMP_ETHERS="$RUNNER_TEMP/privi-intent-ethers"
+          mkdir -p "$TEMP_ETHERS"
+          npm install --prefix "$TEMP_ETHERS" --no-save --ignore-scripts --no-audit --no-fund --silent ethers@6.15.0
+          PRIVI_CAPSULE_ETHERS_PATH="$TEMP_ETHERS/node_modules/ethers" \
+            node --test production-network/iot/intents/test_capsule.cjs
       - name: Verify local AI labels and non-minted PRVI estimates
         run: python3 -m unittest discover -s production-network/iot/tests -p 'test_*.py' -v
       - name: Fail closed on non-PoP consensus, foreign ledgers, missing IoT controls
