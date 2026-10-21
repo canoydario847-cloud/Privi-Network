@@ -55,11 +55,14 @@ jobs:
           # Upstream module cache, real chain data and production validators remain unchanged.
           GOTOOLCHAIN=local go mod download github.com/cosmos/cosmos-sdk@v0.54.3
           sdk_root="$(go env GOMODCACHE)/github.com/cosmos/cosmos-sdk@v0.54.3"
-          overlay_dir="$RUNNER_TEMP/privi-custom-bank-overlay"
-          python3 "$GITHUB_WORKSPACE/production-network/mainnet/custom-app/patch_sdk_bank_source.py" --sdk-root "$sdk_root" --output-dir "$overlay_dir"
-          GOTOOLCHAIN=local GOFLAGS="-overlay=$overlay_dir/overlay.json" go test -mod=mod -p 2 -run '^          # Compile an isolated pre-production command binary, never uploaded,
+          sdk_copy_dir="$RUNNER_TEMP/privi-patched-sdk-app-only"
+          python3 "$GITHUB_WORKSPACE/production-network/mainnet/custom-app/patch_sdk_bank_source.py" --sdk-root "$sdk_root" --output-dir "$sdk_copy_dir"
+          # Only the disposable app checkout's go.mod is redirected.
+          GOTOOLCHAIN=local go mod edit -replace="github.com/cosmos/cosmos-sdk=$sdk_copy_dir"
+          GOTOOLCHAIN=local go test -mod=mod -p 2 -run 'a^' -timeout 20m . ./prvicap
+          # Compile an isolated pre-production command binary, never uploaded,
           # executed as mainnet, issued, or distributed to operator hosts.
-          GOTOOLCHAIN=local GOFLAGS="-overlay=$overlay_dir/overlay.json" go build -mod=mod -p 2 -trimpath \
+          GOTOOLCHAIN=local go build -mod=mod -p 2 -trimpath \
             -o "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY" ./cmd/evmd
           test -s "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY"
           sha256sum "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY"
