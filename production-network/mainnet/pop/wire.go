@@ -9,6 +9,12 @@ import (
     "errors"
 )
 
+// PoPSinkEVMAddress is an intentionally unspendable-looking, fixed zero-value
+// EVM calldata destination for the *experimental* native PoP post-handler.
+// The custom application MUST reject code at this address before applying
+// any position, and must never infer monetary transfer or value from it.
+const PoPSinkEVMAddress = "0x5072697669506f505472616e73616374696f6e00"
+
 const envelopePrefix = "PRIVI_POP_TX_V1\n"
 const MaxEnvelopeBytes = 2048
 
