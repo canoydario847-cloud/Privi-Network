@@ -149,6 +149,22 @@ Signed proof that a person authorized an AI agent to spend, which any merchant o
 
 Public: `GET /mandates/<id>` (terms, signatures, budget, recent spends).
 
+## Privi Guard (prompt-injection and data-leak check with receipts)
+
+One call checks content before an agent acts on it or sends it:
+
+- **inbound:** prompt injection, fake system turns, exfiltration and prompt-leak requests, concealment, tool and payment coercion, hidden text, markdown-image exfiltration, base64-hidden instructions;
+- **outbound:** cloud and API keys, private keys, tokens, seed phrases, passwords, card numbers, SSNs and URL data smuggling, with a redacted copy.
+
+Each check returns an Ed25519-signed receipt holding the content's SHA-256 (never the content). Receipts are Merkle-batched into the transparency log every five minutes and anchored on-chain.
+
+| | |
+|---|---|
+| MCP | `guard_check`, `guard_check_many`, `guard_receipt`, `guard_balance`, `guard_buy_credits`, `guard_pricing`; `gateway_set_guard` screens every tool result through a Privi Gateway (`tag` or `block`) |
+| HTTP | `POST /guard/v1/check`, `/check_many`, `/signup`, `/demo` (website, rate-limited, no receipt); `GET /guard/v1/receipts/<id>`, `/pricing`, `/stats`, `/revenue` (admin key) |
+| Price | 1,000 checks per month free per organization, then credits (1k / 10k / 100k for 7 / 50 / 300 USDC) or 1 cent per check via x402 (MCP `_meta` or HTTP `PAYMENT-REQUIRED` / `PAYMENT-SIGNATURE`) |
+| SDKs | [`guard-sdk/`](../guard-sdk): Python and JS clients (zero dependencies) and a Claude Code hook |
+
 ## Privi Scan (public MCP trust registry)
 
 Privi Scan syncs the official MCP Registry. It reads every public streamable-HTTP server's tool list with `initialize` and `tools/list` only, and never calls a tool. It grades each server A-F for tool poisoning:

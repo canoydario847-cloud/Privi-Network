@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://guard.priviflow.us/sitemap.xml

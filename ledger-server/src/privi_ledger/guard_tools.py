@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import hmac
 import json
+import time
+from collections import defaultdict, deque
 from typing import Annotated, Any, Callable, Literal
 
 import anyio
@@ -270,6 +273,33 @@ def http_routes(guard: Guard, paywall, ledger, settings, signup: Callable | None
                       "next": "send Authorization: Bearer <api_key> to /guard/v1/check",
                       "note": "Store api_key now; it cannot be shown again."}, 201)
 
+    demo_hits: dict[str, deque] = defaultdict(deque)
+
+    async def demo(request: Request) -> JSONResponse:
+        """Free try-it endpoint for the website: short texts, 20 per hour per visitor, no receipt, not billed."""
+        fwd = request.headers.get("x-forwarded-for", "")
+        ip = (fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else "?")) or "?"
+        k = hashlib.sha256(ip.encode()).hexdigest()[:16]
+        q, now = demo_hits[k], time.monotonic()
+        while q and now - q[0] > 3600:
+            q.popleft()
+        if len(q) >= 20:
+            return _cors({"error": "demo limit reached (20 per hour); get a free key at /guard/v1/signup"}, 429)
+        if len(demo_hits) > 50_000:
+            demo_hits.clear()
+        try:
+            data = await read_json(request, 20_000)
+            text, direction = data.get("text"), data.get("direction", "inbound")
+            if not isinstance(text, str) or not text.strip() or len(text) > 4000 or direction not in ("inbound", "outbound"):
+                raise GuardError("demo checks take up to 4,000 characters and direction inbound|outbound")
+        except GuardError as e:
+            return _cors({"error": str(e)}, 400)
+        q.append(now)
+        from .guard_engine import inspect
+        r = inspect(text, direction)
+        r.pop("input_sha256", None)
+        return _cors({**r, "demo": True, "note": "Demo results carry no receipt. Use /guard/v1/check with a free key for signed, anchored receipts."})
+
     async def options(_: Request) -> Response:
         return Response(status_code=204, headers={"Access-Control-Allow-Origin": "*", "Access-Control-Max-Age": "86400",
                                                   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -278,5 +308,6 @@ def http_routes(guard: Guard, paywall, ledger, settings, signup: Callable | None
     return [("/guard/v1/check", ["POST"], check), ("/guard/v1/check", ["OPTIONS"], options),
             ("/guard/v1/check_many", ["POST"], check_many), ("/guard/v1/check_many", ["OPTIONS"], options),
             ("/guard/v1/receipts/{check_id}", ["GET"], receipt), ("/guard/v1/pricing", ["GET"], pricing),
-            ("/guard/v1/stats", ["GET"], stats), ("/guard/v1/revenue", ["GET"], revenue)] + (
+            ("/guard/v1/stats", ["GET"], stats), ("/guard/v1/revenue", ["GET"], revenue),
+            ("/guard/v1/demo", ["POST"], demo), ("/guard/v1/demo", ["OPTIONS"], options)] + (
             [("/guard/v1/signup", ["POST"], http_signup), ("/guard/v1/signup", ["OPTIONS"], options)] if signup else [])

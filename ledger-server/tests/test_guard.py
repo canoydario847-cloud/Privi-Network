@@ -154,6 +154,13 @@ def test_http_api_with_x402_header_flow(ledger, monkeypatch):
         r = http.post("/guard/v1/check", json={"text": BENIGN}, headers={"Authorization": f"Bearer {su.json()['api_key']}"})
         assert r.status_code == 200 and r.json()["paid_by"] == "free"
         assert http.post("/guard/v1/signup", json={}).status_code == 400
+        d = http.post("/guard/v1/demo", json={"text": ATTACK})
+        assert d.status_code == 200 and d.json()["verdict"] == "block" and d.json()["demo"]
+        assert http.post("/guard/v1/demo", json={"text": "x" * 5000}).status_code == 400
+        for _ in range(19):
+            http.post("/guard/v1/demo", json={"text": BENIGN})
+        assert http.post("/guard/v1/demo", json={"text": BENIGN}).status_code == 429
+        assert http.get("/guard/v1/stats").json()["checks_total"] == st["checks_total"] + 1    # demos are not checks
 
 
 def test_gateway_guard_modes(ledger, monkeypatch):
