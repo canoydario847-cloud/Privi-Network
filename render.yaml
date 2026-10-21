@@ -141,3 +141,36 @@ services:
           envVarKey: ANCHOR_API_KEYS
       - key: PRIVI_ANCHOR_INTERVAL
         value: "300"
+
+  # ------------------------------------------------------------------ Privi Quantum
+  - type: web
+    name: privi-quantum
+    runtime: docker
+    plan: starter
+    region: virginia
+    dockerfilePath: ./quantum-server/Dockerfile
+    dockerContext: ./quantum-server
+    buildFilter:
+      paths: ["quantum-server/**"]
+    healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: privi-quantum-data        # keeps the post-quantum signing key and attestations
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: QUANTUM_DB_PATH
+        value: /data/quantum.db
+      - key: QUANTUM_PUBLIC_URL
+        value: https://privi-quantum.onrender.com
+      - key: QUANTUM_ANCHOR_URL
+        value: https://privi-anchor.onrender.com/mcp
+      - key: QUANTUM_ANCHOR_API_KEY
+        fromService:
+          name: privi-anchor
+          type: web
+          envVarKey: ANCHOR_API_KEYS
+      - key: QUANTUM_ANCHOR_INTERVAL
+        value: "300"
+      - key: QUANTUM_RATE_PER_MIN
+        value: "20"

@@ -205,6 +205,22 @@
         "anchor_hashes",
         "anchor_verify"
       ]
+    },
+    {
+      "name": "Privi Quantum",
+      "registry_id": "io.github.canoydario847-cloud/privi-quantum",
+      "url": "https://privi-quantum.onrender.com/mcp",
+      "transport": "streamable-http",
+      "description": "Quantum optimization (CVaR-QAOA, up to 16 qubits) for manufacturing decisions: balance production lines, pick lots to inspect, split conflicting jobs across shifts. Every result is checked against the proven optimum, signed with Ed25519 + ML-DSA-87 (NIST FIPS 204), and anchored on the Privi chain; circuits export as OpenQASM for IBM, Braket and Azure hardware. Also scans code for quantum-vulnerable cryptography.",
+      "pricing": "free",
+      "auth": "none",
+      "tools": [
+        "quantum_status",
+        "quantum_problems",
+        "quantum_optimize",
+        "quantum_verify",
+        "pqc_scan_code"
+      ]
     }
   ],
   "chain": {

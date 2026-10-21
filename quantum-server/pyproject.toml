@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "privi-quantum-mcp"
+version = "0.1.0"
+description = "Quantum optimization (CVaR-QAOA) for manufacturing decisions, with post-quantum signed results anchored on the Privi blockchain, as an MCP server."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Privi World Co" }, { name = "Dario Canoy" }]
+requires-python = ">=3.11"
+dependencies = ["mcp>=2.3,<3", "uvicorn>=0.30", "cryptography>=50", "numpy>=1.26", "scipy>=1.11"]
+keywords = ["mcp", "quantum computing", "qaoa", "post-quantum", "ml-dsa", "manufacturing", "optimization", "blockchain"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "anyio>=4"]
+
+[project.scripts]
+privi-quantum-mcp = "privi_quantum.server:main"
+
+[project.urls]
+Homepage = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/quantum-server"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/privi_quantum"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
