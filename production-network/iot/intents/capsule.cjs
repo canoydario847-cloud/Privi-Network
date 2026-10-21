@@ -9,7 +9,7 @@
  * not an executable on-chain smart contract, not an escrow or token.
  * The real on-chain transaction is still checked by PriviIoTLedger.
  */
-const {sha, canonical} = require("../gateway/core.cjs");
+const {sha, canonical, packetDigest} = require("../gateway/core.cjs");
 const ADDRESS=/^0x[0-9a-fA-F]{40}$/;
 const H32=/^0x[0-9a-fA-F]{64}$/;
 const DECIMAL=/^(?:0|[1-9][0-9]{0,25})$/;
@@ -107,6 +107,15 @@ async function verifyIntentCapsule({capsule,signature,event,packet,config,wallet
     eq(capsule.popStampHash,event.popStampHash),
     "Intent Capsule does not authorize this exact signed PoP event");
   for(const predicate of capsule.predicates) validatePredicate(packet,predicate);
+  // The exported verifier must independently bind the predicate-tested packet
+  // to the company-approved signed event. Callers must not supply a matching
+  // event from one packet while presenting different sensor data here.
+  const computed=packetDigest(packet);
+  ensure(eq(computed.eventHash,event.eventHash) &&
+    eq(computed.companyIdHash,event.companyIdHash) &&
+    eq(computed.deviceIdHash,event.deviceIdHash) &&
+    eq(computed.popStampHash,event.popStampHash),
+    "Intent Capsule packet/event digest mismatch");
   const nowBlock=await provider.send("eth_getBlockByNumber",["latest",false]);
   ensure(nowBlock&&typeof nowBlock.timestamp==="string"&&/^0x[0-9a-f]+$/i.test(nowBlock.timestamp),
     "Pinned Privi block timestamp required");

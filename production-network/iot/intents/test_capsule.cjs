@@ -74,6 +74,23 @@ test("forged, malformed, absent company signer fails closed",async()=>{
  f.capsule.maxTotalWei="4550000000000000";
  await assert.rejects(verifyIntentCapsule({...f,signature}),/current company administrator/);
 });
+test("capsule predicates cannot authorize a different signed event packet",async()=>{
+ const mutations=[
+   f=>{f.packet.payload.humidityPercent=99}, // outside any signed predicate
+   f=>{f.packet.sequence+=1},
+   f=>{f.packet.positionSequence+=1},
+   f=>{f.packet.observedAt+=1},
+   f=>{f.packet.deviceId="sensor-02"},
+   f=>{f.packet.companyId="OTHER_TEST_CO"}
+ ];
+ for(const mutate of mutations){
+   const f=fixture();
+   mutate(f);
+   // These values still pass the sole temperature predicate, so only
+   // independent packet/event digest binding can reject the substitution.
+   await assert.rejects(run(f),/packet\/event digest mismatch/);
+ }
+});
 test("company epoch rotation and company suspension instantly invalidate capsules",async()=>{
  const f=fixture();
  f.mutate.epoch(3n);
