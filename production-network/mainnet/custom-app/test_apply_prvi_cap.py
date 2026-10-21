@@ -30,6 +30,7 @@ func test() {
         logger,
     )
     app.BankKeeper = app.BankKeeper.WithObjStoreKey(oKeys[banktypes.ObjectStoreKey])
+    bank.NewAppModule(appCodec, app.BankKeeper, app.AccountKeeper, nil)
     return app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)
 }
 '''
@@ -89,6 +90,21 @@ class PatcherTests(unittest.TestCase):
         self.assertIn("PRVI cap genesis initialization denied", app)
         self.assertIn("const StoreKey = \"prvicap\"", (self.upstream/"evmd"/"prvicap"/"store.go").read_text())
         self.assertNotIn("app.BankKeeper = app.BankKeeper.WithObjStoreKey", app)
+        self.assertIn("baseBank.WithMintCoinsRestriction(app.PriviCapKeeper.MintRestriction)", app)
+        self.assertEqual(app.count("baseBank.WithMintCoinsRestriction("), 1)
+        self.assertNotIn("bank.NewAppModule(appCodec, app.BankKeeper", app)
+
+    def test_unpinned_bank_module_rejected_before_any_write(self):
+        self.app_file.write_text(APP.replace(
+            "bank.NewAppModule(appCodec, app.BankKeeper, app.AccountKeeper, nil)",
+            "bank.NewAppModule(appCodec, differentBank, app.AccountKeeper, nil)"
+        ), encoding="utf-8")
+        old = self.app_file.read_text()
+        with self.assertRaisesRegex(ValueError, "pinned upstream mismatch"):
+            module.apply_patch(self.upstream, self.repo, verify_git=False)
+        self.assertEqual(old, self.app_file.read_text())
+        self.assertFalse((self.upstream / "evmd" / "prvicap").exists())
+
 
     def test_cannot_overwrite_existing_cap_keeper_files(self):
         (self.upstream/"evmd"/"prvicap").mkdir()
