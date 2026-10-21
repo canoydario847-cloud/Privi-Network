@@ -50,7 +50,7 @@ CHANGE_FLAG_DAYS = 30
 UA = "PriviScan/1.0 (read-only MCP trust probe; never calls tools; +https://privi-ledger.onrender.com/scan)"
 PROTOCOL = "2025-06-18"
 LISTED = ("ok", "auth_required", "paid_gate")
-ANALYZER_VERSION = "6"     # bump when rules change; stored servers are re-graded from their saved tools
+ANALYZER_VERSION = "7"     # bump when rules change; stored servers are re-graded from their saved tools
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS scan_servers (
@@ -235,7 +235,7 @@ def _texts(t: dict) -> str:
                 if k == "properties" and isinstance(v, dict):
                     for pv in list(v.values())[:200]:
                         walk(pv, depth + 1)
-                elif k not in ("type", "format", "pattern", "$schema", "$ref", "required"):
+                elif k not in ("type", "format", "pattern", "$schema", "$ref", "required", "examples", "example"):
                     walk(v, depth + 1)
         elif isinstance(o, list):
             for v in o[:200]:
