@@ -138,6 +138,7 @@ def assess(manifest, services=None):
                 service_map[item["id"]] = item
 
     ids, names, service_ids, domains, pubkeys = set(), set(), set(), set(), set()
+    observed_disk_ids = set()
     regions = set()
     for idx, node in enumerate(candidates):
         label = f"validator[{idx}]"
@@ -221,8 +222,14 @@ def assess(manifest, services=None):
         disk = details.get("disk")
         if not isinstance(disk, dict) or not _assigned(disk.get("id")):
             errors.append(f"{label}: attached persistent disk ID missing")
-        elif disk.get("mountPath") != "/data" or not isinstance(disk.get("sizeGB"), (float, int)) or disk["sizeGB"] < diskmin:
-            errors.append(f"{label}: persistent disk mount/capacity invalid")
+        else:
+            if disk["id"] in observed_disk_ids:
+                errors.append(f"{label}: two validators share a Render persistent disk ID")
+            observed_disk_ids.add(disk["id"])
+            if (disk.get("mountPath") != "/data" or
+                type(disk.get("sizeGB")) not in (float, int) or
+                type(diskmin) is not int or disk["sizeGB"] < diskmin):
+                errors.append(f"{label}: persistent disk mount/capacity invalid")
         if details.get("url") and "onrender.com" in str(details["url"]):
             errors.append(f"{label}: public onrender.com endpoint forbidden on validator")
         matches += 1
