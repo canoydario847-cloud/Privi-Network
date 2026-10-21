@@ -88,6 +88,11 @@ class PatcherTests(unittest.TestCase):
         self.assertIn("prvicap.New(runtime.NewKVStoreService", app)
         self.assertIn("bankGenesis.Supply.AmountOf(prvicap.BaseDenom)", app)
         self.assertIn("PRVI cap genesis initialization denied", app)
+        self.assertIn("prvicap.ValidateGenesisBase(initialPRVI.String())", app)
+        self.assertLess(app.index("prvicap.ValidateGenesisBase(initialPRVI.String())"),
+                        app.index("app.ModuleManager.InitGenesis("))
+        self.assertLess(app.index("bankGenesis.Supply.AmountOf(prvicap.BaseDenom)"),
+                        app.index("app.ModuleManager.InitGenesis("))
         self.assertIn("const StoreKey = \"prvicap\"", (self.upstream/"evmd"/"prvicap"/"store.go").read_text())
         self.assertNotIn("app.BankKeeper = app.BankKeeper.WithObjStoreKey", app)
         self.assertIn("baseBank.WithMintCoinsRestriction(app.PriviCapKeeper.MintRestriction)", app)
