@@ -23,6 +23,10 @@ DEFAULT_PRICES_USD = {
     "ledger_audit_stream": "0.02",
     "ledger_upgrade_pro": "29",
     "passport_issue": "1",       # free-plan organizations; Pro and enterprise issue for free
+    "guard_check": "0.01",       # Privi Guard, per check without an organization allowance or credits
+    "guard_credits_1k": "7",
+    "guard_credits_10k": "50",
+    "guard_credits_100k": "300",
 }
 
 
