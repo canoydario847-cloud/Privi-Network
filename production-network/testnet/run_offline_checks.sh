@@ -49,6 +49,21 @@ else
     exit 1
   fi
 fi
+# Render validators are a secret-free NONLIVE candidate, not a deployment.
+# The provider-facing checker refuses web services masquerading as BFT signers.
+python3 "$ROOT/ops/render_validator_preflight.py" \
+  "$ROOT/ops/render-validator-candidates.NONLIVE.json" --mode draft
+if python3 "$ROOT/ops/render_validator_preflight.py" \
+  "$ROOT/ops/render-validator-candidates.NONLIVE.json" --mode production; then
+  echo "FATAL: candidate Render topology authorized mainnet" >&2
+  exit 1
+else
+  status=$?
+  if [[ "$status" -ne 3 ]]; then
+    echo "Render validator production guard returned unexpected status $status" >&2
+    exit 1
+  fi
+fi
 node --check "$ROOT/ops/legacy_state_copy.js"
 node --test "$ROOT/ops/test_legacy_state_copy.js"
 node --test "$ROOT/ops/test_verify_operator_attestations.cjs"
