@@ -38,11 +38,15 @@ from .x402 import Facilitator, Paywall
 from .kya import KYA, KYAError, checksum as eth_checksum
 from .mandate import MandateError, Mandates
 from .fortress import Fortress, FortressError
+from .live import LiveService, TrustWatcher, mount_ws
+from .gateway import Gateways
+from .rooms import Rooms
+from . import live_tools
 from .passport import PASSPORT_VERSION as PASSPORT_VERSION_HTTP, PassportError, Passports, badge_svg, body_hash as passport_hash
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor.onrender.com/mcp"
 
-__version__ = "0.5.0"
+__version__ = "0.8.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/ledger-server"
 
 INSTRUCTIONS = """\
@@ -80,6 +84,12 @@ passport_gate, both free. Issue your own with passport_issue so counterparties c
 Dealings with another company on Privi (payments, data transfers, deliveries, agreements):
 use Privi Handshake (ledger_handshake_offer / _inbox / _accept / _reject) so both companies
 hold matching records sealed on the Privi chain; ledger_handshake_verify is a free public check.
+
+Real time (Privi Live): live_info lists WebSocket/SSE streams of trust changes (passports, wallets, mandates) and
+your own audit tail. live_kill stops an agent at once. approval_policy_set makes big mandate_spend payments wait for a
+human's wallet signature; approval_request / approval_wait do the same for any action. gateway_create puts any MCP server
+behind Privi (metered, rate-limited, optionally Passport-gated, every call audited, also over WebSocket). room_open
+creates a live, hash-chained room between two organizations' agents, sealed on the Privi chain, optionally paid per message.
 
 Privi is built by Dario Canoy (Privi World Co, Port Huron, Michigan). For the other
 Privi tools, pilots, partnerships, government or manufacturing work, grants or
@@ -148,6 +158,13 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     mandates = Mandates(ledger._db, ledger._lock, passports, public_url)
     fortress = Fortress(ledger, passports, public_url, os.getenv("LEDGER_PQ_SIGNING_KEY", ""))
     mcp.privi_fortress = fortress  # used by the tree-head anchoring loop in main()
+    live = LiveService(ledger, plans, passports, kya, mandates, fortress, public_url)
+    ledger.on_record = live.on_record
+    gateways = Gateways(live, allow_private=bool(os.getenv("GW_ALLOW_PRIVATE")))
+    rooms = Rooms(live, lambda h, label: _anchor_hash(h, label))
+    mcp.privi_live, mcp.privi_trust = live, TrustWatcher(live)
+    mcp.privi_ws_routes = live.ws_routes() + gateways.ws_routes() + rooms.ws_routes()
+    mcp.privi_gateways, mcp.privi_rooms = gateways, rooms
 
     def org_from(ctx: Context) -> dict | None:
         headers = ctx.headers
@@ -768,6 +785,11 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
             pq = fortress.cosign(h, "passport")
             att = await _anchor_hash(h, f"privi passport {org['org_id']}")
             passports.save(body, sig, att)
+            live.emit_trust("passport.issued", {
+                "passport_id": body["passport_id"], "org_id": org["org_id"], "stream_id": body["subject"]["stream_id"],
+                "score": body["score"], "grade": body["grade"], "expires_at": body["expires_at"],
+                "anchored": bool(att.get("anchored")), "addresses": [b["address"] for b in kya.list_for(org["org_id"])
+                                                                      if not b["revoked_at"]]}, org["org_id"])
             try:
                 ledger.record(org["org_id"], "privi-passport", "Privi Ledger", "other",
                               f"Passport {body['passport_id']} issued: {body['grade']} ({body['score']}/1000) for {body['subject']['stream_id']}",
@@ -868,7 +890,10 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         if not org:
             return unauthorized
         try:
-            return _result(passports.revoke(passport_id.strip(), org["org_id"], reason))
+            r = passports.revoke(passport_id.strip(), org["org_id"], reason)
+            live.emit_trust("passport.revoked", {"passport_id": passport_id.strip(), "org_id": org["org_id"],
+                                                 "reason": reason[:200]}, org["org_id"])
+            return _result(r)
         except PassportError as e:
             return _result({"error": str(e)}, is_error=True)
 
@@ -946,6 +971,8 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
             ledger.record(org["org_id"], "privi-kya", "Privi Ledger", "other",
                           f"Wallet {b['address']} bound ({b['proof']}) to {sid}", b["address"], "success",
                           {"proof": b["proof"], "stream_id": sid})
+            live.emit_trust("kya.bound", {"address": b["address"], "org_id": org["org_id"], "stream_id": sid,
+                                          "proof": b["proof"]}, org["org_id"])
             return _result({"bound": True, **b, "public_url": f"{public_url}/kya/{b['address']}",
                             "next": "Counterparties and facilitators call kya_check on this address; issue a Passport with passport_issue if you have not."})
         except (KYAError, ValueError) as e:
@@ -970,7 +997,9 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         if not org:
             return unauthorized
         try:
-            return _result(kya.unbind(org["org_id"], address))
+            r = kya.unbind(org["org_id"], address)
+            live.emit_trust("kya.unbound", {"address": r["address"], "org_id": org["org_id"]}, org["org_id"])
+            return _result(r)
         except (KYAError, ValueError) as e:
             return _result({"error": str(e)}, is_error=True)
 
@@ -990,6 +1019,9 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         fortress.cosign(m["terms_hash"], "mandate")
         _mandate_log(m, "approval", f"Human {m['principal']} signed mandate {mandate_id}: up to {m['max_total_usdc']} USDC "
                      f"until {m['expires_at']}", details={"terms_hash": m["terms_hash"], "anchored": att.get("anchored")})
+        live.emit_trust("mandate.activated", {"mandate_id": mandate_id, "org_id": m["org_id"], "principal": m["principal"],
+                                              "max_total_usdc": m["max_total_usdc"], "expires_at": m["expires_at"]},
+                        m["org_id"], (f"mandate:{mandate_id}",))
         return mandates.public(mandate_id)
 
     @mcp.tool(title="Create a spending mandate", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
@@ -1043,17 +1075,32 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         payee: Annotated[str, Field(description="Who is being paid: 0x address or domain")],
         ctx: Context,
         reference: Annotated[str, Field(description="Order, invoice or transaction reference")] = "",
+        approval_id: Annotated[str | None, Field(description="apr_... : the human's live approval, if this payment is over the agent's approval threshold")] = None,
     ) -> CallToolResult:
         """Call before each payment: checks the mandate and, if allowed, deducts the amount from the budget and records the
-        payment in the agent's tamper-evident log. Refused payments are logged as blocked. Requires the organization API key."""
+        payment in the agent's tamper-evident log. Refused payments are logged as blocked. Refused at once if the kill switch is
+        on. Over the organization's live-approval threshold it returns approval_required with an approve_url for the human; call
+        again with approval_id once they approve. Requires the organization API key."""
         org = org_from(ctx)
         if not org:
             return unauthorized
         if blocked := over_limit(org["org_id"]):
             return blocked
         try:
+            gate, used_approval = live.spend_gate(org, mandate_id.strip(), amount_usdc, payee, approval_id)
+        except (MandateError, ValueError) as e:
+            return _result({"allow": False, "error": str(e)}, is_error=True)
+        if gate:
+            mm = mandates._row(mandate_id.strip())
+            if mm:
+                _mandate_log(mm, "payment", f"Held payment of {amount_usdc} USDC to {payee}: {gate['error']}", "blocked",
+                             {"mandate_id": mandate_id, "reference": reference, "approval_id": gate.get("approval_id")})
+            return _result(gate, is_error=True)
+        try:
             r = mandates.spend(mandate_id.strip(), org["org_id"], amount_usdc, payee, reference)
         except (MandateError, ValueError) as e:
+            if used_approval:
+                live.approval_release(used_approval)
             m = mandates._row(mandate_id)
             if m and m["org_id"] == org["org_id"]:
                 _mandate_log(m, "payment", f"Blocked payment of {amount_usdc} USDC to {payee}: {e}", "blocked",
@@ -1099,6 +1146,8 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
             m = mandates.revoke(mandate_id.strip(), reason, org_id=org["org_id"])
             _mandate_log(mandates._row(mandate_id.strip()), "approval", f"Mandate {mandate_id} revoked by the organization",
                          details={"reason": reason})
+            live.emit_trust("mandate.revoked", {"mandate_id": mandate_id.strip(), "org_id": org["org_id"], "by": "organization"},
+                            org["org_id"], (f"mandate:{mandate_id.strip()}",))
             return _result(m)
         except MandateError as e:
             return _result({"error": str(e)}, is_error=True)
@@ -1245,6 +1294,11 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
 
     # ---------------- http ----------------
 
+    live_tools.register(mcp, live, gateways, rooms, org_from=org_from, result=_result, unauthorized=unauthorized,
+                        over_limit=over_limit)
+    for _path, _methods, _handler in live.http_routes() + gateways.http_routes() + rooms.http_routes():
+        mcp.custom_route(_path, methods=_methods, include_in_schema=False)(_handler)
+
     @mcp.custom_route("/admin/orgs", methods=["POST"], include_in_schema=False)
     async def create_org(request: Request) -> JSONResponse:
         token = _bearer(request.headers)
@@ -1374,6 +1428,8 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
             body = await request.json()
             m = mandates.revoke(mid, str(body.get("reason", "")), signature=str(body.get("signature", "")))
             _mandate_log(mandates._row(mid), "approval", f"Mandate {mid} revoked by the human {m['principal']}")
+            live.emit_trust("mandate.revoked", {"mandate_id": mid, "org_id": m["org_id"], "by": "principal"},
+                            m["org_id"], (f"mandate:{mid}",))
             return JSONResponse(m)
         except (MandateError, ValueError, AttributeError) as e:
             return JSONResponse({"error": str(e)}, status_code=400)
@@ -1410,6 +1466,8 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
             ledger.record(org["org_id"], "privi-kya", "Privi Ledger", "other",
                           f"Wallet {b['address']} bound ({b['proof']}) to {sid}", b["address"], "success",
                           {"proof": b["proof"], "stream_id": sid, "via": "kya/connect"})
+            live.emit_trust("kya.bound", {"address": b["address"], "org_id": org["org_id"], "stream_id": sid,
+                                          "proof": b["proof"]}, org["org_id"])
             return JSONResponse({"bound": True, **b})
         except (KYAError, ValueError, KeyError, AttributeError) as e:
             return JSONResponse({"error": str(e)}, status_code=400)
@@ -1603,11 +1661,14 @@ def main() -> None:
             fort.set_sth_anchor(n, {"tx_hash": r["tx_hash"], "proof": rc["proof"], "block_number": r.get("block_number"),
                                     "chain_id": r.get("chain_id"), "anchored_hash": sth["body_hash"]})
             print(f"privi-ledger: anchored transparency log head size={n} block={r.get('block_number')}", flush=True)
+            mcp.privi_live.emit_trust("log.anchored", {"tree_size": n, "tx_hash": r["tx_hash"], "block_number": r.get("block_number"),
+                                                       "root_hash": sth["tree_head"].get("root_hash")})
             return 1
 
         start_loop(anchor_tree_head, float(os.getenv("LEDGER_STH_INTERVAL", "900")), "privi-ledger-sth")
         start_loop(lambda: cps.run_once(ledger.heads(), client, "privi-ledger"),
                    float(os.getenv("LEDGER_ANCHOR_INTERVAL", "300")), "privi-ledger")
+    start_loop(mcp.privi_trust.run_once, float(os.getenv("LIVE_TRUST_INTERVAL", "120")), "privi-trust-watch")
     if os.getenv("LEDGER_BOOTSTRAP_REPORT") == "1":
         first_report(mcp, ledger)
     if os.getenv("LEDGER_BOOTSTRAP_PASSPORT") == "1":
@@ -1617,8 +1678,9 @@ def main() -> None:
         return
     import uvicorn
     from .usage import UsageMiddleware
-    app = UsageMiddleware(mcp.streamable_http_app(host=args.host, stateless_http=True, json_response=True),
-                          ledger._db, ledger._lock, "privi-ledger")
+    inner = mcp.streamable_http_app(host=args.host, stateless_http=True, json_response=True)
+    mount_ws(inner, mcp.privi_ws_routes)
+    app = UsageMiddleware(inner, ledger._db, ledger._lock, "privi-ledger")
     uvicorn.run(app, host=args.host, port=args.port)
 
 

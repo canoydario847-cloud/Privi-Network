@@ -115,6 +115,7 @@ class Ledger:
         self._db.row_factory = sqlite3.Row
         self._db.executescript(SCHEMA)
         self._db.commit()
+        self.on_record = None   # optional callback(org_id, entry) used by Privi Live; never allowed to break recording
 
     # ---- organizations ------------------------------------------------
 
@@ -198,7 +199,13 @@ class Ledger:
                 tuple(fields.values()),
             )
             self._db.commit()
-        return _public(fields)
+        entry = _public(fields)
+        if self.on_record:
+            try:
+                self.on_record(org_id, entry)
+            except Exception:
+                pass
+        return entry
 
     def entries(self, org_id: str, stream_id: str, after_seq: int = 0, limit: int | None = None) -> list[dict]:
         stream_id = check_id(stream_id, "stream_id")

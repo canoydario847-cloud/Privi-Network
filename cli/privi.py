@@ -16,6 +16,16 @@
   privi tree                          latest signed tree head of the transparency log
   privi stats                         public tool-call counts
 
+Real time (Privi Live):
+  privi watch [--trust-only] [--address 0x..] [--replay N]   live stream of your audit tail and the trust network
+  privi kill [STREAM|*] [--reason "..."]                     stop an agent at once (spending, gateways, rooms)
+  privi resume [STREAM|*]                                    lift the kill switch
+  privi ask "ACTION" --approver 0x.. [--amount N --payee P]  ask a human to approve; prints the link they sign at
+  privi wait APPROVAL_ID                                     wait for the human's decision
+  privi approvals [--status pending]                         your approval requests
+  privi gateway create NAME UPSTREAM_URL [--min-score N] [--rate N] | list | stats ID | delete ID
+  privi room open TITLE [--with ORG_ID] [--price X --payee P] | list | transcript ID | close ID | verify ID
+
 Only Python 3.9+ is needed. Settings live in ~/.config/privi/config.json (readable only by you).
 Set PRIVI_LEDGER_URL to use a different Ledger.
 """
@@ -259,6 +269,137 @@ def cmd_stats(a):
         print(f"  {t:<30} {c}")
 
 
+# ---------------------------------------------------------------- Privi Live
+
+def cmd_watch(a):
+    import time
+    key = "" if a.trust_only else api_key(False)
+    q = f"channels={'org,trust' if key else 'trust'}&replay={a.replay}" + (f"&address={a.address}" if a.address else "")
+    last = None
+    print("privi: watching" + (" your organization + the trust network" if key else " the public trust network (delayed unless Pro)")
+          + "; Ctrl-C to stop", file=sys.stderr)
+    while True:
+        req = urllib.request.Request(f"{base_url()}/live/events?{q}", headers={
+            "Accept": "text/event-stream", "User-Agent": "privi-cli/1"})
+        if key:
+            req.add_header("Authorization", f"Bearer {key}")
+        if last:
+            req.add_header("Last-Event-ID", last)
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                name = data = None
+                for raw in r:
+                    line = raw.decode("utf-8", "replace").rstrip("\r\n")
+                    if line.startswith("id:"):
+                        last = line[3:].strip()
+                    elif line.startswith("event:"):
+                        name = line[6:].strip()
+                    elif line.startswith("data:"):
+                        data = line[5:].strip()
+                    elif not line and data:
+                        try:
+                            ev = json.loads(data)
+                            brief = " ".join(f"{k}={v}" for k, v in (ev.get("data") or {}).items()
+                                             if k != "addresses" and not isinstance(v, (dict, list)))
+                            print(f"{ev.get('at', '')[11:19]}  {name or ev.get('type'):<28} {brief[:200]}", flush=True)
+                        except ValueError:
+                            print(data, flush=True)
+                        name = data = None
+        except urllib.error.HTTPError as e:
+            die(f"Ledger answered HTTP {e.code}: {e.read().decode()[:200]}")
+        except (urllib.error.URLError, OSError):
+            print("privi: connection lost, reconnecting…", file=sys.stderr)
+            time.sleep(3)
+        except KeyboardInterrupt:
+            return
+
+
+def cmd_kill(a):
+    show(call("live_kill", {"stream_id": a.stream, "reason": a.reason or ""}))
+
+
+def cmd_resume(a):
+    show(call("live_resume", {"stream_id": a.stream}))
+
+
+def cmd_ask(a):
+    args = {"stream_id": a.stream, "action": a.action, "approver_wallet": a.approver, "ttl_s": a.ttl}
+    if a.amount:
+        args.update(amount_usdc=a.amount, payee=a.payee or "")
+    if a.mandate:
+        args["mandate_id"] = a.mandate
+        args.pop("approver_wallet")
+    r = call("approval_request", args)
+    show(r, ["approval_id", "status", "approver", "expires_at", "approve_url"])
+    print("\nSend the approver that link; then: privi wait " + r["approval_id"])
+
+
+def cmd_wait(a):
+    r = call("approval_wait", {"approval_id": a.approval_id, "timeout_s": 50}, auth=False)
+    show(r, ["approval_id", "status", "decided_by", "decided_at", "use_until"])
+
+
+def cmd_approvals(a):
+    r = call("approval_list", {"status": a.status} if a.status else {})
+    for x in r.get("approvals", []):
+        print(f"{x['approval_id']}  {x['status']:<9} {x['stream_id']:<18} {x['action'][:70]}")
+    if not r.get("approvals"):
+        print("no approval requests")
+
+
+def cmd_gateway(a):
+    if a.op == "create":
+        if not (a.name and a.arg):
+            die("usage: privi gateway create NAME UPSTREAM_URL [--min-score N] [--rate N]")
+        r = call("gateway_create", {"name": a.name, "upstream_url": a.arg, "min_score": a.min_score, "rate_per_min": a.rate})
+        show(r, ["gw_id", "http_url", "ws_url", "upstream_host", "caller_gate", "rate_limit_per_minute_per_caller"])
+    elif a.op == "list":
+        for g in call("gateway_list")["gateways"]:
+            st = g["stats"]
+            print(f"{g['gw_id']}  {g['name']:<24} -> {g['upstream_host']:<28} calls={st['tool_calls']} errors={st['errors']}")
+    elif a.op == "stats":
+        if not a.name:
+            die("usage: privi gateway stats GW_ID")
+        r = call("gateway_stats", {"gw_id": a.name})
+        show(r, ["gw_id", "name", "http_url", "ws_url", "stats", "quota"])
+        for t in r["by_tool"]:
+            print(f"  {t['tool']:<30} calls={t['calls']} errors={t['errors']} denied={t['denied']} payment_required={t['payment_required']}")
+    elif a.op == "delete":
+        if not a.name:
+            die("usage: privi gateway delete GW_ID")
+        show(call("gateway_delete", {"gw_id": a.name}))
+
+
+def cmd_room(a):
+    if a.op == "open":
+        if not a.arg:
+            die('usage: privi room open "TITLE" [--with ORG_ID] [--price 0.05 --payee seller.example.com]')
+        args = {"title": a.arg}
+        if a.with_org:
+            args["counterparty_org_id"] = a.with_org
+        if a.price:
+            args.update(price_per_message_usdc=a.price, payee=a.payee or "")
+        r = call("room_open", args)
+        show(r, ["room_id", "ws_url", "join_code", "price_per_message_usdc", "expires_at"])
+    elif a.op == "list":
+        for r in call("room_list")["rooms"]:
+            print(f"{r['room_id']}  {r['status']:<8} msgs={r['message_count']:<4} {r['title']}")
+    elif a.op in ("transcript", "verify", "close"):
+        if not a.arg:
+            die(f"usage: privi room {a.op} ROOM_ID")
+        if a.op == "close":
+            show(call("room_close", {"room_id": a.arg}), ["room_id", "status", "message_count", "head_hash", "closed_at"])
+            return
+        t = call("room_transcript", {"room_id": a.arg})
+        if a.op == "transcript":
+            for m in t["messages"]:
+                print(f"{m['seq']:>4}  {m['at'][11:19]}  {m['org_id'][:12]}  {m['body'][:120]}")
+            print("chain:", json.dumps(t["verification"]))
+        else:
+            v = call("room_verify", {"room_id": a.arg, "messages": t["messages"]}, auth=False)
+            show(v, ["room_id", "sealed", "seal_hash_ok", "signature_valid", "transcript", "anchor"])
+
+
 def main():
     ap = argparse.ArgumentParser(prog="privi", description="Use your Privi Ledger from the terminal.",
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__.split("\n\n")[1])
@@ -279,6 +420,21 @@ def main():
     p = sp.add_parser("check-bundle"); p.add_argument("file"); p.set_defaults(f=cmd_check_bundle)
     sp.add_parser("tree").set_defaults(f=cmd_tree)
     sp.add_parser("stats").set_defaults(f=cmd_stats)
+    p = sp.add_parser("watch"); p.add_argument("--trust-only", action="store_true"); p.add_argument("--address")
+    p.add_argument("--replay", type=int, default=10); p.set_defaults(f=cmd_watch)
+    p = sp.add_parser("kill"); p.add_argument("stream", nargs="?", default="*"); p.add_argument("--reason"); p.set_defaults(f=cmd_kill)
+    p = sp.add_parser("resume"); p.add_argument("stream", nargs="?", default="*"); p.set_defaults(f=cmd_resume)
+    p = sp.add_parser("ask"); p.add_argument("action"); p.add_argument("--stream", default="cli")
+    p.add_argument("--approver"); p.add_argument("--mandate"); p.add_argument("--amount"); p.add_argument("--payee")
+    p.add_argument("--ttl", type=int, default=900); p.set_defaults(f=cmd_ask)
+    p = sp.add_parser("wait"); p.add_argument("approval_id"); p.set_defaults(f=cmd_wait)
+    p = sp.add_parser("approvals"); p.add_argument("--status"); p.set_defaults(f=cmd_approvals)
+    p = sp.add_parser("gateway"); p.add_argument("op", choices=["create", "list", "stats", "delete"])
+    p.add_argument("name", nargs="?"); p.add_argument("arg", nargs="?"); p.add_argument("--min-score", type=int, default=0)
+    p.add_argument("--rate", type=int, default=60); p.set_defaults(f=cmd_gateway)
+    p = sp.add_parser("room"); p.add_argument("op", choices=["open", "list", "transcript", "close", "verify"])
+    p.add_argument("arg", nargs="?"); p.add_argument("--with", dest="with_org"); p.add_argument("--price"); p.add_argument("--payee")
+    p.set_defaults(f=cmd_room)
     a = ap.parse_args()
     a.f(a)
 

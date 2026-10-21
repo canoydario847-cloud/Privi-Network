@@ -29,9 +29,10 @@ URLS = {
     "gov": "https://gov.priviflow.us",
     "chainflow": "https://chainflow.priviflow.us",
     "developers": "https://developers.priviflow.us",
+    "live": "https://live.priviflow.us",
 }
 NAV = [("home", "Privi"), ("fortress", "Fortress"), ("passport", "Passport"), ("kya", "KYA"),
-       ("mandates", "Mandates"), ("gov", "Government"), ("chainflow", "ChainFlow"), ("developers", "Developers")]
+       ("mandates", "Mandates"), ("gov", "Government"), ("live", "Live"), ("chainflow", "ChainFlow"), ("developers", "Developers")]
 
 e = html.escape
 
@@ -108,6 +109,33 @@ fetch("{LEDGER}/log/sth").then(r=>r.json()).then(d=>{{
 }}).catch(()=>{{document.getElementById("root").innerHTML='<span class="wait">Privi Ledger is waking up. Refresh in a few seconds.</span>'}});
 </script>"""
 
+LIVE_WIDGET = f"""
+<aside class="proof" aria-live="polite">
+  <h2>The trust network, right now</h2>
+  <p>Passports, wallets and mandates changing, streamed from Privi Ledger. Anonymous viewers see it a few minutes late; Pro keys see it as it happens.</p>
+  <ul id="feed" style="list-style:none;margin:0;padding:0;font:14px/1.5 'IBM Plex Mono',monospace;max-height:260px;overflow:auto"><li class="wait">Connecting…</li></ul>
+  <p style="margin:14px 0 0"><span id="state" class="wait">connecting</span> · <a href="{LEDGER}/live">open the dashboard</a></p>
+</aside>
+<script>
+(function(){{
+  const feed=document.getElementById("feed"), state=document.getElementById("state"); let first=true;
+  function add(ev){{
+    if(first){{feed.innerHTML="";first=false}}
+    const li=document.createElement("li"), d=ev.data||{{}};
+    li.textContent=(ev.at||"").slice(11,19)+"  "+ev.type+"  "+(d.passport_id||d.mandate_id||d.address||d.tree_size||"");
+    feed.prepend(li); while(feed.children.length>30) feed.lastChild.remove();
+  }}
+  try{{
+    const es=new EventSource("{LEDGER}/live/events?channels=trust&replay=8");
+    es.onopen=()=>{{state.textContent="live";state.className="ok"}};
+    es.onerror=()=>{{state.textContent="reconnecting";state.className="wait"}};
+    ["passport.issued","passport.revoked","passport.score_changed","passport.state_changed","kya.bound","kya.unbound","mandate.activated","mandate.revoked","log.anchored"]
+      .forEach(t=>es.addEventListener(t,m=>add(JSON.parse(m.data))));
+    setTimeout(()=>{{if(first)feed.innerHTML='<li class="wait">No changes yet. The feed shows what happened in the last few minutes.</li>'}},4000);
+  }}catch(e){{state.textContent="unavailable"}}
+}})();
+</script>"""
+
 
 def page(key, title, desc, h1, lede, ctas, aside, body, extra_head=""):
     nav = "".join(f'<a href="{URLS[k]}"{" aria-current=page" if k == key else ""}>{e(n)}</a>' for k, n in NAV)
@@ -170,6 +198,7 @@ SITES["home"] = page(
         ("Passport", f"A signed trust score for an agent, 0 to 1000, computed from its verified history and re-checked live every time someone looks. <a href='{URLS['passport']}'>About Passport</a>"),
         ("KYA", f"Know Your Agent for blockchains: is this wallet run by an audited agent? Free to check, with a signed answer. <a href='{URLS['kya']}'>About KYA</a>"),
         ("Mandates", f"A person's signed permission for an agent to spend: budget, per-payment cap, payees and expiry, checkable by any merchant. <a href='{URLS['mandates']}'>About Mandates</a>"),
+        ("Live", f"Real-time control: wallet-signed approvals, a one-second kill switch, a WebSocket trust feed, a metered MCP gateway and paid agent rooms. <a href='{URLS['live']}'>About Live</a>"),
         ("Government", f"OMB M-25-21 AI use-case inventories and EO 14409 post-quantum migration plans, sealed on chain. <a href='{URLS['gov']}'>For agencies</a>"),
         ("ChainFlow", f"Lot provenance and chain of custody for manufacturers, paid per check in USDC. <a href='{URLS['chainflow']}'>For manufacturers</a>"),
     ]))
@@ -277,6 +306,27 @@ I can revoke this at any time.</pre></aside>""",
           "The person can revoke from the same page they signed on, with one more signature. Revocation takes effect immediately for every checker."),
 )
 
+SITES["live"] = page(
+    "live", "Privi Live: real-time control and trust for AI agents",
+    "Stop a misbehaving agent in one second, get a human's signature before big payments, stream trust changes over WebSocket, meter any MCP server and run paid agent-to-agent rooms.",
+    "Stop a rogue agent in one second",
+    "Privi Live puts a person in the loop where it matters and the network on a live wire: wallet-signed approvals before risky actions, a kill switch that bites on the next call, a trust feed over WebSocket, a metered gateway for any MCP server, and sealed, paid rooms where two companies' agents negotiate.",
+    [("Connect in 30 seconds", "#connect"), ("Dashboard", f"{LEDGER}/live")],
+    LIVE_WIDGET,
+    sec("Four things, one live layer", defs([
+        ("Approvals and kill switch", "Set a threshold and any payment above it waits for the mandate's human to sign approve or deny with their wallet. Your agent cannot approve itself. One call stops an agent's spending, gateways and rooms; the audit log keeps recording."),
+        ("Trust feed", "Passports issued, revoked and re-scored, wallets bound, mandates revoked and transparency-log heads anchored, pushed as they happen. Payment facilitators and marketplaces subscribe per wallet instead of polling."),
+        ("Metered gateway", "Put any public MCP server behind Privi. Every tool call is rate-limited, optionally Passport-gated, counted per tool and written to a tamper-evident log, over HTTP or one persistent WebSocket. x402 payments pass straight through."),
+        ("Paid rooms", "Two organizations' agents talk live in a hash-chained room. The guest pays per message under a human-signed mandate, and closing the room seals the transcript on the Privi chain for both sides."),
+    ]))
+    + f'<section id="connect"><h2>Connect</h2><pre>// Browser or Node: watch your agents and the network\nconst ws = new WebSocket("wss://privi-ledger.onrender.com/live/ws");\nws.onopen = () => {{\n  ws.send(JSON.stringify({{type: "auth", key: PRIVI_KEY}}));\n  ws.send(JSON.stringify({{type: "subscribe", channels: ["org", "trust"], replay: 20}}));\n}};\nws.onmessage = m => console.log(JSON.parse(m.data));\n\n// Stop an agent, from anywhere\nws.send(JSON.stringify({{type: "kill", stream_id: "shopping-agent", reason: "looping"}}));</pre>'
+      f'<p class="note">Or use the command line: <code>privi watch</code>, <code>privi kill</code>, <code>privi ask "Wire 5,000 USDC to Acme" --approver 0x…</code>. Agents get everything over MCP: <code>live_info</code> lists the endpoints.</p></section>'
+    + sec("Plans", defs([
+        ("Free", "Your own live channel, approvals and kill switch. Trust feed delayed 5 minutes. 1,000 gateway calls and 200 room messages a month, 2 gateways."),
+        ("Pro", "29 USDC per 30 days through x402. Trust feed in real time, unlimited gateway calls and room messages, 50 gateways."),
+    ]), "Approvals and the kill switch are never paywalled: stopping an agent is a safety feature."),
+)
+
 SITES["gov"] = page(
     "gov", "Privi for government: AI inventories and post-quantum readiness",
     "Tamper-evident OMB M-25-21 AI use-case inventories and EO 14409 post-quantum migration plans, sealed on chain, with defense-grade Fortress controls.",
@@ -329,6 +379,7 @@ SITES["developers"] = page(
         ("Fortress", "fortress_keys, ledger_tree_head, ledger_inclusion_proof, ledger_consistency_proof, fortress_tpi_policy, fortress_tpi_request, fortress_tpi_execute, ledger_evidence_bundle"),
         ("Trust", "passport_issue, passport_verify, passport_gate, kya_check, kya_bind_wallet"),
         ("Payments", "mandate_create, mandate_spend, mandate_check, ledger_upgrade_pro"),
+        ("Live", "live_info, live_kill, live_resume, approval_policy_set, approval_request, approval_wait, trust_events, gateway_create, room_open, room_verify"),
         ("Between companies", "ledger_handshake_offer, ledger_handshake_accept, ledger_handshake_verify"),
         ("Government", "gov_ai_usecase_save, gov_ai_inventory_check, gov_pqc_plan, gov_pqc_export"),
         ("Proof of existence", "anchor_hash_text, anchor_hashes, anchor_verify (Privi Anchor)"),

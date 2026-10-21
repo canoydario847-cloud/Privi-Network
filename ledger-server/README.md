@@ -8,6 +8,8 @@ Works with Claude, ChatGPT, Cursor, VS Code and custom agents. Built by [Privi W
 
 ## Tools
 
+Real-time tools (`live_*`, `approval_*`, `trust_events`, `gateway_*`, `room_*`) are described under *Privi Live* below.
+
 | Tool | Access | What it does |
 |---|---|---|
 | `ledger_pricing` | free | Prices, network, action types, how to get a key |
@@ -146,6 +148,24 @@ Signed proof that a person authorized an AI agent to spend, which any merchant o
 5. The human revokes from the same page with one signature, or the organization calls `mandate_revoke`.
 
 Public: `GET /mandates/<id>` (terms, signatures, budget, recent spends).
+
+## Privi Live (real-time: streams, human approvals, kill switch, gateway, rooms)
+
+Everything here runs over WebSocket and server-sent events, backed by one durable event log (7 days of replay).
+
+**Streams** (`live_info` lists them): `wss://…/live/ws`, `GET /live/events` (SSE), `GET /live/trust/recent`, dashboard at `/live`.
+- Channels: `trust` (public: passports issued / revoked / re-scored, wallets bound, mandates activated or revoked, transparency-log heads anchored), `mandate:<id>`, and `org` (private: a live tail of your audit log, approvals, kill switch, rooms).
+- WebSocket frames: `{"type":"auth","key":"…"}`, `{"type":"subscribe","channels":["trust","org"],"replay":20,"filter":{"address":"0x…","types":["passport."]}}`, `{"type":"kill","stream_id":"agent|*"}`, `{"type":"ping"}`. Server frames: `{"type":"event","event":"passport.score_changed","id":N,"channel":"trust","at":"…","data":{…}}`, `heartbeat`.
+- API keys never go in URLs: use `Authorization: Bearer` (SSE/HTTP) or the first WebSocket frame.
+- Free and anonymous subscribers see the public channels delayed by `LIVE_FREE_DELAY_S` (default 300 s); Pro and enterprise get them in real time. A background watcher re-scores every live passport every `LIVE_TRUST_INTERVAL` seconds (default 120) and announces score or state changes (valid → broken / expired).
+
+**Human approvals.** `approval_policy_set` makes `mandate_spend` pause on payments over a threshold: it returns `approval_required` with an `approve_url`; the mandate's principal signs an approve/deny message with their wallet (EIP-191), then the agent calls `mandate_spend` again with `approval_id`. An approval is for exactly one payment (mandate, amount and payee must match), valid 10 minutes after it is granted, usable once. `approval_request` / `approval_wait` do the same for any action. The organization's API key can only *cancel*, so an agent cannot approve itself.
+
+**Kill switch.** `live_kill` (or `privi kill`, the `/live` dashboard, or a WebSocket frame) stops `mandate_spend`, the organization's gateways and room messages for one agent or all of them on the very next call, and pushes `agent.killed` to the live channel. Audit logging is never blocked. `live_resume` lifts it.
+
+**Gateway.** `gateway_create` puts any public HTTPS MCP server behind `/gw/<id>/mcp` (and `wss://…/gw/<id>/ws`, the same JSON-RPC over one persistent connection). Privi rate-limits each caller, can require a Passport (`min_score`: the caller proves a KYA wallet with a fresh `personal_sign` over `Privi Gateway <id>\nTimestamp: <ts>`), meters every `tools/call`, writes each call to your log, and forwards the request unchanged, including x402 payment headers, so the upstream's own paywall keeps working. The kill switch stops it instantly. Upstreams that resolve to private, loopback or link-local addresses are refused. Free plan: 1,000 metered calls and 2 gateways; Pro: unlimited calls, 50 gateways. Per-tool stats: `gateway_stats`.
+
+**Rooms.** `room_open` creates a live, hash-chained conversation between two organizations' agents (`wss://…/rooms/<id>/ws`; invite by org id or one-time join code). Optionally charge the guest per message, paid under their human-signed Mandate (budget, cap, payee list, approval policy and kill switch all apply). Closing a room seals the transcript: signed with Ed25519 and ML-DSA-87, anchored on the Privi chain, and written into both organizations' logs. `room_verify` (free) checks a transcript against the seal. Privi enforces and records the per-message charge; moving the money is between the two parties.
 
 ## Privi Handshake
 

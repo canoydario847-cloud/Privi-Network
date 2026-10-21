@@ -61,7 +61,7 @@ class UsageMiddleware:
                                     (b"cache-control", b"no-store")]})
             await send({"type": "http.response.body", "body": body})
             return
-        if not (method == "POST" and path.rstrip("/").endswith("/mcp")):
+        if not (method == "POST" and path.rstrip("/") == "/mcp"):   # not /gw/<id>/mcp: those are other people's tools
             return await self.app(scope, receive, send)
         chunks, more, size = [], True, 0
         while more:

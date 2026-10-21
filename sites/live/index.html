@@ -1,0 +1,97 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privi Live: real-time control and trust for AI agents</title><meta name="description" content="Stop a misbehaving agent in one second, get a human&#x27;s signature before big payments, stream trust changes over WebSocket, meter any MCP server and run paid agent-to-agent rooms.">
+<link rel="canonical" href="https://live.priviflow.us"><link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="alternate" type="text/plain" href="https://privi-discovery.onrender.com/llms.txt" title="llms.txt">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
+<meta property="og:title" content="Privi Live: real-time control and trust for AI agents"><meta property="og:description" content="Stop a misbehaving agent in one second, get a human&#x27;s signature before big payments, stream trust changes over WebSocket, meter any MCP server and run paid agent-to-agent rooms."><meta property="og:type" content="website">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebPage", "name": "Privi Live: real-time control and trust for AI agents", "description": "Stop a misbehaving agent in one second, get a human's signature before big payments, stream trust changes over WebSocket, meter any MCP server and run paid agent-to-agent rooms.", "url": "https://live.priviflow.us", "publisher": {"@type": "Organization", "name": "Privi World Co", "url": "https://priviflow.us", "email": "dariocanoy@priviflow.us", "founder": {"@type": "Person", "name": "Dario Canoy"}}}</script>
+<style>
+:root{--paper:#F7F8FA;--surface:#FFFFFF;--ink:#0E1B33;--steel:#5A6B85;--seal:#2F5BEA;--on-seal:#FFFFFF;--verified:#0F8A5F;--rule:#DCE1EA;--code:#EEF1F6}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--paper:#0D1626;--surface:#122036;--ink:#E7ECF4;--steel:#93A3BB;--seal:#7FA2FF;--on-seal:#0D1626;--verified:#3CCB94;--rule:#22314A;--code:#16263F}}
+*{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:17px/1.6 "IBM Plex Sans",system-ui,sans-serif}
+a{color:var(--seal);text-underline-offset:3px}a:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid var(--seal);outline-offset:2px}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+header{border-bottom:1px solid var(--rule);background:var(--surface)}
+.bar{display:flex;align-items:center;gap:24px;min-height:64px;flex-wrap:wrap}
+.mark{font:600 20px "IBM Plex Sans Condensed",sans-serif;color:var(--ink);text-decoration:none;letter-spacing:.01em;display:flex;align-items:center;gap:10px}
+.mark svg{width:26px;height:26px}
+nav{display:flex;gap:4px 18px;flex-wrap:wrap;font-size:15px}nav a{color:var(--steel);text-decoration:none;padding:4px 0}
+nav a[aria-current]{color:var(--ink);box-shadow:inset 0 -2px var(--seal)}nav a:hover{color:var(--ink)}
+.hero{display:grid;grid-template-columns:1.15fr .85fr;gap:48px;padding:72px 0 56px;align-items:start}
+h1{font:600 clamp(36px,5.2vw,58px)/1.04 "IBM Plex Sans Condensed",sans-serif;margin:0 0 20px;letter-spacing:-.01em;max-width:16ch}
+h2{font:600 30px/1.15 "IBM Plex Sans Condensed",sans-serif;margin:0 0 14px}
+h3{font:600 20px/1.3 "IBM Plex Sans Condensed",sans-serif;margin:0 0 4px}
+.lede{font-size:20px;color:var(--steel);max-width:36em;margin:0 0 28px}
+.cta{display:flex;gap:14px;flex-wrap:wrap}
+.btn{display:inline-block;padding:12px 20px;border-radius:8px;background:var(--seal);color:var(--on-seal);text-decoration:none;font-weight:600}
+.btn.alt{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--rule)}
+.proof{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:22px}
+.proof h2{font-size:18px;margin:0 0 4px}.proof p{margin:0 0 14px;color:var(--steel);font-size:15px}
+.root{font:500 clamp(15px,1.9vw,19px)/1.55 "IBM Plex Mono",monospace;word-break:break-all;color:var(--ink);margin:6px 0 14px}
+.root span{display:inline-block;margin-right:.45em}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:15px;margin:0}.facts dt{color:var(--steel)}.facts dd{margin:0}
+.ok{color:var(--verified);font-weight:600}.wait{color:var(--steel)}.root .wait{font:15px/1.5 "IBM Plex Sans",system-ui,sans-serif;word-break:normal}
+section{padding:56px 0;border-top:1px solid var(--rule)}
+.prose{max-width:44em}.prose p{margin:0 0 16px}
+dl.defs{display:grid;grid-template-columns:minmax(180px,260px) 1fr;gap:22px 40px;margin:28px 0 0}
+dl.defs dt{font:600 19px/1.3 "IBM Plex Sans Condensed",sans-serif}dl.defs dd{margin:0;color:var(--steel)}
+ol.steps{counter-reset:s;list-style:none;padding:0;margin:24px 0 0;max-width:46em}
+ol.steps li{counter-increment:s;position:relative;padding:0 0 22px 52px}
+ol.steps li::before{content:counter(s);position:absolute;left:0;top:0;width:34px;height:34px;border-radius:50%;border:1.5px solid var(--seal);color:var(--seal);font:600 15px/31px "IBM Plex Sans Condensed",sans-serif;text-align:center}
+pre{background:var(--code);border-radius:10px;padding:18px;overflow-x:auto;font:14px/1.6 "IBM Plex Mono",monospace;margin:18px 0 0}
+code{font-family:"IBM Plex Mono",monospace;font-size:.9em}
+.note{font-size:15px;color:var(--steel);max-width:44em}
+form.check{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0 10px}
+form.check input{flex:1 1 280px;padding:11px 12px;border:1.5px solid var(--rule);border-radius:8px;background:var(--surface);color:var(--ink);font:15px "IBM Plex Mono",monospace}
+form.check button{padding:11px 18px;border:0;border-radius:8px;background:var(--seal);color:var(--on-seal);font:600 15px "IBM Plex Sans",sans-serif;cursor:pointer}
+#out{font-size:15px;max-width:44em}
+footer{border-top:1px solid var(--rule);padding:36px 0 48px;color:var(--steel);font-size:15px}
+footer .cols{display:flex;gap:40px;flex-wrap:wrap;justify-content:space-between}
+@media (max-width:820px){.hero{grid-template-columns:1fr;padding-top:44px}dl.defs{grid-template-columns:1fr;gap:6px}dl.defs dd{margin-bottom:14px}}
+@media (prefers-reduced-motion:no-preference){.root.fresh span{animation:in .5s ease both}@keyframes in{from{opacity:0}to{opacity:1}}}
+</style></head><body>
+<header><div class="wrap bar"><a class="mark" href="https://priviflow.us"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#0E1B33"/><path d="M18 46V18h14a10 10 0 0 1 0 20h-6v8z" fill="none" stroke="#7FA2FF" stroke-width="5" stroke-linejoin="round"/><circle cx="46" cy="44" r="4" fill="#3CCB94"/></svg>Privi</a><nav aria-label="Privi sites"><a href="https://priviflow.us">Privi</a><a href="https://fortress.priviflow.us">Fortress</a><a href="https://passport.priviflow.us">Passport</a><a href="https://kya.priviflow.us">KYA</a><a href="https://mandates.priviflow.us">Mandates</a><a href="https://gov.priviflow.us">Government</a><a href="https://live.priviflow.us" aria-current=page>Live</a><a href="https://chainflow.priviflow.us">ChainFlow</a><a href="https://developers.priviflow.us">Developers</a></nav></div></header>
+<main><div class="wrap">
+<div class="hero"><div><h1>Stop a rogue agent in one second</h1><p class="lede">Privi Live puts a person in the loop where it matters and the network on a live wire: wallet-signed approvals before risky actions, a kill switch that bites on the next call, a trust feed over WebSocket, a metered gateway for any MCP server, and sealed, paid rooms where two companies' agents negotiate.</p><div class="cta"><a class="btn" href="#connect">Connect in 30 seconds</a><a class="btn alt" href="https://privi-ledger.onrender.com/live">Dashboard</a></div></div>
+<aside class="proof" aria-live="polite">
+  <h2>The trust network, right now</h2>
+  <p>Passports, wallets and mandates changing, streamed from Privi Ledger. Anonymous viewers see it a few minutes late; Pro keys see it as it happens.</p>
+  <ul id="feed" style="list-style:none;margin:0;padding:0;font:14px/1.5 'IBM Plex Mono',monospace;max-height:260px;overflow:auto"><li class="wait">Connecting…</li></ul>
+  <p style="margin:14px 0 0"><span id="state" class="wait">connecting</span> · <a href="https://privi-ledger.onrender.com/live">open the dashboard</a></p>
+</aside>
+<script>
+(function(){
+  const feed=document.getElementById("feed"), state=document.getElementById("state"); let first=true;
+  function add(ev){
+    if(first){feed.innerHTML="";first=false}
+    const li=document.createElement("li"), d=ev.data||{};
+    li.textContent=(ev.at||"").slice(11,19)+"  "+ev.type+"  "+(d.passport_id||d.mandate_id||d.address||d.tree_size||"");
+    feed.prepend(li); while(feed.children.length>30) feed.lastChild.remove();
+  }
+  try{
+    const es=new EventSource("https://privi-ledger.onrender.com/live/events?channels=trust&replay=8");
+    es.onopen=()=>{state.textContent="live";state.className="ok"};
+    es.onerror=()=>{state.textContent="reconnecting";state.className="wait"};
+    ["passport.issued","passport.revoked","passport.score_changed","passport.state_changed","kya.bound","kya.unbound","mandate.activated","mandate.revoked","log.anchored"]
+      .forEach(t=>es.addEventListener(t,m=>add(JSON.parse(m.data))));
+    setTimeout(()=>{if(first)feed.innerHTML='<li class="wait">No changes yet. The feed shows what happened in the last few minutes.</li>'},4000);
+  }catch(e){state.textContent="unavailable"}
+})();
+</script></div>
+<section><h2>Four things, one live layer</h2><dl class="defs"><dt>Approvals and kill switch</dt><dd>Set a threshold and any payment above it waits for the mandate's human to sign approve or deny with their wallet. Your agent cannot approve itself. One call stops an agent's spending, gateways and rooms; the audit log keeps recording.</dd><dt>Trust feed</dt><dd>Passports issued, revoked and re-scored, wallets bound, mandates revoked and transparency-log heads anchored, pushed as they happen. Payment facilitators and marketplaces subscribe per wallet instead of polling.</dd><dt>Metered gateway</dt><dd>Put any public MCP server behind Privi. Every tool call is rate-limited, optionally Passport-gated, counted per tool and written to a tamper-evident log, over HTTP or one persistent WebSocket. x402 payments pass straight through.</dd><dt>Paid rooms</dt><dd>Two organizations' agents talk live in a hash-chained room. The guest pays per message under a human-signed mandate, and closing the room seals the transcript on the Privi chain for both sides.</dd></dl></section><section id="connect"><h2>Connect</h2><pre>// Browser or Node: watch your agents and the network
+const ws = new WebSocket("wss://privi-ledger.onrender.com/live/ws");
+ws.onopen = () => {
+  ws.send(JSON.stringify({type: "auth", key: PRIVI_KEY}));
+  ws.send(JSON.stringify({type: "subscribe", channels: ["org", "trust"], replay: 20}));
+};
+ws.onmessage = m => console.log(JSON.parse(m.data));
+
+// Stop an agent, from anywhere
+ws.send(JSON.stringify({type: "kill", stream_id: "shopping-agent", reason: "looping"}));</pre><p class="note">Or use the command line: <code>privi watch</code>, <code>privi kill</code>, <code>privi ask "Wire 5,000 USDC to Acme" --approver 0x…</code>. Agents get everything over MCP: <code>live_info</code> lists the endpoints.</p></section><section><h2>Plans</h2><div class=prose><p>Approvals and the kill switch are never paywalled: stopping an agent is a safety feature.</p></div><dl class="defs"><dt>Free</dt><dd>Your own live channel, approvals and kill switch. Trust feed delayed 5 minutes. 1,000 gateway calls and 200 room messages a month, 2 gateways.</dd><dt>Pro</dt><dd>29 USDC per 30 days through x402. Trust feed in real time, unlimited gateway calls and room messages, 50 gateways.</dd></dl></section>
+</div></main>
+<footer><div class="wrap cols"><div><strong>Privi World Co</strong><br>Port Huron, Michigan<br><a href="mailto:dariocanoy@priviflow.us">dariocanoy@priviflow.us</a></div>
+<div>Built by Dario Canoy<br><a href="https://github.com/canoydario847-cloud/Privi-Network">Source on GitHub</a><br><a href="https://privi-discovery.onrender.com/llms.txt">For AI agents: llms.txt</a></div>
+<div>MCP servers<br><a href="https://privi-ledger.onrender.com">Ledger</a>, <a href="https://privi-verify.onrender.com">Verify</a>, <a href="https://privi-anchor.onrender.com">Anchor</a></div></div></footer>
+</body></html>

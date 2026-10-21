@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privi Live</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#0b1f3a;--mut:#5b6472;--line:#e3e6eb;--ok:#1a7f37;--bad:#c62828;--acc:#1d4ed8;--warn:#a15c00}
+@media (prefers-color-scheme:dark){:root{--bg:#0b1220;--card:#121b2d;--ink:#e6eaf0;--mut:#9aa4b2;--line:#25304a;--ok:#4ade80;--bad:#f87171;--acc:#7aa2ff;--warn:#fbbf24}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:980px;margin:24px auto;padding:0 16px;display:grid;gap:16px;grid-template-columns:1fr}
+@media(min-width:860px){main{grid-template-columns:2fr 1fr}.wide{grid-column:1/-1}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+h1{font-size:22px;margin:0}h2{font-size:15px;margin:0 0 10px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+.sub{color:var(--mut);margin:4px 0 0}
+input{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+button{padding:10px 14px;border:0;border-radius:8px;background:var(--acc);color:#fff;font:600 14px system-ui;cursor:pointer}
+button.danger{background:var(--bad)}button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+button:disabled{opacity:.5;cursor:default}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.row>input{flex:1;min-width:140px}
+#feed{max-height:480px;overflow:auto;font:13px/1.45 ui-monospace,Menlo,monospace}
+.ev{padding:6px 8px;border-bottom:1px solid var(--line);word-break:break-word}.ev b{font-weight:600}
+.ev.org{border-left:3px solid var(--acc)}.ev.trust{border-left:3px solid var(--ok)}.ev.bad{border-left:3px solid var(--bad)}
+.t{color:var(--mut)}.pill{display:inline-block;padding:1px 9px;border-radius:999px;border:1px solid var(--line);font-size:12px;font-weight:600}
+.pill.on{color:var(--ok)}.pill.off{color:var(--mut)}
+.ap{padding:8px 0;border-bottom:1px solid var(--line)}a{color:var(--acc)}
+</style></head><body><main>
+<div class="card wide"><h1>Privi Live</h1><p class="sub">Watch your agents and the trust network in real time over a WebSocket, and stop an agent in one click.</p>
+<div class="row"><input id="key" type="password" placeholder="Organization API key (stays in this tab, never in a URL)" autocomplete="off">
+<button id="go">Connect</button><span id="st" class="pill off">disconnected</span></div></div>
+<div class="card"><h2>Live feed</h2><div id="feed"><div class="t">Connect to see events. Without a key you get the public trust feed (delayed 5 minutes unless Pro).</div></div></div>
+<div>
+<div class="card"><h2>Kill switch</h2><p class="sub">Stops mandate spending, gateway calls and room messages. Audit logging keeps working.</p>
+<div class="row"><input id="sid" placeholder="agent stream id, or * for all" value="*"><input id="why" placeholder="reason (optional)"></div>
+<div class="row"><button class="danger" id="kill" disabled>Stop</button><button class="ghost" id="resume" disabled>Resume</button></div>
+<div id="killed" class="sub"></div></div>
+<div class="card" style="margin-top:16px"><h2>Waiting for a human</h2><div id="aps" class="sub">Nothing pending.</div></div>
+</div>
+</main>
+<script>
+const $ = s => document.getElementById(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let ws, key = '';
+try { key = sessionStorage.getItem('privi_live_key') || ''; $('key').value = key; } catch (e) {}
+function status(t, on) { $('st').textContent = t; $('st').className = 'pill ' + (on ? 'on' : 'off'); }
+function add(ev) {
+  const d = document.createElement('div');
+  const bad = /killed|denied|revoked|blocked|broken/.test(ev.type);
+  d.className = 'ev ' + (bad ? 'bad' : ev.channel === 'trust' ? 'trust' : 'org');
+  const data = ev.data || {};
+  const brief = Object.entries(data).filter(([k]) => k !== 'addresses').map(([k, v]) => k + '=' + (typeof v === 'object' ? JSON.stringify(v) : v)).join(' ');
+  d.innerHTML = '<span class="t">' + esc((ev.at || '').slice(11, 19)) + '</span> <b>' + esc(ev.type) + '</b> ' + esc(brief.slice(0, 300));
+  const f = $('feed'); if (f.firstElementChild && f.firstElementChild.classList.contains('t')) f.innerHTML = '';
+  f.prepend(d); while (f.children.length > 200) f.lastChild.remove();
+  if (/^approval\.|agent\./.test(ev.type)) refresh();
+}
+async function refresh() {
+  if (!key) return;
+  const r = await fetch('/live/state', {headers: {Authorization: 'Bearer ' + key}}); if (!r.ok) return;
+  const s = await r.json();
+  $('killed').textContent = s.killed.length ? 'Stopped: ' + s.killed.map(k => k.stream_id).join(', ') : 'No agent is stopped.';
+  $('aps').innerHTML = s.pending_approvals.length ? s.pending_approvals.map(a =>
+    '<div class="ap"><b>' + esc(a.action) + '</b><br><span class="t">' + esc(a.stream_id) + ' · expires ' + esc(a.expires_at.slice(11, 19)) + ' UTC</span><br><a href="' + esc(a.approve_url) + '" target="_blank" rel="noopener">Open approval page</a></div>').join('') : 'Nothing pending.';
+}
+function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
+$('go').onclick = () => {
+  if (ws) ws.close();
+  key = $('key').value.trim(); try { sessionStorage.setItem('privi_live_key', key); } catch (e) {}
+  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/live/ws');
+  status('connecting…', false);
+  ws.onopen = () => { if (key) send({type: 'auth', key}); else subscribe(); };
+  ws.onmessage = m => {
+    const f = JSON.parse(m.data);
+    if (f.type === 'auth') { if (f.ok) { status('connected · ' + f.plan, true); $('kill').disabled = $('resume').disabled = false; subscribe(); refresh(); } else status(f.error, false); }
+    else if (f.type === 'subscribed') { status('live · ' + f.channels.join(', ') + (f.delay_seconds ? ' · trust delayed ' + f.delay_seconds + 's' : ''), true); }
+    else if (f.type === 'event') add({type: f.event, channel: f.channel, at: f.at, data: f.data});
+    else if (f.type === 'kill' || f.type === 'resume') refresh();
+    else if (f.type === 'error') add({type: 'error', channel: 'org', data: {error: f.error}, at: new Date().toISOString()});
+  };
+  ws.onclose = () => status('disconnected', false);
+};
+function subscribe() { send({type: 'subscribe', channels: key ? ['org', 'trust'] : ['trust'], replay: 20}); }
+$('kill').onclick = () => { if (confirm('Stop ' + ($('sid').value || '*') + '?')) send({type: 'kill', stream_id: $('sid').value || '*', reason: $('why').value}); };
+$('resume').onclick = () => send({type: 'resume', stream_id: $('sid').value || '*'});
+</script></body></html>
