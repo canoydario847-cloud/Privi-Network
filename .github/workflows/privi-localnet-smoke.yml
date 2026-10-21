@@ -18,9 +18,13 @@ jobs:
   offline:
     name: Offline checks
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25.9'
+          cache: false
       - name: Validate local tools and tests
         run: bash production-network/testnet/run_offline_checks.sh
 
