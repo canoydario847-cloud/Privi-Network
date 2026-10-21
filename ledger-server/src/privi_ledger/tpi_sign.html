@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privi Two-Person Integrity</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#0b1f3a;--mut:#5b6472;--line:#e3e6eb;--ok:#1a7f37;--bad:#c62828;--acc:#1d4ed8}
+@media (prefers-color-scheme:dark){:root{--bg:#0b1220;--card:#121b2d;--ink:#e6eaf0;--mut:#9aa4b2;--line:#25304a;--ok:#4ade80;--bad:#f87171;--acc:#7aa2ff}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:600px;margin:40px auto;padding:0 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px}
+h1{font-size:22px;margin:0 0 6px}.sub{color:var(--mut);margin:0 0 16px}
+dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:0}dt{color:var(--mut)}dd{margin:0;word-break:break-word}
+.msg{white-space:pre-wrap;font:14px/1.5 ui-monospace,Menlo,monospace;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:14px}
+.row{display:flex;gap:10px;margin-top:16px}button{flex:1;padding:12px;border:0;border-radius:10px;font:600 16px system-ui;cursor:pointer}
+#ok{background:var(--acc);color:#fff}#no{background:transparent;color:var(--bad);border:1px solid var(--bad)}button:disabled{opacity:.5}
+#log{font-size:14px;margin-top:12px;white-space:pre-wrap;color:var(--mut)}.g{color:var(--ok)!important}.r{color:var(--bad)!important}
+</style></head><body><main><div class="card">
+<h1>Two-person approval required</h1>
+<p class="sub">An AI agent wants to take a sensitive action. It needs signatures from more than one authorized officer. Any officer can veto.</p>
+<div id="info">Loading…</div><div class="msg" id="msg"></div>
+<div class="row" id="btns" hidden><button id="ok">Approve and sign</button><button id="no">Veto</button></div>
+<div id="log"></div></div></main>
+<script>
+const id = location.pathname.split('/')[2], $ = s => document.getElementById(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const say = (t, c) => { $('log').textContent = t; $('log').className = c || ''; };
+let R;
+async function load() {
+  const r = await fetch('/tpi/' + id + '/status'); if (!r.ok) { $('info').textContent = 'Request not found.'; return; }
+  R = await r.json();
+  $('info').innerHTML = `<dl><dt>Status</dt><dd><b>${esc(R.status)}</b></dd><dt>Action</dt><dd>${esc(R.summary)}</dd>
+    <dt>Agent</dt><dd>${esc(R.stream_id)} (${esc(R.org_id)})</dd><dt>Approvals</dt><dd>${R.approvals_count} of ${R.required} required</dd>
+    <dt>Officers</dt><dd>${R.officers.map(esc).join('<br>')}</dd><dt>Expires</dt><dd>${esc(R.expires_at)} UTC</dd></dl>`;
+  $('msg').textContent = R.approve_message; $('btns').hidden = R.status !== 'pending';
+}
+async function decide(kind) {
+  $('ok').disabled = $('no').disabled = true;
+  try {
+    if (!window.ethereum) throw new Error('No browser wallet found. Open this page where MetaMask is installed.');
+    const [a] = await window.ethereum.request({method: 'eth_requestAccounts'});
+    const text = kind === 'approve' ? R.approve_message : R.veto_message;
+    say('Please sign in your wallet…');
+    const signature = await window.ethereum.request({method: 'personal_sign', params: [text, a]});
+    const r = await fetch('/tpi/' + id + '/' + kind, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({signature})});
+    const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error || 'HTTP ' + r.status);
+    say(kind === 'approve' ? (j.status === 'authorized' ? '✓ Approved. The action is now authorized.' : '✓ Approved. Waiting for another officer.') : '✓ Vetoed. The action is blocked.', 'g');
+    await load();
+  } catch (e) { say('✗ ' + (e.message || e), 'r'); } finally { $('ok').disabled = $('no').disabled = false; }
+}
+$('ok').onclick = () => decide('approve'); $('no').onclick = () => decide('veto'); load();
+</script></body></html>

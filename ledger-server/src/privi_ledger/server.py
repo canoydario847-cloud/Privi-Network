@@ -37,11 +37,12 @@ from .gov_pqc import KINDS, STATUSES, QuantumReady, canonical_json, classify
 from .x402 import Facilitator, Paywall
 from .kya import KYA, KYAError, checksum as eth_checksum
 from .mandate import MandateError, Mandates
+from .fortress import Fortress, FortressError
 from .passport import PASSPORT_VERSION as PASSPORT_VERSION_HTTP, PassportError, Passports, badge_svg, body_hash as passport_hash
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor.onrender.com/mcp"
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/ledger-server"
 
 INSTRUCTIONS = """\
@@ -60,6 +61,12 @@ Blockchain wallets: Privi KYA (Know-Your-Agent) tells any chain, protocol, excha
 facilitator whether a wallet is operated by an audited agent: kya_check <address> is free and
 returns allow/deny with the live Passport score. Bind your agents' wallets with kya_challenge +
 kya_bind_wallet (signed with the wallet) so your transactions pass KYA checks everywhere.
+
+Defense-grade controls (Privi Fortress): every attestation is co-signed with ML-DSA-87 (FIPS 204,
+CNSA 2.0) as well as Ed25519; all entries form an RFC 9162 transparency log (ledger_tree_head,
+ledger_inclusion_proof, ledger_consistency_proof, free); sensitive actions can require two-person
+integrity (fortress_tpi_policy / _request, approved by officers' wallet signatures); and
+ledger_evidence_bundle exports a package verifiable fully offline.
 
 Spending on behalf of a person: ask them for a Privi Mandate. mandate_create drafts the terms
 (budget, per-payment cap, allowed payees, expiry) and returns a sign_url for the human; once
@@ -127,6 +134,8 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
 
     kya = KYA(ledger._db, ledger._lock, passports, public_url)
     mandates = Mandates(ledger._db, ledger._lock, passports, public_url)
+    fortress = Fortress(ledger, passports, public_url, os.getenv("LEDGER_PQ_SIGNING_KEY", ""))
+    mcp.privi_fortress = fortress  # used by the tree-head anchoring loop in main()
 
     def org_from(ctx: Context) -> dict | None:
         headers = ctx.headers
@@ -169,6 +178,11 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
                 "kya_wallets": "organization API key", "kya_unbind_wallet": "organization API key",
                 "mandate_create": "organization API key", "mandate_check": "free", "mandate_spend": "organization API key",
                 "mandate_get": "free", "mandate_list": "organization API key", "mandate_revoke": "organization API key",
+                "fortress_keys": "free", "ledger_tree_head": "free", "ledger_inclusion_proof": "free",
+                "ledger_consistency_proof": "free", "fortress_tpi_status": "free",
+                "fortress_tpi_policy": "organization API key", "fortress_tpi_request": "organization API key",
+                "fortress_tpi_execute": "organization API key", "fortress_tpi_list": "organization API key",
+                "ledger_evidence_bundle": "organization API key",
             },
             "action_types": list(ACTION_TYPES), "outcomes": list(OUTCOMES),
             "get_a_key": SOURCE,
@@ -305,6 +319,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
                 att.update(anchored=False, reason=f"anchoring failed: {e}")
         else:
             att.update(anchored=False, reason="anchoring is not configured on this server")
+        att["post_quantum"] = fortress.cosign(h, "compliance_report")
         rid = reports.save(org["org_id"], body, att)
         return _result({"report_id": rid, "report": body, "attestation": att, "markdown": to_markdown(body, att)})
 
@@ -353,6 +368,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
                            block_time_utc=v.get("block_time_utc"), tx_hash=att["tx_hash"])
             except AnchorError as e:
                 out.update(onchain_verified=None, onchain_error=str(e))
+        out.update(fortress.check_cosign(h))
         out["valid"] = out.get("onchain_verified", True) is not False
         return _result(out)
 
@@ -737,6 +753,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
                 return {"error": str(e)}
             h = passport_hash(body)
             sig = passports.sign(h)
+            pq = fortress.cosign(h, "passport")
             att = await _anchor_hash(h, f"privi passport {org['org_id']}")
             passports.save(body, sig, att)
             try:
@@ -746,7 +763,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
             except ValueError:
                 pass
             return {"passport_id": body["passport_id"], "score": body["score"], "grade": body["grade"],
-                    "passport": body, "body_hash": h, "signature": sig, "attestation": att,
+                    "passport": body, "body_hash": h, "signature": sig, "post_quantum": pq, "attestation": att,
                     "public_url": f"{public_url}/passports/{body['passport_id']}",
                     "badge_svg_url": f"{public_url}/passports/{body['passport_id']}/badge.svg",
                     "present_as": "Give counterparties the passport_id (or public_url); they call passport_verify or passport_gate."}
@@ -777,6 +794,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         v.update(await _chain_check(rec["attestation"], rec["body_hash"]))
         if v.get("onchain_verified") is False:
             v["valid"] = False
+        v.update(fortress.check_cosign(rec["body_hash"]))
         v["issuer"] = passports.issuer()
         return _result(v)
 
@@ -862,6 +880,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         except ValueError as e:
             return _result({"error": str(e)}, is_error=True)
         d.update(kya.attest(d))
+        d["ml_dsa_87_signature"] = fortress.pq_sign(d["attestation_hash"])
         org = org_from(ctx)
         if org:
             try:
@@ -956,6 +975,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         m = mandates.activate(mandate_id, signature)
         att = await _anchor_hash(m["terms_hash"], f"privi mandate {mandate_id}")
         mandates.set_anchor(mandate_id, att)
+        fortress.cosign(m["terms_hash"], "mandate")
         _mandate_log(m, "approval", f"Human {m['principal']} signed mandate {mandate_id}: up to {m['max_total_usdc']} USDC "
                      f"until {m['expires_at']}", details={"terms_hash": m["terms_hash"], "anchored": att.get("anchored")})
         return mandates.public(mandate_id)
@@ -997,7 +1017,9 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         amount? Verifies the human's wallet signature, status, expiry, per-payment cap, remaining budget and payee list,
         and returns allow/deny with reasons plus a Privi-signed attestation. Free; no key needed."""
         try:
-            return _result(mandates.check(mandate_id, amount_usdc, payee))
+            d = mandates.check(mandate_id, amount_usdc, payee)
+            d["ml_dsa_87_signature"] = fortress.pq_sign(d["attestation_hash"])
+            return _result(d)
         except (MandateError, ValueError) as e:
             return _result({"error": str(e)}, is_error=True)
 
@@ -1069,6 +1091,146 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         except MandateError as e:
             return _result({"error": str(e)}, is_error=True)
 
+    # ---------------- Privi Fortress: defense-grade controls ----------------
+
+    @mcp.tool(title="Fortress keys", annotations=READ_ONLY)
+    def fortress_keys() -> dict[str, Any]:
+        """Privi's public signing keys: Ed25519 and ML-DSA-87 (NIST FIPS 204, CNSA 2.0 post-quantum). Pin these to
+        verify Privi signatures offline. Free."""
+        return fortress.keys()
+
+    @mcp.tool(title="Signed tree head", annotations=READ_ONLY)
+    def ledger_tree_head() -> CallToolResult:
+        """The latest signed tree head of Privi's transparency log: an RFC 9162 Merkle root over every entry ever
+        recorded, signed with Ed25519 and ML-DSA-87, and periodically anchored on the Privi chain. Free."""
+        return _result({**fortress.tree_head(), "recent": fortress.history(10)})
+
+    @mcp.tool(title="Inclusion proof", annotations=READ_ONLY)
+    def ledger_inclusion_proof(
+        entry_hash: Annotated[str, Field(description="64-hex entry_hash (an action receipt)")],
+        tree_size: Annotated[int | None, Field(description="Prove against this signed tree head size; omit for latest")] = None,
+    ) -> CallToolResult:
+        """Merkle audit path proving an entry is in Privi's append-only transparency log (RFC 9162). Verifiable offline
+        against the signed tree head. Reveals no entry contents. Free."""
+        try:
+            return _result(fortress.inclusion(entry_hash, tree_size))
+        except FortressError as e:
+            return _result({"error": str(e)}, is_error=True)
+
+    @mcp.tool(title="Consistency proof", annotations=READ_ONLY)
+    def ledger_consistency_proof(
+        first: Annotated[int, Field(description="Older signed tree size", ge=1)],
+        second: Annotated[int | None, Field(description="Newer signed tree size; omit for latest")] = None,
+    ) -> CallToolResult:
+        """Proof that Privi's log only grew between two signed tree heads: nothing recorded earlier was edited, removed
+        or reordered (RFC 9162). Free."""
+        try:
+            return _result(fortress.consistency(first, second))
+        except FortressError as e:
+            return _result({"error": str(e)}, is_error=True)
+
+    @mcp.tool(title="Set a two-person policy", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                           idempotentHint=True, openWorldHint=False))
+    def fortress_tpi_policy(
+        name: Annotated[str, Field(description="Policy name, e.g. 'treasury-transfers'")],
+        officer_wallets: Annotated[list[str], Field(description="0x wallets of the officers who may approve (at least 2)")],
+        required: Annotated[int, Field(description="Approvals needed (2..number of officers)", ge=2)],
+        ctx: Context,
+    ) -> CallToolResult:
+        """Define a Two-Person Integrity policy: which officers can approve, and how many distinct approvals an action
+        needs. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        try:
+            p = fortress.tpi_policy(org["org_id"], check_id(name, "name"), officer_wallets, required)
+            ledger.record(org["org_id"], "privi-fortress", "Privi Ledger", "other",
+                          f"Two-person policy '{p['policy']}' set: {p['required']} of {len(p['officers'])} officers",
+                          p["policy"], "success", p)
+            return _result(p)
+        except (FortressError, ValueError) as e:
+            return _result({"error": str(e)}, is_error=True)
+
+    @mcp.tool(title="Request two-person approval", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                               idempotentHint=False, openWorldHint=False))
+    def fortress_tpi_request(
+        policy: Annotated[str, Field(description="Policy name")],
+        stream_id: Annotated[str, Field(description="The agent asking")],
+        summary: Annotated[str, Field(description="Exactly what will be done, in plain words")],
+        ctx: Context,
+        details: Annotated[dict[str, Any] | None, Field(description="Exact parameters; their hash is what officers sign")] = None,
+        hours: Annotated[int, Field(description="Hours until the request expires (1-168)", ge=1, le=168)] = 24,
+    ) -> CallToolResult:
+        """Ask officers to authorize a sensitive action under a two-person policy. Returns approve_url for the officers;
+        each signs with their wallet. Do not act until fortress_tpi_status shows 'authorized', then call
+        fortress_tpi_execute. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        if blocked := over_limit(org["org_id"]):
+            return blocked
+        try:
+            sid = check_id(stream_id, "stream_id")
+            r = fortress.tpi_request(org["org_id"], policy, sid, summary, details, hours)
+            ledger.record(org["org_id"], sid, "Privi Ledger", "approval", f"Two-person approval requested: {r['summary']}",
+                          r["request_id"], "pending", {"policy": policy, "details_hash": r["details_hash"]})
+            return _result({**r, "next": f"Send officers this link: {r['approve_url']}"})
+        except (FortressError, ValueError) as e:
+            return _result({"error": str(e)}, is_error=True)
+
+    @mcp.tool(title="Two-person status", annotations=READ_ONLY)
+    def fortress_tpi_status(request_id: Annotated[str, Field(description="tpi_... ID")]) -> CallToolResult:
+        """Status of a two-person request (pending, authorized, vetoed, expired, executed) and who approved. Free."""
+        try:
+            return _result(fortress.tpi_public(request_id))
+        except FortressError as e:
+            return _result({"error": str(e)}, is_error=True)
+
+    @mcp.tool(title="Execute an authorized action", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                                idempotentHint=False, openWorldHint=False))
+    def fortress_tpi_execute(
+        request_id: Annotated[str, Field(description="tpi_... ID")],
+        ctx: Context,
+    ) -> CallToolResult:
+        """Consume a two-person authorization right before performing the action. Single use; refused unless authorized.
+        Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        try:
+            r = fortress.tpi_execute(request_id.strip(), org["org_id"])
+            ledger.record(org["org_id"], r["stream_id"], "Privi Ledger", "approval",
+                          f"Two-person authorization used: {r['summary']}", r["request_id"], "success",
+                          {"approved_by": [a["officer"] for a in r["approvals"]]})
+            return _result(r)
+        except FortressError as e:
+            return _result({"error": str(e)}, is_error=True)
+
+    @mcp.tool(title="List two-person requests", annotations=READ_ONLY)
+    def fortress_tpi_list(ctx: Context) -> CallToolResult:
+        """Your organization's two-person requests. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        return _result({"org_id": org["org_id"], "requests": fortress.tpi_list(org["org_id"])})
+
+    @mcp.tool(title="Evidence bundle", annotations=READ_ONLY)
+    def ledger_evidence_bundle(
+        stream_id: Annotated[str, Field(description="Stream to export")],
+        ctx: Context,
+    ) -> CallToolResult:
+        """Export a self-contained evidence package for auditors, courts or air-gapped systems: every entry, the hash
+        chain, an RFC 9162 inclusion proof, the signed tree head, on-chain checkpoint and Privi's keys, signed with
+        Ed25519 and ML-DSA-87. Verify offline with verify_bundle.py (GET /tools/verify_bundle.py). Requires the
+        organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        try:
+            return _result(fortress.bundle(org, check_id(stream_id, "stream_id"), checkpoints))
+        except (FortressError, ValueError) as e:
+            return _result({"error": str(e)}, is_error=True)
+
     # ---------------- http ----------------
 
     @mcp.custom_route("/admin/orgs", methods=["POST"], include_in_schema=False)
@@ -1096,6 +1258,71 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         return Response(pdf, media_type="application/pdf",
                         headers={"Content-Disposition": f'attachment; filename="{rid}.pdf"'})
 
+    @mcp.custom_route("/log/sth", methods=["GET"], include_in_schema=False)
+    async def log_sth(_: Request) -> JSONResponse:
+        return JSONResponse({**fortress.tree_head(), "keys": fortress.keys()},
+                            headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"})
+
+    @mcp.custom_route("/log/inclusion", methods=["GET"], include_in_schema=False)
+    async def log_inclusion(request: Request) -> JSONResponse:
+        q = request.query_params
+        try:
+            ts = int(q["tree_size"]) if q.get("tree_size") else None
+            return JSONResponse(fortress.inclusion(q.get("hash", ""), ts), headers={"Access-Control-Allow-Origin": "*"})
+        except (FortressError, ValueError) as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+
+    @mcp.custom_route("/log/consistency", methods=["GET"], include_in_schema=False)
+    async def log_consistency(request: Request) -> JSONResponse:
+        q = request.query_params
+        try:
+            return JSONResponse(fortress.consistency(int(q.get("first", "0")), int(q["second"]) if q.get("second") else None),
+                                headers={"Access-Control-Allow-Origin": "*"})
+        except (FortressError, ValueError) as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+
+    @mcp.custom_route("/tools/verify_bundle.py", methods=["GET"], include_in_schema=False)
+    async def verifier_script(_: Request) -> Response:
+        from pathlib import Path
+        return Response((Path(__file__).parent / "verify_bundle.py").read_text(encoding="utf-8"),
+                        media_type="text/x-python; charset=utf-8",
+                        headers={"Content-Disposition": 'attachment; filename="verify_bundle.py"'})
+
+    @mcp.custom_route("/tpi/{request_id}", methods=["GET"], include_in_schema=False)
+    async def tpi_page(_: Request) -> Response:
+        from pathlib import Path
+        return Response((Path(__file__).parent / "tpi_sign.html").read_text(encoding="utf-8"),
+                        media_type="text/html; charset=utf-8")
+
+    @mcp.custom_route("/tpi/{request_id}/status", methods=["GET"], include_in_schema=False)
+    async def tpi_status_http(request: Request) -> JSONResponse:
+        try:
+            return JSONResponse(fortress.tpi_public(request.path_params["request_id"]), headers={"Cache-Control": "no-store"})
+        except FortressError as e:
+            return JSONResponse({"error": str(e)}, status_code=404)
+
+    async def _tpi_decide_http(request: Request, decision: str) -> JSONResponse:
+        rid = request.path_params["request_id"]
+        try:
+            body = await request.json()
+            r = fortress.tpi_decide(rid, decision, str(body.get("signature", "")))
+            row = fortress.tpi_row(rid)
+            ledger.record(row["org_id"], row["stream_id"], "Privi Ledger", "approval",
+                          f"Officer {r['decided_by']} {'approved' if decision == 'approve' else 'vetoed'}: {r['summary']} "
+                          f"({r['approvals_count']}/{r['required']})", rid,
+                          "success" if decision == "approve" else "blocked", {"status": r["status"]})
+            return JSONResponse(r)
+        except (FortressError, ValueError, AttributeError) as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+
+    @mcp.custom_route("/tpi/{request_id}/approve", methods=["POST"], include_in_schema=False)
+    async def tpi_approve_http(request: Request) -> JSONResponse:
+        return await _tpi_decide_http(request, "approve")
+
+    @mcp.custom_route("/tpi/{request_id}/veto", methods=["POST"], include_in_schema=False)
+    async def tpi_veto_http(request: Request) -> JSONResponse:
+        return await _tpi_decide_http(request, "veto")
+
     @mcp.custom_route("/mandates/{mandate_id}", methods=["GET"], include_in_schema=False)
     async def mandate_json(request: Request) -> JSONResponse:
         try:
@@ -1115,6 +1342,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         q = request.query_params
         try:
             d = mandates.check(request.path_params["mandate_id"], q.get("amount", ""), q.get("payee", ""))
+            d["ml_dsa_87_signature"] = fortress.pq_sign(d["attestation_hash"])
             return JSONResponse(d, headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"})
         except (MandateError, ValueError) as e:
             return JSONResponse({"error": str(e)}, status_code=400)
@@ -1183,6 +1411,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         except ValueError as e:
             return JSONResponse({"error": str(e)}, status_code=400)
         d.update(kya.attest(d))
+        d["ml_dsa_87_signature"] = fortress.pq_sign(d["attestation_hash"])
         return JSONResponse(d, headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"})
 
     @mcp.custom_route("/kya/{address}/badge.svg", methods=["GET"], include_in_schema=False)
@@ -1222,6 +1451,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         return JSONResponse({**passports.issuer(), "version": PASSPORT_VERSION_HTTP,
                              "verify": {"mcp": f"{public_url}/mcp", "tools": ["passport_verify", "passport_gate", "kya_check"]},
                              "kya": f"{public_url}/kya/{{address}}",
+                             "post_quantum": fortress.keys()["post_quantum"], "transparency_log": f"{public_url}/log/sth",
                              "lookup": f"{public_url}/passports/{{passport_id}}"},
                             headers={"Access-Control-Allow-Origin": "*"})
 
@@ -1348,6 +1578,22 @@ def main() -> None:
     if key:
         client = HttpAnchorClient(os.getenv("LEDGER_ANCHOR_URL", DEFAULT_ANCHOR_URL), key)
         cps = Checkpoints(ledger._db, ledger._lock)
+        fort = mcp.privi_fortress
+
+        def anchor_tree_head() -> int:
+            sth = fort.tree_head()
+            n = sth["tree_head"]["tree_size"]
+            last = fort.last_anchored_sth()
+            if not n or (last and last["tree_head"]["tree_size"] == n):
+                return 0
+            r = client.anchor([sth["body_hash"]], f"privi transparency log size {n}")
+            rc = next(x for x in r["receipts"] if x["hash"] == sth["body_hash"])
+            fort.set_sth_anchor(n, {"tx_hash": r["tx_hash"], "proof": rc["proof"], "block_number": r.get("block_number"),
+                                    "chain_id": r.get("chain_id"), "anchored_hash": sth["body_hash"]})
+            print(f"privi-ledger: anchored transparency log head size={n} block={r.get('block_number')}", flush=True)
+            return 1
+
+        start_loop(anchor_tree_head, float(os.getenv("LEDGER_STH_INTERVAL", "900")), "privi-ledger-sth")
         start_loop(lambda: cps.run_once(ledger.heads(), client, "privi-ledger"),
                    float(os.getenv("LEDGER_ANCHOR_INTERVAL", "300")), "privi-ledger")
     if os.getenv("LEDGER_BOOTSTRAP_REPORT") == "1":

@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.canoydario847-cloud/privi-ledger",
   "title": "Privi Ledger",
-  "description": "Privi Mandates (signed proof a human authorized an AI agent to spend; free checks for merchants and x402 facilitators), Privi KYA (Know-Your-Agent wallet checks) and Privi Passport (on-chain trust credentials for agents), built on tamper-evident audit logs, compliance reports, Handshake records, OMB M-25-21 AI inventories and EO 14409 post-quantum plans. Free tier; Pro $29 USDC/30 days via x402.",
-  "version": "0.6.0",
+  "description": "Privi Fortress: post-quantum (ML-DSA-87, FIPS 204) co-signed audit logs, an RFC 9162 transparency log with free inclusion and consistency proofs, two-person integrity for sensitive agent actions, and offline-verifiable evidence bundles. Plus Mandates, KYA wallet checks and Passport trust credentials for AI agents. Free tier; Pro $29 USDC/30 days.",
+  "version": "0.7.0",
   "websiteUrl": "https://privi-discovery.onrender.com",
   "repository": {
     "url": "https://github.com/canoydario847-cloud/Privi-Network",

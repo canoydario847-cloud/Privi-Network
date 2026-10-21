@@ -126,6 +126,15 @@ As AI agents become the main senders of on-chain transactions, every chain, DeFi
 
 Integration pattern for a chain or protocol: before accepting an agent transaction, `GET /kya/<from>`; require `allow: true` (and optionally `proof: "signature"`); keep the `attestation` + `signature` as your compliance record.
 
+## Privi Fortress (defense-grade integrity controls)
+
+Engineering controls aligned with CNSA 2.0 and NIST SP 800-53 (AU-9 protection of audit information, AU-10 non-repudiation, AC-5 separation of duties, SC-13 cryptographic protection). They are not a certification (no FIPS 140-3 validation, FedRAMP or DoD Impact Level authorization is claimed).
+
+- **Post-quantum co-signatures.** Passports, compliance reports, mandates, KYA and mandate attestations, tree heads and evidence bundles are signed with Ed25519 **and ML-DSA-87** (NIST FIPS 204; the CNSA 2.0 parameter set). Keys: `fortress_keys`, `/.well-known/privi-passport.json`. Pin the seed with `LEDGER_PQ_SIGNING_KEY` (32-byte hex) or one is generated and stored.
+- **Transparency log.** Every entry from every organization is a leaf in one RFC 9162 Merkle tree (the Certificate Transparency design). `ledger_tree_head` returns a dual-signed tree head, anchored on the Privi chain every `LEDGER_STH_INTERVAL` seconds (default 900); `ledger_inclusion_proof` proves an entry is in the log and `ledger_consistency_proof` proves the log only grew between two heads. HTTP: `/log/sth`, `/log/inclusion?hash=`, `/log/consistency?first=&second=`. All free.
+- **Two-Person Integrity.** `fortress_tpi_policy` names the officers' wallets and how many must approve (at least 2). `fortress_tpi_request` returns an approval page (`/tpi/<id>`); each officer signs with their own wallet, the same officer cannot approve twice, outsiders are refused, and any officer can veto. `fortress_tpi_execute` consumes the authorization once. Every step is logged.
+- **Air-gapped evidence bundles.** `ledger_evidence_bundle` exports entries, the hash chain, an inclusion proof, the signed tree head, the on-chain checkpoint and Privi's keys, dual-signed. `python verify_bundle.py bundle.json` (download at `/tools/verify_bundle.py`) checks all of it with no network access.
+
 ## Privi Mandates (human-authorized agent spending)
 
 Signed proof that a person authorized an AI agent to spend, which any merchant or payment facilitator can check before taking the agent's money.

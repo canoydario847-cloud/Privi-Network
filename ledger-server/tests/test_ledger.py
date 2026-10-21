@@ -754,3 +754,114 @@ def test_mandate_lifecycle(ledger, monkeypatch):
     assert "revoked" in ok("0.1").structured_content["error"]
     lst = run_(shop["api_key"], "mandate_list", {}).structured_content["mandates"]
     assert lst[0]["mandate_id"] == mid and lst[0]["spent_usdc"] == "99.5"
+
+
+# ---------------- Privi Fortress ----------------
+
+def test_fortress_pq_log_tpi_bundle(ledger, monkeypatch, tmp_path):
+    import subprocess, sys as _sys
+    from pathlib import Path
+    from starlette.testclient import TestClient
+    from cryptography.hazmat.primitives.asymmetric.mldsa import MLDSA87PublicKey
+    from privi_ledger.fortress import verify_inclusion, verify_consistency, leaf_hash
+    acme, other = ledger.create_org("Acme Defense"), ledger.create_org("Other")
+    for i in range(9):
+        ledger.record(acme["org_id"], "ops", "claude", "tool_call", f"step {i}")
+        ledger.record(other["org_id"], "x", "claude", "tool_call", f"o{i}")
+    o1, sign1 = _eth_wallet()
+    o2, sign2 = _eth_wallet()
+    o3, sign3 = _eth_wallet()
+
+    def run_(key, name, args):
+        as_org(monkeypatch, key)
+
+        async def go():
+            async with Client(server(ledger)) as c:
+                return await c.call_tool(name, args)
+        return anyio.run(go)
+
+    # keys + post-quantum co-signed passport
+    keys = run_(None, "fortress_keys", {}).structured_content
+    assert "ML-DSA-87" in keys["post_quantum"]["algorithm"] and len(bytes.fromhex(keys["post_quantum"]["public_key_hex"])) == 2592
+    pp = run_(acme["api_key"], "passport_issue", {"stream_id": "ops"}).structured_content
+    MLDSA87PublicKey.from_public_bytes(bytes.fromhex(keys["post_quantum"]["public_key_hex"])).verify(
+        bytes.fromhex(pp["post_quantum"]["ml_dsa_87"]), bytes.fromhex(pp["body_hash"]))
+    v = run_(None, "passport_verify", {"passport_id": pp["passport_id"]}).structured_content
+    assert v["post_quantum_signed"] and v["ml_dsa_87_valid"] and v["ed25519_valid"]
+    rep = run_(acme["api_key"], "ledger_compliance_report", {}).structured_content
+    assert rep["attestation"]["post_quantum"]["ml_dsa_87"]
+    assert run_(None, "ledger_verify_report", {"report": rep["report"]}).structured_content["ml_dsa_87_valid"]
+
+    # transparency log: head, inclusion, consistency
+    sth1 = run_(None, "ledger_tree_head", {}).structured_content
+    n1 = sth1["tree_head"]["tree_size"]
+    MLDSA87PublicKey.from_public_bytes(bytes.fromhex(keys["post_quantum"]["public_key_hex"])).verify(
+        bytes.fromhex(sth1["signatures"]["ml_dsa_87"]), bytes.fromhex(sth1["body_hash"]))
+    e3 = ledger.entries(acme["org_id"], "ops")[2]["entry_hash"]
+    inc = run_(None, "ledger_inclusion_proof", {"entry_hash": e3}).structured_content
+    assert inc["verified_here"] and verify_inclusion(leaf_hash(e3), inc["leaf_index"], inc["tree_size"],
+                                                     [bytes.fromhex(p) for p in inc["audit_path"]],
+                                                     bytes.fromhex(inc["signed_tree_head"]["tree_head"]["root_hash"]))
+    for i in range(5):
+        ledger.record(other["org_id"], "x", "claude", "tool_call", f"later {i}")
+    sth2 = run_(None, "ledger_tree_head", {}).structured_content
+    assert sth2["tree_head"]["tree_size"] > n1
+    cons = run_(None, "ledger_consistency_proof", {"first": n1}).structured_content
+    assert cons["verified_here"] and verify_consistency(n1, cons["second"], bytes.fromhex(cons["first_root"]),
+                                                        bytes.fromhex(cons["second_root"]),
+                                                        [bytes.fromhex(p) for p in cons["proof"]])
+    # rewriting history breaks consistency with the old signed head
+    ledger._db.execute("UPDATE entries SET entry_hash=? WHERE entry_hash=?", ("ab" * 32, e3))
+    ledger._db.commit()
+    forged = run_(None, "ledger_consistency_proof", {"first": n1}).structured_content
+    assert forged["verified_here"] is False
+    ledger._db.execute("UPDATE entries SET entry_hash=? WHERE entry_hash=?", (e3, "ab" * 32))
+    ledger._db.commit()
+
+    # two-person integrity
+    assert run_(acme["api_key"], "fortress_tpi_policy", {"name": "wire", "officer_wallets": [o1],
+                                                         "required": 2}).is_error
+    pol = run_(acme["api_key"], "fortress_tpi_policy", {"name": "wire", "officer_wallets": [o1, o2, o3],
+                                                        "required": 2}).structured_content
+    assert pol["required"] == 2 and len(pol["officers"]) == 3
+    rq = run_(acme["api_key"], "fortress_tpi_request", {"policy": "wire", "stream_id": "ops",
+                                                       "summary": "Transfer 50,000 USDC to supplier",
+                                                       "details": {"to": "0xabc", "usdc": 50000}}).structured_content
+    rid = rq["request_id"]
+    assert "error" in run_(acme["api_key"], "fortress_tpi_execute", {"request_id": rid}).structured_content
+    outsider, sign_out = _eth_wallet()
+    app = server(ledger).streamable_http_app(stateless_http=True, json_response=True)
+    with TestClient(app) as http:
+        assert "personal_sign" in http.get(f"/tpi/{rid}").text
+        assert http.post(f"/tpi/{rid}/approve", json={"signature": sign_out(rq["approve_message"])}).status_code == 400
+        a1 = http.post(f"/tpi/{rid}/approve", json={"signature": sign1(rq["approve_message"])}).json()
+        assert a1["status"] == "pending" and a1["approvals_count"] == 1
+        assert http.post(f"/tpi/{rid}/approve", json={"signature": sign1(rq["approve_message"])}).status_code == 400
+        a2 = http.post(f"/tpi/{rid}/approve", json={"signature": sign2(rq["approve_message"])}).json()
+        assert a2["status"] == "authorized"
+        assert http.get("/log/sth").json()["tree_head"]["tree_size"] > 0
+        assert "verify_inclusion" in http.get("/tools/verify_bundle.py").text
+    assert run_(other["api_key"], "fortress_tpi_execute", {"request_id": rid}).is_error
+    ex = run_(acme["api_key"], "fortress_tpi_execute", {"request_id": rid}).structured_content
+    assert ex["status"] == "executed"
+    assert run_(acme["api_key"], "fortress_tpi_execute", {"request_id": rid}).is_error  # single use
+    rq2 = run_(acme["api_key"], "fortress_tpi_request", {"policy": "wire", "stream_id": "ops",
+                                                        "summary": "Delete audit stream"}).structured_content
+    app = server(ledger).streamable_http_app(stateless_http=True, json_response=True)
+    with TestClient(app) as http:
+        vt = http.post(f"/tpi/{rq2['request_id']}/veto", json={"signature": sign3(rq2["veto_message"])}).json()
+        assert vt["status"] == "vetoed"
+        assert http.post(f"/tpi/{rq2['request_id']}/approve", json={"signature": sign1(rq2["approve_message"])}).status_code == 400
+
+    # evidence bundle verified offline by the standalone script; tampering fails
+    b = run_(acme["api_key"], "ledger_evidence_bundle", {"stream_id": "ops"}).structured_content
+    script = Path(__file__).resolve().parents[1] / "src" / "privi_ledger" / "verify_bundle.py"
+    good = tmp_path / "bundle.json"
+    good.write_text(json.dumps(b))
+    r = subprocess.run([_sys.executable, str(script), str(good)], capture_output=True, text=True)
+    assert r.returncode == 0 and "RESULT: VALID" in r.stdout and "[FAIL]" not in r.stdout, r.stdout
+    b["bundle"]["entries"][1]["summary"] = "something else"
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps(b))
+    r = subprocess.run([_sys.executable, str(script), str(bad)], capture_output=True, text=True)
+    assert r.returncode == 1 and "INVALID" in r.stdout
