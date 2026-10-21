@@ -203,6 +203,82 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \t}
 \treturn response, nil'''
     app = replace_once(app, old_chainer, new_chainer, "chain init fail-closed proof")
+    # Defense in depth, build-only: re-check actual live consensus state at
+    # block boundaries, not merely unsigned genesis declarations. This is
+    # NOT an atomic bank mutation boundary. Account scans are O(accounts)
+    # and ERC20 registry scans O(pairs): benchmark before financial use.
+    invariant = '''// CheckPriviNativeRuntimeInvariant checks mounted SDK module state at
+// block boundaries. It does not prevent transient, same-block violations.
+func (app *EVMD) CheckPriviNativeRuntimeInvariant(ctx sdk.Context) error {
+	evmp := app.EVMKeeper.GetParams(ctx)
+	if evmp.EvmDenom != prvicap.BaseDenom {
+		return fmt.Errorf("PRVI runtime: EVM gas denom must be aprvi")
+	}
+	bond, err := app.StakingKeeper.BondDenom(ctx)
+	if err != nil { return fmt.Errorf("PRVI runtime: staking params: %w", err) }
+	if bond != prvicap.BaseDenom {
+		return fmt.Errorf("PRVI runtime: staking bond denom must be aprvi")
+	}
+	mintp, err := app.MintKeeper.Params.Get(ctx)
+	if err != nil { return fmt.Errorf("PRVI runtime: mint params: %w", err) }
+	minter, err := app.MintKeeper.Minter.Get(ctx)
+	if err != nil { return fmt.Errorf("PRVI runtime: mint state: %w", err) }
+	if mintp.MintDenom != prvicap.BaseDenom ||
+		!mintp.InflationMin.IsZero() || !mintp.InflationMax.IsZero() ||
+		!mintp.InflationRateChange.IsZero() ||
+		!minter.Inflation.IsZero() || !minter.AnnualProvisions.IsZero() {
+		return fmt.Errorf("PRVI runtime: native mint must have zero inflation")
+	}
+	erc20p := app.Erc20Keeper.GetParams(ctx)
+	if erc20p.PermissionlessRegistration {
+		return fmt.Errorf("PRVI runtime: ERC20 permissionless registration forbidden")
+	}
+	if app.Erc20Keeper.IsDenomRegistered(ctx, prvicap.BaseDenom) {
+		return fmt.Errorf("PRVI runtime: aprvi ERC20 denom registration forbidden")
+	}
+	for _, pair := range app.Erc20Keeper.GetTokenPairs(ctx) {
+		if pair.Denom == prvicap.BaseDenom {
+			return fmt.Errorf("PRVI runtime: aprvi ERC20 token pair forbidden")
+		}
+	}
+	return nil
+}
+
+'''
+    app = replace_once(app,
+        "func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {",
+        invariant + "func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {",
+        "mount native runtime denomination and ERC20 checks")
+    app = replace_once(app,
+        '''func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {
+\treturn app.ModuleManager.BeginBlock(ctx)
+}''',
+        '''func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {
+\tif err := app.PriviCapKeeper.Reconcile(ctx, app.BankKeeper); err != nil {
+\t\treturn sdk.BeginBlock{}, fmt.Errorf("PRVI begin-block supply check: %w", err)
+\t}
+\tif err := app.CheckPriviNativeRuntimeInvariant(ctx); err != nil {
+\t\treturn sdk.BeginBlock{}, fmt.Errorf("PRVI begin-block runtime invariant: %w", err)
+\t}
+\treturn app.ModuleManager.BeginBlock(ctx)
+}''',
+        "fail closed before bank and module BeginBlock")
+    app = replace_once(app,
+        '''func (app *EVMD) EndBlocker(ctx sdk.Context) (sdk.EndBlock, error) {
+\treturn app.ModuleManager.EndBlock(ctx)
+}''',
+        '''func (app *EVMD) EndBlocker(ctx sdk.Context) (sdk.EndBlock, error) {
+\tresponse, err := app.ModuleManager.EndBlock(ctx)
+\tif err != nil { return response, err }
+\tif err := app.PriviCapKeeper.Reconcile(ctx, app.BankKeeper); err != nil {
+\t\treturn response, fmt.Errorf("PRVI end-block supply check: %w", err)
+\t}
+\tif err := app.CheckPriviNativeRuntimeInvariant(ctx); err != nil {
+\t\treturn response, fmt.Errorf("PRVI end-block runtime invariant: %w", err)
+\t}
+\treturn response, nil
+}''',
+        "fail closed after bank and module EndBlock")
     # Verify all modifications before writing anything. No direct on-chain action.
     srcdir = source_repo / "production-network" / "mainnet" / "prvicap"
     required = ["keeper.go", "sdk_bank_adapter.go", "chain_identity.go"]
