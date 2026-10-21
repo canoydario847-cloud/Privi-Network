@@ -39,6 +39,12 @@ func test() {
 
     return app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)
 }
+func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {
+    return app.ModuleManager.BeginBlock(ctx)
+}
+func (app *EVMD) EndBlocker(ctx sdk.Context) (sdk.EndBlock, error) {
+    return app.ModuleManager.EndBlock(ctx)
+}
 '''
 APP = "\n".join(("\t" * ((len(line) - len(line.lstrip(" "))) // 4)) + line.lstrip(" ") for line in APP.split("\n"))
 
@@ -126,6 +132,19 @@ class PatcherTests(unittest.TestCase):
         self.assertLess(app.index("app.UpgradeKeeper.SetModuleVersionMap("),
                         app.index("app.ModuleManager.InitGenesis("))
         self.assertEqual(app.count("app.UpgradeKeeper.SetModuleVersionMap("), 1)
+        self.assertIn("func (app *EVMD) CheckPriviNativeRuntimeInvariant(ctx sdk.Context) error", app)
+        self.assertIn("app.EVMKeeper.GetParams(ctx)", app)
+        self.assertIn("app.StakingKeeper.BondDenom(ctx)", app)
+        self.assertIn("app.MintKeeper.Params.Get(ctx)", app)
+        self.assertIn("app.MintKeeper.Minter.Get(ctx)", app)
+        self.assertIn("app.Erc20Keeper.GetTokenPairs(ctx)", app)
+        self.assertIn("app.Erc20Keeper.IsDenomRegistered(ctx, prvicap.BaseDenom)", app)
+        self.assertEqual(app.count("app.CheckPriviNativeRuntimeInvariant(ctx)"), 2)
+        self.assertEqual(app.count("app.PriviCapKeeper.Reconcile(ctx, app.BankKeeper)"), 2)
+        self.assertLess(app.index("app.PriviCapKeeper.Reconcile(ctx, app.BankKeeper)"),
+                        app.index("app.ModuleManager.BeginBlock(ctx)"))
+        self.assertLess(app.index("response, err := app.ModuleManager.EndBlock(ctx)"),
+                        app.rindex("app.PriviCapKeeper.Reconcile(ctx, app.BankKeeper)"))
         self.assertIn("func ValidateEVMChainID",
                       (self.upstream / "evmd" / "prvicap" / "chain_identity.go").read_text())
 
@@ -156,6 +175,28 @@ class PatcherTests(unittest.TestCase):
         self.app_file.write_text(APP.replace(
             "app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap())",
             "app.UpgradeKeeper.SetModuleVersionMap(ctx, differentMap)"
+        ), encoding="utf-8")
+        old = self.app_file.read_text()
+        with self.assertRaisesRegex(ValueError, "pinned upstream mismatch"):
+            module.apply_patch(self.upstream, self.repo, verify_git=False)
+        self.assertEqual(old, self.app_file.read_text())
+        self.assertFalse((self.upstream / "evmd" / "prvicap").exists())
+
+    def test_rejects_changed_begin_blocker_before_modifying_upstream(self):
+        self.app_file.write_text(APP.replace(
+            "return app.ModuleManager.BeginBlock(ctx)",
+            "return app.ModuleManager.AlternateBeginBlock(ctx)"
+        ), encoding="utf-8")
+        old = self.app_file.read_text()
+        with self.assertRaisesRegex(ValueError, "pinned upstream mismatch"):
+            module.apply_patch(self.upstream, self.repo, verify_git=False)
+        self.assertEqual(old, self.app_file.read_text())
+        self.assertFalse((self.upstream / "evmd" / "prvicap").exists())
+
+    def test_rejects_changed_end_blocker_before_modifying_upstream(self):
+        self.app_file.write_text(APP.replace(
+            "return app.ModuleManager.EndBlock(ctx)",
+            "return app.ModuleManager.AlternateEndBlock(ctx)"
         ), encoding="utf-8")
         old = self.app_file.read_text()
         with self.assertRaisesRegex(ValueError, "pinned upstream mismatch"):
