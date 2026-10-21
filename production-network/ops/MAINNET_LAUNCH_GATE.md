@@ -31,6 +31,23 @@ list the still-missing mint-route audit, persisted state enforcement,
 complete governance/vesting/staking/upgrade tests and external review.
 **Gate 2 remains BLOCKED**, even when offline model tests pass.
 
+## Operator-signed binary and genesis attestation (additional evidence)
+
+The verifier [`verify_operator_release.cjs`](verify_operator_release.cjs) and
+[release ceremony instructions](PRVI_SIGNED_RELEASE_CEREMONY.md) now provide a
+read-only testable candidate for gate 2, gate 3 and gate 8 evidence.
+Verification requires all separately vetted operator roster keys to sign the
+same genesis SHA-256, node binary SHA-256, pinned source commit, Cosmos/EVM
+chain identities and genesis activation time. It hashes **actual input files**,
+rejects developer IDs, replayed signatures, missing signers and mismatched
+file content, and is exercised by the pinned offline CI tests.
+
+**Status remains BLOCKED.** No independently signed production roster, final
+genesis, binary release, audit or operating PoP finality is evidenced by a
+unit test. The verifier never grants network launch permission, and four
+different keys do not prove independently operated validators. Founder wallet
+authorization and live operator custody/recovery must be checked separately.
+
 ## GO / NO-GO
 
 **NO-GO** unless every gate has documented verifiable evidence, each independent operator signs the same genesis, and the final accountable launch approvers explicitly authorize activation. Approval should be recorded with reviewer, date, commit/hash and evidence link. CI passing by itself does not constitute approval.
