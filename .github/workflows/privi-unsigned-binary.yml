@@ -48,7 +48,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/.upstream-capbuild/evmd"
-          # Refuse unsigned review builds against unmodified raw Cosmos SDK.
+          # Build and package only with the reviewed hardened Cosmos SDK.
           GOTOOLCHAIN=local go mod download github.com/cosmos/cosmos-sdk@v0.54.3
           sdk_root="$(go env GOMODCACHE)/github.com/cosmos/cosmos-sdk@v0.54.3"
           sdk_copy_dir="$RUNNER_TEMP/privi-patched-sdk-app-only"
@@ -56,7 +56,7 @@ jobs:
             --sdk-root "$sdk_root" --output-dir "$sdk_copy_dir"
           GOTOOLCHAIN=local go mod edit -replace="github.com/cosmos/cosmos-sdk=$sdk_copy_dir"
           GOTOOLCHAIN=local go list -m -json github.com/cosmos/cosmos-sdk > "$RUNNER_TEMP/privi-sdk-module.json"
-          GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^
+          GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^$' -timeout 20m . ./prvicap ./prvipop
           mkdir -p "$RUNNER_TEMP/privi-unsigned-test-binary"
           GOTOOLCHAIN=local go build -mod=mod -p 2 -trimpath -buildvcs=false \
             -o "$RUNNER_TEMP/privi-unsigned-test-binary/privi-evmd-UNSIGNED-TEST-ONLY" ./cmd/evmd
@@ -101,65 +101,11 @@ jobs:
           printf 'privi_source_commit=%s\nupstream_cosmos_evm_tag=%s\nupstream_cosmos_evm_commit=%s\n' \
             "$GITHUB_SHA" "v0.7.3" "c3ae9067a7eadcdea55a5192226916deb44c71c4" > "$OUT/BUILD-PROVENANCE.txt"
           GOTOOLCHAIN=local go version -m "$OUT/privi-evmd-UNSIGNED-TEST-ONLY" > "$OUT/GO-BUILD-INFO.txt"
-          # Fail closed before uploading even valueless unsigned review bytes.
+          # Do not publish even a valueless review artifact with the raw SDK.
           python3 "$GITHUB_WORKSPACE/production-network/mainnet/custom-app/verify_privi_sdk_binary.py" \
             --module-json "$RUNNER_TEMP/privi-sdk-module.json" \
             --build-info "$OUT/GO-BUILD-INFO.txt" \
             --sdk-dir "$RUNNER_TEMP/privi-patched-sdk-app-only"
-          (cd "$OUT" && sha256sum privi-evmd-UNSIGNED-TEST-ONLY GO-BUILD-INFO.txt BUILD-PROVENANCE.txt READ-ME-FIRST.txt > SHA256SUMS)
-          (cd "$OUT" && sha256sum -c SHA256SUMS)
-      - name: Upload short-lived unsigned review artifact (never a financial release)
-        uses: actions/upload-artifact@v4
-        with:
-          name: privi-unsigned-custom-node-TEST-ONLY
-          path: ${{ runner.temp }}/privi-unsigned-test-binary/
-          if-no-files-found: error
-          retention-days: 3
- -timeout 20m . ./prvicap ./prvipop
-          mkdir -p "$RUNNER_TEMP/privi-unsigned-test-binary"
-          GOTOOLCHAIN=local go build -mod=mod -p 2 -trimpath -buildvcs=false \
-            -o "$RUNNER_TEMP/privi-unsigned-test-binary/privi-evmd-UNSIGNED-TEST-ONLY" ./cmd/evmd
-          GOTOOLCHAIN=local go build -mod=mod -p 2 -trimpath -buildvcs=false \
-            -o "$RUNNER_TEMP/privi-evmd-independent-twin" ./cmd/evmd
-          cmp "$RUNNER_TEMP/privi-unsigned-test-binary/privi-evmd-UNSIGNED-TEST-ONLY" \
-            "$RUNNER_TEMP/privi-evmd-independent-twin"
-      - name: Prove custom InitChain rejects upstream/default and unsafe genesis
-        run: |
-          set -euo pipefail
-          PROBE="$RUNNER_TEMP/.upstream-capbuild/evmd/cmd/privi-cap-genesis-probe"
-          mkdir -p "$PROBE"
-          cp production-network/mainnet/custom-app/privi_cap_genesis_probe_main.go "$PROBE/main.go"
-          gofmt -w "$PROBE/main.go"
-          cd "$RUNNER_TEMP/.upstream-capbuild/evmd"
-          GOTOOLCHAIN=local go run -mod=mod -p 2 ./cmd/privi-cap-genesis-probe
-      - name: Prove custom InitChain accepts only disposable cap-compliant genesis
-        run: |
-          set -euo pipefail
-          PROBE="$RUNNER_TEMP/.upstream-capbuild/evmd/cmd/privi-cap-genesis-positive-probe"
-          mkdir -p "$PROBE"
-          cp production-network/mainnet/custom-app/privi_cap_genesis_positive_probe_main.go "$PROBE/main.go"
-          gofmt -w "$PROBE/main.go"
-          cd "$RUNNER_TEMP/.upstream-capbuild/evmd"
-          GOTOOLCHAIN=local go build -mod=mod -p 2 -o "$RUNNER_TEMP/privi-positive-genesis-valueless" ./cmd/privi-cap-genesis-positive-probe
-          "$RUNNER_TEMP/privi-positive-genesis-valueless"
-          PRIVI_ERC20_NEGATIVE_PROBE=permissionless "$RUNNER_TEMP/privi-positive-genesis-valueless"
-          PRIVI_ERC20_NEGATIVE_PROBE=native-pair "$RUNNER_TEMP/privi-positive-genesis-valueless"
-      - name: Create traceable nonfinancial artifact
-        run: |
-          set -euo pipefail
-          OUT="$RUNNER_TEMP/privi-unsigned-test-binary"
-          cat > "$OUT/READ-ME-FIRST.txt" <<'EOF'
-          UNSIGNED PRVI CUSTOM NODE CANDIDATE — VALELESS RESEARCH ONLY
-          NOT A PRODUCTION RELEASE. DO NOT RUN WITH A FINANCIAL GENESIS.
-          NO PRODUCTION SIGNING KEYS, GENESIS, ACCOUNTS, COINS, OR LIQUIDITY ARE INCLUDED.
-          The binary has only a same-host twin-build comparison, not an independent
-          multi-host reproducible build, audited mint/balance paths, or chain-ID registry approval.
-          Distribution of these bytes does not authorize mainnet activation.
-          The known supply-neutral unauthorized-account mutation gap remains unresolved.
-          EOF
-          printf 'privi_source_commit=%s\nupstream_cosmos_evm_tag=%s\nupstream_cosmos_evm_commit=%s\n' \
-            "$GITHUB_SHA" "v0.7.3" "c3ae9067a7eadcdea55a5192226916deb44c71c4" > "$OUT/BUILD-PROVENANCE.txt"
-          go version -m "$OUT/privi-evmd-UNSIGNED-TEST-ONLY" > "$OUT/GO-BUILD-INFO.txt"
           (cd "$OUT" && sha256sum privi-evmd-UNSIGNED-TEST-ONLY GO-BUILD-INFO.txt BUILD-PROVENANCE.txt READ-ME-FIRST.txt > SHA256SUMS)
           (cd "$OUT" && sha256sum -c SHA256SUMS)
       - name: Upload short-lived unsigned review artifact (never a financial release)
