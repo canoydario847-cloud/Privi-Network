@@ -1,0 +1,31 @@
+name: Privi native PoP keeper security (NONFINANCIAL)
+
+on:
+  pull_request:
+    paths:
+      - 'production-network/mainnet/pop/**'
+      - '.github/workflows/privi-pop-unit-security.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pop-keeper:
+    name: Atomic PoP batch, registry pin and replay guards (NOT BFT)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25.9'
+          cache: false
+      - name: Run native PoP keeper and adversarial regression tests
+        run: |
+          set -euo pipefail
+          cd production-network/mainnet/pop
+          GOTOOLCHAIN=local go test -mod=mod -p 2 -count=1 -timeout=8m ./...
+      - name: State correct financial release status
+        run: |
+          echo 'PoP consensus-KV unit tests only: no native BFT finality, production signed registry pin, issuance, deploy or funds.'
