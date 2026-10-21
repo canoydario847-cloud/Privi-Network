@@ -160,16 +160,14 @@ func (k Keeper) Apply(ctx context.Context,p Position) (Verified,error) {
     if len(p.Signature)!=ed25519.SignatureSize||!ed25519.Verify(author,message,p.Signature) {
         return Verified{},errors.New("PoP author signature invalid")
     }
-    var seal bytes.Buffer
-    pack(&seal,[]byte(domain+"_SEALED"))
-    pack(&seal,message)
-    pack(&seal,p.Signature)
-    digest:=sha256.Sum256(seal.Bytes())
-    want:=hex.EncodeToString(digest[:])
+    want,err:=SealedHash(p)
+    if err!=nil{return Verified{},err}
     if p.BlockHash!=want {return Verified{},errors.New("PoP sealed position hash mismatch")}
+    digest,err:=hex.DecodeString(want)
+    if err!=nil{return Verified{},err}
     state:=make([]byte,8+sha256.Size)
     binary.BigEndian.PutUint64(state[:8],p.Sequence)
-    copy(state[8:],digest[:])
+    copy(state[8:],digest)
     if err=kv.Set(key,state);err!=nil{return Verified{},err}
     return Verified{PoPVerified:true,Stamp:p.Stamp,TipHash:want,Sequence:p.Sequence,Records:1},nil
 }
