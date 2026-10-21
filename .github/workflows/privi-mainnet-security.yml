@@ -60,17 +60,19 @@ jobs:
       - name: Exercise actual Cosmos SDK keeper interfaces
         working-directory: production-network/mainnet/prvicap
         run: GOTOOLCHAIN=local go test -mod=mod -p 2 -count=1 -timeout=25m ./...
-      - name: Verify experimental raw SDK mint and direct native setter isolation
+      - name: Verify raw SDK mint/setter isolation in a disposable local module fork
         working-directory: production-network/mainnet/prvicap
         run: |
           set -euo pipefail
           GOTOOLCHAIN=local go mod download github.com/cosmos/cosmos-sdk@v0.54.3
           sdk_root="$(go env GOMODCACHE)/github.com/cosmos/cosmos-sdk@v0.54.3"
-          overlay_dir="$RUNNER_TEMP/privi-bank-overlay"
+          sdk_copy_dir="$RUNNER_TEMP/privi-patched-sdk-test-only"
           python3 "$GITHUB_WORKSPACE/production-network/mainnet/custom-app/patch_sdk_bank_source.py" \
-            --sdk-root "$sdk_root" --output-dir "$overlay_dir"
-          PRVI_TEST_SDK_BANK_OVERLAY=1 GOFLAGS="-overlay=$overlay_dir/overlay.json" \
-            GOTOOLCHAIN=local go test -mod=mod -p 2 -count=1 -run '^TestSDKPatched' -timeout=15m ./...
+            --sdk-root "$sdk_root" --output-dir "$sdk_copy_dir"
+          # Changes go.mod ONLY in the disposable CI checkout.
+          GOTOOLCHAIN=local go mod edit -replace="github.com/cosmos/cosmos-sdk=$sdk_copy_dir"
+          PRVI_TEST_SDK_BANK_OVERLAY=1 GOTOOLCHAIN=local \
+            go test -mod=mod -p 2 -count=1 -run '^TestSDKPatched' -timeout=15m ./...
           echo "Source-overlaid SDK bank denies raw aprvi mint/writes; does NOT prove direct KV, EVM, IBC or upgrades fully safe." >> "$GITHUB_STEP_SUMMARY"
       - name: Preserve residual bypass finding
         if: always()
