@@ -41,6 +41,8 @@ class EVMReceiptTests(unittest.TestCase):
         self.assertEqual(out["gas_used"],"21000")
         self.assertEqual(out["effective_gas_price_wei"],"1000000000")
         self.assertEqual(out["gross_gas_paid_wei"],"21000000000000")
+        self.assertEqual(out["transaction_type"],"0")
+        self.assertEqual(out["max_authorized_gas_fee_wei"],"30000000000000")
     def test_gas_used_must_not_exceed_signed_gas_limit(self):
         self.rpc.values["eth_getTransactionReceipt"]["gasUsed"]="0x7531"
         with self.assertRaisesRegex(ValueError,"invalid EVM gas usage"):
@@ -53,6 +55,44 @@ class EVMReceiptTests(unittest.TestCase):
         self.rpc.values["eth_getTransactionByHash"]["gasPrice"]="0x0"
         with self.assertRaisesRegex(ValueError,"exceeds transaction gas price"):
             self.verify()
+    def test_eip1559_receipt_uses_signed_fee_ceiling(self):
+        tx=self.rpc.values["eth_getTransactionByHash"]
+        tx["type"]="0x2"
+        tx["maxFeePerGas"]="0x77359400"  # 2 gwei signed max
+        tx["maxPriorityFeePerGas"]="0x3b9aca00"  # 1 gwei tip cap
+        # The mined effective price differs from the signed ceiling.
+        out=self.verify()
+        self.assertEqual(out["transaction_type"],"2")
+        self.assertEqual(out["gross_gas_paid_wei"],"21000000000000")
+        self.assertEqual(out["signed_max_fee_per_gas_wei"],"2000000000")
+        self.assertEqual(out["max_authorized_gas_fee_wei"],"60000000000000")
+    def test_eip1559_receipt_rejects_fee_above_signed_max(self):
+        tx=self.rpc.values["eth_getTransactionByHash"]
+        tx.update({"type":"0x2","maxFeePerGas":"0x1",
+                   "maxPriorityFeePerGas":"0x0"})
+        with self.assertRaisesRegex(ValueError,"exceeds signed EIP-1559 maxFeePerGas"):
+            self.verify()
+    def test_eip1559_receipt_rejects_missing_or_invalid_caps(self):
+        tx=self.rpc.values["eth_getTransactionByHash"]
+        tx["type"]="0x2"
+        for maximum,priority,expected in [
+            (None,"0x0","transaction maxFeePerGas"),
+            ("0x0","0x0","invalid signed EIP-1559 fee caps"),
+            ("0x1","0x2","invalid signed EIP-1559 fee caps"),
+            ("0x77359400",None,"transaction maxPriorityFeePerGas"),
+        ]:
+            with self.subTest(maximum=maximum,priority=priority):
+                tx["maxFeePerGas"]=maximum
+                tx["maxPriorityFeePerGas"]=priority
+                with self.assertRaisesRegex(ValueError,expected):
+                    self.verify()
+    def test_unknown_transaction_type_fails_closed(self):
+        self.rpc.values["eth_getTransactionByHash"]["type"]="0x3"
+        with self.assertRaisesRegex(ValueError,"unsupported transaction type"):
+            self.verify()
+    def test_type_one_uses_legacy_signed_gas_price(self):
+        self.rpc.values["eth_getTransactionByHash"]["type"]="0x1"
+        self.assertEqual(self.verify()["signed_max_fee_per_gas_wei"],"1000000000")
     def test_missing_gas_fields_fail_closed(self):
         self.rpc.values["eth_getTransactionReceipt"].pop("gasUsed")
         with self.assertRaisesRegex(ValueError,"receipt gasUsed"):
