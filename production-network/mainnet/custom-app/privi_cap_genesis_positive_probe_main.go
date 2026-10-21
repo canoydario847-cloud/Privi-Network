@@ -53,6 +53,10 @@ import (
 type priviTestAppOptions struct{}
 func (priviTestAppOptions) Get(key string) interface{} {
     if key == srvflags.EVMChainID { return uint64(424242) }
+    if key == "privi.pop.trusted_registry_digest" && os.Getenv("PRIVI_POP_NEGATIVE_PROBE") == "wrong-pin" {
+        // Deliberately wrong test-only pin; never a signed operator manifest.
+        return strings.Repeat("f",64)
+    }
     return nil
 }
 
@@ -333,6 +337,9 @@ func probe() error {
         popGenesis.ChainID="privi-ci-incorrect"
     case "invalid-author":
         popGenesis.Authorities[0].PublicKey=nil
+    case "wrong-pin":
+        // Keep genesis valid, but require it to differ from the separately
+        // supplied signer registry digest before InitChain can write state.
     case "missing":
     default:
         return fmt.Errorf("unknown disposable PoP genesis negative mode")

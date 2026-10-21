@@ -65,7 +65,7 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
         "reject upstream default EVM chain ID before constructing keepers")
     app = replace_once(app,
         "\tBankKeeper            bankkeeper.Keeper",
-        "\tBankKeeper            bankkeeper.Keeper\n\tPriviCapKeeper        prvicap.Keeper\n\tPriviPoPKeeper        prvipop.Keeper",
+        "\tBankKeeper            bankkeeper.Keeper\n\tPriviCapKeeper        prvicap.Keeper\n\tPriviPoPKeeper        prvipop.Keeper\n\tPriviPoPTrustedDigest string",
         "cap keeper field")
     app = replace_once(app,
         "\t\tauthtypes.StoreKey, banktypes.StoreKey, stakingtypes.StoreKey,",
@@ -91,6 +91,13 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \tpopKeeper, popErr := prvipop.NewKeeper(runtime.NewKVStoreService(keys[prvipop.StoreKey]))
 \tif popErr != nil { panic(popErr) }
 \tapp.PriviPoPKeeper = popKeeper
+\t// Operator-provided registry digest: its release signature and custody
+\t// must be validated externally, never inferred from the local KV store.
+\tif value := appOpts.Get("privi.pop.trusted_registry_digest"); value != nil {
+\t\tpin,ok := value.(string)
+\t\tif !ok || pin == "" {panic("Privi PoP external registry pin malformed")}
+\t\tapp.PriviPoPTrustedDigest = pin
+\t}
 \tbaseBank := bankkeeper.NewBaseKeeper(
 \t\tappCodec,
 \t\truntime.NewKVStoreService(keys[banktypes.StoreKey]),
@@ -157,6 +164,15 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \t}
 \tif err := prvipop.ValidateGenesis(popGenesis.ChainID,popGenesis.Authorities); err != nil {
 \t\treturn nil,fmt.Errorf("Privi PoP genesis: unsafe author registry before SDK InitGenesis: %w",err)
+\t}
+\t// Reject a substituted same-chain author key BEFORE any module initializes.
+\t// The trusted pin must come from a separately authenticated release.
+\tif app.PriviPoPTrustedDigest != "" {
+\t\tgot,err := prvipop.GenesisDigest(popGenesis.ChainID,popGenesis.Authorities)
+\t\tif err != nil {return nil,fmt.Errorf("Privi PoP genesis: digest calculation denied: %w",err)}
+\t\tif got != app.PriviPoPTrustedDigest {
+\t\t\treturn nil,fmt.Errorf("Privi PoP genesis: operator-pinned authorization digest mismatch")
+\t\t}
 \t}
 \t// Native PRVI must actually be the EVM gas and staking denomination.
 \t// Do not allow a misleading genesis with capped aprvi but fees/stake in
@@ -253,7 +269,16 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
     # This is defense in depth: it does not atomically forbid every possible
     # in-block transient create/delete route or unreviewed keeper mutation.
     # The per-block token-pair walk requires load/performance testing.
-    invariant = '''// CheckPriviNativeERC20Invariant verifies live ERC20 state rather than
+    invariant = '''// checkPriviPoPRegistry uses a separately supplied signer pin when present.
+// Missing pins remain DEV-ONLY and may not authorize a financial mainnet.
+func (app *EVMD) checkPriviPoPRegistry(ctx sdk.Context) error {
+\tif app.PriviPoPTrustedDigest != "" {
+\t\treturn app.PriviPoPKeeper.AssertPinnedGenesis(ctx,ctx.ChainID(),app.PriviPoPTrustedDigest)
+\t}
+\treturn app.PriviPoPKeeper.AssertInitialized(ctx,ctx.ChainID())
+}
+
+// CheckPriviNativeERC20Invariant verifies live ERC20 state rather than
 // just unsigned genesis declarations. No runtime auto-correction: a
 // forbidden state makes block execution fail closed. This is O(token pairs).
 func (app *EVMD) CheckPriviNativeERC20Invariant(ctx sdk.Context) error {
@@ -286,7 +311,7 @@ func (app *EVMD) CheckPriviNativeERC20Invariant(ctx sdk.Context) error {
 \treturn app.ModuleManager.BeginBlock(ctx)
 }'''.replace("\\t", "\t"),
         '''func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {
-\tif err := app.PriviPoPKeeper.AssertInitialized(ctx,ctx.ChainID()); err != nil {
+\tif err := app.checkPriviPoPRegistry(ctx); err != nil {
 \t\treturn sdk.BeginBlock{},fmt.Errorf("Privi PoP beginning-of-block registry denied: %w",err)
 \t}
 \tif err := app.PriviCapKeeper.Reconcile(ctx, app.BankKeeper); err != nil {
@@ -305,7 +330,7 @@ func (app *EVMD) CheckPriviNativeERC20Invariant(ctx sdk.Context) error {
         '''func (app *EVMD) EndBlocker(ctx sdk.Context) (sdk.EndBlock, error) {
 \tresponse, endErr := app.ModuleManager.EndBlock(ctx)
 \tif endErr != nil { return response, endErr }
-\tif err := app.PriviPoPKeeper.AssertInitialized(ctx,ctx.ChainID()); err != nil {
+\tif err := app.checkPriviPoPRegistry(ctx); err != nil {
 \t\treturn response,fmt.Errorf("Privi PoP end-of-block registry denied: %w",err)
 \t}
 \tif err := app.PriviCapKeeper.Reconcile(ctx, app.BankKeeper); err != nil {
@@ -351,6 +376,11 @@ func (app *EVMD) PostTxProcessing(
 \tif len(app.EVMKeeper.GetCode(ctx,app.EVMKeeper.GetCodeHash(ctx,*msg.To)))!=0 {
 \t\treturn fmt.Errorf("Privi PoP sink EVM contract code forbidden")
 \t}
+\t// Validate the optional external registry pin again in the receipt hook:
+\t// a same-block author-key substitution cannot be credited to PoP.
+\tif err:=app.checkPriviPoPRegistry(ctx);err!=nil {
+\t\treturn fmt.Errorf("Privi PoP receipt signer registry denied: %w",err)
+\t}
 \tposition,decodeErr:=prvipop.DecodeEnvelope(msg.Data)
 \tif decodeErr!=nil {
 \t\treturn fmt.Errorf("Privi PoP transaction envelope rejected: %w",decodeErr)
@@ -378,6 +408,10 @@ func (app *EVMD) PostTxProcessing(
     if app.count("app.EVMKeeper.SetHooks(app)") != 1 or app.count(
             "app.PriviPoPKeeper.Apply(ctx,position)") != 1:
         raise ValueError("native PoP receipt guard must register and apply exactly once")
+    if (app.count("app.checkPriviPoPRegistry(ctx)") != 3 or
+            app.count("app.PriviPoPKeeper.AssertPinnedGenesis(") != 1 or
+            app.count("prvipop.GenesisDigest(popGenesis.ChainID,popGenesis.Authorities)") != 1):
+        raise ValueError("external PoP digest guard must cover genesis, block edges and EVM receipt")
     if "app.ApplyPriviPoPFromFinalizedTx(" in app:
         raise ValueError("obsolete SDK posthandler PoP credit path forbidden")
     # Fail closed if upstream source evolves to retain or overwrite a raw

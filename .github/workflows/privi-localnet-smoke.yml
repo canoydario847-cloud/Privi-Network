@@ -131,7 +131,7 @@ jobs:
             "$RUNNER_TEMP/privi-custom-InitChain-TEST-ONLY"
           # Native PoP author registry is mandatory and Cosmos-chain-bound,
           # but these checks do not yet route position txs into FinalizeBlock.
-          for mode in missing wrong-chain invalid-author; do
+          for mode in missing wrong-chain invalid-author wrong-pin; do
             PRIVI_POP_NEGATIVE_PROBE="$mode" \
               "$RUNNER_TEMP/privi-custom-InitChain-TEST-ONLY"
           done
