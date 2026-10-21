@@ -1681,7 +1681,7 @@ def main() -> None:
                    float(os.getenv("LEDGER_ANCHOR_INTERVAL", "300")), "privi-ledger")
     start_loop(mcp.privi_trust.run_once, float(os.getenv("LIVE_TRUST_INTERVAL", "120")), "privi-trust-watch")
     if os.getenv("SCAN_ENABLED", "1") != "0":
-        mcp.privi_scan.start(float(os.getenv("SCAN_INTERVAL", "300")))
+        mcp.privi_scan.start(float(os.getenv("SCAN_INTERVAL", "120")))
     if os.getenv("LEDGER_BOOTSTRAP_REPORT") == "1":
         first_report(mcp, ledger)
     if os.getenv("LEDGER_BOOTSTRAP_PASSPORT") == "1":
