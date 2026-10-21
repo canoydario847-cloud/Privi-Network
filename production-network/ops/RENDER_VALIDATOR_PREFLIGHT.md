@@ -2,6 +2,41 @@
 
 **Decision recorded 2026-10-20:** Privi's owner selected **Render** as the *preferred* production validator hosting provider, subject to proof that the proposed architecture meets the security, quorum, P2P connectivity, signer isolation, and disaster-recovery launch gates. This is a deployment **plan**, not evidence of infrastructure, custody, finality, token issuance, public endpoints or mainnet readiness.
 
+## Connected Render workspace read-only inspection — 2026-10-20
+
+A direct provider service-list inspection of the connected Render workspace found
+**13 existing services**, none of type `private_service`, `background_worker`,
+or a recognizable CometBFT validator. The inspected inventory consists of
+eight `static_site` services and five `web_service` instances.
+In particular:
+
+- `privi-ledger`, `privi-anchor`, `privi-verify`: **public web services**
+  (not blockchain validator nodes), each on Render's Virginia region on
+  a starter plan, each with its own 1 GB persistent disk mounted at `/data`.
+  Their deployed source paths point to HTTP application servers, not the
+  reviewed custom Privi node binary. They auto-deploy from repository `main`
+  and show a publicly reachable web service URL; **do not reassign or
+  repurpose them to sign consensus**.
+- `privi-discovery`: public free-tier Python web service in Ohio, not a
+  validator. `jose-backend`: public free-tier Node web service in Oregon,
+  not a validator.
+- Eight additional `privi-*` or website `static_site` projects run public
+  sites; static sites cannot host a running consensus signer.
+
+This read-only provider inventory **does not demonstrate current service
+health, chain finality, custody of keys, reserve capacity, HSM capability or
+ownership of production signing identities**. It establishes only that the
+connected Render account is usable and that **no production Privi validator
+candidate is present among the listed services**: 0/4 verified. The existing
+public Privi web apps may remain available independently of blockchain launch.
+Do not migrate these services or disable auto-deploy in this planning stage.
+
+The existing connector tools can list services, inspect metrics/logs and
+create public web services; they **do not expose creation of a Render private
+service, paid persistent-disk attachment to a new service, or HSM custody**.
+Those operations require a separately reviewed deployment workflow and
+provider permissions, not an assumption that a public web service is suitable.
+
 ## Candidate topology
 
 - Four independently configured, paid **Render private services**, ideally in distinct failure domains; one `priv_validator_key` / remote signing identity per service, **never shared or cloned**. Do not use a Render autoscaled service to represent multiple validators, especially not with attached disk.
