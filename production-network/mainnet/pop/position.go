@@ -85,6 +85,21 @@ func CanonicalMessage(p Position) ([]byte,error) {
     return buf.Bytes(),nil
 }
 
+// SealedHash computes the canonical signed-record commitment. This verifies
+// the shape of the signed message but NOT who is authorized to sign it.
+// VerifyChain and the consensus-backed Keeper.Apply MUST independently verify
+// the Ed25519 signature against their pinned authority before accepting this.
+func SealedHash(p Position) (string,error) {
+    message,err:=CanonicalMessage(p);if err!=nil{return "",err}
+    if len(p.Signature)!=ed25519.SignatureSize {return "",errors.New("missing PoP record signature")}
+    var seal bytes.Buffer
+    pack(&seal,[]byte(domain+"_SEALED"))
+    pack(&seal,message)
+    pack(&seal,p.Signature)
+    digest:=sha256.Sum256(seal.Bytes())
+    return hex.EncodeToString(digest[:]),nil
+}
+
 // VerifyChain validates full ancestry from sequence 1 and an external pinned
 // company signer. It deliberately does not assume a self-asserted
 // pop_verified flag or confer token, dollar or consensus voting value.
@@ -107,13 +122,10 @@ func VerifyChain(records []Position,expectedChain string,authorized ed25519.Publ
         if len(p.Signature)!=ed25519.SignatureSize||!ed25519.Verify(authorized,message,p.Signature) {
             return Verified{},errors.New("invalid PoP author signature")
         }
-        // A domain-separated commitment includes the validated signature.
-        buf:=new(bytes.Buffer)
-        pack(buf,[]byte(domain+"_SEALED"))
-        pack(buf,message)
-        pack(buf,p.Signature)
-        sum:=sha256.Sum256(buf.Bytes())
-        prev=hex.EncodeToString(sum[:])
+        // Use the same verified, domain-separated seal calculation for
+        // offline ancestry checks as the consensus-backed native keeper.
+        prev,err=SealedHash(p)
+        if err!=nil{return Verified{},err}
         if p.BlockHash!=prev {return Verified{},errors.New("PoP block seal mismatch")}
     }
     return Verified{PoPVerified:true,Stamp:records[len(records)-1].Stamp,
