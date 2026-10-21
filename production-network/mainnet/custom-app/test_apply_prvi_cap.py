@@ -18,6 +18,8 @@ type EVMD struct {
     BankKeeper            bankkeeper.Keeper
 }
 func test() {
+    evmChainID := cast.ToUint64(appOpts.Get(srvflags.EVMChainID))
+    encodingConfig := evmencoding.MakeConfig(evmChainID)
     keys := storetypes.NewKVStoreKeys(
         authtypes.StoreKey, banktypes.StoreKey, stakingtypes.StoreKey,
     )
@@ -31,6 +33,9 @@ func test() {
     )
     app.BankKeeper = app.BankKeeper.WithObjStoreKey(oKeys[banktypes.ObjectStoreKey])
     bank.NewAppModule(appCodec, app.BankKeeper, app.AccountKeeper, nil)
+    if err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap()); err != nil {
+        panic(err)
+    }
     return app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)
 }
 '''
@@ -49,6 +54,9 @@ class PatcherTests(unittest.TestCase):
         (source / "keeper.go").write_text("package prvicap\n", encoding="utf-8")
         (source / "sdk_bank_adapter.go").write_text(
             "package prvicap\nfunc RestrictedBank(){}\n", encoding="utf-8"
+        )
+        (source / "chain_identity.go").write_text(
+            "package prvicap\nfunc ValidateEVMChainID(uint64) error {return nil}\n", encoding="utf-8"
         )
         self.app_file = self.upstream / "evmd" / "app.go"
         self.app_file.write_text(APP, encoding="utf-8")
@@ -98,6 +106,27 @@ class PatcherTests(unittest.TestCase):
         self.assertIn("baseBank.WithMintCoinsRestriction(app.PriviCapKeeper.MintRestriction)", app)
         self.assertEqual(app.count("baseBank.WithMintCoinsRestriction("), 1)
         self.assertNotIn("bank.NewAppModule(appCodec, app.BankKeeper", app)
+        self.assertIn("prvicap.ValidateEVMChainID(evmChainID)", app)
+        self.assertLess(app.index("prvicap.ValidateEVMChainID(evmChainID)"),
+                        app.index("bankkeeper.NewBaseKeeper("))
+        self.assertIn("EVM gas denomination must be aprvi", app)
+        self.assertIn("bonded staking denomination must be aprvi", app)
+        self.assertIn("ZERO inflation and provisions", app)
+        self.assertIn("permissionless ERC20 registration forbidden", app)
+        self.assertIn("aprvi ERC20 token pair forbidden", app)
+        self.assertIn("aprvi requires 18 decimal PRVI metadata", app)
+        for message in ("EVM gas denomination must be aprvi",
+                        "bonded staking denomination must be aprvi",
+                        "ZERO inflation and provisions",
+                        "permissionless ERC20 registration forbidden",
+                        "aprvi ERC20 token pair forbidden"):
+            self.assertLess(app.index(message),
+                            app.index("app.UpgradeKeeper.SetModuleVersionMap("))
+        self.assertLess(app.index("app.UpgradeKeeper.SetModuleVersionMap("),
+                        app.index("app.ModuleManager.InitGenesis("))
+        self.assertEqual(app.count("app.UpgradeKeeper.SetModuleVersionMap("), 1)
+        self.assertIn("func ValidateEVMChainID",
+                      (self.upstream / "evmd" / "prvicap" / "chain_identity.go").read_text())
 
     def test_unpinned_bank_module_rejected_before_any_write(self):
         self.app_file.write_text(APP.replace(
@@ -110,6 +139,28 @@ class PatcherTests(unittest.TestCase):
         self.assertEqual(old, self.app_file.read_text())
         self.assertFalse((self.upstream / "evmd" / "prvicap").exists())
 
+
+    def test_rejects_unrecognized_chain_id_upstream_source_before_write(self):
+        self.app_file.write_text(APP.replace(
+            "evmChainID := cast.ToUint64(appOpts.Get(srvflags.EVMChainID))",
+            "evmChainID := 0"
+        ), encoding="utf-8")
+        old = self.app_file.read_text()
+        with self.assertRaisesRegex(ValueError, "pinned upstream mismatch"):
+            module.apply_patch(self.upstream, self.repo, verify_git=False)
+        self.assertEqual(old, self.app_file.read_text())
+        self.assertFalse((self.upstream / "evmd" / "prvicap").exists())
+
+    def test_rejects_changed_upgrade_write_location_before_write(self):
+        self.app_file.write_text(APP.replace(
+            "app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap())",
+            "app.UpgradeKeeper.SetModuleVersionMap(ctx, differentMap)"
+        ), encoding="utf-8")
+        old = self.app_file.read_text()
+        with self.assertRaisesRegex(ValueError, "pinned upstream mismatch"):
+            module.apply_patch(self.upstream, self.repo, verify_git=False)
+        self.assertEqual(old, self.app_file.read_text())
+        self.assertFalse((self.upstream / "evmd" / "prvicap").exists())
 
     def test_cannot_overwrite_existing_cap_keeper_files(self):
         (self.upstream/"evmd"/"prvicap").mkdir()
