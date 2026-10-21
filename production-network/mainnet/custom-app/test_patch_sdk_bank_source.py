@@ -38,6 +38,24 @@ func (k BaseKeeper) MintCoins(ctx context.Context, moduleName string, amounts sd
 }
 """.replace("    if err := k.mintCoinsRestrictionFn(ctx, amounts); err != nil {\n        return err\n    }\n    acc :=",
             "\terr := k.mintCoinsRestrictionFn(ctx, amounts)\n\tif err != nil {\n\t\treturn err\n\t}\n\tacc :=")
+GENESIS="""package keeper
+import (
+    "context"
+    "fmt"
+)
+// InitGenesis initializes the bank module's state from a given genesis state.
+func (k BaseKeeper) InitGenesis(ctx context.Context, genState *types.GenesisState) {
+    if err := k.SetParams(ctx, genState.Params); err != nil {
+        panic(err)
+    }
+\tfor _, meta := range genState.DenomMetadata {
+\t\tk.SetDenomMetaData(ctx, meta)
+\t}
+}
+
+// ExportGenesis returns bank state.
+func (k BaseKeeper) ExportGenesis(ctx context.Context) *types.GenesisState { return nil }
+"""
 class BankSDKOverlayTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory()
@@ -47,27 +65,41 @@ class BankSDKOverlayTests(unittest.TestCase):
         self.keeper.mkdir(parents=True)
         (self.keeper/"send.go").write_text(SEND)
         (self.keeper/"keeper.go").write_text(KEEPER)
+        (self.keeper/"genesis.go").write_text(GENESIS)
         self.output=Path(self.temp.name)/"overlay"
     def test_patches_disposable_local_sdk_clone_without_module_cache_edit(self):
-        baseline=[(self.keeper/name).read_text() for name in ("send.go","keeper.go")]
+        baseline=[(self.keeper/name).read_text() for name in ("send.go","keeper.go","genesis.go")]
         result=mod.build_overlay(self.root,self.output)
         module_copy=Path(result["module_dir"])
         self.assertEqual(module_copy,self.output)
         self.assertTrue((module_copy/"x"/"bank"/"keeper").is_dir())
         changed_send=(module_copy/"x"/"bank"/"keeper"/"send.go").read_text()
         changed_keeper=(module_copy/"x"/"bank"/"keeper"/"keeper.go").read_text()
+        changed_genesis=(module_copy/"x"/"bank"/"keeper"/"genesis.go").read_text()
+        self.assertIn('repeated InitGenesis forbidden',changed_genesis)
+        self.assertIn('rawKV.Has(priviBankGenesisApplied)',changed_genesis)
+        self.assertIn('rawKV.Set(priviBankGenesisApplied, []byte{1})',changed_genesis)
+        self.assertEqual(changed_genesis.count('var priviBankGenesisApplied ='),1)
         self.assertIn("func (k BaseSendKeeper) setBalanceForBankOperation(",changed_send)
         self.assertIn("func (k BaseSendKeeper) UncheckedSetBalance(",changed_send)
         self.assertIn('balance.Denom == "aprvi"',changed_send)
         self.assertEqual(changed_send.count("k.setBalanceForBankOperation(ctx, addr, newBalance)"),2)
         self.assertIn("k.setBalanceForBankOperation(ctx, delegatorAddr",changed_keeper)
         self.assertIn('amounts.AmountOf("aprvi").IsPositive()',changed_keeper)
-        self.assertEqual(baseline,[(self.keeper/name).read_text() for name in ("send.go","keeper.go")])
+        self.assertEqual(baseline,[(self.keeper/name).read_text() for name in ("send.go","keeper.go","genesis.go")])
     def test_denies_unreviewed_sdk_signatures_and_does_not_create_module_copy(self):
         (self.keeper/"send.go").write_text(SEND.replace("k.UncheckedSetBalance(ctx, addr, newBalance)", "k.AlternateSetBalance(ctx, addr, newBalance)",1))
         with self.assertRaisesRegex(ValueError,"source drift"):
             mod.build_overlay(self.root,self.output)
         self.assertFalse(self.output.exists())
+    def test_denies_unreviewed_genesis_implementation_before_copy(self):
+        path=self.keeper/"genesis.go"
+        path.write_text(GENESIS.replace("func (k BaseKeeper) InitGenesis(",
+                                        "func (k BaseKeeper) UnsafeGenesis("))
+        with self.assertRaisesRegex(ValueError,"source drift"):
+            mod.build_overlay(self.root,self.output)
+        self.assertFalse(self.output.exists())
+
     def test_denies_unknown_cosmos_sdk_release(self):
         wrong=self.root.with_name("cosmos-sdk@v0.54.4")
         self.root.rename(wrong)

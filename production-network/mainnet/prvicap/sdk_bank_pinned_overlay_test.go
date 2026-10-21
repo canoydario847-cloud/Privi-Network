@@ -2,7 +2,9 @@ package prvicap
 
 import (
  "bytes"
+ "fmt"
  "os"
+ "strings"
  "testing"
 
  sdk "github.com/cosmos/cosmos-sdk/types"
@@ -165,5 +167,57 @@ func TestSDKPatchedMixedNativeMintIsAtomic(t *testing.T) {
    if got:=h.bank.GetSupply(h.ctx,denom).Amount;got.IsPositive() {
      t.Fatalf("rejected mixed mint partially changed %s supply: %s",denom,got)
    }
+ }
+}
+
+// Repeating raw SDK InitGenesis would bypass MintCoins entirely. The pinned
+// disposable SDK clone must keep its marker after a legitimate full burn,
+// including when the native bank Supply collection removes its zero entry.
+func TestSDKPatchedRepeatGenesisDeniedAfterNativeSupplyBurnsToZero(t *testing.T) {
+ if os.Getenv("PRVI_TEST_SDK_BANK_OVERLAY") != "1" { t.Skip("requires pinned SDK bank source overlay") }
+ h:=newRealBankHarness(t)
+ burner:=authtypes.NewEmptyModuleAccount("genesisburner",authtypes.Burner)
+ native:=sdk.NewCoins(sdk.NewInt64Coin(BaseDenom,100))
+ h.bank.InitGenesis(h.ctx,&banktypes.GenesisState{
+   Params:banktypes.DefaultParams(),
+   Balances:[]banktypes.Balance{{Address:burner.GetAddress().String(),Coins:native}},
+   Supply:native,
+ })
+ if err:=h.cap.InitGenesis(h.ctx,"100",h.bank);err!=nil{t.Fatal(err)}
+ h.account.EXPECT().GetModuleAccount(h.ctx,"genesisburner").Return(burner)
+ h.account.EXPECT().GetAccount(h.ctx,burner.GetAddress()).Return(burner).MinTimes(1)
+ if err:=h.bank.BurnCoins(h.ctx,"genesisburner",native);err!=nil{t.Fatal(err)}
+ if h.bank.GetSupply(h.ctx,BaseDenom).Amount.IsPositive() {
+   t.Fatal("expected zero outstanding PRVI after a legitimate complete burn")
+ }
+ if err:=h.cap.Reconcile(h.ctx,h.bank);err!=nil{t.Fatal(err)}
+ // Attacker retries genesis with 100 new native units and 5 atest units.
+ // Any side effect (including unrelated denomination or params) is forbidden.
+ replacement:=sdk.NewCoins(sdk.NewInt64Coin(BaseDenom,100),sdk.NewInt64Coin("atest",5))
+ func() {
+   defer func(){
+     p:=recover()
+     if p==nil || !strings.Contains(fmt.Sprint(p),"repeated InitGenesis forbidden") {
+       t.Fatalf("raw SDK repeated InitGenesis did not fail before state writes: %v",p)
+     }
+   }()
+   h.bank.InitGenesis(h.ctx,&banktypes.GenesisState{
+     Params:banktypes.DefaultParams(),
+     Balances:[]banktypes.Balance{{Address:burner.GetAddress().String(),Coins:replacement}},
+     Supply:replacement,
+   })
+ }()
+ for _,denom:=range []string{BaseDenom,"atest"} {
+   if h.bank.GetSupply(h.ctx,denom).Amount.IsPositive(){
+     t.Fatalf("replayed genesis changed %s total supply",denom)
+   }
+   if h.bank.GetBalance(h.ctx,burner.GetAddress(),denom).Amount.IsPositive(){
+     t.Fatalf("replayed genesis changed %s account balance",denom)
+   }
+ }
+ if err:=h.cap.Reconcile(h.ctx,h.bank);err!=nil{t.Fatal(err)}
+ s,err:=h.cap.Snapshot(h.ctx);if err!=nil{t.Fatal(err)}
+ if s.GenesisBase!="100"||s.LifetimeIssuedBase!="100"{
+   t.Fatalf("replayed genesis corrupted immutable issued units: %+v",s)
  }
 }

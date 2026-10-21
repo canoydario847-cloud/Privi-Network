@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Build a disposable PINNED Cosmos SDK module copy for bank hardening tests.
 
-Protect external raw BaseKeeper MintCoins and UncheckedSetBalance without
+Protect external raw BaseKeeper MintCoins, UncheckedSetBalance and repeated
+InitGenesis without
 breaking *internal* legitimate bank sends and delegations. This is an
 experimental preproduction SDK source modification, not an app release.
 The immutable upstream module cache is READ ONLY: patched SDK lives in a
@@ -31,10 +32,12 @@ def build_overlay(sdk_root: Path, output_dir: Path) -> dict:
     source = sdk_root / "x" / "bank" / "keeper"
     send_file = source / "send.go"
     keeper_file = source / "keeper.go"
+    genesis_file = source / "genesis.go"
     send = send_file.read_text(encoding="utf-8")
     keeper = keeper_file.read_text(encoding="utf-8")
+    genesis = genesis_file.read_text(encoding="utf-8")
     # Ensure upstream schema and exact package names before writing output.
-    if not send.startswith("package keeper\n") or not keeper.startswith("package keeper\n"):
+    if not all(s.startswith("package keeper\n") for s in (send, keeper, genesis)):
         raise ValueError("unexpected Cosmos bank package")
     if send.count("func (k BaseSendKeeper) UncheckedSetBalance(") != 1:
         raise ValueError("unexpected upstream bank setter signature")
@@ -97,6 +100,49 @@ func (k BaseSendKeeper) UncheckedSetBalance(ctx context.Context, addr sdk.AccAdd
 ''',
         "SDK raw MintCoins entry",
     )
+    # x/bank InitGenesis bypasses MintCoins and writes balances plus supply
+    # directly. On the pinned bank schema, raw prefixes 0..5 are taken and
+    # 0xff is reserved here for this preproduction one-shot guard. A distinct
+    # consensus-store marker survives a native burn-to-zero. Never treat the
+    # absence of this marker on an existing upgraded network as authorization
+    # to initialize genesis again.
+    genesis = exact(
+        genesis,
+        ")\n\n// InitGenesis initializes the bank module's state from a given genesis state.",
+        ")\n\nvar priviBankGenesisApplied = []byte{0xff, 0x50, 0x52, 0x56, 0x49, 0x01}\n\n"
+        "// InitGenesis initializes the bank module's state from a given genesis state.",
+        "pinned SDK bank genesis marker",
+    )
+    genesis = exact(
+        genesis,
+        "func (k BaseKeeper) InitGenesis(ctx context.Context, genState *types.GenesisState) {\n",
+        """func (k BaseKeeper) InitGenesis(ctx context.Context, genState *types.GenesisState) {
+    // Reject before bank params, balances, or supply can be changed.
+    if genState == nil { panic("PRVI SDK bank: nil genesis refused") }
+    rawKV := k.storeService.OpenKVStore(ctx)
+    already, err := rawKV.Has(priviBankGenesisApplied)
+    if err != nil { panic(err) }
+    if already || k.GetSupply(ctx, "aprvi").Amount.IsPositive() {
+        panic("PRVI SDK bank: repeated InitGenesis forbidden")
+    }
+""",
+        "genesis early lifecycle guard",
+    )
+    genesis = exact(
+        genesis,
+        """\tfor _, meta := range genState.DenomMetadata {
+\t\tk.SetDenomMetaData(ctx, meta)
+\t}
+}""",
+        """\tfor _, meta := range genState.DenomMetadata {
+\t\tk.SetDenomMetaData(ctx, meta)
+\t}
+    // Only write the marker after genesis completed. Aborted InitChain must
+    // be rolled back using the app's cached SDK context.
+    if err := rawKV.Set(priviBankGenesisApplied, []byte{1}); err != nil { panic(err) }
+}""",
+        "genesis marker commit",
+    )
     if "k.UncheckedSetBalance(" in send or "k.UncheckedSetBalance(" in keeper:
         raise ValueError("unreviewed SDK bank internal unsafe setter site")
     # Go explicitly refuses -overlay replacements for files underneath
@@ -111,13 +157,16 @@ func (k BaseSendKeeper) UncheckedSetBalance(ctx context.Context, addr sdk.AccAdd
     shutil.copytree(sdk_root, output_dir)
     target_send = output_dir / "x" / "bank" / "keeper" / "send.go"
     target_keeper = output_dir / "x" / "bank" / "keeper" / "keeper.go"
-    for target, patched in ((target_send, send), (target_keeper, keeper)):
+    target_genesis = output_dir / "x" / "bank" / "keeper" / "genesis.go"
+    for target, patched in ((target_send, send), (target_keeper, keeper),
+                            (target_genesis, genesis)):
         target.chmod(target.stat().st_mode | stat.S_IWUSR)
         target.write_text(patched, encoding="utf-8")
     return {"mode": "BUILD_ONLY_LOCAL_MODULE_REPLACEMENT",
             "financial_mainnet": "NO_GO",
             "sdk_module": SDK_VERSION, "module_dir": str(output_dir),
-            "patched_files": ["x/bank/keeper/send.go", "x/bank/keeper/keeper.go"]}
+            "patched_files": ["x/bank/keeper/send.go", "x/bank/keeper/keeper.go",
+                              "x/bank/keeper/genesis.go"]}
 
 
 def main():
