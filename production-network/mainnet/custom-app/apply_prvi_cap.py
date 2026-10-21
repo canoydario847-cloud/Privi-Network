@@ -63,6 +63,30 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
         "\t}\n"
         "\tencodingConfig := evmencoding.MakeConfig(evmChainID)",
         "reject upstream default EVM chain ID before constructing keepers")
+    # This policy executes after EIP-155 validation but BEFORE global VM
+    # fork configuration and keeper construction, so a generic chain cannot
+    # silently launch with a self-supplied PoP signer registry.
+    app = replace_once(app,
+        "\tencodingConfig := evmencoding.MakeConfig(evmChainID)",
+        '''\tvar popPin string
+\tif rawPin:=appOpts.Get("privi.pop.trusted_registry_digest");rawPin!=nil {
+\t\tvalue,ok:=rawPin.(string)
+\t\tif !ok||len(value)!=64 {panic("Privi PoP registry pin must be lowercase 64-hex")}
+\t\tfor _,r:=range value {
+\t\t\tif !((r>='0'&&r<='9')||(r>='a'&&r<='f')){
+\t\t\t\tpanic("Privi PoP registry pin must be lowercase 64-hex")
+\t\t\t}
+\t\t}
+\t\tpopPin=value
+\t}
+\tif popPin=="" {
+\t\tallow,ok:=appOpts.Get("privi.pop.allow_unpinned_dev").(bool)
+\t\tif !ok||!allow||evmChainID!=424242 {
+\t\t\tpanic("Privi PoP trusted registry digest REQUIRED outside explicit valueless CI")
+\t\t}
+\t}
+\tencodingConfig := evmencoding.MakeConfig(evmChainID)''',
+        "fail closed on missing non-CI PoP registry pin")
     app = replace_once(app,
         "\tBankKeeper            bankkeeper.Keeper",
         "\tBankKeeper            bankkeeper.Keeper\n\tPriviCapKeeper        prvicap.Keeper\n\tPriviPoPKeeper        prvipop.Keeper\n\tPriviPoPTrustedDigest string",
@@ -91,13 +115,8 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \tpopKeeper, popErr := prvipop.NewKeeper(runtime.NewKVStoreService(keys[prvipop.StoreKey]))
 \tif popErr != nil { panic(popErr) }
 \tapp.PriviPoPKeeper = popKeeper
-\t// Operator-provided registry digest: its release signature and custody
-\t// must be validated externally, never inferred from the local KV store.
-\tif value := appOpts.Get("privi.pop.trusted_registry_digest"); value != nil {
-\t\tpin,ok := value.(string)
-\t\tif !ok || pin == "" {panic("Privi PoP external registry pin malformed")}
-\t\tapp.PriviPoPTrustedDigest = pin
-\t}
+\t// Reuse the pinned digest already validated before global EVM setup.
+\tapp.PriviPoPTrustedDigest = popPin
 \tbaseBank := bankkeeper.NewBaseKeeper(
 \t\tappCodec,
 \t\truntime.NewKVStoreService(keys[banktypes.StoreKey]),
@@ -161,6 +180,13 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \t}
 \tif popGenesis.ChainID != ctx.ChainID() {
 \t\treturn nil, fmt.Errorf("Privi PoP genesis: Cosmos chain identity mismatch")
+\t}
+\t// Only the two hardcoded NONFINANCIAL Cosmos fixtures may omit the
+\t// external registry digest. No arbitrary Cosmos chain may use dev mode.
+\tif app.PriviPoPTrustedDigest=="" &&
+\t\tpopGenesis.ChainID!="privi-ci-only-not-financial-1" &&
+\t\tpopGenesis.ChainID!="privi-valueless-genesis-probe-1" {
+\t\treturn nil,fmt.Errorf("Privi PoP genesis: unpinned dev chain identity forbidden")
 \t}
 \tif err := prvipop.ValidateGenesis(popGenesis.ChainID,popGenesis.Authorities); err != nil {
 \t\treturn nil,fmt.Errorf("Privi PoP genesis: unsafe author registry before SDK InitGenesis: %w",err)
@@ -412,6 +438,11 @@ func (app *EVMD) PostTxProcessing(
             app.count("app.PriviPoPKeeper.AssertPinnedGenesis(") != 1 or
             app.count("prvipop.GenesisDigest(popGenesis.ChainID,popGenesis.Authorities)") != 1):
         raise ValueError("external PoP digest guard must cover genesis, block edges and EVM receipt")
+    if (app.count('appOpts.Get("privi.pop.allow_unpinned_dev")') != 1 or
+            app.count("app.PriviPoPTrustedDigest = popPin") != 1 or
+            app.count("Privi PoP trusted registry digest REQUIRED outside explicit valueless CI") != 1 or
+            app.count("Privi PoP genesis: unpinned dev chain identity forbidden") != 1):
+        raise ValueError("missing fail-closed non-CI PoP signer pin policy")
     if "app.ApplyPriviPoPFromFinalizedTx(" in app:
         raise ValueError("obsolete SDK posthandler PoP credit path forbidden")
     # Fail closed if upstream source evolves to retain or overwrite a raw

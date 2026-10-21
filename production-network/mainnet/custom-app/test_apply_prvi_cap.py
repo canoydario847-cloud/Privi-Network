@@ -122,6 +122,13 @@ class PatcherTests(unittest.TestCase):
         self.assertIn("prvicap.StoreKey", app)
         self.assertIn("prvipop.StoreKey", app)
         self.assertIn("app.PriviPoPKeeper = popKeeper", app)
+        self.assertIn('appOpts.Get("privi.pop.allow_unpinned_dev")',app)
+        self.assertIn("evmChainID!=424242",app)
+        self.assertIn("Privi PoP trusted registry digest REQUIRED outside explicit valueless CI",app)
+        self.assertIn("Privi PoP genesis: unpinned dev chain identity forbidden",app)
+        self.assertLess(app.index("Privi PoP trusted registry digest REQUIRED"),
+                        app.index("evmencoding.MakeConfig(evmChainID)"))
+        self.assertEqual(app.count("app.PriviPoPTrustedDigest = popPin"),1)
 
         self.assertIn("func (app *EVMD) PostTxProcessing(", app)
         self.assertIn("receipt.Status != ethtypes.ReceiptStatusSuccessful",app)

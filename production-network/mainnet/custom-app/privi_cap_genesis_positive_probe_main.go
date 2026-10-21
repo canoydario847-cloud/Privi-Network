@@ -53,6 +53,7 @@ import (
 type priviTestAppOptions struct{}
 func (priviTestAppOptions) Get(key string) interface{} {
     if key == srvflags.EVMChainID { return uint64(424242) }
+    if key == "privi.pop.allow_unpinned_dev" { return true }
     if key == "privi.pop.trusted_registry_digest" && os.Getenv("PRIVI_POP_NEGATIVE_PROBE") == "wrong-pin" {
         // Deliberately wrong test-only pin; never a signed operator manifest.
         return strings.Repeat("f",64)

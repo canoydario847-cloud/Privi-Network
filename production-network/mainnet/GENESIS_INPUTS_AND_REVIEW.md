@@ -125,3 +125,18 @@ trusted digest on every restart. If absent, the app falls back to basic
 registry/chain-ID checks for NONFINANCIAL research only. That fallback is
 not sufficient for a production financial mainnet. Neither this feature
 nor passing CI constitutes PoP BFT finality or release approval.
+
+
+### PoP default-deny startup restriction (development milestone)
+
+To prevent accidental startup with unpinned PoP signers, the custom
+application now requires `privi.pop.trusted_registry_digest` as 64 canonical
+lowercase hex characters before initializing the EVM chain or bank keepers.
+The only unpinned exception requires **both** an explicit
+`privi.pop.allow_unpinned_dev=true` app option and EVM chain ID `424242`;
+InitChain also restricts that exception to the two exact valueless fixture
+Cosmos chain identities `privi-ci-only-not-financial-1` and
+`privi-valueless-genesis-probe-1`. Any other EVM or Cosmos identity is
+rejected without an externally supplied pin. This does not authenticate
+the submitted digest or make the code ready for financial mainnet; a
+trusted owner-signed release is still mandatory.

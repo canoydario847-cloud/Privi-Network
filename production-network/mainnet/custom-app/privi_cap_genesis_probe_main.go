@@ -31,6 +31,7 @@ import (
 type priviTestAppOptions struct{}
 func (priviTestAppOptions) Get(key string) interface{} {
     if key == srvflags.EVMChainID { return uint64(424242) }
+    if key == "privi.pop.allow_unpinned_dev" { return true }
     return nil
 }
 
@@ -76,6 +77,29 @@ func (o forbiddenEVMOptions) Get(key string) interface{} {
     if key == srvflags.EVMChainID { return o.id }
     return nil
 }
+// No chain setup or private keys: the constructor must fail before EVM
+// global fork configuration when any non-CI chain omits the PoP registry pin.
+type unpinnedIdentityOptions struct{ id uint64; allow bool }
+func (o unpinnedIdentityOptions) Get(key string) interface{} {
+    if key == srvflags.EVMChainID { return o.id }
+    if key == "privi.pop.allow_unpinned_dev" && o.allow { return true }
+    return nil
+}
+func rejectUnpinnedStartup(id uint64,allow bool) (err error) {
+    defer func() {
+        caught:=recover()
+        if caught==nil {
+            err=fmt.Errorf("SECURITY: unpinned Privi chain accepted EVM ID %d allow=%v",id,allow)
+        } else if !strings.Contains(fmt.Sprint(caught),"Privi PoP trusted registry digest REQUIRED") {
+            err=fmt.Errorf("startup denied for unrelated reason: %v",caught)
+        }
+    }()
+    _=evmd.NewExampleApp(log.NewNopLogger(),dbm.NewMemDB(),false,
+        unpinnedIdentityOptions{id:id,allow:allow},
+        baseapp.SetChainID("privi-valueless-genesis-probe-1"))
+    return nil
+}
+
 func assertRejectEVMIdentityBeforeAppInit(id uint64) (err error) {
     defer func() {
         caught:=recover()
@@ -125,6 +149,15 @@ func main() {
         }
     }
     fmt.Println("PASS: customized app constructor rejected 8 unsafe EIP-155 chain IDs")
+    for _,tc:=range []struct{evm uint64; allow bool}{
+        {424242,false}, {424243,false}, {424243,true},
+    } {
+        if err:=rejectUnpinnedStartup(tc.evm,tc.allow);err!=nil {
+            fmt.Fprintln(os.Stderr,err)
+            os.Exit(1)
+        }
+    }
+    fmt.Println("PASS: unpinned PoP rejected outside explicitly valueless fixed CI")
     if os.Getenv("PRIVI_NEGATIVE_GENESIS_CASE") == "" {
         // The VM keeper sets process-global EVM chainConfig and panics
         // if a second app attempts to reset it. Use one fresh subprocess
