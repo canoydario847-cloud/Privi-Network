@@ -70,7 +70,7 @@ class PatcherTests(unittest.TestCase):
         )
         pop_source = self.repo / "production-network" / "mainnet" / "pop"
         pop_source.mkdir(parents=True)
-        for name in ("position.go","keeper.go"):
+        for name in ("position.go","keeper.go","wire.go"):
             (pop_source / name).write_text("package position\n",encoding="utf-8")
         self.app_file = self.upstream / "evmd" / "app.go"
         self.app_file.write_text(APP, encoding="utf-8")
@@ -115,6 +115,17 @@ class PatcherTests(unittest.TestCase):
         self.assertIn("prvicap.StoreKey", app)
         self.assertIn("prvipop.StoreKey", app)
         self.assertIn("app.PriviPoPKeeper = popKeeper", app)
+
+        self.assertIn("func (app *EVMD) ApplyPriviPoPFromFinalizedTx(", app)
+        self.assertIn("prvipop.DecodeEnvelope(transaction.Data())", app)
+        self.assertIn("common.HexToAddress(prvipop.PoPSinkEVMAddress)", app)
+        self.assertIn("ctx.ExecMode()!=sdk.ExecModeFinalize", app)
+        self.assertIn("app.PriviPoPKeeper.Apply(ctx,position)", app)
+        self.assertIn("app.SetPostHandler(func(ctx sdk.Context", app)
+        self.assertIn("Privi PoP EVM position tx may not transfer value" if False else
+                      "Privi PoP position tx may not transfer value", app)
+        self.assertEqual(app.count("app.ApplyPriviPoPFromFinalizedTx("), 1)
+        self.assertIn("package position",(self.upstream/"evmd"/"prvipop"/"wire.go").read_text())
         self.assertEqual(app.count("app.PriviPoPKeeper.AssertInitialized(ctx,ctx.ChainID())"),2)
         self.assertIn("Privi PoP beginning-of-block registry denied",app)
         self.assertIn("Privi PoP end-of-block registry denied",app)
