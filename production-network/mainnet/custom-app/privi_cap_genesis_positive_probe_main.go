@@ -9,7 +9,10 @@ import (
     "bytes"
     "crypto/ed25519"
     "crypto/rand"
+    "crypto/sha256"
+    "encoding/hex"
     "encoding/json"
+    "math/big"
     "errors"
     "fmt"
     "os"
@@ -22,6 +25,8 @@ import (
     abci "github.com/cometbft/cometbft/abci/types"
     cmttypes "github.com/cometbft/cometbft/types"
     cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
+    ethcommon "github.com/ethereum/go-ethereum/common"
+    ethtypes "github.com/ethereum/go-ethereum/core/types"
     dbm "github.com/cosmos/cosmos-db"
     "github.com/cosmos/evm/evmd"
     "github.com/cosmos/evm/evmd/prvicap"
@@ -45,6 +50,78 @@ type priviTestAppOptions struct{}
 func (priviTestAppOptions) Get(key string) interface{} {
     if key == srvflags.EVMChainID { return uint64(424242) }
     return nil
+}
+
+// This test manually invokes the custom application's post-execution hook
+// with a synthetic EVM SDK message against REAL mounted native PoP state.
+// It does NOT submit a signed EVM transaction through BaseApp FinalizeBlock;
+// that complete ABCI transaction-routing test remains a separate launch gate.
+func testNativePoPPostHook(app *evmd.EVMD,ctx sdk.Context,priv ed25519.PrivateKey) (string,error) {
+    rawHash:=sha256.Sum256([]byte("disposable PoP telemetry on test app only"))
+    p:=prvipop.Position{
+        ChainID:"privi-ci-only-not-financial-1",Company:"UTQ4JJ20",Zone:"GRID/READINGS",
+        Sequence:1,Stamp:"PoP:UTQ4JJ20:GRID/READINGS:000001",
+        PriorHash:strings.Repeat("0",64),EventHash:hex.EncodeToString(rawHash[:]),
+        Signer:append([]byte(nil),priv.Public().(ed25519.PublicKey)...),
+    }
+    signed,err:=prvipop.CanonicalMessage(p);if err!=nil{return "",err}
+    p.Signature=ed25519.Sign(priv,signed)
+    p.BlockHash,err=prvipop.SealedHash(p);if err!=nil{return "",err}
+    wire,err:=prvipop.EncodeEnvelope(p);if err!=nil{return "",err}
+    sink:=ethcommon.HexToAddress(prvipop.PoPSinkEVMAddress)
+    makeSDKMsg:=func(to ethcommon.Address,value *big.Int,payload []byte)*vmtypes.MsgEthereumTx {
+        tx:=ethtypes.NewTx(&ethtypes.LegacyTx{
+            To:&to,Value:value,Gas:200000,GasPrice:big.NewInt(1),Data:payload,
+        })
+        m:=new(vmtypes.MsgEthereumTx)
+        m.FromEthereumTx(tx)
+        return m
+    }
+    tx:=makeSDKMsg(sink,big.NewInt(0),wire)
+    finalCtx:=ctx.WithExecMode(sdk.ExecModeFinalize)
+    if _,err=app.ApplyPriviPoPFromFinalizedTx(finalCtx,tx,false,false);err!=nil{
+        return "",fmt.Errorf("failed EVM msg should be ignored: %w",err)
+    }
+    if _,err=app.ApplyPriviPoPFromFinalizedTx(finalCtx,tx,true,true);err!=nil{
+        return "",fmt.Errorf("simulated EVM msg should be ignored: %w",err)
+    }
+    if seq,_,err:=app.PriviPoPKeeper.Snapshot(finalCtx,p.Company,p.Zone);err!=nil||seq!=0{
+        return "",fmt.Errorf("failed/simulated PoP tx advanced consensus state: %v, seq %d",err,seq)
+    }
+    if _,err=app.ApplyPriviPoPFromFinalizedTx(finalCtx,makeSDKMsg(
+        ethcommon.HexToAddress("0x00000000000000000000000000000000000000fe"),
+        big.NewInt(0),wire),false,true);err!=nil{return "",err}
+    if seq,_,err:=app.PriviPoPKeeper.Snapshot(finalCtx,p.Company,p.Zone);err!=nil||seq!=0{
+        return "",fmt.Errorf("wrong EVM destination changed PoP consensus state: %v %d",err,seq)
+    }
+    if _,err=app.ApplyPriviPoPFromFinalizedTx(finalCtx,makeSDKMsg(
+        sink,big.NewInt(1),wire),false,true);err==nil {
+        return "",fmt.Errorf("PoP payment-value guard missing")
+    }
+    if _,err=app.ApplyPriviPoPFromFinalizedTx(finalCtx,makeSDKMsg(
+        sink,big.NewInt(0),[]byte("not-a-position")),false,true);err==nil {
+        return "",fmt.Errorf("noncanonical PoP payload accepted")
+    }
+    if _,err=app.ApplyPriviPoPFromFinalizedTx(finalCtx,tx,false,true);err!=nil {
+        return "",fmt.Errorf("valid signed PoP native state transition denied: %w",err)
+    }
+    if seq,tip,err:=app.PriviPoPKeeper.Snapshot(finalCtx,p.Company,p.Zone);err!=nil||seq!=1||tip!=p.BlockHash {
+        return "",fmt.Errorf("PoP posthandler did not persist accepted position: %d %s %v",seq,tip,err)
+    }
+    if _,err=app.ApplyPriviPoPFromFinalizedTx(finalCtx,tx,false,true);err==nil{
+        return "",fmt.Errorf("PoP replay succeeded through native posthandler")
+    }
+    attacker:=p
+    attacker.EventHash=strings.Repeat("f",64)
+    forged,err:=prvipop.EncodeEnvelope(attacker);if err!=nil{return "",err}
+    if _,err=app.ApplyPriviPoPFromFinalizedTx(finalCtx,makeSDKMsg(
+        sink,big.NewInt(0),forged),false,true);err==nil {
+        return "",fmt.Errorf("PoP forged-data envelope accepted")
+    }
+    if seq,tip,err:=app.PriviPoPKeeper.Snapshot(finalCtx,p.Company,p.Zone);err!=nil||seq!=1||tip!=p.BlockHash{
+        return "",fmt.Errorf("failed or replayed PoP tx changed ledger: %d %s %v",seq,tip,err)
+    }
+    return p.BlockHash,nil
 }
 
 func probe() error {
@@ -196,7 +273,7 @@ func probe() error {
     // Bootstrap the native candidate PoP authorization registry with a
     // throwaway Ed25519 public key. This is NOT a production signing key,
     // network operator identity, PoP finality proof or launched token.
-    popPub,_,err:=ed25519.GenerateKey(rand.Reader)
+    popPub,popPriv,err:=ed25519.GenerateKey(rand.Reader)
     if err!=nil{return fmt.Errorf("disposable PoP author fixture: %w",err)}
     popGenesis:=struct {
         ChainID string `json:"chain_id"`
@@ -269,6 +346,10 @@ func probe() error {
         return fmt.Errorf("native PoP genesis signer registry not persisted: %d %s %v",popSeq,popTip,popErr)
     }
     fmt.Println("PASS: custom InitChain mounted and initialized native PoP authorization consensus KV store")
+    verifiedPositionTip,err:=testNativePoPPostHook(app,ctx,popPriv)
+    if err!=nil{return fmt.Errorf("native post-execution PoP state test: %w",err)}
+    fmt.Printf("PASS: native PoP posthook accepted signed position and denied failed/replayed/forged calldata (tip=%s)\n",verifiedPositionTip)
+
     capBefore,err := app.PriviCapKeeper.Snapshot(ctx)
     if err!=nil {return fmt.Errorf("custom native genesis cap store not initialized: %w",err)}
     if capBefore.GenesisBase!=expectedAPRVI ||
@@ -457,9 +538,10 @@ func verifyRestart(dir string) error {
     }
     ctx:=restarted.NewContextLegacy(true,cmtproto.Header{ChainID:chainID,Height:2})
     popSeq,popTip,popErr:=restarted.PriviPoPKeeper.Snapshot(ctx,"UTQ4JJ20","GRID/READINGS")
-    if popErr!=nil||popSeq!=0||popTip!=strings.Repeat("0",64) {
-        return fmt.Errorf("restarted PoP authorization registry missing: %d %s %v",popSeq,popTip,popErr)
+    if popErr!=nil||popSeq!=1||popTip==strings.Repeat("0",64) {
+        return fmt.Errorf("restarted PoP signed position or registry missing: %d %s %v",popSeq,popTip,popErr)
     }
+    fmt.Println("PASS: native signed PoP position checkpoint survived two block commits and fresh OS process restart")
     capState,err:=restarted.PriviCapKeeper.Snapshot(ctx)
     if err!=nil {return fmt.Errorf("cap state missing after app restart: %w",err)}
     if capState.GenesisBase!=expectedAPRVI||
