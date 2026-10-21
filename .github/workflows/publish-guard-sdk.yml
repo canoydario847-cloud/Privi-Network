@@ -65,6 +65,6 @@ jobs:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
       - run: node --test test.mjs
-      - run: npm publish --access public --provenance
+      - run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
