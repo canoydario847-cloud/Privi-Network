@@ -37,6 +37,57 @@ service, paid persistent-disk attachment to a new service, or HSM custody**.
 Those operations require a separately reviewed deployment workflow and
 provider permissions, not an assumption that a public web service is suitable.
 
+## Offline deployment candidate and provider-identity preflight
+
+The reviewed, **non-deploying** handoff files are:
+
+- [Four private-validator candidate slots](render-validator-candidates.NONLIVE.json).
+- [Read-only Render provider checker](render_validator_preflight.py).
+- [Fifteen adversarial preflight tests](test_render_validator_preflight.py).
+
+Each proposed signer has one named service slot, unique public signer fingerprint,
+intended region and fault domain, persistent disk at `/data`, single instance,
+Docker runtime and **manual-deploy-only** policy. All actual service IDs, keys,
+signed release digests and independent security attestations intentionally
+start as `UNASSIGNED`. Do not put mnemonics, private keys, seed material,
+provider API tokens or remote-signer credentials in these files.
+
+Run locally, from the repository root, to verify the candidate **structure**:
+
+```bash
+python3 production-network/ops/render_validator_preflight.py \
+  production-network/ops/render-validator-candidates.NONLIVE.json --mode draft
+python3 -m unittest discover -s production-network/ops -p 'test_render_validator_preflight.py'
+```
+
+Once four genuine **private** services have been provisioned separately by
+approved operators, export their **sanitized read-only** Render `list_services`
+JSON response to a file *outside git*, e.g. `/tmp/render-services.json`.
+Only then, after separately reviewing public service IDs and fingerprints,
+fill in the candidate metadata and compare provider reality:
+
+```bash
+python3 production-network/ops/render_validator_preflight.py \
+  /tmp/approved-render-candidate.json --mode observe \
+  --render-services /tmp/render-services.json
+```
+
+The command rejects, among other things, a web service misrepresented as
+a private validator, a mismatch between Render workspace IDs, enabled auto
+deploy, free compute, Docker/runtime mismatch, absent/undersized/reused
+persistent disks, more than one service instance per signer, wrong regions,
+or reused consensus public-key fingerprints. It also refuses malformed or
+duplicate-key JSON and credential-like secret fields.
+
+**Important:** `observe` and `production` always exit **3 (NO-GO)** even
+when metadata appears to match four hypothetical services. They cannot
+verify signer custody, authenticated cross-region networking, genesis,
+binary integrity, key high-watermark monotonicity, BFT safety/liveness,
+independent audits or human launch approvals. Exit 0 from `draft` only
+means the manifest structure is valid. This is a release candidate
+*preflight*, not an executable validator daemon, Render Blueprint, funded
+hosting order, or a mainnet activation script.
+
 ## Candidate topology
 
 - Four independently configured, paid **Render private services**, ideally in distinct failure domains; one `priv_validator_key` / remote signing identity per service, **never shared or cloned**. Do not use a Render autoscaled service to represent multiple validators, especially not with attached disk.
