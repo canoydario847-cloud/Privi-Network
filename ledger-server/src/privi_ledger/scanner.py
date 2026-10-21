@@ -50,7 +50,7 @@ CHANGE_FLAG_DAYS = 30
 UA = "PriviScan/1.0 (read-only MCP trust probe; never calls tools; +https://privi-ledger.onrender.com/scan)"
 PROTOCOL = "2025-06-18"
 LISTED = ("ok", "auth_required", "paid_gate")
-ANALYZER_VERSION = "3"     # bump when rules change; stored servers are re-graded from their saved tools
+ANALYZER_VERSION = "4"     # bump when rules change; stored servers are re-graded from their saved tools
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS scan_servers (
@@ -177,9 +177,12 @@ def _strings(obj: Any, out: list[str], depth: int = 0) -> None:
 
 
 I = re.IGNORECASE | re.DOTALL
-VERB = r"(read|cat|open|send|upload|include|pass|forward|post|paste|exfiltrate|copy|attach|share)"
-SECRET_FILE = (r"(\.ssh/id_|\bid_(rsa|ed25519|ecdsa|dsa)\b(?!\.pub)|\.ssh/(config|known_hosts)\b|\.aws/credentials|\.npmrc\b|\.netrc\b"
-               r"|claude_desktop_config|\bmcp\.json\b|\.cursor/mcp|\.env\b)")
+OUT = r"(send|upload|pass|forward|post|paste|attach|share|exfiltrate|transmit|submit|append\s+(it|its\s+contents?|them)\s+to)"
+READ = r"(read|cat|open|load|print|dump|copy)"
+PRIVATE_KEY = r"(\.ssh/id_\w*\b(?!\.pub)|\bid_(rsa|ed25519|ecdsa|dsa)\b(?!\.pub)|\.aws/credentials)"
+SECRET_FILE = (r"(" + PRIVATE_KEY[1:-1] + r"|\.ssh/(config|known_hosts)\b|\.npmrc\b|\.netrc\b|claude_desktop_config|\bmcp\.json\b"
+               r"|\.cursor/mcp|\.env\b)")
+VERB = OUT
 SECRET_WORD = r"(seed\s+phrase|mnemonic|private\s+keys?\b|wallet\s+keys?)"
 RULES: list[tuple[str, str, str, re.Pattern]] = [
     ("high", "prompt_injection", "text tries to override the agent's instructions",
@@ -194,7 +197,8 @@ RULES: list[tuple[str, str, str, re.Pattern]] = [
                 r"|without\s+(telling|informing|notifying|alerting|asking)\s+the\s+user"
                 r"|the\s+user\s+(must|should)\s+(not|never)\s+(know|see|be\s+told|find\s+out)\s+(about\s+)?(this|these|that)", I)),
     ("high", "exfiltration", "text asks the agent to read or send private files (SSH keys, credentials, .env, MCP configs)",
-     re.compile(VERB + r"\b.{0,80}" + SECRET_FILE + r"|" + SECRET_FILE + r".{0,80}\b" + VERB + r"\b", I)),
+     re.compile(OUT + r"\b.{0,80}" + SECRET_FILE + r"|" + SECRET_FILE + r".{0,80}\b" + OUT + r"\b"
+                r"|" + READ + r"\b.{0,60}" + PRIVATE_KEY, I)),
     ("medium", "secret_request", "text asks for a seed phrase or private key; an honest tool almost never needs one",
      re.compile(VERB + r"\b.{0,60}" + SECRET_WORD + r"|" + SECRET_WORD + r".{0,60}\b" + VERB + r"\b", I)),
     ("medium", "tool_shadowing", "text tries to change how the agent uses other tools or servers",
