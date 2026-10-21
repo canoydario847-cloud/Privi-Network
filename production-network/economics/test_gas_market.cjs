@@ -55,14 +55,24 @@ test("treasury revenue can be claimed only if all actual allocations reconcile",
 });
 test("advisory EIP-1559 quotes preserve a customer maximum rather than maximize a fee",()=>{
   const good=advisoryEip1559Quote({baseFeeWei:"10",priorityFeeWei:"2",
-    customerMaxFeePerGasWei:"15",estimatedGas:"21000",customerMaxTotalWei:"300000"});
+    customerMaxFeePerGasWei:"15",estimatedGas:"21000",customerMaxTotalWei:"350000"});
   assert.equal(good.quotedGasPriceWei,"12");
-  assert.equal(good.maxQuotedGasWei,"252000");
+  assert.equal(good.estimatedQuotedGasWei,"252000");
+  assert.equal(good.maxQuotedGasWei,"315000");
+  assert.equal(good.requiredGasLimit,"21000");
+  assert.equal(good.requiredMaxFeePerGasWei,"15");
   assert.equal(good.includedTipWei,"2");
   const capped=advisoryEip1559Quote({baseFeeWei:"10",priorityFeeWei:"100",
     customerMaxFeePerGasWei:"15",estimatedGas:"21000",customerMaxTotalWei:"400000"});
   assert.equal(capped.quotedGasPriceWei,"15");
   assert.equal(capped.includedTipWei,"5");
+  // A low observed effective price must not conceal the signed max-fee risk.
+  assert.throws(()=>advisoryEip1559Quote({baseFeeWei:"10",priorityFeeWei:"2",
+    customerMaxFeePerGasWei:"15",estimatedGas:"21000",customerMaxTotalWei:"252000"}),
+    /Worst-case fee quote exceeds customer's signed budget/);
+  const exact=advisoryEip1559Quote({baseFeeWei:"10",priorityFeeWei:"2",
+    customerMaxFeePerGasWei:"15",estimatedGas:"21000",customerMaxTotalWei:"315000"});
+  assert.equal(exact.maxQuotedGasWei,"315000");
   assert.throws(()=>advisoryEip1559Quote({baseFeeWei:"20",priorityFeeWei:"1",
     customerMaxFeePerGasWei:"15",estimatedGas:"21000",customerMaxTotalWei:"900000"}),/exceeds customer/);
   assert.throws(()=>advisoryEip1559Quote({baseFeeWei:"10",priorityFeeWei:"5",

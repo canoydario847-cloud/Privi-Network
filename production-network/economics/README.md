@@ -38,8 +38,12 @@ quote dollar revenue, dollars per PRVI, or promise profitability.
 
 The `advisoryEip1559Quote` prototype considers a base-fee observation and
 a priority-fee suggestion, but always obeys a customer's maximum price per
-gas and overall fee budget. An unsafe or unaffordable quote is rejected;
-it does not silently raise spending limits. It is *advisory*: Cosmos EVM
+gas and overall fee budget. An unsafe or unaffordable quote is rejected; it does not silently raise
+spending limits. The maximum transaction exposure is the user-approved
+**gas limit multiplied by maxFeePerGas**, not the lower current effective
+price estimate. Quoted limits remain advisory: the eventual transaction
+builder must enforce both returned `requiredGasLimit` and
+`requiredMaxFeePerGasWei` (or stricter limits). It is *advisory*: Cosmos EVM
 fee routing, block congestion responses, EIP-1559 actual base-fee burning,
 validator rewards and on-chain fee accounting must be reviewed in the
 exact pinned native PoP implementation before changing any production

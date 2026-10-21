@@ -95,10 +95,15 @@ function advisoryEip1559Quote({baseFeeWei,priorityFeeWei,customerMaxFeePerGasWei
   need(base<=customerMax,"Network base fee exceeds customer-approved limit");
   // EIP1559 effective price is bounded by the customer's maximum.
   const effective=(base+priority>customerMax)?customerMax:base+priority;
-  const chargedMax=gas*effective;
-  need(chargedMax<=budget,"Fee quote exceeds customer's signed budget");
+  // The observed effective price can rise before inclusion. A transaction
+  // may spend as much as gasLimit * maxFeePerGas, not gasLimit * this quote.
+  const estimatedCharged=gas*effective;
+  const worstCaseCharged=gas*customerMax;
+  need(worstCaseCharged<=budget,"Worst-case fee quote exceeds customer's signed budget");
   return Object.freeze({quotedGasPriceWei:effective.toString(),
-    maxQuotedGasWei:chargedMax.toString(),
+    estimatedQuotedGasWei:estimatedCharged.toString(),
+    maxQuotedGasWei:worstCaseCharged.toString(),
+    requiredGasLimit:gas.toString(),requiredMaxFeePerGasWei:customerMax.toString(),
     baseFeeWei:base.toString(),includedTipWei:(effective-base).toString(),
     mayChangeBeforeInclusion:true,noOnchainEnforcement:true});
 }
