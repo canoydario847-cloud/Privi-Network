@@ -25,3 +25,23 @@ The existing offline CI runs this command with \`-mod=mod\`. Tests generate thro
 - The sole proposed operator remains Privi World Corp; the sole candidate owner/treasury wallet remains `0x1990589FD200E043b8C6FD9ec5956c61b3071048`. Neither wallet control nor permission is established by this verifier.
 
 **Financial mainnet remains NO-GO** until the native PoP BFT protocol is specified, implemented and independently audited alongside Cosmos SDK PRVI supply/fee routes, signed genesis/release and securely operated validator hosts.
+
+
+## Independently pinned authorization registry (development preflight)
+
+`GenesisDigest(chainID, authorities)` returns a SHA-256 digest of the canonical
+sorted, chain-bound PoP author registry using the domain
+`PRIVI_POP_AUTHORITY_REGISTRY_V1`. `AssertPinnedGenesis(ctx, chainID, trustedDigest)`
+checks the current consensus-store registry against a **digest from an
+independently authenticated and signed release/genesis manifest**. It rejects
+same-chain canonical public-key substitution that ordinary schema validation
+would miss. Callers must never derive `trustedDigest` from the registry being
+checked. This is a **prototype API only**; the custom Cosmos EVM app does not
+yet inject an authenticated digest into every block boundary or transaction.
+
+`ApplyBatch` validates up to 128 consecutive positions for **one**
+company/zone and writes only the final tip once. Tests cover an invalid
+later signature, wrong lineage, replay, store-write errors and restart of
+the in-memory keeper. This does not provide multi-stream atomicity,
+persistent-node crash recovery, ABCI transaction execution, validator BFT
+voting or production consensus.

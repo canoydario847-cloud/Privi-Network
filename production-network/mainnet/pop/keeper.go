@@ -28,6 +28,8 @@ var ErrRegistryMissing = errors.New("PoP genesis authorization registry absent")
 var ErrStateCorrupt = errors.New("PoP consensus state corrupt")
 var ErrUnapprovedAuthor = errors.New("PoP company/zone author is not genesis-authorized")
 var ErrSequence = errors.New("PoP sequence or prior position mismatch")
+var ErrRegistryMismatch = errors.New("PoP authorization registry differs from independently pinned genesis")
+var ErrRegistryPinInvalid = errors.New("invalid externally pinned PoP registry digest")
 
 // Authority is a company+logical-zone public author key, not a validator,
 // owner/treasury key, signature authority for mainnet, or proof of IoT origin.
@@ -86,6 +88,26 @@ func (k Keeper) loadRegistry(ctx context.Context) (registry,corestore.KVStore,er
     canonical,err:=json.Marshal(r)
     if err!=nil||!bytes.Equal(data,canonical){return registry{},nil,ErrStateCorrupt}
     return r,kv,nil
+}
+
+// GenesisDigest deterministically hashes a canonical author registry before
+// ANY store write. The hash must be distributed through an independently
+// signed genesis/release manifest, never obtained from the local store under
+// verification. This is NOT a validator signature or BFT commitment.
+const registryDigestDomain = "PRIVI_POP_AUTHORITY_REGISTRY_V1\x00"
+
+func digestRegistry(r registry) (string,error) {
+    raw,err:=json.Marshal(r)
+    if err!=nil{return "",err}
+    h:=sha256.New()
+    _,_=h.Write([]byte(registryDigestDomain))
+    _,_=h.Write(raw)
+    return hex.EncodeToString(h.Sum(nil)),nil
+}
+func GenesisDigest(chainID string,entries []Authority) (string,error) {
+    r,err:=canonicalGenesis(chainID,entries)
+    if err!=nil{return "",err}
+    return digestRegistry(r)
 }
 
 // InitGenesis stores one immutable, canonical authorization registry.
@@ -209,6 +231,27 @@ func (k Keeper) AssertInitialized(ctx context.Context, expectedChain string) err
        return errors.New("PoP committed registry chain identity mismatch")
    }
    return nil
+}
+
+// AssertPinnedGenesis additionally checks the FULL canonical authorization
+// registry against an externally trusted signed-genesis commitment. Merely
+// checking validity and chain ID cannot detect canonical substitution of
+// a different public key under the same chain identity. App wiring must
+// supply a trusted digest from an independently verified release; recomputing
+// the expected digest from this local store would defeat the protection.
+func (k Keeper) AssertPinnedGenesis(ctx context.Context, expectedChain, trustedDigest string) error {
+    if _,err:=decodeHash(trustedDigest);err!=nil{
+        return ErrRegistryPinInvalid
+    }
+    r,_,err:=k.loadRegistry(ctx)
+    if err!=nil{return err}
+    if !chainPattern.MatchString(expectedChain)||r.ChainID!=expectedChain {
+        return ErrRegistryMismatch
+    }
+    observed,err:=digestRegistry(r)
+    if err!=nil{return err}
+    if observed!=trustedDigest{return ErrRegistryMismatch}
+    return nil
 }
 
 // Snapshot is a bounded consensus-store read, NOT verification of BFT votes,

@@ -9,6 +9,8 @@ import (
     "encoding/hex"
     "errors"
     "fmt"
+    "encoding/json"
+    "strings"
     "testing"
 
     corestore "cosmossdk.io/core/store"
@@ -108,7 +110,7 @@ func TestKeeperAtomicBatchCommitsOneVerifiedTip(t *testing.T) {
 func TestKeeperAtomicBatchRejectsForgedLaterRecordWithoutPartialWrite(t *testing.T) {
     mutators:=map[string]func(*Position){
         "forged signature":func(p *Position){p.Signature[0]^=1},
-        "changed event hash":func(p *Position){p.EventHash="f"+p.EventHash[1:]},
+        "changed event hash":func(p *Position){if p.EventHash[0]=='f'{p.EventHash="0"+p.EventHash[1:]}else{p.EventHash="f"+p.EventHash[1:]}},
         "sequence gap":func(p *Position){p.Sequence=3},
         "replayed sequence":func(p *Position){p.Sequence=1},
         "wrong prior tip":func(p *Position){p.PriorHash=zeroTip()},
@@ -230,6 +232,77 @@ func TestKeeperNilStoreAndContextRejected(t *testing.T){
     if _,err:=NewKeeper(nil);err==nil{t.Fatal("nil consensus store accepted")}
     k,_,_,priv:=setupPosition(t)
     if _,err:=k.Apply(nil,makePosition(t,priv,1,zeroTip()));err==nil{t.Fatal("nil context accepted")}
+}
+
+// A canonical replacement of the immutable registry can pass syntax/chain
+// checks. Only an external trusted genesis digest detects author substitution.
+func TestAssertPinnedGenesisRejectsCanonicalSignerReplacement(t *testing.T) {
+    k,db,pub,_:=setupPosition(t)
+    ctx:=context.Background()
+    trusted,err:=GenesisDigest("privi-ci-pop-1",[]Authority{{
+        Company:"UTQ4JJ20",Zone:"GRID/READINGS",PublicKey:pub,
+    }})
+    if err!=nil{t.Fatal(err)}
+    if err:=k.AssertPinnedGenesis(ctx,"privi-ci-pop-1",trusted);err!=nil{
+        t.Fatalf("original signed genesis registry rejected: %v",err)
+    }
+    original:=bytes.Clone(db.entries[string(registryKey)])
+    _,attacker,err:=ed25519.GenerateKey(rand.Reader)
+    if err!=nil{t.Fatal(err)}
+    replacement:=registry{Version:1,ChainID:"privi-ci-pop-1",Authorities:[]Authority{{
+        Company:"UTQ4JJ20",Zone:"GRID/READINGS",PublicKey:attacker.Public().(ed25519.PublicKey),
+    }}}
+    alternate,err:=json.Marshal(replacement)
+    if err!=nil{t.Fatal(err)}
+    db.entries[string(registryKey)]=alternate
+    if err:=k.AssertInitialized(ctx,"privi-ci-pop-1");err!=nil{
+        t.Fatalf("fixture must prove an alternate canonical registry passes shape-only check: %v",err)
+    }
+    if err:=k.AssertPinnedGenesis(ctx,"privi-ci-pop-1",trusted);!errors.Is(err,ErrRegistryMismatch){
+        t.Fatalf("attacker signer replacement evaded pinned-genesis check: %v",err)
+    }
+    if _,err:=k.Apply(ctx,makePosition(t,attacker,1,zeroTip()));err!=nil{
+        t.Fatalf("fixture must confirm substituted author would otherwise be accepted: %v",err)
+    }
+    // Restoring the original immutable authority re-enables the external pin.
+    db.entries[string(registryKey)]=original
+    if err:=k.AssertPinnedGenesis(ctx,"privi-ci-pop-1",trusted);err!=nil{
+        t.Fatalf("restored genesis registry rejected: %v",err)
+    }
+}
+
+func TestGenesisDigestDeterminismAndPinnedIdentity(t *testing.T) {
+    _,db,pub,_:=setupPosition(t)
+    ctx:=context.Background()
+    otherPub,_,err:=ed25519.GenerateKey(rand.Reader)
+    if err!=nil{t.Fatal(err)}
+    entries:=[]Authority{
+        {Company:"ZZZ",Zone:"FLEET/ASSETS",PublicKey:otherPub},
+        {Company:"UTQ4JJ20",Zone:"GRID/READINGS",PublicKey:pub},
+    }
+    a,err:=GenesisDigest("privi-ci-pop-1",entries)
+    if err!=nil{t.Fatal(err)}
+    b,err:=GenesisDigest("privi-ci-pop-1",[]Authority{entries[1],entries[0]})
+    if err!=nil||a!=b {t.Fatalf("digest changed with declaration order: %q %q %v",a,b,err)}
+    changed,err:=GenesisDigest("privi-other-1",entries)
+    if err!=nil||changed==a{t.Fatalf("PoP digest did not bind chain identity: %q %q %v",a,changed,err)}
+    if _,err:=GenesisDigest("privi-ci-pop-1",append(entries,entries[0]));err==nil{
+        t.Fatal("duplicated author unexpectedly yielded genesis digest")
+    }
+    k,err:=NewKeeper(mockService{db});if err!=nil{t.Fatal(err)}
+    original,err:=GenesisDigest("privi-ci-pop-1",[]Authority{entries[1]})
+    if err!=nil{t.Fatal(err)}
+    for _,pin:=range []string{"","0x"+original,strings.ToUpper(original),strings.Repeat("0",64)}{
+        if err:=k.AssertPinnedGenesis(ctx,"privi-ci-pop-1",pin);err==nil {
+            t.Fatalf("accepted missing, malformed, or mismatched pin %q",pin)
+        }
+    }
+    if err:=k.AssertPinnedGenesis(ctx,"privi-other-1",original);!errors.Is(err,ErrRegistryMismatch) {
+        t.Fatalf("foreign genesis identity accepted: %v",err)
+    }
+    if err:=k.AssertPinnedGenesis(ctx,"privi-ci-pop-1",original);err!=nil {
+        t.Fatalf("valid pinned registry rejected: %v",err)
+    }
 }
 
 func TestAssertInitializedBlocksRegistryRemovalAndCrossChain(t *testing.T) {
