@@ -47,12 +47,12 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
     # Numeric uniqueness and the operator-approved production identity remain
     # separate launch gates: this filter is necessary, not sufficient.
     app = replace_once(app,
-        "\\tevmChainID := cast.ToUint64(appOpts.Get(srvflags.EVMChainID))\\n\\tencodingConfig := evmencoding.MakeConfig(evmChainID)",
-        "\\tevmChainID := cast.ToUint64(appOpts.Get(srvflags.EVMChainID))\\n"
-        "\\tif err := prvicap.ValidateEVMChainID(evmChainID); err != nil {\\n"
-        "\\t\\tpanic(fmt.Errorf(\\\"PRVI EVM chain identity rejected: %w\\\", err))\\n"
-        "\\t}\\n"
-        "\\tencodingConfig := evmencoding.MakeConfig(evmChainID)",
+        "\tevmChainID := cast.ToUint64(appOpts.Get(srvflags.EVMChainID))\n\tencodingConfig := evmencoding.MakeConfig(evmChainID)",
+        "\tevmChainID := cast.ToUint64(appOpts.Get(srvflags.EVMChainID))\n"
+        "\tif err := prvicap.ValidateEVMChainID(evmChainID); err != nil {\n"
+        "\t\tpanic(fmt.Errorf(\\"PRVI EVM chain identity rejected: %w\\", err))\n"
+        "\t}\n"
+        "\tencodingConfig := evmencoding.MakeConfig(evmChainID)",
         "validate EVM chain identity before any bank or EVM keeper")
     app = replace_once(app,
         "\tBankKeeper            bankkeeper.Keeper",
@@ -106,9 +106,9 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
     # Move it after all native PRVI genesis policy checks so rejected
     # financial genesis cannot cause even preliminary consensus KV writes.
     app = replace_once(app,
-        "\\tif err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap()); err != nil {\\n"
-        "\\t\\tpanic(err)\\n"
-        "\\t}\\n\\n",
+        "\tif err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap()); err != nil {\n"
+        "\t\tpanic(err)\n"
+        "\t}\n\n",
         "",
         "defer upgrade version-map write until after PRVI genesis preflight")
     old_chainer = '\treturn app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)'
@@ -196,7 +196,7 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \t\tmetadataValid = true
 \t}
 \tif !metadataValid {return nil, fmt.Errorf("PRVI native genesis: missing aprvi/PRVI metadata")}
-\\t// Only after all native asset identity checks may consensus module writes begin.\n\\tif err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap()); err != nil {\n\\t\\treturn nil, fmt.Errorf("PRVI genesis: upgrade version map: %w", err)\n\\t}\n\tresponse, initErr := app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)
+\t// Only after all native asset identity checks may consensus module writes begin.\n\tif err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap()); err != nil {\n\t\treturn nil, fmt.Errorf("PRVI genesis: upgrade version map: %w", err)\n\t}\n\tresponse, initErr := app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)
 \tif initErr != nil { return nil, initErr }
 \tif err := app.PriviCapKeeper.InitGenesis(ctx, initialPRVI.String(), app.BankKeeper); err != nil {
 \t\treturn nil, fmt.Errorf("PRVI cap genesis initialization denied: %w", err)
