@@ -1,4 +1,4 @@
-"""Privi Anchor MCP server: timestamped proof-of-existence on the Privi chain.
+"""Privi Anchor MCP server: timestamped proof-of-existence on chain (Base until the Privi chain mainnet).
 
 Free:     anchor_status, anchor_hash_text, anchor_verify
 API key:  anchor_hashes
@@ -27,13 +27,13 @@ from . import merkle
 from .chain import Chain, JsonRpcChain, RpcError, wait_receipt
 from .store import AnchorStore
 
-__version__ = "0.3.2"
+__version__ = "0.4.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/anchor-server"
 MAX_HASHES = 100
 
 INSTRUCTIONS = """\
-Privi Anchor puts a permanent, timestamped proof that some data existed onto the
-Privi blockchain. Hash the content yourself (SHA-256, or use anchor_hash_text),
+Privi Anchor puts a permanent, timestamped proof that some data existed on chain:
+on Base (Ethereum L2) until the Privi chain mainnet launches. Hash the content yourself (SHA-256, or use anchor_hash_text),
 then anchor_hashes records up to 100 hashes in one transaction. Keep the returned
 receipt (tx_hash + proof). Anyone can later check it with anchor_verify, which
 reads the chain directly, so the proof does not depend on trusting this server.
@@ -52,14 +52,16 @@ READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=True)
 
 @dataclass
 class Settings:
-    rpc_url: str = "https://privi-evm-devnet-development.up.railway.app"
-    chain_id: int = 262144
-    network_name: str = "Privi EVM Devnet (valueless TEST gas)"
+    # Privi runs on Base until the Privi chain mainnet launches.
+    rpc_url: str = "https://mainnet.base.org"
+    chain_id: int = 8453
+    network_name: str = "Base (until the Privi chain mainnet launches)"
     private_key: str = ""
     db_path: str = "anchor.db"
     api_keys: set[str] = field(default_factory=set)
     rate_per_min: int = 30
-    explorer_tx_url: str = ""
+    explorer_tx_url: str = "https://basescan.org/tx/"
+    max_tx_per_day: int = 500  # gas budget: each anchor is a real Base transaction
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -71,7 +73,8 @@ class Settings:
             db_path=os.getenv("ANCHOR_DB_PATH", "anchor.db"),
             api_keys={k.strip() for k in os.getenv("ANCHOR_API_KEYS", "").split(",") if k.strip()},
             rate_per_min=int(os.getenv("ANCHOR_RATE_PER_MIN", "30")),
-            explorer_tx_url=os.getenv("ANCHOR_EXPLORER_TX_URL", ""),
+            explorer_tx_url=os.getenv("ANCHOR_EXPLORER_TX_URL", cls.explorer_tx_url),
+            max_tx_per_day=int(os.getenv("ANCHOR_MAX_TX_PER_DAY", str(cls.max_tx_per_day))),
         )
 
 
@@ -102,14 +105,16 @@ class RateLimiter:
 def build_server(settings: Settings | None = None, chain: Chain | None = None,
                  store: AnchorStore | None = None, receipt_timeout: float = 25.0) -> MCPServer:
     settings = settings or Settings.from_env()
-    store = store or AnchorStore(settings.db_path)
+    store = store or AnchorStore(settings.db_path, settings.chain_id)
+    if store.chain_id is None:
+        store.chain_id = settings.chain_id
     if chain is None and settings.private_key:
         chain = JsonRpcChain(settings.rpc_url, settings.chain_id, settings.private_key)
     limiter = RateLimiter(settings.rate_per_min)
 
     mcp = MCPServer(
         name="privi-anchor", title="Privi Anchor",
-        description="Timestamped proof-of-existence for AI outputs and data, anchored on the Privi blockchain.",
+        description="Timestamped proof-of-existence for AI outputs and data, anchored on Base until the Privi chain mainnet launches.",
         instructions=INSTRUCTIONS, website_url=SOURCE, version=__version__,
     )
 
@@ -132,7 +137,8 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
         info: dict[str, Any] = {
             "network": settings.network_name, "chain_id": settings.chain_id, "rpc_url": settings.rpc_url,
             "anchor_wallet": chain.address if chain else None, "anchoring_enabled": chain is not None,
-            "max_hashes_per_call": MAX_HASHES, "calldata_format": "0x50525641 ('PRVA') + 0x01 + 32-byte Merkle root",
+            "max_hashes_per_call": MAX_HASHES, "max_tx_per_day": settings.max_tx_per_day,
+            "until": "Privi anchors on Base until the Privi chain mainnet launches", "calldata_format": "0x50525641 ('PRVA') + 0x01 + 32-byte Merkle root",
             "merkle": "sha256(min(a,b)||max(a,b)); single leaf is its own root", **store.stats(),
         }
         if chain:
@@ -167,6 +173,12 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
             rec = store.find_leaf(leaf)
             if not rec or not rec.get("tx_hash"):
                 return _result({"hash": leaf, "verified": False, "reason": "no anchor found for this hash"})
+            if rec.get("chain_id") is not None and rec["chain_id"] != settings.chain_id:
+                net = "the Privi EVM Devnet" if rec["chain_id"] == AnchorStore.LEGACY_CHAIN_ID else f"chain {rec['chain_id']}"
+                return _result({"hash": leaf, "verified": None, "anchored_on_chain_id": rec["chain_id"], "tx_hash": rec["tx_hash"],
+                                "proof": rec["proof"], "block_number": rec.get("block_number"), "block_time": rec.get("block_time"),
+                                "reason": f"anchored on {net} before Privi moved to Base; that transaction lives on that chain, "
+                                          "not on Base. Re-anchor the hash to get a Base receipt."})
             tx_hash, proof = rec["tx_hash"], rec["proof"]
         proof = proof or []
         try:
@@ -209,7 +221,7 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
         ctx: Context,
         label: Annotated[str, Field(description="Optional note kept in this server's index (not on chain)")] = "",
     ) -> CallToolResult:
-        """Anchor up to 100 hashes on the Privi chain in one transaction. Returns, for each hash, a
+        """Anchor up to 100 hashes on chain (Base until the Privi chain mainnet) in one transaction. Returns, for each hash, a
         receipt (tx_hash, Merkle proof, block, time) that anyone can check with anchor_verify.
         Requires an API key (Authorization: Bearer)."""
         who = client_key(ctx)
@@ -219,6 +231,9 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
             return _result({"error": "anchoring is not configured on this server"}, is_error=True)
         if not limiter.allow(who):
             return _result({"error": f"rate limit: {settings.rate_per_min} calls per minute"}, is_error=True)
+        if store.sent_since(86400) >= settings.max_tx_per_day:
+            return _result({"error": f"daily anchoring budget reached ({settings.max_tx_per_day} transactions per 24 h); "
+                                     "batch more hashes per call or try later"}, is_error=True)
         if not hashes or len(hashes) > MAX_HASHES:
             return _result({"error": f"send between 1 and {MAX_HASHES} hashes"}, is_error=True)
         try:
@@ -264,7 +279,7 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
         """Static MCP server card (Smithery and other directories read it when they cannot scan)."""
         tools = [t.model_dump(by_alias=True, exclude_none=True) for t in await mcp.list_tools()]
         return JSONResponse({"serverInfo": {"name": "privi-anchor", "title": "Privi Anchor", "version": __version__,
-                                            "description": "Timestamped proof-of-existence: anchor any hash on the Privi chain and verify it later.",
+                                            "description": "Timestamped proof-of-existence: anchor any hash on Base (until the Privi chain mainnet) and verify it later.",
                                             "websiteUrl": "https://privi-hub.onrender.com"},
                              "authentication": {"required": False, "schemes": []},
                              "tools": tools, "resources": [], "prompts": []},
@@ -322,7 +337,7 @@ def startup_check(settings: Settings, chain: JsonRpcChain, store: AnchorStore) -
     except Exception as e:
         log(f"startup check error: {e}")
         return
-    if os.getenv("ANCHOR_GENESIS") == "1" and not store.stats()["confirmed_batches"]:
+    if os.getenv("ANCHOR_GENESIS") == "1" and not store.confirmed_on_current_chain():
         import threading
         threading.Thread(target=_genesis, args=(settings, chain, store, log), daemon=True).start()
 
@@ -368,7 +383,7 @@ def main() -> None:
     p.add_argument("--port", type=int, default=int(os.getenv("PORT", "8000")))
     args = p.parse_args()
     settings = Settings.from_env()
-    store = AnchorStore(settings.db_path)
+    store = AnchorStore(settings.db_path, settings.chain_id)
     chain = JsonRpcChain(settings.rpc_url, settings.chain_id, settings.private_key) if settings.private_key else None
     if chain:
         startup_check(settings, chain, store)

@@ -174,7 +174,7 @@ def test_onchain_checkpoint_catches_consistent_rewrite(ledger, tmp_path):
     db.commit()
     assert ledger.check_chain(ledger.entries(org, "ops")).valid      # local check alone is fooled
     b = anyio.run(audit)
-    assert b["intact"] is False and "anchored on the Privi chain" in b["reason"]
+    assert b["intact"] is False and "anchored on chain (Base)" in b["reason"]
     assert b["onchain_checkpoint"]["matches_current_record"] is False
 
 

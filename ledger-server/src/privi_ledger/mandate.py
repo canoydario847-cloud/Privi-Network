@@ -6,7 +6,7 @@ expiry, purpose). The human principal signs the plain-English terms with their w
 proposed payment against the mandate for free, and the agent records each spend so the
 remaining budget is enforced. The principal can revoke with one more signature.
 
-The mandate hash is anchored on the Privi chain and every activation, spend and
+The mandate hash is anchored on chain (Base) and every activation, spend and
 revocation is written to the organization's tamper-evident log.
 """
 

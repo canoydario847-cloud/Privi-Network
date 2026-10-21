@@ -9,7 +9,7 @@ human-signed Privi Mandate (budget, per-payment cap, payee list, live approval p
 so a runaway agent cannot overspend and every charge is in both parties' logs. Privi enforces and records the
 charge; moving the money is between the two parties (for example by settling the mandate's spends over x402).
 
-Closing a room seals the transcript: its hash is signed (Ed25519 + ML-DSA-87), anchored on the Privi chain and
+Closing a room seals the transcript: its hash is signed (Ed25519 + ML-DSA-87), anchored on chain (Base) and
 written into both organizations' tamper-evident logs. Anyone holding the transcript can verify it with room_verify.
 """
 

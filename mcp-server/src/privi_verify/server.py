@@ -91,7 +91,7 @@ def build_server(
         info = describe(cp, store.hash_at(lot_code, cp["seq"]) if cp else None, anchor_url)
         if cp and not info["matches_current_record"]:
             integrity.update(valid=False, broken_at_seq=cp["seq"],
-                             reason="history differs from the version anchored on the Privi chain")
+                             reason="history differs from the version anchored on chain (Base)")
         return info
 
     mcp = MCPServer(

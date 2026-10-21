@@ -18,7 +18,7 @@ def h(s: str) -> str:
 
 class FakeChain:
     """In-memory EVM: records self-sent anchor txs and mines them immediately."""
-    chain_id = 262144
+    chain_id = 8453  # Base
     address = WALLET
 
     def __init__(self, mine=True):
@@ -74,7 +74,7 @@ def test_anchor_then_verify(store, monkeypatch):
     async def go():
         async with Client(build_server(Settings(), chain, store, receipt_timeout=1)) as c:
             st = (await c.call_tool("anchor_status", {})).structured_content
-            assert st["anchor_wallet"] == WALLET and st["chain_id"] == 262144
+            assert st["anchor_wallet"] == WALLET and st["chain_id"] == 8453 and "Base" in st["network"]
             ht = (await c.call_tool("anchor_hash_text", {"text": "report v1"})).structured_content
             assert ht["sha256"] == docs[0]
 
@@ -129,6 +129,54 @@ def test_auth_limits_and_validation(store, monkeypatch):
     assert anyio.run(call, {"hashes": ["nothex"]}, True).is_error           # bad hash
     assert anyio.run(call, {"hashes": [h(str(i)) for i in range(101)]}, True).is_error  # too many
     assert not chain.txs  # nothing was sent for rejected calls
+
+
+def test_devnet_anchors_survive_move_to_base(tmp_path, monkeypatch):
+    """Anchors made on the Privi devnet are reported honestly after the move, not as forgeries."""
+    import sqlite3
+    db = str(tmp_path / "old.db")
+    old = sqlite3.connect(db)  # a pre-0.4 database: no chain_id column
+    old.executescript("""
+        CREATE TABLE batches (batch_id INTEGER PRIMARY KEY AUTOINCREMENT, root TEXT NOT NULL, tx_hash TEXT,
+          status TEXT NOT NULL, block_number INTEGER, block_time INTEGER, label TEXT NOT NULL DEFAULT '',
+          client TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, error TEXT);
+        CREATE TABLE leaves (leaf TEXT NOT NULL, batch_id INTEGER NOT NULL, proof TEXT NOT NULL, PRIMARY KEY (leaf, batch_id));""")
+    old.execute("INSERT INTO batches (root, tx_hash, status, block_number, block_time, created_at) VALUES (?, ?, 'confirmed', 58638, 1760900000, '2026-10-20T00:00:00+00:00')",
+                (h("genesis"), "0x" + "ab" * 32))
+    old.execute("INSERT INTO leaves VALUES (?, 1, '[]')", (h("genesis"),))
+    old.commit()
+    old.close()
+
+    monkeypatch.setenv("ANCHOR_ALLOW_LOCAL", "1")
+    store = AnchorStore(db, 8453)
+    assert store.stats()["confirmed_batches"] == 0, "devnet anchors are not counted as Base anchors"
+    assert store.confirmed_on_current_chain() == 0
+    chain = FakeChain()
+
+    async def go():
+        async with Client(build_server(Settings(), chain, store, receipt_timeout=1)) as c:
+            v = (await c.call_tool("anchor_verify", {"hash": h("genesis")})).structured_content
+            assert v["verified"] is None and v["anchored_on_chain_id"] == 262144 and "Devnet" in v["reason"]
+            assert v["block_number"] == 58638
+            r = (await c.call_tool("anchor_hashes", {"hashes": [h("genesis")]})).structured_content
+            assert r["status"] == "confirmed" and r["chain_id"] == 8453
+            v = (await c.call_tool("anchor_verify", {"hash": h("genesis")})).structured_content
+            assert v["verified"] is True and v["tx_link"].startswith("https://basescan.org/tx/")
+    anyio.run(go)
+
+
+def test_daily_gas_budget(store, monkeypatch):
+    monkeypatch.setenv("ANCHOR_ALLOW_LOCAL", "1")
+    chain = FakeChain()
+
+    async def go():
+        async with Client(build_server(Settings(max_tx_per_day=2), chain, store, receipt_timeout=1)) as c:
+            for i in range(2):
+                assert not (await c.call_tool("anchor_hashes", {"hashes": [h(f"d{i}")]})).is_error
+            over = await c.call_tool("anchor_hashes", {"hashes": [h("d3")]})
+            assert over.is_error and "budget" in over.structured_content["error"]
+    anyio.run(go)
+    assert len(chain.txs) == 2
 
 
 def test_eth_account_signing_roundtrip():

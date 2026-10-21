@@ -101,7 +101,7 @@ def render_pdf(body: dict, attestation: dict, report_id: str) -> bytes:
     story.append(Spacer(1, 6))
     if attestation.get("anchored"):
         chain = f" (chain {attestation['chain_id']})" if attestation.get("chain_id") else ""
-        story.append(Paragraph(f"Sealed on the Privi blockchain{_esc(chain)} in block "
+        story.append(Paragraph(f"Sealed on chain (Base, until the Privi chain mainnet){_esc(chain)} in block "
                                f"{_esc(attestation.get('block_number'))}, transaction:", p))
         story.append(Paragraph(_esc(attestation["tx_hash"]), mono))
         story.append(Spacer(1, 6))
