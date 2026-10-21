@@ -26,11 +26,12 @@ client is necessary before calling the output verified on-chain evidence.
 
 **Gross gas fees are NOT founder/operator or treasury revenue.** They may be
 burned, sent to validators or fee collectors, redistributed or accounted for
-under other SDK/EVM modules. `reconcileActualFeeAllocation` only reports
-actual treasury receipts when *every* burned, validator, treasury and other
-allocation is known and sums exactly to the charged fees. The caller must
-obtain those values from audited and verified chain bank/module state;
-hand-entered made-up values are not proof of revenue. PRVI has no real-issued
+under other SDK/EVM modules. `reconcileActualFeeAllocation` only verifies
+that **caller-reported** burned, validator, treasury and other allocations
+sum to charged gas. Even perfectly balanced amounts are unverified and
+`treasuryRevenueWei` remains `null`. Actual treasury, burn and validator
+receipts require independent authenticated chain bank/module state evidence
+and an audited fee-routing proof; hand-entered numbers are not that proof. PRVI has no real-issued
 financial supply or publicly verified market price, so this tool does NOT
 quote dollar revenue, dollars per PRVI, or promise profitability.
 
@@ -38,8 +39,14 @@ quote dollar revenue, dollars per PRVI, or promise profitability.
 
 The `advisoryEip1559Quote` prototype considers a base-fee observation and
 a priority-fee suggestion, but always obeys a customer's maximum price per
-gas and overall fee budget. An unsafe or unaffordable quote is rejected;
-it does not silently raise spending limits. It is *advisory*: Cosmos EVM
+gas and overall fee budget. An unsafe or unaffordable quote is rejected; it does not silently raise
+spending limits. The maximum transaction exposure is the user-approved
+**gas limit multiplied by maxFeePerGas**, not the lower current effective
+price estimate. Quoted limits remain advisory: the eventual transaction
+builder must enforce both returned `signedGasLimit` and `customerMaxFeePerGasWei` (or stricter limits),
+and a user-approved worst-case total budget. `maxQuotedGasWei` is only
+an estimated price-times-usage figure; the maximum exposure
+is separately reported as `maxAuthorizedGasWei`. It is *advisory*: Cosmos EVM
 fee routing, block congestion responses, EIP-1559 actual base-fee burning,
 validator rewards and on-chain fee accounting must be reviewed in the
 exact pinned native PoP implementation before changing any production
