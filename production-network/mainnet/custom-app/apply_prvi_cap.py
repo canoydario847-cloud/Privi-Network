@@ -94,8 +94,7 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
     new_chainer = '''\t// The bank supply is loaded by module initialization. Require its exact
 \t// declared native PRVI genesis supply, refusing default upstream TEST genesis.
 \t// PRVI minting remains forbidden before and after keeper InitGenesis.
-\tresponse, initErr := app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)
-\tif initErr != nil { return nil, initErr }
+\t// Reject invalid declared native issuance before touching module state.
 \tbankJSON, found := genesisState[banktypes.ModuleName]
 \tif !found { return nil, fmt.Errorf("PRVI cap: bank genesis absent") }
 \tvar bankGenesis banktypes.GenesisState
@@ -103,6 +102,11 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \t\treturn nil, fmt.Errorf("PRVI cap: invalid bank genesis: %w", err)
 \t}
 \tinitialPRVI := bankGenesis.Supply.AmountOf(prvicap.BaseDenom)
+\tif err := prvicap.ValidateGenesisBase(initialPRVI.String()); err != nil {
+\t\treturn nil, fmt.Errorf("PRVI pre-init genesis supply rejected: %w", err)
+\t}
+\tresponse, initErr := app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)
+\tif initErr != nil { return nil, initErr }
 \tif err := app.PriviCapKeeper.InitGenesis(ctx, initialPRVI.String(), app.BankKeeper); err != nil {
 \t\treturn nil, fmt.Errorf("PRVI cap genesis initialization denied: %w", err)
 \t}
