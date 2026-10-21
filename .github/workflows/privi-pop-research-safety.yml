@@ -7,6 +7,9 @@ on:
     paths:
       - ".github/workflows/privi-pop-research-safety.yml"
       - "production-network/mainnet/pop_candidate/**"
+      - "production-network/mainnet/pop_mainnet_guard.py"
+      - "production-network/mainnet/test_pop_mainnet_guard.py"
+      - "production-network/mainnet/privi_pop_iot_development.template.json"
   push:
     branches: [main]
     paths:
@@ -41,6 +44,17 @@ jobs:
         run: |
           set -euo pipefail
           node --test production-network/mainnet/pop_candidate/test_*.cjs
+      - name: Fail-closed PoP mainnet approval regressions
+        run: |
+          set -euo pipefail
+          python3 -m unittest -v production-network/mainnet/test_pop_mainnet_guard.py
+          if python3 production-network/mainnet/pop_mainnet_guard.py \
+            --manifest production-network/mainnet/privi_pop_iot_development.template.json; then
+            echo "Research PoP candidate incorrectly authorized a financial mainnet" >&2
+            exit 1
+          else
+            echo "Expected refusal: native Point of Position mainnet remains NO-GO"
+          fi
       - name: Disclose research-only limits in check output
         if: always()
         run: |
