@@ -152,3 +152,27 @@ func TestKeeperNilStoreAndContextRejected(t *testing.T){
     k,_,_,priv:=setupPosition(t)
     if _,err:=k.Apply(nil,makePosition(t,priv,1,zeroTip()));err==nil{t.Fatal("nil context accepted")}
 }
+
+func TestAssertInitializedBlocksRegistryRemovalAndCrossChain(t *testing.T) {
+    k,db,_,_:=setupPosition(t)
+    ctx:=context.Background()
+    if err:=k.AssertInitialized(ctx,"privi-ci-pop-1");err!=nil {
+        t.Fatalf("valid PoP registry rejected: %v",err)
+    }
+    if err:=k.AssertInitialized(ctx,"privi-foreign-1");err==nil {
+        t.Fatal("cross-chain PoP registry passed block-boundary verification")
+    }
+    original:=bytes.Clone(db.entries[string(registryKey)])
+    delete(db.entries,string(registryKey))
+    if err:=k.AssertInitialized(ctx,"privi-ci-pop-1");!errors.Is(err,ErrRegistryMissing){
+        t.Fatalf("missing registry passed block boundary: %v",err)
+    }
+    db.entries[string(registryKey)]=[]byte("corrupt")
+    if err:=k.AssertInitialized(ctx,"privi-ci-pop-1");!errors.Is(err,ErrStateCorrupt){
+        t.Fatalf("corrupt registry passed block boundary: %v",err)
+    }
+    db.entries[string(registryKey)]=original
+    if err:=k.AssertInitialized(ctx,"privi-ci-pop-1");err!=nil {
+        t.Fatalf("restored valid registry rejected: %v",err)
+    }
+}
