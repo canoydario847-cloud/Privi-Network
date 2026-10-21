@@ -26,11 +26,13 @@ import (
     cmttypes "github.com/cometbft/cometbft/types"
     cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
     ethcommon "github.com/ethereum/go-ethereum/common"
+    "github.com/ethereum/go-ethereum/core"
     ethtypes "github.com/ethereum/go-ethereum/core/types"
     dbm "github.com/cosmos/cosmos-db"
     "github.com/cosmos/evm/evmd"
     "github.com/cosmos/evm/evmd/prvicap"
     evmtesttx "github.com/cosmos/evm/testutil/tx"
+    evmintest "github.com/cosmos/evm/testutil/integration"
     cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
     prvipop "github.com/cosmos/evm/evmd/prvipop"
     srvflags "github.com/cosmos/evm/server/flags"
@@ -58,6 +60,8 @@ func (priviTestAppOptions) Get(key string) interface{} {
 // with a synthetic EVM SDK message against REAL mounted native PoP state.
 // It does NOT submit a signed EVM transaction through BaseApp FinalizeBlock;
 // that complete ABCI transaction-routing test remains a separate launch gate.
+// This direct receipt-hook regression tests the ACTUAL EVM ReceiptStatus.
+// It remains distinct from the separate signed-Ethereum ABCI transaction test.
 func testNativePoPPostHook(app *evmd.EVMD,ctx sdk.Context,priv ed25519.PrivateKey) (string,error) {
     rawHash:=sha256.Sum256([]byte("disposable PoP telemetry on test app only"))
     p:=prvipop.Position{
@@ -66,62 +70,61 @@ func testNativePoPPostHook(app *evmd.EVMD,ctx sdk.Context,priv ed25519.PrivateKe
         PriorHash:strings.Repeat("0",64),EventHash:hex.EncodeToString(rawHash[:]),
         Signer:append([]byte(nil),priv.Public().(ed25519.PublicKey)...),
     }
-    signed,err:=prvipop.CanonicalMessage(p);if err!=nil{return "",err}
-    p.Signature=ed25519.Sign(priv,signed)
+    body,err:=prvipop.CanonicalMessage(p);if err!=nil{return "",err}
+    p.Signature=ed25519.Sign(priv,body)
     p.BlockHash,err=prvipop.SealedHash(p);if err!=nil{return "",err}
     wire,err:=prvipop.EncodeEnvelope(p);if err!=nil{return "",err}
     sink:=ethcommon.HexToAddress(prvipop.PoPSinkEVMAddress)
-    makeSDKMsg:=func(to ethcommon.Address,value *big.Int,payload []byte)*vmtypes.MsgEthereumTx {
-        tx:=ethtypes.NewTx(&ethtypes.LegacyTx{
-            To:&to,Value:value,Gas:200000,GasPrice:big.NewInt(1),Data:payload,
-        })
-        m:=new(vmtypes.MsgEthereumTx)
-        m.FromEthereumTx(tx)
-        return m
+    makeMessage:=func(to ethcommon.Address,value *big.Int,payload []byte)core.Message {
+        return core.Message{To:&to,Value:value,GasLimit:200000,Data:payload}
     }
-    tx:=makeSDKMsg(sink,big.NewInt(0),wire)
+    msg:=makeMessage(sink,big.NewInt(0),wire)
     finalCtx:=ctx.WithExecMode(sdk.ExecModeFinalize)
-    if _,err=app.ApplyPriviPoPFromFinalizedTx(finalCtx,tx,false,false);err!=nil{
-        return "",fmt.Errorf("failed EVM msg should be ignored: %w",err)
+    okReceipt:=&ethtypes.Receipt{Status:ethtypes.ReceiptStatusSuccessful}
+    failedReceipt:=&ethtypes.Receipt{Status:ethtypes.ReceiptStatusFailed}
+    if err=app.PostTxProcessing(finalCtx,sink,msg,failedReceipt);err==nil {
+        return "",fmt.Errorf("SECURITY: EVM status-0 PoP receipt credited")
     }
-    if _,err=app.ApplyPriviPoPFromFinalizedTx(finalCtx,tx,true,true);err!=nil{
-        return "",fmt.Errorf("simulated EVM msg should be ignored: %w",err)
+    if err=app.PostTxProcessing(finalCtx,sink,msg,nil);err==nil {
+        return "",fmt.Errorf("SECURITY: absent PoP EVM receipt credited")
     }
-    if seq,_,err:=app.PriviPoPKeeper.Snapshot(finalCtx,p.Company,p.Zone);err!=nil||seq!=0{
-        return "",fmt.Errorf("failed/simulated PoP tx advanced consensus state: %v, seq %d",err,seq)
+    if err=app.PostTxProcessing(ctx,sink,msg,okReceipt);err==nil {
+        return "",fmt.Errorf("SECURITY: PoP receipt outside FinalizeBlock accepted")
     }
-    if _,err=app.ApplyPriviPoPFromFinalizedTx(finalCtx,makeSDKMsg(
+    if seq,_,err:=app.PriviPoPKeeper.Snapshot(finalCtx,p.Company,p.Zone);err!=nil||seq!=0 {
+        return "",fmt.Errorf("failed/nonfinal PoP receipt advanced consensus state: %v, seq %d",err,seq)
+    }
+    if err=app.PostTxProcessing(finalCtx,sink,makeMessage(
         ethcommon.HexToAddress("0x00000000000000000000000000000000000000fe"),
-        big.NewInt(0),wire),false,true);err!=nil{return "",err}
-    if seq,_,err:=app.PriviPoPKeeper.Snapshot(finalCtx,p.Company,p.Zone);err!=nil||seq!=0{
-        return "",fmt.Errorf("wrong EVM destination changed PoP consensus state: %v %d",err,seq)
+        big.NewInt(0),wire),okReceipt);err!=nil{return "",err}
+    if seq,_,err:=app.PriviPoPKeeper.Snapshot(finalCtx,p.Company,p.Zone);err!=nil||seq!=0 {
+        return "",fmt.Errorf("unrelated EVM destination changed PoP ledger: %v %d",err,seq)
     }
-    if _,err=app.ApplyPriviPoPFromFinalizedTx(finalCtx,makeSDKMsg(
-        sink,big.NewInt(1),wire),false,true);err==nil {
-        return "",fmt.Errorf("PoP payment-value guard missing")
+    if err=app.PostTxProcessing(finalCtx,sink,makeMessage(
+        sink,big.NewInt(1),wire),okReceipt);err==nil {
+        return "",fmt.Errorf("PoP EVM payment-value guard missing")
     }
-    if _,err=app.ApplyPriviPoPFromFinalizedTx(finalCtx,makeSDKMsg(
-        sink,big.NewInt(0),[]byte("not-a-position")),false,true);err==nil {
-        return "",fmt.Errorf("noncanonical PoP payload accepted")
+    if err=app.PostTxProcessing(finalCtx,sink,makeMessage(
+        sink,big.NewInt(0),[]byte("invalid-payload")),okReceipt);err==nil {
+        return "",fmt.Errorf("PoP accepted noncanonical calldata")
     }
-    if _,err=app.ApplyPriviPoPFromFinalizedTx(finalCtx,tx,false,true);err!=nil {
-        return "",fmt.Errorf("valid signed PoP native state transition denied: %w",err)
-    }
-    if seq,tip,err:=app.PriviPoPKeeper.Snapshot(finalCtx,p.Company,p.Zone);err!=nil||seq!=1||tip!=p.BlockHash {
-        return "",fmt.Errorf("PoP posthandler did not persist accepted position: %d %s %v",seq,tip,err)
-    }
-    if _,err=app.ApplyPriviPoPFromFinalizedTx(finalCtx,tx,false,true);err==nil{
-        return "",fmt.Errorf("PoP replay succeeded through native posthandler")
-    }
-    attacker:=p
-    attacker.EventHash=strings.Repeat("f",64)
-    forged,err:=prvipop.EncodeEnvelope(attacker);if err!=nil{return "",err}
-    if _,err=app.ApplyPriviPoPFromFinalizedTx(finalCtx,makeSDKMsg(
-        sink,big.NewInt(0),forged),false,true);err==nil {
-        return "",fmt.Errorf("PoP forged-data envelope accepted")
+    if err=app.PostTxProcessing(finalCtx,sink,msg,okReceipt);err!=nil {
+        return "",fmt.Errorf("valid status-1 PoP EVM receipt denied: %w",err)
     }
     if seq,tip,err:=app.PriviPoPKeeper.Snapshot(finalCtx,p.Company,p.Zone);err!=nil||seq!=1||tip!=p.BlockHash{
-        return "",fmt.Errorf("failed or replayed PoP tx changed ledger: %d %s %v",seq,tip,err)
+        return "",fmt.Errorf("valid EVM receipt did not advance native PoP: %d %s %v",seq,tip,err)
+    }
+    if err=app.PostTxProcessing(finalCtx,sink,msg,okReceipt);err==nil {
+        return "",fmt.Errorf("PoP replay succeeded through EVM receipt hook")
+    }
+    forged:=p
+    forged.EventHash=strings.Repeat("f",64)
+    forgedWire,err:=prvipop.EncodeEnvelope(forged);if err!=nil{return "",err}
+    if err=app.PostTxProcessing(finalCtx,sink,makeMessage(sink,big.NewInt(0),forgedWire),okReceipt);err==nil{
+        return "",fmt.Errorf("forged PoP record accepted")
+    }
+    if seq,tip,err:=app.PriviPoPKeeper.Snapshot(finalCtx,p.Company,p.Zone);err!=nil||seq!=1||tip!=p.BlockHash {
+        return "",fmt.Errorf("unsuccessful/forged/replay EVM receipt altered position: %d %s %v",seq,tip,err)
     }
     return p.BlockHash,nil
 }
@@ -387,7 +390,7 @@ func probe() error {
     fmt.Println("PASS: custom InitChain mounted and initialized native PoP authorization consensus KV store")
     verifiedPositionTip,err:=testNativePoPPostHook(app,ctx,popPriv)
     if err!=nil{return fmt.Errorf("native post-execution PoP state test: %w",err)}
-    fmt.Printf("PASS: native PoP posthook accepted signed position and denied failed/replayed/forged calldata (tip=%s)\n",verifiedPositionTip)
+    fmt.Printf("PASS: native EVM receipt hook accepts status-1, rejects status-0/missing receipt, replay and forged PoP (tip=%s)\n",verifiedPositionTip)
 
     capBefore,err := app.PriviCapKeeper.Snapshot(ctx)
     if err!=nil {return fmt.Errorf("custom native genesis cap store not initialized: %w",err)}
@@ -544,9 +547,8 @@ func probe() error {
     if fin2==nil||len(fin2.TxResults)!=1 {
         return fmt.Errorf("signed PoP block must produce exactly one EVM transaction receipt")
     }
-    if fin2.TxResults[0].Code!=0 {
-        return fmt.Errorf("signed Ethereum PoP FinalizeBlock rejected: code=%d log=%s",
-            fin2.TxResults[0].Code,fin2.TxResults[0].Log)
+    if _,err:=evmintest.CheckEthTxResponse(*fin2.TxResults[0],app.AppCodec());err!=nil {
+        return fmt.Errorf("signed Ethereum PoP FinalizeBlock failed in SDK or EVM: %w",err)
     }
     if _,err=app.Commit();err!=nil{return fmt.Errorf("commit signed PoP block: %w",err)}
     afterSigned:=app.NewContextLegacy(true,cmtproto.Header{ChainID:chainID,Height:2})
@@ -570,8 +572,13 @@ func probe() error {
         Txs:[][]byte{replayBytes},
     })
     if err!=nil{return fmt.Errorf("replay-negative block FinalizeBlock: %w",err)}
-    if fin3==nil||len(fin3.TxResults)!=1||fin3.TxResults[0].Code==0 {
-        return fmt.Errorf("SECURITY: replayed PoP position was accepted as a valid EVM transaction")
+    if fin3==nil||len(fin3.TxResults)!=1 {
+        return fmt.Errorf("replay-negative block did not return one EVM transaction result")
+    }
+    // An EVM hook failure normally returns an unsuccessful EVM VmError even
+    // if SDK ExecTxResult.Code=0. Checking only SDK Code would miss it.
+    if _,err:=evmintest.CheckEthTxResponse(*fin3.TxResults[0],app.AppCodec());err==nil {
+        return fmt.Errorf("SECURITY: replayed PoP position was accepted as EVM successful")
     }
     if _,err=app.Commit();err!=nil{return fmt.Errorf("commit replay-negative block: %w",err)}
     afterReplay:=app.NewContextLegacy(true,cmtproto.Header{ChainID:chainID,Height:3})
