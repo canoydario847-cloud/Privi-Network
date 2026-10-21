@@ -36,6 +36,7 @@ func test() {
     if err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap()); err != nil {
         panic(err)
     }
+
     return app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)
 }
 '''
