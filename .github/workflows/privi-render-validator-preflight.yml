@@ -1,0 +1,49 @@
+name: Privi Render validator preflight (NO DEPLOY)
+
+on:
+  pull_request:
+    paths:
+      - 'production-network/ops/render-validator-candidates.NONLIVE.json'
+      - 'production-network/ops/render_validator_preflight.py'
+      - 'production-network/ops/test_render_validator_preflight.py'
+      - 'production-network/ops/RENDER_VALIDATOR_PREFLIGHT.md'
+      - '.github/workflows/privi-render-validator-preflight.yml'
+  push:
+    paths:
+      - 'production-network/ops/render-validator-candidates.NONLIVE.json'
+      - 'production-network/ops/render_validator_preflight.py'
+      - 'production-network/ops/test_render_validator_preflight.py'
+      - 'production-network/ops/RENDER_VALIDATOR_PREFLIGHT.md'
+      - '.github/workflows/privi-render-validator-preflight.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  render-candidate:
+    name: Read-only Render validator NO-GO checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test four-validator Render candidate parser (no provider calls)
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s production-network/ops -p 'test_render_validator_preflight.py' -v
+      - name: Verify draft structure and never allow candidate to launch
+        run: |
+          set -euo pipefail
+          file=production-network/ops/render-validator-candidates.NONLIVE.json
+          python3 production-network/ops/render_validator_preflight.py "$file" --mode draft
+          if python3 production-network/ops/render_validator_preflight.py "$file" --mode production; then
+            echo 'SECURITY: Render candidate was mistaken for a ready financial mainnet' >&2
+            exit 1
+          else
+            result=$?
+            if [[ "$result" -ne 3 ]]; then
+              echo "SECURITY: unexpected preflight exit code $result" >&2
+              exit 1
+            fi
+          fi
+      - name: Financial mainnet remains inactive
+        run: echo 'PASS - only offline Render metadata was checked; 0/4 production validators verified. No keys, deployment or funds.'
