@@ -1,0 +1,49 @@
+name: Privi PoP research consensus-safety regressions (not live)
+
+# Signer locks and committee proofs are experimental; they are deliberately
+# not imported by the Cosmos EVM production application or deployed validators.
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/privi-pop-research-safety.yml"
+      - "production-network/mainnet/pop_candidate/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/privi-pop-research-safety.yml"
+      - "production-network/mainnet/pop_candidate/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: privi-pop-research-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pop-research-safety:
+    name: PoP signed committee and durable lock adversarial tests (research only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Assert candidate cannot be mistaken for production consensus
+        run: |
+          set -euo pipefail
+          grep -Fq 'attested-position-research-not-live-consensus' production-network/mainnet/pop_candidate/engine.cjs
+          grep -Fq 'productionConsensus:false' production-network/mainnet/pop_candidate/engine.cjs
+          grep -Fq 'RESEARCH ONLY' production-network/mainnet/pop_candidate/persistent_vote_guard.cjs
+      - name: Exercise Ed25519 admission, quorum, replay and recovery locks
+        run: |
+          set -euo pipefail
+          node --test production-network/mainnet/pop_candidate/test_*.cjs
+      - name: Disclose research-only limits in check output
+        if: always()
+        run: |
+          echo "## PRVI financial mainnet still NO-GO" >> "$GITHUB_STEP_SUMMARY"
+          echo "These tests prove only isolated candidate safety properties, not live PoP finality, native validator admissions, any ledger proof, or independent hosting." >> "$GITHUB_STEP_SUMMARY"
+          echo "No PRVI coins, real signer keys, signed genesis, mainnet transactions, or production validator services are created." >> "$GITHUB_STEP_SUMMARY"
