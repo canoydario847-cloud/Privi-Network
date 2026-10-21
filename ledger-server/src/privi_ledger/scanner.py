@@ -50,7 +50,7 @@ CHANGE_FLAG_DAYS = 30
 UA = "PriviScan/1.0 (read-only MCP trust probe; never calls tools; +https://privi-ledger.onrender.com/scan)"
 PROTOCOL = "2025-06-18"
 LISTED = ("ok", "auth_required", "paid_gate")
-ANALYZER_VERSION = "2"     # bump when rules change; stored servers are re-graded from their saved tools
+ANALYZER_VERSION = "3"     # bump when rules change; stored servers are re-graded from their saved tools
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS scan_servers (
@@ -140,6 +140,18 @@ def tool_canon(t: dict) -> dict:
 
 def tool_hash(t: dict) -> str:
     return sha(canon(tool_canon(t)))
+
+
+def fit_tools(tools: list[dict], limit: int = 600_000) -> str:
+    """Valid JSON of as many whole tools as fit in limit bytes (never a truncated string)."""
+    out, size = [], 2
+    for t in tools:
+        c = canon(tool_canon(t))
+        if size + len(c) + 1 > limit:
+            break
+        out.append(tool_canon(t))
+        size += len(c) + 1
+    return canon(out)
 
 
 def manifest_of(tools: list[dict]) -> dict[str, str]:
@@ -487,7 +499,10 @@ class Scanner:
             return None
         d = dict(r)
         for k in ("tools", "findings", "changed_tools"):
-            d[k] = json.loads(d[k]) if d.get(k) else None
+            try:
+                d[k] = json.loads(d[k]) if d.get(k) else None
+            except ValueError:          # tolerate rows written by older versions
+                d[k] = None
         return d
 
     def store(self, sid: str, p: dict) -> dict:
@@ -553,7 +568,7 @@ class Scanner:
         if p["status"] == "ok":
             upd.update(server_name=p["server_name"], server_version=p["server_version"], protocol=p["protocol"])
         if tools is not None:
-            upd.update(tools_hash=th, tool_count=len(tools), tools=canon(tools)[:600_000], findings=canon(findings),
+            upd.update(tools_hash=th, tool_count=len(tools), tools=fit_tools(tools), findings=canon(findings),
                        score=score, grade=grade, changed_tools=canon(changed_tools))
         elif p["status"] in ("auth_required", "paid_gate"):
             upd.update(findings=canon([]), score=None, grade=None)
@@ -624,11 +639,14 @@ class Scanner:
             row = self._row(sid)
             if row is None or row.get("tools") is None:
                 continue
-            f = analyze(row["tools"], row["status"], row.get("auth"), row.get("changed_tools") or [])
-            sc, g = score_of(f)
-            with self.lock:
-                self.db.execute("UPDATE scan_servers SET findings=?, score=?, grade=? WHERE server_id=?", (canon(f), sc, g, sid))
-            n += 1
+            try:
+                f = analyze(row["tools"], row["status"], row.get("auth"), row.get("changed_tools") or [])
+                sc, g = score_of(f)
+                with self.lock:
+                    self.db.execute("UPDATE scan_servers SET findings=?, score=?, grade=? WHERE server_id=?", (canon(f), sc, g, sid))
+                n += 1
+            except Exception as e:
+                print(f"privi-scan: re-grade {sid} failed: {e}", flush=True)
         with self.lock:
             self.db.execute("INSERT INTO scan_meta (k, v) VALUES ('analyzer', ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v",
                             (ANALYZER_VERSION,))
