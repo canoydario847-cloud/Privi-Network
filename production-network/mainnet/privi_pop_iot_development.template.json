@@ -1,0 +1,21 @@
+{
+  "chain_family": "privi-native",
+  "target_protocol": "Point of Position",
+  "consensus_kind": "pop-not-yet-implemented",
+  "iot_settlement": "privi-only",
+  "external_bridges": false,
+  "external_pairings": false,
+  "real_prvi_rewards": false,
+  "iot_controls": {
+    "native_privi_only": true,
+    "developer_registry": true,
+    "device_enrollment": true,
+    "ed25519_gateway_auth": true,
+    "sequence_replay_protection": true,
+    "pop_company_zone_sequence_commitment": true,
+    "receipt_and_genesis_verification": true,
+    "local_ai_metadata_minimization": true,
+    "no_external_bridge_or_pairing": true,
+    "no_automatic_prvi_mint": true
+  }
+}
