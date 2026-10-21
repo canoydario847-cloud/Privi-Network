@@ -144,7 +144,7 @@ def register(mcp: MCPServer, guard: Guard, paywall, *, org_from: Callable, resul
                          "receipt": f"GET {guard.public_url}/guard/v1/receipts/<check_id>"}}
 
 
-def http_routes(guard: Guard, paywall, ledger, settings) -> list[tuple[str, list[str], Callable]]:
+def http_routes(guard: Guard, paywall, ledger, settings, signup: Callable | None = None) -> list[tuple[str, list[str], Callable]]:
     public = guard.public_url
 
     def org_of(request: Request) -> dict | None:
@@ -260,6 +260,16 @@ def http_routes(guard: Guard, paywall, ledger, settings) -> list[tuple[str, list
             return _cors({"error": "unauthorized"}, 401)
         return _cors({**guard.revenue(), **guard.stats()})
 
+    async def http_signup(request: Request) -> JSONResponse:
+        try:
+            data = await read_json(request, 10_000)
+            org = signup(str(data.get("organization_name") or data.get("name") or ""))
+        except (GuardError, ValueError) as e:
+            return _cors({"error": str(e)}, 400)
+        return _cors({**org, "free_checks_per_month": guard.balance(org["org_id"])["free_monthly"],
+                      "next": "send Authorization: Bearer <api_key> to /guard/v1/check",
+                      "note": "Store api_key now; it cannot be shown again."}, 201)
+
     async def options(_: Request) -> Response:
         return Response(status_code=204, headers={"Access-Control-Allow-Origin": "*", "Access-Control-Max-Age": "86400",
                                                   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -268,4 +278,5 @@ def http_routes(guard: Guard, paywall, ledger, settings) -> list[tuple[str, list
     return [("/guard/v1/check", ["POST"], check), ("/guard/v1/check", ["OPTIONS"], options),
             ("/guard/v1/check_many", ["POST"], check_many), ("/guard/v1/check_many", ["OPTIONS"], options),
             ("/guard/v1/receipts/{check_id}", ["GET"], receipt), ("/guard/v1/pricing", ["GET"], pricing),
-            ("/guard/v1/stats", ["GET"], stats), ("/guard/v1/revenue", ["GET"], revenue)]
+            ("/guard/v1/stats", ["GET"], stats), ("/guard/v1/revenue", ["GET"], revenue)] + (
+            [("/guard/v1/signup", ["POST"], http_signup), ("/guard/v1/signup", ["OPTIONS"], options)] if signup else [])

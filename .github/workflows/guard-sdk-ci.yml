@@ -1,0 +1,40 @@
+name: Privi Guard SDK CI
+
+on:
+  push:
+    branches: [main]
+    paths: ["guard-sdk/**", ".github/workflows/guard-sdk-ci.yml"]
+  pull_request:
+    paths: ["guard-sdk/**", ".github/workflows/guard-sdk-ci.yml"]
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.13"]
+    defaults:
+      run:
+        working-directory: guard-sdk/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+      - run: python -m py_compile ../hooks/claude-code/privi_guard_hook.py
+  js:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ["18", "22"]
+    defaults:
+      run:
+        working-directory: guard-sdk/js
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: node --test test.mjs

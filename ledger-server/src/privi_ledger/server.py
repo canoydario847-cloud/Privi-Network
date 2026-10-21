@@ -1333,7 +1333,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     guard_tools.register(mcp, guard, paywall, org_from=org_from, result=_result, unauthorized=unauthorized,
                          payments_enabled=settings.payments_enabled)
     for _path, _methods, _handler in (live.http_routes() + gateways.http_routes() + rooms.http_routes()
-                                      + scan_tools.http_routes(scanner) + guard_tools.http_routes(guard, paywall, ledger, settings)):
+                                      + scan_tools.http_routes(scanner) + guard_tools.http_routes(guard, paywall, ledger, settings, plans.signup)):
         mcp.custom_route(_path, methods=_methods, include_in_schema=False)(_handler)
 
     @mcp.custom_route("/admin/orgs", methods=["POST"], include_in_schema=False)

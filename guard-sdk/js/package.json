@@ -1,0 +1,17 @@
+{
+  "name": "privi-guard",
+  "version": "0.1.0",
+  "description": "Check what your AI agent reads (prompt injection) and sends (leaked secrets), with signed, anchored receipts. Zero dependencies.",
+  "type": "module",
+  "main": "index.mjs",
+  "types": "index.d.ts",
+  "exports": { ".": { "types": "./index.d.ts", "import": "./index.mjs" } },
+  "files": ["index.mjs", "index.d.ts", "README.md"],
+  "engines": { "node": ">=18" },
+  "scripts": { "test": "node --test test.mjs" },
+  "keywords": ["ai-agents", "prompt-injection", "llm-security", "guardrails", "dlp", "mcp", "x402", "langchain", "openai", "anthropic"],
+  "author": "Dario Canoy <dariocanoy@priviflow.us>",
+  "license": "MIT",
+  "homepage": "https://privi-hub.onrender.com",
+  "repository": { "type": "git", "url": "https://github.com/canoydario847-cloud/Privi-Network.git", "directory": "guard-sdk/js" }
+}
