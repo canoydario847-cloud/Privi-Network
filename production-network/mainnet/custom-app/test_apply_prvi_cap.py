@@ -118,6 +118,8 @@ class PatcherTests(unittest.TestCase):
         self.assertIn("app.PriviPoPKeeper.InitGenesis(ctx,popGenesis.ChainID,popGenesis.Authorities)",app)
         self.assertIn("Privi PoP genesis: authorization registry absent",app)
         self.assertIn("Privi PoP genesis: Cosmos chain identity mismatch",app)
+        self.assertIn("prvipop.ValidateGenesis(popGenesis.ChainID,popGenesis.Authorities)",app)
+        self.assertLess(app.index("prvipop.ValidateGenesis("),app.index("app.UpgradeKeeper.SetModuleVersionMap"))
         self.assertIn("package position",(self.upstream/"evmd"/"prvipop"/"position.go").read_text())
         self.assertLess(app.index("Privi PoP genesis: authorization registry absent"),
                         app.index("app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)"))
