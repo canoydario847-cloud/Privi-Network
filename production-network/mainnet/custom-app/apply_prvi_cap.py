@@ -47,6 +47,12 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
         '\tprvicap "github.com/cosmos/evm/evmd/prvicap"\n'
         '\tprvipop "github.com/cosmos/evm/evmd/prvipop"',
         "pop import")
+    app = replace_once(app,
+        '\t"github.com/ethereum/go-ethereum/common"',
+        '\t"github.com/ethereum/go-ethereum/common"\n'
+        '\t"github.com/ethereum/go-ethereum/core"\n'
+        '\tethtypes "github.com/ethereum/go-ethereum/core/types"',
+        "actual EVM receipt hook imports")
     # Validate the EIP-155 chain identity before module/codec construction;
     # the upstream dev chain ID must never slip into a financial PRVI binary.
     app = replace_once(app,
@@ -311,57 +317,69 @@ func (app *EVMD) CheckPriviNativeERC20Invariant(ctx sdk.Context) error {
 \treturn response, nil
 }'''.replace("\\t", "\t"),
         "post-block supply invariant")
-    # The upstream SDK PostHandler is empty at v0.54.3. Wrap it rather than
-    # mutating EVM balances in an ante handler, which could survive failed
-    # execution. Only a successful zero-value EVM call to our dedicated sink
-    # triggers authenticated PoP state transitions on FinalizeBlock.
-    popPost = '''// ApplyPriviPoPFromFinalizedTx runs in SDK's transaction cache AFTER
-// all message execution. Returning an error discards the runMsgs cache.
-// CometBFT handles voting; this native app guards PoP position validity.
-func (app *EVMD) ApplyPriviPoPFromFinalizedTx(ctx sdk.Context, tx sdk.Tx, simulate, success bool) (sdk.Context, error) {
-\tif !success || simulate || ctx.ExecMode()!=sdk.ExecModeFinalize { return ctx,nil }
-\tfor _, msg := range tx.GetMsgs() {
-\t\teth, ok := msg.(*evmtypes.MsgEthereumTx)
-\t\tif !ok { continue }
-\t\ttransaction := eth.AsTransaction()
-\t\tif transaction == nil { return ctx,fmt.Errorf("Privi PoP EVM transaction missing") }
-\t\tto := transaction.To()
-\t\tif to == nil || *to != common.HexToAddress(prvipop.PoPSinkEVMAddress) { continue }
-\t\tif transaction.Value().Sign()!=0 {return ctx,fmt.Errorf("Privi PoP position tx may not transfer value")}
-\t\tif transaction.Gas() > 1000000 {return ctx,fmt.Errorf("Privi PoP position gas limit exceeds test-only bound")}
-\t\t// The sink must remain an EOA with no runtime EVM code, making a
-\t\t// successful call incapable of hiding a reverted contract execution.
-\t\tcodeHash := app.EVMKeeper.GetCodeHash(ctx,*to)
-\t\tif len(app.EVMKeeper.GetCode(ctx,codeHash))!=0 {
-\t\t\treturn ctx,fmt.Errorf("Privi PoP sink EVM contract code forbidden")
-\t\t}
-\t\tposition,decodeErr:=prvipop.DecodeEnvelope(transaction.Data())
-\t\tif decodeErr!=nil {return ctx,fmt.Errorf("Privi PoP transaction envelope rejected: %w",decodeErr)}
-\t\tif _,applyErr:=app.PriviPoPKeeper.Apply(ctx,position);applyErr!=nil {
-\t\t\treturn ctx,fmt.Errorf("Privi PoP authenticated native transition denied: %w",applyErr)
-\t\t}
+    # Pinned Cosmos EVM v0.7.3 reports EVM reverts as MsgEthereumTxResponse
+    # VmError while the Cosmos SDK runMsgs error may still be NIL. Therefore
+    # the SDK PostHandler's "success" bool is NOT an EVM success proof!
+    # Move native PoP writes to the EVM keeper's PostTxProcessing hook,
+    # where the actual per-message receipt.Status is available. The EVM
+    # keeper runs hooks in a CacheContext and commits only when the hook
+    # and EVM both succeed. Do not mutate PoP state from an SDK posthandler.
+    evmPoPHook = '''// PostTxProcessing is a native EVM receipt-aware hook, NOT an SDK
+// posthandler. A successful Cosmos SDK tx alone cannot authorize PoP:
+// Ethereum VM errors can return nil Cosmos handler error with status=0.
+// Native PoP state is committed only after receipt.Status=1.
+func (app *EVMD) PostTxProcessing(
+\tctx sdk.Context, sender common.Address, msg core.Message, receipt *ethtypes.Receipt,
+) error {
+\tif msg.To == nil || *msg.To != common.HexToAddress(prvipop.PoPSinkEVMAddress) { return nil }
+\t// Any PoP-looking EVM call to this dedicated sink MUST fail closed on
+\t// missing receipt or unsuccessful EVM execution, not silently earn value.
+\tif ctx.ExecMode() != sdk.ExecModeFinalize {
+\t\treturn fmt.Errorf("Privi PoP hook outside finalized transaction")
 \t}
-\treturn ctx,nil
+\tif receipt == nil || receipt.Status != ethtypes.ReceiptStatusSuccessful {
+\t\treturn fmt.Errorf("Privi PoP execution receipt unsuccessful")
+\t}
+\tif msg.Value == nil || msg.Value.Sign()!=0 {
+\t\treturn fmt.Errorf("Privi PoP position tx may not transfer value")
+\t}
+\tif msg.GasLimit > 1000000 {
+\t\treturn fmt.Errorf("Privi PoP position gas limit exceeds test-only bound")
+\t}
+\t// Ensure this address has no EVM runtime bytecode. A code-bearing sink
+\t// could revert or execute side effects other than position verification.
+\tif len(app.EVMKeeper.GetCode(ctx,app.EVMKeeper.GetCodeHash(ctx,*msg.To)))!=0 {
+\t\treturn fmt.Errorf("Privi PoP sink EVM contract code forbidden")
+\t}
+\tposition,decodeErr:=prvipop.DecodeEnvelope(msg.Data)
+\tif decodeErr!=nil {
+\t\treturn fmt.Errorf("Privi PoP transaction envelope rejected: %w",decodeErr)
+\t}
+\tif _,applyErr:=app.PriviPoPKeeper.Apply(ctx,position);applyErr!=nil {
+\t\treturn fmt.Errorf("Privi PoP authenticated native transition denied: %w",applyErr)
+\t}
+\treturn nil
 }
 
 '''
     app = replace_once(app,
         "func (app *EVMD) setPostHandler() {",
-        popPost.replace("\\t","\t") + "func (app *EVMD) setPostHandler() {",
-        "attach signed PoP position transaction route to SDK post execution")
+        evmPoPHook.replace("\\t","\t") + "func (app *EVMD) setPostHandler() {",
+        "mount EVM receipt verified native PoP execution hook")
+    # The custom EVM app has NO existing EVM hooks at this pinned tag.
+    # SetHooks panics on a second hook and deliberately fails closed on
+    # unexpected upstream changes; do not overwrite unrelated hook chains.
     app = replace_once(app,
-        "\tapp.SetPostHandler(postHandler)",
-        '''\tapp.SetPostHandler(func(ctx sdk.Context, tx sdk.Tx, simulate, success bool) (sdk.Context,error) {
-\t\tif postHandler!=nil {
-\t\t\tvar err error
-\t\t\tctx,err=postHandler(ctx,tx,simulate,success)
-\t\t\tif err!=nil {return ctx,err}
-\t\t}
-\t\treturn app.ApplyPriviPoPFromFinalizedTx(ctx,tx,simulate,success)
-\t})'''.replace("\\t","\t"),
-        "native PoP post handler installation")
-    if app.count("app.ApplyPriviPoPFromFinalizedTx(")!=1:
-        raise ValueError("PoP posthandler must be installed exactly once")
+        "\tapp.EVMKeeper.EnableVirtualFeeCollection()",
+        '''\tapp.EVMKeeper.EnableVirtualFeeCollection()
+\tif app.EVMKeeper.HasHooks() {panic("Privi PoP EVM hook conflict")}
+\tapp.EVMKeeper.SetHooks(app)'''.replace("\\t","\t"),
+        "require PoP EVM receipt hook at keeper initialization")
+    if app.count("app.EVMKeeper.SetHooks(app)") != 1 or app.count(
+            "app.PriviPoPKeeper.Apply(ctx,position)") != 1:
+        raise ValueError("native PoP receipt guard must register and apply exactly once")
+    if "app.ApplyPriviPoPFromFinalizedTx(" in app:
+        raise ValueError("obsolete SDK posthandler PoP credit path forbidden")
     # Fail closed if upstream source evolves to retain or overwrite a raw
     # bank keeper after restricted injection. This static check is intentionally
     # conservative and does NOT replace an audit of module aliases or SDK code.
