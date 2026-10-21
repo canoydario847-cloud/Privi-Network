@@ -57,7 +57,7 @@ func TestSDKPatchedBankGenesisAndLegitimateNativeTransfer(t *testing.T) {
  if err:=h.cap.InitGenesis(h.ctx,"100",h.bank);err!=nil {t.Fatal(err)}
  // Bank's normal internal transfer must still write the actual native
  // balance collections, unlike the external UncheckedSetBalance entry.
- h.account.EXPECT().GetAccount(h.ctx,receiver).Return(nil).AnyTimes()
+ h.account.EXPECT().GetAccount(h.ctx,gomock.Any()).Return(nil).AnyTimes()
  h.account.EXPECT().NewAccountWithAddress(h.ctx,receiver).
    Return(authtypes.NewBaseAccountWithAddress(receiver)).AnyTimes()
  h.account.EXPECT().SetAccount(h.ctx,gomock.Any()).AnyTimes()
