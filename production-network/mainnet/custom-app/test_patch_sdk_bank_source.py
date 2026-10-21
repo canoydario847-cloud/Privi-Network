@@ -43,6 +43,7 @@ import (
     "context"
     "fmt"
 )
+
 // InitGenesis initializes the bank module's state from a given genesis state.
 func (k BaseKeeper) InitGenesis(ctx context.Context, genState *types.GenesisState) {
     if err := k.SetParams(ctx, genState.Params); err != nil {
