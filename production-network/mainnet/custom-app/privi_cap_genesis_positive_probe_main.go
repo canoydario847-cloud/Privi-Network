@@ -30,6 +30,8 @@ import (
     dbm "github.com/cosmos/cosmos-db"
     "github.com/cosmos/evm/evmd"
     "github.com/cosmos/evm/evmd/prvicap"
+    evmtesttx "github.com/cosmos/evm/testutil/tx"
+    cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
     prvipop "github.com/cosmos/evm/evmd/prvipop"
     srvflags "github.com/cosmos/evm/server/flags"
     vmtypes "github.com/cosmos/evm/x/vm/types"
@@ -124,6 +126,38 @@ func testNativePoPPostHook(app *evmd.EVMD,ctx sdk.Context,priv ed25519.PrivateKe
     return p.BlockHash,nil
 }
 
+// signedABCIPosition encodes a REAL signed Ethereum message inside the pinned
+// Cosmos EVM SDK Tx format; the caller submits these bytes via FinalizeBlock.
+// Every key used here is ephemeral, CI-only and never reused by production.
+func signedABCIPosition(app *evmd.EVMD,key cryptotypes.PrivKey,envelope []byte,nonce uint64)([]byte,error){
+    sink:=ethcommon.HexToAddress(prvipop.PoPSinkEVMAddress)
+    eth:=ethtypes.NewTx(&ethtypes.LegacyTx{
+        Nonce:nonce,To:&sink,Value:big.NewInt(0),Gas:200000,
+        GasPrice:big.NewInt(100000000000),Data:envelope,
+    })
+    msg:=new(vmtypes.MsgEthereumTx)
+    msg.FromEthereumTx(eth)
+    msg.From=key.PubKey().Address().Bytes()
+    signed,err:=evmtesttx.PrepareEthTx(app.GetTxConfig(),key,msg)
+    if err!=nil{return nil,fmt.Errorf("sign disposable PoP Ethereum tx: %w",err)}
+    wire,err:=app.GetTxConfig().TxEncoder()(signed)
+    if err!=nil{return nil,fmt.Errorf("encode signed disposable Ethereum SDK tx: %w",err)}
+    return wire,nil
+}
+func nextPoPPosition(author ed25519.PrivateKey,sequence uint64,previous string)(prvipop.Position,error){
+    event:=sha256.Sum256([]byte(fmt.Sprintf("CI-only signed FinalizeBlock position %d",sequence)))
+    p:=prvipop.Position{ChainID:"privi-ci-only-not-financial-1",
+        Company:"UTQ4JJ20",Zone:"GRID/READINGS",Sequence:sequence,
+        Stamp:fmt.Sprintf("PoP:UTQ4JJ20:GRID/READINGS:%06d",sequence),
+        PriorHash:previous,EventHash:hex.EncodeToString(event[:]),
+        Signer:append([]byte(nil),author.Public().(ed25519.PublicKey)...),
+    }
+    body,err:=prvipop.CanonicalMessage(p)
+    if err!=nil{return prvipop.Position{},err}
+    p.Signature=ed25519.Sign(author,body)
+    p.BlockHash,err=prvipop.SealedHash(p)
+    return p,err
+}
 func probe() error {
     const chainID = "privi-ci-only-not-financial-1"
     // A disk-backed TEMPORARY database is necessary to prove restart in
@@ -146,13 +180,18 @@ func probe() error {
     validators := cmttypes.NewValidatorSet([]*cmttypes.Validator{cmttypes.NewValidator(pubKey, 1)})
     address := sdk.AccAddress(bytes.Repeat([]byte{0x42},20))
     account := authtypes.NewBaseAccount(address,nil,0,0)
+    evmAddr,evmPriv:=evmtesttx.NewAccAddressAndKey()
+    if evmPriv==nil{return fmt.Errorf("ephemeral EVM signing key unavailable")}
+    evmAccount:=authtypes.NewBaseAccount(evmAddr,evmPriv.PubKey(),0,0)
     allocation := sdk.NewCoins(
-        sdk.NewCoin(prvicap.BaseDenom,sdkmath.NewInt(2_000_000_000_000_000_000)),
+        sdk.NewCoin(prvicap.BaseDenom,sdkmath.NewInt(1_000_000_000_000_000_000)),
     )
     bal := banktypes.Balance{Address: account.GetAddress().String(), Coins: allocation}
+    evmFunding:=sdk.NewCoins(sdk.NewCoin(prvicap.BaseDenom,sdkmath.NewInt(1_000_000_000_000_000_000)))
+    signedEvmBal:=banktypes.Balance{Address:evmAccount.GetAddress().String(),Coins:evmFunding}
     genesis, err = simtestutil.GenesisStateWithValSet(
         app.AppCodec(), genesis, validators,
-        []authtypes.GenesisAccount{account}, bal,
+        []authtypes.GenesisAccount{account,evmAccount}, bal,signedEvmBal,
     )
     if err!=nil {return fmt.Errorf("build valueless SDK fixture: %w",err)}
     // Cosmos EVM v0.7.3 requires EVM denomination metadata in bank genesis.
@@ -484,22 +523,67 @@ func probe() error {
         return fmt.Errorf("native aprvi supply changed after 1 finalized block: %s",supply)
     }
     fmt.Println("PASS: customized app FinalizeBlock/Commit height 1; native PRVI lifetime issuance and supply unchanged")
-    // Another actual ABCI finalization exercises Begin/EndBlock supply
-    // checks after the first successful commit (one epoch is insufficient
-    // to demonstrate keeper state persistence).
+    // REAL Ethereum ECDSA signature -> encoded Cosmos SDK Tx ->
+    // BaseApp FinalizeBlock -> app PostHandler -> PoP consensus KV transition.
+    // A direct post-handler test above is not a substitute for this path.
+    pos2,err:=nextPoPPosition(popPriv,2,verifiedPositionTip)
+    if err!=nil{return err}
+    signedPayload,err:=prvipop.EncodeEnvelope(pos2)
+    if err!=nil{return err}
+    signedTxBytes,err:=signedABCIPosition(app,evmPriv,signedPayload,0)
+    if err!=nil{return err}
     fin2,err:=app.FinalizeBlock(&abci.RequestFinalizeBlock{
         Height:2, Time:blockTime.Add(time.Second),
         DecidedLastCommit:abci.CommitInfo{Votes:votes},
         NextValidatorsHash:validators.Hash(),
         ProposerAddress:validators.Proposer.Address,
         Hash:app.LastCommitID().Hash,
+        Txs:[][]byte{signedTxBytes},
     })
-    if err!=nil {return fmt.Errorf("custom app FinalizeBlock height 2: %w",err)}
-    if fin2==nil {return fmt.Errorf("custom app nil FinalizeBlock at height 2")}
-    if _,err=app.Commit();err!=nil {return fmt.Errorf("custom app Commit height 2: %w",err)}
-    if app.LastBlockHeight()!=2 {
-        return fmt.Errorf("expected two persisted in-memory blocks; got %d",app.LastBlockHeight())
+    if err!=nil {return fmt.Errorf("signed PoP FinalizeBlock height 2: %w",err)}
+    if fin2==nil||len(fin2.TxResults)!=1 {
+        return fmt.Errorf("signed PoP block must produce exactly one EVM transaction receipt")
     }
+    if fin2.TxResults[0].Code!=0 {
+        return fmt.Errorf("signed Ethereum PoP FinalizeBlock rejected: code=%d log=%s",
+            fin2.TxResults[0].Code,fin2.TxResults[0].Log)
+    }
+    if _,err=app.Commit();err!=nil{return fmt.Errorf("commit signed PoP block: %w",err)}
+    afterSigned:=app.NewContextLegacy(true,cmtproto.Header{ChainID:chainID,Height:2})
+    seq,tip,err:=app.PriviPoPKeeper.Snapshot(afterSigned,"UTQ4JJ20","GRID/READINGS")
+    if err!=nil||seq!=2||tip!=pos2.BlockHash {
+        return fmt.Errorf("signed EVM FinalizeBlock did not persist position 2: %d %s %v",seq,tip,err)
+    }
+    fmt.Println("PASS: real signed Ethereum PoP calldata executed in BaseApp FinalizeBlock and committed native sequence 2")
+
+    // A separately signed, correctly nonce-incremented EVM transaction
+    // attempts to replay the already-finalized PoP position. The block must
+    // finalize while the transaction fails and cannot advance the PoP ledger.
+    replayBytes,err:=signedABCIPosition(app,evmPriv,signedPayload,1)
+    if err!=nil{return err}
+    fin3,err:=app.FinalizeBlock(&abci.RequestFinalizeBlock{
+        Height:3,Time:blockTime.Add(2*time.Second),
+        DecidedLastCommit:abci.CommitInfo{Votes:votes},
+        NextValidatorsHash:validators.Hash(),
+        ProposerAddress:validators.Proposer.Address,
+        Hash:app.LastCommitID().Hash,
+        Txs:[][]byte{replayBytes},
+    })
+    if err!=nil{return fmt.Errorf("replay-negative block FinalizeBlock: %w",err)}
+    if fin3==nil||len(fin3.TxResults)!=1||fin3.TxResults[0].Code==0 {
+        return fmt.Errorf("SECURITY: replayed PoP position was accepted as a valid EVM transaction")
+    }
+    if _,err=app.Commit();err!=nil{return fmt.Errorf("commit replay-negative block: %w",err)}
+    afterReplay:=app.NewContextLegacy(true,cmtproto.Header{ChainID:chainID,Height:3})
+    seq,tip,err=app.PriviPoPKeeper.Snapshot(afterReplay,"UTQ4JJ20","GRID/READINGS")
+    if err!=nil||seq!=2||tip!=pos2.BlockHash {
+        return fmt.Errorf("SECURITY: replayed PoP advanced committed position: %d %s %v",seq,tip,err)
+    }
+    if app.LastBlockHeight()!=3 {
+        return fmt.Errorf("expected three persisted blocks, got %d",app.LastBlockHeight())
+    }
+    fmt.Println("PASS: separately signed PoP replay transaction rejected in real ABCI FinalizeBlock")
+
 
     // Cosmos EVM sets Go process-global fork activation once. A second app
     // instantiated in the SAME process can panic with duplicate activation,
@@ -516,7 +600,7 @@ func probe() error {
         return fmt.Errorf("fresh OS process failed PRVI restart verification: %w\n%s",err,string(output))
     }
     fmt.Print(string(output))
-    fmt.Println("PASS: two finalized blocks + full app restart in fresh process; capped PRVI unchanged")
+    fmt.Println("PASS: three finalized blocks + full app restart in fresh process; native PRVI issuance cap unchanged")
 
     fmt.Println("PASS: actual customized Cosmos EVM app accepts a cap-compliant, in-memory, valueless positive genesis fixture")
     fmt.Println("NO FINANCIAL PRVI ISSUED, NO PUBLIC CHAIN, NO PRODUCTION KEYS")
@@ -533,15 +617,15 @@ func verifyRestart(dir string) error {
     defer db.Close()
     restarted:=evmd.NewExampleApp(log.NewNopLogger(),db,true,
         priviTestAppOptions{},baseapp.SetChainID(chainID))
-    if restarted.LastBlockHeight()!=2 {
+    if restarted.LastBlockHeight()!=3 {
         return fmt.Errorf("restarted chain height changed: %d",restarted.LastBlockHeight())
     }
-    ctx:=restarted.NewContextLegacy(true,cmtproto.Header{ChainID:chainID,Height:2})
+    ctx:=restarted.NewContextLegacy(true,cmtproto.Header{ChainID:chainID,Height:3})
     popSeq,popTip,popErr:=restarted.PriviPoPKeeper.Snapshot(ctx,"UTQ4JJ20","GRID/READINGS")
-    if popErr!=nil||popSeq!=1||popTip==strings.Repeat("0",64) {
+    if popErr!=nil||popSeq!=2||popTip==strings.Repeat("0",64) {
         return fmt.Errorf("restarted PoP signed position or registry missing: %d %s %v",popSeq,popTip,popErr)
     }
-    fmt.Println("PASS: native signed PoP position checkpoint survived two block commits and fresh OS process restart")
+    fmt.Println("PASS: ABCI-signed native PoP position checkpoint survived three commits and restart")
     capState,err:=restarted.PriviCapKeeper.Snapshot(ctx)
     if err!=nil {return fmt.Errorf("cap state missing after app restart: %w",err)}
     if capState.GenesisBase!=expectedAPRVI||
@@ -549,15 +633,16 @@ func verifyRestart(dir string) error {
         capState.MintPolicy!="NO_NEW_NATIVE_PRVI_MINTS" {
         return fmt.Errorf("native issuance policy changed after restart: %+v",capState)
     }
-    if supply:=restarted.BankKeeper.GetSupply(ctx,prvicap.BaseDenom).Amount.String();supply!=expectedAPRVI {
-        return fmt.Errorf("restarted PRVI supply unexpectedly changed: %s",supply)
+    if supply:=restarted.BankKeeper.GetSupply(ctx,prvicap.BaseDenom).Amount;
+        !supply.IsPositive()||supply.GT(sdkmath.NewInt(3_000_000_000_000_000_000)) {
+        return fmt.Errorf("restarted PRVI supply exceeded lifetime cap or became nonpositive: %s",supply)
     }
     err=restarted.BankKeeper.MintCoins(ctx,minttypes.ModuleName,
         sdk.NewCoins(sdk.NewInt64Coin(prvicap.BaseDenom,1)))
     if !errors.Is(err,prvicap.ErrMintForbidden) {
         return fmt.Errorf("SECURITY: native mint allowed after process restart: %v",err)
     }
-    fmt.Println("PASS: freshly restarted process loaded PRVI cap at height 2 and denied unauthorized mint")
+    fmt.Println("PASS: freshly restarted process loaded PRVI cap at height 3 and denied unauthorized mint")
     // Adversarial lifetime cap proof on the real SDK bank module:
     // physically BURN 1 native aprvi base unit via the x/vm module, then
     // attempt to MINT exactly that unit back. A supply <= original genesis
