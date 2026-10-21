@@ -258,6 +258,18 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
         return JSONResponse({"$schema": "https://glama.ai/mcp/schemas/server.json",
                              "maintainers": ["canoydario847-cloud"]})
 
+
+    @mcp.custom_route("/.well-known/mcp/server-card.json", methods=["GET"], include_in_schema=False)
+    async def server_card(_: Request) -> JSONResponse:
+        """Static MCP server card (Smithery and other directories read it when they cannot scan)."""
+        tools = [t.model_dump(by_alias=True, exclude_none=True) for t in await mcp.list_tools()]
+        return JSONResponse({"serverInfo": {"name": "privi-anchor", "title": "Privi Anchor", "version": __version__,
+                                            "description": "Timestamped proof-of-existence: anchor any hash on the Privi chain and verify it later.",
+                                            "websiteUrl": "https://privi-hub.onrender.com"},
+                             "authentication": {"required": False, "schemes": []},
+                             "tools": tools, "resources": [], "prompts": []},
+                            headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=3600"})
+
     @mcp.custom_route("/health", methods=["GET"], include_in_schema=False)
     async def health(_: Request) -> JSONResponse:
         return JSONResponse({"ok": True, "service": "privi-anchor", "version": __version__,

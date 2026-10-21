@@ -193,3 +193,11 @@ def test_cdp_jwt_and_mainnet_guard():
         Settings(pay_to=PAY_TO, network_key="base", facilitator_url=CDP_FACILITATOR_URL).validate()
     Settings(pay_to=PAY_TO, network_key="base", facilitator_url=CDP_FACILITATOR_URL,
              cdp_key_id="k", cdp_key_secret=secret).validate()
+
+
+def test_server_card(store):
+    from starlette.testclient import TestClient
+    s = build_server(settings(), store, FakeFacilitator())
+    with TestClient(s.streamable_http_app(host="0.0.0.0", stateless_http=True, json_response=True)) as http:
+        card = http.get("/.well-known/mcp/server-card.json").json()
+        assert card["serverInfo"]["name"] == "privi-verify" and any(t["name"] == "privi_verify_lot" for t in card["tools"])

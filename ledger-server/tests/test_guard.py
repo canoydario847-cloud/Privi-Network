@@ -148,6 +148,8 @@ def test_http_api_with_x402_header_flow(ledger, monkeypatch):
         rev = http.get("/guard/v1/revenue", headers={"Authorization": "Bearer " + "adm" * 10}).json()
         assert rev["per_check_x402"]["checks"] == 1 and rev["total_usdc"] == 7.01
         assert http.options("/guard/v1/check").status_code == 204
+        card = http.get("/.well-known/mcp/server-card.json").json()
+        assert card["serverInfo"]["name"] == "privi-ledger" and any(t["name"] == "guard_check" for t in card["tools"])
         assert http.get("/guard/v1/pricing").json()["credit_packs"]["10k"]["usdc"] == "50"
         su = http.post("/guard/v1/signup", json={"organization_name": "New Dev"})
         assert su.status_code == 201 and su.json()["api_key"].startswith("plk_")

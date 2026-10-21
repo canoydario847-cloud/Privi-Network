@@ -200,3 +200,11 @@ def test_public_status_and_health_cors(store, monkeypatch):
         assert h.headers["access-control-allow-origin"] == "*"
         st = http.get("/status").json()
         assert st["service"] == "privi-anchor" and st["anchoring_enabled"] is False and "last_confirmed_block_time" in st
+
+
+def test_server_card(store):
+    from starlette.testclient import TestClient
+    s = build_server(Settings(), None, store)
+    with TestClient(s.streamable_http_app(host="0.0.0.0", stateless_http=True, json_response=True)) as http:
+        card = http.get("/.well-known/mcp/server-card.json").json()
+        assert card["serverInfo"]["name"] == "privi-anchor" and any(t["name"] == "anchor_verify" for t in card["tools"])

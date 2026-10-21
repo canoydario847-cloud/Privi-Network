@@ -1568,6 +1568,18 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         return JSONResponse({"$schema": "https://glama.ai/mcp/schemas/server.json",
                              "maintainers": ["canoydario847-cloud"]})
 
+
+    @mcp.custom_route("/.well-known/mcp/server-card.json", methods=["GET"], include_in_schema=False)
+    async def server_card(_: Request) -> JSONResponse:
+        """Static MCP server card (Smithery and other directories read it when they cannot scan)."""
+        tools = [t.model_dump(by_alias=True, exclude_none=True) for t in await mcp.list_tools()]
+        return JSONResponse({"serverInfo": {"name": "privi-ledger", "title": "Privi Ledger", "version": __version__,
+                                            "description": "Trust layer for AI agents: Privi Guard (prompt-injection and data-leak checks with signed receipts), Privi Scan (safety grades for every MCP server), tamper-evident audit logs, agent passports, spending mandates and a live kill switch.",
+                                            "websiteUrl": "https://privi-hub.onrender.com"},
+                             "authentication": {"required": False, "schemes": []},
+                             "tools": tools, "resources": [], "prompts": []},
+                            headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=3600"})
+
     @mcp.custom_route("/health", methods=["GET"], include_in_schema=False)
     async def health(_: Request) -> JSONResponse:
         return JSONResponse({"ok": True, "service": "privi-ledger", "version": __version__},
