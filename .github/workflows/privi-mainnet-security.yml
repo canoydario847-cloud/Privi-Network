@@ -1,0 +1,68 @@
+name: Privi native mainnet safety checks (build-only)
+
+# Exercise the financially relevant source on every PR and main update.
+# This is not a production release, and CI green must never mean "GO".
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/privi-mainnet-security.yml"
+      - "production-network/mainnet/**"
+      - "production-network/ops/**"
+      - "production-network/testnet/**"
+      - "production-network/migration/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/privi-mainnet-security.yml"
+      - "production-network/mainnet/**"
+      - "production-network/ops/**"
+      - "production-network/testnet/**"
+      - "production-network/migration/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: privi-security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline-release-guards:
+    name: Offline supply, evidence and build patch regressions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25.9'
+          cache: false
+      - name: Run pinned offline tests
+        run: bash production-network/testnet/run_offline_checks.sh
+      - name: State release limitation in check output
+        if: always()
+        run: |
+          echo "## Financial mainnet remains NO-GO" >> "$GITHUB_STEP_SUMMARY"
+          echo "These are build-only security regressions, not a live native PoP consensus test, full bank invariant proof, external audit, or signed-genesis approval." >> "$GITHUB_STEP_SUMMARY"
+          echo "Do not use this check as financial launch authorization." >> "$GITHUB_STEP_SUMMARY"
+
+  sdk-stateful-bank-regressions:
+    name: SDK v0.54.3 bank persistence and cap tests (not deployed)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25.9'
+          cache: false
+      - name: Exercise actual Cosmos SDK keeper interfaces
+        working-directory: production-network/mainnet/prvicap
+        run: GOTOOLCHAIN=local go test -mod=mod -p 2 -count=1 -timeout=25m ./...
+      - name: Preserve residual bypass finding
+        if: always()
+        run: |
+          echo "## S-01 is NOT resolved by these keeper tests" >> "$GITHUB_STEP_SUMMARY"
+          echo "Raw bank keeper references, direct store writes, same-block mint-and-burn and unreviewed upgrades require separate runtime isolation and audits." >> "$GITHUB_STEP_SUMMARY"
+          echo "No genesis, PRVI, validators, bridge or live network are created here." >> "$GITHUB_STEP_SUMMARY"
