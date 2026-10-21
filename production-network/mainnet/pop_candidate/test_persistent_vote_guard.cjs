@@ -93,6 +93,30 @@ test("same height cannot sign conflicting block even across round or process res
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });
 
+test("same-height vote lock does not reset when a research committee epoch changes",()=>{
+  const f=fixture(),dir=tempRoot();
+  try {
+    const id=f.committee.validators[0].id;
+    const oldHash="0x"+"e".repeat(64),nextHash="0x"+"f".repeat(64);
+    const prior=recordFor(f.committee,25,id,oldHash);
+    const changed={...f.committee,epoch:f.committee.epoch+1};
+    const next=recordFor(changed,25,id,nextHash);
+    assert.equal(lockedFileName(prior),lockedFileName(next),
+      "same signer and height MUST share the lock across epochs");
+    reservePosition(dir,f.committee,25,id,oldHash);
+    assert.throws(()=>reservePosition(dir,changed,25,id,nextHash),
+      /equivocation|inconsistent/);
+    assert.throws(()=>reservePosition(dir,changed,25,id,oldHash),
+      /inconsistent/,"unreviewed epoch migration cannot silently reset old signer state");
+    const saved=JSON.parse(fs.readFileSync(path.join(dir,lockedFileName(prior)),"utf8"));
+    assert.equal(saved.epoch,f.committee.epoch);
+    assert.equal(saved.blockHash,oldHash);
+    assert.equal(fs.readdirSync(dir).length,1);
+    // A NEW height remains signable even in the changed research epoch.
+    assert.equal(reservePosition(dir,changed,26,id,nextHash).alreadyReserved,false);
+  } finally {fs.rmSync(dir,{recursive:true,force:true});}
+});
+
 test("corrupt lock state must fail closed and remain present for audit",()=>{
   const f=fixture(),dir=tempRoot();
   try {
