@@ -154,3 +154,40 @@ def test_http_api_with_x402_header_flow(ledger, monkeypatch):
         r = http.post("/guard/v1/check", json={"text": BENIGN}, headers={"Authorization": f"Bearer {su.json()['api_key']}"})
         assert r.status_code == 200 and r.json()["paid_by"] == "free"
         assert http.post("/guard/v1/signup", json={}).status_code == 400
+
+
+def test_gateway_guard_modes(ledger, monkeypatch):
+    import httpx2
+    from test_live import CALL, make_upstream, mk, runner
+    monkeypatch.setenv("GW_ALLOW_PRIVATE", "1")
+    monkeypatch.setattr(guard_mod, "FREE_MONTHLY", 5)
+    org = ledger.create_org("Proxy Co")
+    run_ = runner(ledger, monkeypatch)
+    s, app = mk(ledger)
+    s.privi_gateways._client = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=make_upstream([])), base_url="http://up.test")
+    gid = run_(org["api_key"], "gateway_create", {"name": "g", "upstream_url": "http://up.test/mcp", "guard": "tag"}).structured_content["gw_id"]
+    assert run_(org["api_key"], "gateway_create", {"name": "g2", "upstream_url": "http://up.test/mcp", "guard": "nope"}).is_error
+    hdr = {"Accept": "application/json, text/event-stream"}
+    with TestClient(app, base_url="http://localhost") as http:
+        # tag: verdict added, content untouched
+        r = http.post(f"/gw/{gid}/mcp", headers=hdr, json=CALL("echo", q=ATTACK))
+        g = r.json()["result"]["_meta"]["privi/guard"]
+        assert g["verdict"] == "block" and g["receipt"].startswith("gc_") and ATTACK in r.json()["result"]["content"][0]["text"]
+        assert r.headers["x-privi-guard"] == "block"
+        ok = http.post(f"/gw/{gid}/mcp", headers=hdr, json=CALL("echo", q=BENIGN)).json()["result"]["_meta"]["privi/guard"]
+        assert ok["verdict"] == "allow"
+        # block: injected results are withheld, over JSON and SSE and WebSocket
+        assert not run_(org["api_key"], "gateway_set_guard", {"gw_id": gid, "mode": "block"}).is_error
+        r = http.post(f"/gw/{gid}/mcp", headers=hdr, json=CALL("echo", q=ATTACK)).json()["result"]
+        assert r["isError"] and "withheld" in r["content"][0]["text"] and ATTACK not in json.dumps(r)
+        raw = http.post(f"/gw/{gid}/mcp", headers=hdr, json=CALL("sse_echo", q=ATTACK)).text
+        assert raw.startswith("event: message") and "withheld" in raw and "IGNORE ALL" not in raw
+        with http.websocket_connect(f"/gw/{gid}/ws") as ws:
+            ws.send_json(CALL("echo", 7, q=ATTACK))
+            assert "withheld" in ws.receive_json()["result"]["content"][0]["text"]
+        # tools/list and errors are not screened; allowance used up -> passes through, marked unchecked
+        assert "_meta" not in http.post(f"/gw/{gid}/mcp", headers=hdr, json={"jsonrpc": "2.0", "id": 3, "method": "tools/list"}).json()["result"]
+        r = http.post(f"/gw/{gid}/mcp", headers=hdr, json=CALL("echo", q=ATTACK)).json()["result"]
+        assert r["_meta"]["privi/guard"]["checked"] is False and ATTACK in r["content"][0]["text"]
+    assert s.privi_guard.balance(org["org_id"])["used_this_month"] == 5
+    assert run_(org["api_key"], "gateway_info", {"gw_id": gid}).structured_content["guard"]["mode"] == "block"

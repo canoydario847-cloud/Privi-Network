@@ -305,6 +305,9 @@ def make_upstream(seen):
             if name == "stream":
                 return Response("event: message\ndata: " + json.dumps({"jsonrpc": "2.0", "id": rid, "result": {"content": []}})
                                 + "\n\n", media_type="text/event-stream")
+            if name == "sse_echo":
+                return Response("event: message\ndata: " + json.dumps({"jsonrpc": "2.0", "id": rid, "result": {"content": [
+                    {"type": "text", "text": json.dumps(body["params"].get("arguments"))}]}}) + "\n\n", media_type="text/event-stream")
             if name == "boom":
                 return JSONResponse({"jsonrpc": "2.0", "id": rid, "error": {"code": -32000, "message": "boom"}})
         return JSONResponse({"jsonrpc": "2.0", "id": rid, "result": {"tools": []}})

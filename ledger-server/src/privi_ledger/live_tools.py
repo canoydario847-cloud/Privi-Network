@@ -228,6 +228,8 @@ def register(mcp: MCPServer, live: LiveService, gateways: Gateways, rooms: Rooms
         upstream_url: Annotated[str, Field(description="The MCP server's public https URL (streamable HTTP), e.g. https://api.acme.com/mcp")],
         min_score: Annotated[int, Field(description="0 = open to everyone. >0 = callers must prove a KYA wallet whose Passport scores at least this (0-1000)", ge=0, le=1000)] = 0,
         rate_per_min: Annotated[int, Field(description="Requests per minute per caller (1-1200)", ge=1, le=1200)] = 60,
+        guard: Annotated[str, Field(description="Privi Guard on every tool result: off, tag (add the verdict in _meta) or "
+                                                "block (withhold injected results). Each check uses your Guard allowance or credits")] = "off",
     ) -> CallToolResult:
         """Put your MCP server behind Privi. You get an HTTP URL and a WebSocket URL that forward to it unchanged (x402
         payments keep working) while Privi rate-limits callers, optionally requires a Privi Passport, meters every tool call
@@ -237,9 +239,23 @@ def register(mcp: MCPServer, live: LiveService, gateways: Gateways, rooms: Rooms
         if not org:
             return unauthorized
         try:
-            g = await gateways.create(org, name, upstream_url, min_score, rate_per_min)
+            g = await gateways.create(org, name, upstream_url, min_score, rate_per_min, guard)
             return result({**g, "next": "Point your agents at http_url (or ws_url) instead of the upstream URL; view usage with gateway_stats."})
         except (GatewayError, ValueError) as e:
+            return result({"error": str(e)}, True)
+
+    @mcp.tool(title="Gateway: Guard mode", annotations=WRITE)
+    def gateway_set_guard(ctx: Context, gw_id: Annotated[str, Field(description="gw_... ID")],
+                          mode: Annotated[str, Field(description="off | tag | block")]) -> CallToolResult:
+        """Turn Privi Guard on for every tool result that passes through your gateway: tag adds the verdict and a receipt
+        id in result._meta['privi/guard']; block also replaces injected results with an error before your agents see
+        them. Each result is one Guard check (free allowance, then credits). Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        try:
+            return result(gateways.set_guard(org["org_id"], gw_id, mode))
+        except GatewayError as e:
             return result({"error": str(e)}, True)
 
     @mcp.tool(title="Gateway: info", annotations=READ_ONLY)

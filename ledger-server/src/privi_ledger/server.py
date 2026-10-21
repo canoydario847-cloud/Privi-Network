@@ -194,6 +194,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     mcp.privi_scan = scanner
     guard = Guard(ledger, passports, public_url)
     mcp.privi_guard = guard
+    gateways.guard = guard
 
     def org_from(ctx: Context) -> dict | None:
         headers = ctx.headers

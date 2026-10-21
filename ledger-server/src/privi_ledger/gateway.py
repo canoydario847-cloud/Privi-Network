@@ -42,6 +42,7 @@ from .live import LiveService, MAX_FRAME, _iso, _now, jresp
 from .store import check_id
 
 FREE_MONTHLY = int(os.getenv("GW_FREE_MONTHLY", "1000"))
+GUARD_MODES = ("off", "tag", "block")
 MAX_GATEWAYS = {"free": 2, "pro": 50, "enterprise": 500}
 MAX_BODY = 1_000_000
 MAX_BUFFER = 4_000_000
@@ -131,8 +132,12 @@ class Gateways:
         self._rates: dict[tuple[str, str], deque] = defaultdict(deque)
         self._seen_sigs: dict[str, float] = {}
         self._salt = os.getenv("GW_IP_SALT", "") or secrets.token_hex(8)
+        self.guard = None          # Privi Guard service, set by the server when available
         with self.lock:
             self.db.executescript(SCHEMA)
+            cols = {r[1] for r in self.db.execute("PRAGMA table_info(gateways)").fetchall()}
+            if "guard_mode" not in cols:
+                self.db.execute("ALTER TABLE gateways ADD COLUMN guard_mode TEXT NOT NULL DEFAULT 'off'")
             self.db.commit()
 
     @property
@@ -167,7 +172,8 @@ class Gateways:
                     raise GatewayError("upstream resolves to a non-public address")
         return url.strip()
 
-    async def create(self, org: dict, name: str, upstream_url: str, min_score: int = 0, rate_per_min: int = 60) -> dict:
+    async def create(self, org: dict, name: str, upstream_url: str, min_score: int = 0, rate_per_min: int = 60,
+                     guard_mode: str = "off") -> dict:
         name = " ".join((name or "").split())[:60]
         if not name:
             raise GatewayError("name is required")
@@ -175,6 +181,8 @@ class Gateways:
             raise GatewayError("min_score must be 0-1000 (0 = open to everyone)")
         if not 1 <= rate_per_min <= 1200:
             raise GatewayError("rate_per_min must be 1-1200")
+        if guard_mode not in GUARD_MODES:
+            raise GatewayError("guard must be off, tag or block")
         plan = self.live.plan_of(org["org_id"])
         with self.lock:
             n = self.db.execute("SELECT COUNT(*) FROM gateways WHERE org_id=? AND disabled_at IS NULL",
@@ -185,9 +193,9 @@ class Gateways:
         gw_id = "gw_" + secrets.token_hex(6)
         stream = check_id(f"gw-{gw_id}", "stream_id")
         with self.lock:
-            self.db.execute("INSERT INTO gateways (gw_id, org_id, name, upstream, stream_id, min_score, rate_per_min, created_at) "
-                            "VALUES (?,?,?,?,?,?,?,?)", (gw_id, org["org_id"], name, upstream, stream, min_score,
-                                                         rate_per_min, _iso(_now())))
+            self.db.execute("INSERT INTO gateways (gw_id, org_id, name, upstream, stream_id, min_score, rate_per_min, created_at, "
+                            "guard_mode) VALUES (?,?,?,?,?,?,?,?,?)", (gw_id, org["org_id"], name, upstream, stream, min_score,
+                                                                      rate_per_min, _iso(_now()), guard_mode))
             self.db.commit()
         self.live._log(org["org_id"], stream, "other", f"Gateway {gw_id} created for {urlsplit(upstream).hostname}", gw_id)
         return self.public(gw_id)
@@ -213,8 +221,24 @@ class Gateways:
                                  "X-Privi-Timestamp, X-Privi-Signature (personal_sign of 'Privi Gateway <id>\\nTimestamp: <ts>')"}
                                 if g["min_score"] else {"required": False}),
                 "rate_limit_per_minute_per_caller": g["rate_per_min"], "created_at": g["created_at"],
+                "guard": {"mode": g.get("guard_mode", "off"),
+                          "what": {"off": "tool results pass through unchecked",
+                                   "tag": "every tool result is checked by Privi Guard; the verdict is added in _meta['privi/guard']",
+                                   "block": "every tool result is checked; injected results are replaced by an error before the agent sees them"}
+                          [g.get("guard_mode", "off")]},
                 "stats": {"tool_calls": tot["c"], "errors": tot["e"], "denied": tot["d"], "payment_required": tot["p"]},
                 "audited_by": "Privi Ledger: every tool call is written to the owner's tamper-evident log"}
+
+    def set_guard(self, org_id: str, gw_id: str, mode: str) -> dict:
+        if mode not in GUARD_MODES:
+            raise GatewayError("guard must be off, tag or block")
+        with self.lock:
+            n = self.db.execute("UPDATE gateways SET guard_mode=? WHERE gw_id=? AND org_id=? AND disabled_at IS NULL",
+                                (mode, gw_id, org_id)).rowcount
+            self.db.commit()
+        if not n:
+            raise GatewayError("no such gateway for this organization")
+        return self.public(gw_id)
 
     def list_for(self, org_id: str) -> list[dict]:
         with self.lock:
@@ -379,7 +403,8 @@ class Gateways:
                                f"{kind} in {lat}ms ({resp.status_code})", lat, {"caller": caller, "status": resp.status_code,
                                                                               "result": kind, "bytes": nbytes})
 
-        if buffer or "text/event-stream" not in ctype:
+        guarding = bool(tools) and self.guard is not None and gw.get("guard_mode", "off") != "off"
+        if buffer or guarding or "text/event-stream" not in ctype:
             data = bytearray()
             try:
                 async for chunk in resp.aiter_raw():
@@ -391,6 +416,8 @@ class Gateways:
                 await resp.aclose()
             kind = classify(resp.status_code, bytes(data), ctype)
             finish(kind, len(data))
+            if guarding and resp.status_code < 400:
+                data = await self._screen(gw, msg, bytes(data), ctype, out_h)
             return resp.status_code, out_h, bytes(data), None
 
         async def stream():
@@ -403,6 +430,66 @@ class Gateways:
                 await resp.aclose()
                 finish("ok" if resp.status_code < 400 else "error", n)
         return resp.status_code, out_h, stream(), None
+
+    async def _screen(self, gw: dict, request_msg, raw: bytes, ctype: str, out_h: dict) -> bytes:
+        """Privi Guard on tool results: check each tools/call result as inbound content, billed to the gateway owner.
+        tag = add the verdict in result._meta['privi/guard']; block = replace an injected result with an error."""
+        from .guard import NeedPayment
+        reqs = request_msg if isinstance(request_msg, list) else [request_msg]
+        call_ids = {m.get("id"): m["params"]["name"] for m in reqs if isinstance(m, dict) and m.get("method") == "tools/call"
+                    and isinstance(m.get("params"), dict)}
+        sse = "text/event-stream" in ctype
+        try:
+            if sse:
+                events = [e for e in raw.decode("utf-8", "replace").replace("\r\n", "\n").split("\n\n") if e.strip()]
+                msgs = []
+                for ev in events:
+                    data = "\n".join(l[5:].lstrip() for l in ev.split("\n") if l.startswith("data:"))
+                    msgs.append(json.loads(data) if data else None)
+            else:
+                body = json.loads(raw)
+                msgs = body if isinstance(body, list) else [body]
+        except ValueError:
+            return raw
+        changed = False
+        for m in msgs:
+            if not isinstance(m, dict) or m.get("id") not in call_ids or not isinstance(m.get("result"), dict):
+                continue
+            res = m["result"]
+            parts = [c.get("text", "") for c in res.get("content") or [] if isinstance(c, dict) and c.get("type") == "text"]
+            if res.get("structuredContent") is not None:
+                parts.append(json.dumps(res["structuredContent"], ensure_ascii=False))
+            text = "\n".join(p for p in parts if isinstance(p, str))[:100_000]
+            if not text.strip():
+                continue
+            tool = call_ids[m["id"]]
+            try:
+                paid_by = self.guard.bill(gw["org_id"], 1)
+                v = await anyio.to_thread.run_sync(lambda: self.guard.check(text, "inbound", f"gateway {gw['gw_id']} {tool}"[:300],
+                                                                            gw["org_id"], paid_by))
+                tag = {"checked": True, "verdict": v["verdict"], "risk": v["risk"],
+                       "findings": [f["code"] for f in v["findings"]], "receipt": v["receipt"]["check_id"]}
+            except NeedPayment:
+                tag = {"checked": False, "reason": "the gateway owner's Privi Guard allowance is used up"}
+                v = None
+            except Exception as e:  # never break the proxy because of the screen
+                tag, v = {"checked": False, "reason": type(e).__name__}, None
+            if v and v["verdict"] == "block" and gw.get("guard_mode") == "block":
+                why = "; ".join(f"{f['code']}: {f['detail']}" for f in v["findings"][:4])
+                m["result"] = {"content": [{"type": "text", "text": f"Privi Guard blocked this result from {tool}: it contains a "
+                                            f"prompt-injection attempt ({why}). The original was withheld. Receipt {tag['receipt']}."}],
+                               "isError": True, "_meta": {"privi/guard": tag}}
+            else:
+                res.setdefault("_meta", {})
+                if isinstance(res["_meta"], dict):
+                    res["_meta"]["privi/guard"] = tag
+            changed = True
+            out_h["x-privi-guard"] = tag.get("verdict", "unchecked")
+        if not changed:
+            return raw
+        if sse:
+            return "".join(f"event: message\ndata: {json.dumps(m, separators=(',', ':'))}\n\n" for m in msgs if m is not None).encode()
+        return json.dumps(msgs if isinstance(json.loads(raw), list) else msgs[0], separators=(",", ":")).encode()
 
     def _log_call(self, gw: dict, tools: list[str], caller: str, outcome: str, text: str, lat: int,
                   details: dict | None = None) -> None:
