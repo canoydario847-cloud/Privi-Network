@@ -34,6 +34,41 @@ func (priviTestAppOptions) Get(key string) interface{} {
     return nil
 }
 
+// PoP fixture signers are disposable, in-memory Ed25519 test identities.
+type probePoPGenesis struct {
+    ChainID string `json:"chain_id"`
+    Authorities []prvipop.Authority `json:"authorities"`
+}
+
+// Prepare a bank declaration within the cap and a structurally valid PoP
+// registry, so the selected InitChain negative case reaches the intended
+// guard instead of failing earlier on the upstream atest demo supply.
+func validPoPAndBankFixture(app *evmd.EVMD,state map[string]json.RawMessage) error {
+    var bank banktypes.GenesisState
+    if err:=app.AppCodec().UnmarshalJSON(state[banktypes.ModuleName],&bank);err!=nil{return err}
+    bank.Supply=sdk.NewCoins(sdk.NewInt64Coin(prvicap.BaseDenom,1))
+    state[banktypes.ModuleName]=app.AppCodec().MustMarshalJSON(&bank)
+    author,_,err:=ed25519.GenerateKey(rand.Reader)
+    if err!=nil{return err}
+    p:=probePoPGenesis{ChainID:"privi-valueless-genesis-probe-1",
+        Authorities:[]prvipop.Authority{{Company:"TESTCO",Zone:"GRID/READINGS",PublicKey:author}}}
+    raw,err:=json.Marshal(p)
+    if err!=nil{return err}
+    state[prvipop.StoreKey]=raw
+    return nil
+}
+func mutatePoPFixture(app *evmd.EVMD,state map[string]json.RawMessage,
+    mutate func(*probePoPGenesis)) error {
+    if err:=validPoPAndBankFixture(app,state);err!=nil{return err}
+    var p probePoPGenesis
+    if err:=json.Unmarshal(state[prvipop.StoreKey],&p);err!=nil{return err}
+    mutate(&p)
+    raw,err:=json.Marshal(p)
+    if err!=nil{return err}
+    state[prvipop.StoreKey]=raw
+    return nil
+}
+
 // Only the nonfinancial negative fixture; this must fail before a keeper or
 // codec is constructed, rather than after InitChain has modified state.
 type forbiddenEVMOptions struct{ id uint64 }
@@ -99,6 +134,10 @@ func main() {
             "declared PRVI over lifetime cap",
             "missing bank genesis module",
             "aprvi declaration with wrong EVM gas token",
+            "missing PoP authorization registry",
+            "malformed PoP authorization registry",
+            "PoP authorization chain mismatch",
+            "duplicate PoP position authority",
         }
         for _, name:=range names {
             child:=exec.Command(os.Args[0])
@@ -110,7 +149,7 @@ func main() {
             }
             fmt.Print(string(output))
         }
-        fmt.Println("ALL PASS: 4 isolated full-app valueless negative genesis cases; no network started")
+        fmt.Println("ALL PASS: 8 isolated full-app valueless negative genesis cases; no network started")
         return
     }
     // Default upstream demo uses atest and MUST NOT silently initialize
@@ -144,28 +183,42 @@ func main() {
     // An aprvi balance or supply declaration alone cannot make a developer
     // EVM chain with upstream "stake" gas a legitimate Privi-native chain.
     if err:=runCase("aprvi declaration with wrong EVM gas token",
+        validPoPAndBankFixture,
+        "PRVI native genesis: EVM gas denomination must be aprvi");err!=nil {
+        fmt.Fprintln(os.Stderr,err);os.Exit(1)
+    }
+    // These four cases exercise the actual custom-node InitChain PoP checks,
+    // not a standalone PoP keeper mock. All must reject BEFORE module writes.
+    if err:=runCase("missing PoP authorization registry",
         func(app *evmd.EVMD,state map[string]json.RawMessage) error {
-            var bank banktypes.GenesisState
-            if err:=app.AppCodec().UnmarshalJSON(state[banktypes.ModuleName],&bank);err!=nil {return err}
-            bank.Supply=sdk.NewCoins(sdk.NewInt64Coin(prvicap.BaseDenom,1))
-            state[banktypes.ModuleName]=app.AppCodec().MustMarshalJSON(&bank)
-            // Pin valid, valueless PoP author genesis so this particular
-            // negative case reaches the EVM-gas-denomination guard rather
-            // than failing early for an absent PoP registry.
-            author,_,err:=ed25519.GenerateKey(rand.Reader)
-            if err!=nil{return err}
-            popFixture:=struct{
-                ChainID string `json:"chain_id"`
-                Authorities []prvipop.Authority `json:"authorities"`
-            }{
-                ChainID:"privi-valueless-genesis-probe-1",
-                Authorities:[]prvipop.Authority{{Company:"TESTCO",Zone:"GRID/READINGS",PublicKey:author}},
-            }
-            encoded,err:=json.Marshal(popFixture)
-            if err!=nil{return err}
-            state[prvipop.StoreKey]=encoded
+            if err:=validPoPAndBankFixture(app,state);err!=nil{return err}
+            delete(state,prvipop.StoreKey)
             return nil
-        },"PRVI native genesis: EVM gas denomination must be aprvi");err!=nil {
+        },"Privi PoP genesis: authorization registry absent");err!=nil {
+        fmt.Fprintln(os.Stderr,err);os.Exit(1)
+    }
+    if err:=runCase("malformed PoP authorization registry",
+        func(app *evmd.EVMD,state map[string]json.RawMessage) error {
+            if err:=validPoPAndBankFixture(app,state);err!=nil{return err}
+            state[prvipop.StoreKey]=json.RawMessage(`"not-a-registry"`)
+            return nil
+        },"Privi PoP genesis: malformed authorization registry");err!=nil {
+        fmt.Fprintln(os.Stderr,err);os.Exit(1)
+    }
+    if err:=runCase("PoP authorization chain mismatch",
+        func(app *evmd.EVMD,state map[string]json.RawMessage) error {
+            return mutatePoPFixture(app,state,func(p *probePoPGenesis){
+                p.ChainID="privi-foreign-1"
+            })
+        },"Privi PoP genesis: Cosmos chain identity mismatch");err!=nil {
+        fmt.Fprintln(os.Stderr,err);os.Exit(1)
+    }
+    if err:=runCase("duplicate PoP position authority",
+        func(app *evmd.EVMD,state map[string]json.RawMessage) error {
+            return mutatePoPFixture(app,state,func(p *probePoPGenesis){
+                p.Authorities=append(p.Authorities,p.Authorities[0])
+            })
+        },"Privi PoP genesis: unsafe author registry before SDK InitGenesis");err!=nil {
         fmt.Fprintln(os.Stderr,err);os.Exit(1)
     }
     // A child process contains exactly one customized Cosmos EVM app; no
