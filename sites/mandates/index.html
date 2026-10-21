@@ -1,0 +1,66 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privi Mandates: signed permission for AI agents to spend</title><meta name="description" content="A person&#x27;s wallet-signed authorization for an AI agent to spend, with budget, caps, payees and expiry that any merchant can check for free.">
+<link rel="canonical" href="https://privi-mandates.onrender.com"><link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="alternate" type="text/plain" href="https://privi-discovery.onrender.com/llms.txt" title="llms.txt">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
+<meta property="og:title" content="Privi Mandates: signed permission for AI agents to spend"><meta property="og:description" content="A person&#x27;s wallet-signed authorization for an AI agent to spend, with budget, caps, payees and expiry that any merchant can check for free."><meta property="og:type" content="website">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebPage", "name": "Privi Mandates: signed permission for AI agents to spend", "description": "A person's wallet-signed authorization for an AI agent to spend, with budget, caps, payees and expiry that any merchant can check for free.", "url": "https://privi-mandates.onrender.com", "publisher": {"@type": "Organization", "name": "Privi World Co", "url": "https://privi-world.onrender.com", "email": "dariocanoy@priviflow.us", "founder": {"@type": "Person", "name": "Dario Canoy"}}}</script>
+<style>
+:root{--paper:#F7F8FA;--surface:#FFFFFF;--ink:#0E1B33;--steel:#5A6B85;--seal:#2F5BEA;--on-seal:#FFFFFF;--verified:#0F8A5F;--rule:#DCE1EA;--code:#EEF1F6}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--paper:#0D1626;--surface:#122036;--ink:#E7ECF4;--steel:#93A3BB;--seal:#7FA2FF;--on-seal:#0D1626;--verified:#3CCB94;--rule:#22314A;--code:#16263F}}
+*{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:17px/1.6 "IBM Plex Sans",system-ui,sans-serif}
+a{color:var(--seal);text-underline-offset:3px}a:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid var(--seal);outline-offset:2px}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+header{border-bottom:1px solid var(--rule);background:var(--surface)}
+.bar{display:flex;align-items:center;gap:24px;min-height:64px;flex-wrap:wrap}
+.mark{font:600 20px "IBM Plex Sans Condensed",sans-serif;color:var(--ink);text-decoration:none;letter-spacing:.01em;display:flex;align-items:center;gap:10px}
+.mark svg{width:26px;height:26px}
+nav{display:flex;gap:4px 18px;flex-wrap:wrap;font-size:15px}nav a{color:var(--steel);text-decoration:none;padding:4px 0}
+nav a[aria-current]{color:var(--ink);box-shadow:inset 0 -2px var(--seal)}nav a:hover{color:var(--ink)}
+.hero{display:grid;grid-template-columns:1.15fr .85fr;gap:48px;padding:72px 0 56px;align-items:start}
+h1{font:600 clamp(36px,5.2vw,58px)/1.04 "IBM Plex Sans Condensed",sans-serif;margin:0 0 20px;letter-spacing:-.01em;max-width:16ch}
+h2{font:600 30px/1.15 "IBM Plex Sans Condensed",sans-serif;margin:0 0 14px}
+h3{font:600 20px/1.3 "IBM Plex Sans Condensed",sans-serif;margin:0 0 4px}
+.lede{font-size:20px;color:var(--steel);max-width:36em;margin:0 0 28px}
+.cta{display:flex;gap:14px;flex-wrap:wrap}
+.btn{display:inline-block;padding:12px 20px;border-radius:8px;background:var(--seal);color:var(--on-seal);text-decoration:none;font-weight:600}
+.btn.alt{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--rule)}
+.proof{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:22px}
+.proof h2{font-size:18px;margin:0 0 4px}.proof p{margin:0 0 14px;color:var(--steel);font-size:15px}
+.root{font:500 clamp(15px,1.9vw,19px)/1.55 "IBM Plex Mono",monospace;word-break:break-all;color:var(--ink);margin:6px 0 14px}
+.root span{display:inline-block;margin-right:.45em}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:15px;margin:0}.facts dt{color:var(--steel)}.facts dd{margin:0}
+.ok{color:var(--verified);font-weight:600}.wait{color:var(--steel)}.root .wait{font:15px/1.5 "IBM Plex Sans",system-ui,sans-serif;word-break:normal}
+section{padding:56px 0;border-top:1px solid var(--rule)}
+.prose{max-width:44em}.prose p{margin:0 0 16px}
+dl.defs{display:grid;grid-template-columns:minmax(180px,260px) 1fr;gap:22px 40px;margin:28px 0 0}
+dl.defs dt{font:600 19px/1.3 "IBM Plex Sans Condensed",sans-serif}dl.defs dd{margin:0;color:var(--steel)}
+ol.steps{counter-reset:s;list-style:none;padding:0;margin:24px 0 0;max-width:46em}
+ol.steps li{counter-increment:s;position:relative;padding:0 0 22px 52px}
+ol.steps li::before{content:counter(s);position:absolute;left:0;top:0;width:34px;height:34px;border-radius:50%;border:1.5px solid var(--seal);color:var(--seal);font:600 15px/31px "IBM Plex Sans Condensed",sans-serif;text-align:center}
+pre{background:var(--code);border-radius:10px;padding:18px;overflow-x:auto;font:14px/1.6 "IBM Plex Mono",monospace;margin:18px 0 0}
+code{font-family:"IBM Plex Mono",monospace;font-size:.9em}
+.note{font-size:15px;color:var(--steel);max-width:44em}
+form.check{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0 10px}
+form.check input{flex:1 1 280px;padding:11px 12px;border:1.5px solid var(--rule);border-radius:8px;background:var(--surface);color:var(--ink);font:15px "IBM Plex Mono",monospace}
+form.check button{padding:11px 18px;border:0;border-radius:8px;background:var(--seal);color:var(--on-seal);font:600 15px "IBM Plex Sans",sans-serif;cursor:pointer}
+#out{font-size:15px;max-width:44em}
+footer{border-top:1px solid var(--rule);padding:36px 0 48px;color:var(--steel);font-size:15px}
+footer .cols{display:flex;gap:40px;flex-wrap:wrap;justify-content:space-between}
+@media (max-width:820px){.hero{grid-template-columns:1fr;padding-top:44px}dl.defs{grid-template-columns:1fr;gap:6px}dl.defs dd{margin-bottom:14px}}
+@media (prefers-reduced-motion:no-preference){.root.fresh span{animation:in .5s ease both}@keyframes in{from{opacity:0}to{opacity:1}}}
+</style></head><body>
+<header><div class="wrap bar"><a class="mark" href="https://privi-world.onrender.com"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#0E1B33"/><path d="M18 46V18h14a10 10 0 0 1 0 20h-6v8z" fill="none" stroke="#7FA2FF" stroke-width="5" stroke-linejoin="round"/><circle cx="46" cy="44" r="4" fill="#3CCB94"/></svg>Privi</a><nav aria-label="Privi sites"><a href="https://privi-world.onrender.com">Privi</a><a href="https://privi-fortress.onrender.com">Fortress</a><a href="https://privi-passport.onrender.com">Passport</a><a href="https://privi-kya.onrender.com">KYA</a><a href="https://privi-mandates.onrender.com" aria-current=page>Mandates</a><a href="https://privi-gov.onrender.com">Government</a><a href="https://privi-chainflow.onrender.com">ChainFlow</a><a href="https://privi-developers.onrender.com">Developers</a></nav></div></header>
+<main><div class="wrap">
+<div class="hero"><div><h1>Let agents spend. Within limits a person signed.</h1><p class="lede">When an agent pays on someone's behalf, the merchant needs to know a human agreed. A Privi Mandate is that agreement: plain-English terms the person signs once with their wallet, enforced on every payment and checkable by anyone for free.</p><div class="cta"><a class="btn" href="#how">How it works</a><a class="btn alt" href="https://privi-developers.onrender.com">Use it in your agent</a></div></div><aside class="proof"><h2>A mandate says</h2><p>The exact text a person signs.</p>
+<pre style="margin:0;white-space:pre-wrap">I authorize ShopBot's agent 'shopper' to spend up to 100 USDC in total, at most 40 USDC per payment, to only these payees: store.example.com, until 2026-11-20 UTC.
+Purpose: Buy office supplies.
+I can revoke this at any time.</pre></aside></div>
+<section id="how"><h2>How it works</h2><ol class="steps"><li><h3>The agent drafts terms</h3><p>Budget, per-payment cap, allowed payees by address or domain, expiry and purpose. Privi returns a signing link.</p></li><li><h3>The person signs once</h3><p>They read the terms in plain English and sign with their wallet. Privi countersigns and anchors the terms on chain.</p></li><li><h3>Every payment is checked</h3><p>Before paying, the agent records the spend. Over-cap, wrong-payee, expired or revoked payments are refused and logged as blocked.</p></li><li><h3>Merchants verify for free</h3><p>A merchant or facilitator checks the mandate and gets a signed allow or deny with the remaining budget.</p></li></ol></section><section><h2>Check a mandate</h2><div class=prose><p>The person can revoke from the same page they signed on, with one more signature. Revocation takes effect immediately for every checker.</p></div><pre>GET https://privi-ledger.onrender.com/mandates/&lt;mandate_id&gt;/check?amount=25&amp;payee=store.example.com</pre></section>
+</div></main>
+<footer><div class="wrap cols"><div><strong>Privi World Co</strong><br>Port Huron, Michigan<br><a href="mailto:dariocanoy@priviflow.us">dariocanoy@priviflow.us</a></div>
+<div>Built by Dario Canoy<br><a href="https://github.com/canoydario847-cloud/Privi-Network">Source on GitHub</a><br><a href="https://privi-discovery.onrender.com/llms.txt">For AI agents: llms.txt</a></div>
+<div>MCP servers<br><a href="https://privi-ledger.onrender.com">Ledger</a>, <a href="https://privi-verify.onrender.com">Verify</a>, <a href="https://privi-anchor.onrender.com">Anchor</a></div></div></footer>
+</body></html>
