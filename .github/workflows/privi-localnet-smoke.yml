@@ -65,6 +65,25 @@ jobs:
           GOTOOLCHAIN=local go build -mod=mod -p 2 -trimpath \
             -o "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY" ./cmd/evmd
           test -s "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY"
+          # Execute the actual patched application command in an isolated runner.
+          # Its chain-ID guard must reject the known upstream developer identity
+          # before it can be mistaken for a production Privi network.
+          set +e
+          timeout 30s "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY" start \
+            --evm-chain-id 262144 \
+            > "$RUNNER_TEMP/privi-rejected-chain.log" 2>&1
+          reject_status=$?
+          set -e
+          if [ "$reject_status" -eq 0 ] || [ "$reject_status" -eq 124 ]; then
+            echo "Privi custom binary did not promptly reject upstream EVM chain ID" >&2
+            cat "$RUNNER_TEMP/privi-rejected-chain.log"
+            exit 1
+          fi
+          grep -q 'PRVI EVM chain identity rejected' "$RUNNER_TEMP/privi-rejected-chain.log" || {
+            echo "Expected custom-node chain identity rejection was not observed" >&2
+            cat "$RUNNER_TEMP/privi-rejected-chain.log"
+            exit 1
+          }
           sha256sum "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY"
           GOTOOLCHAIN=local go version -m "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY" \
             > "$RUNNER_TEMP/privi-sdk-build-info.txt"
