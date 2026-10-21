@@ -75,7 +75,36 @@ func TestSDKPatchedBankGenesisAndLegitimateNativeTransfer(t *testing.T) {
  if err:=h.cap.Reconcile(h.ctx,h.bank);err!=nil {
    t.Fatalf("legitimate transfer violated native conservation: %v",err)
  }
- if err:=h.bank.UncheckedSetBalance(h.ctx,receiver,sdk.NewInt64Coin(BaseDenom,26));err==nil {
-   t.Fatal("raw caller changed native balance after legitimate transfer")
+ // Rejected raw writes must be atomic: neither inflationary credits nor
+ // unauthorized debits may alter a funded account or the bank's supply.
+ for _,tc:=range []struct{
+   name string
+   address sdk.AccAddress
+   balance int64
+ }{
+   {"receiver-credit",receiver,26},
+   {"receiver-debit",receiver,24},
+   {"receiver-drain",receiver,0},
+   {"sender-credit",sender,76},
+   {"sender-debit",sender,74},
+   {"sender-drain",sender,0},
+ } {
+   t.Run(tc.name,func(t *testing.T) {
+     if err:=h.bank.UncheckedSetBalance(h.ctx,tc.address,sdk.NewInt64Coin(BaseDenom,tc.balance));err==nil {
+       t.Fatal("raw caller altered a funded native PRVI balance")
+     }
+     if got:=h.bank.GetBalance(h.ctx,sender,BaseDenom).Amount.Int64();got!=75 {
+       t.Fatalf("rejected raw write changed sender balance to %d",got)
+     }
+     if got:=h.bank.GetBalance(h.ctx,receiver,BaseDenom).Amount.Int64();got!=25 {
+       t.Fatalf("rejected raw write changed receiver balance to %d",got)
+     }
+     if got:=h.bank.GetSupply(h.ctx,BaseDenom).Amount.Int64();got!=100 {
+       t.Fatalf("rejected raw write changed native supply to %d",got)
+     }
+     if err:=h.cap.Reconcile(h.ctx,h.bank);err!=nil {
+       t.Fatalf("native accounting failed after rejected raw write: %v",err)
+     }
+   })
  }
 }
