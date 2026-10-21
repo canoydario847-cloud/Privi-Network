@@ -30,9 +30,10 @@ URLS = {
     "chainflow": "https://chainflow.priviflow.us",
     "developers": "https://developers.priviflow.us",
     "live": "https://live.priviflow.us",
+    "scan": "https://privi-ledger.onrender.com/scan",
 }
 NAV = [("home", "Privi"), ("fortress", "Fortress"), ("passport", "Passport"), ("kya", "KYA"),
-       ("mandates", "Mandates"), ("gov", "Government"), ("live", "Live"), ("chainflow", "ChainFlow"), ("developers", "Developers")]
+       ("mandates", "Mandates"), ("gov", "Government"), ("live", "Live"), ("scan", "Scan"), ("chainflow", "ChainFlow"), ("developers", "Developers")]
 
 e = html.escape
 

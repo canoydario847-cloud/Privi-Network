@@ -595,8 +595,10 @@ class LiveService:
                 specs.append(("trust", delay))
             elif c.startswith("mandate:") and 8 < len(c) < 40 and c[8:].replace("_", "").isalnum():
                 specs.append((c, delay))
+            elif c == "scan" or (c.startswith("scan:mcp_") and len(c) == 21 and c[9:].isalnum()):
+                specs.append((c, delay))
             else:
-                return [], f"unknown channel '{c[:40]}' (use: org, trust, mandate:<id>)"
+                return [], f"unknown channel '{c[:40]}' (use: org, trust, scan, scan:<server_id>, mandate:<id>)"
         if not specs:
             return [], "no channels requested"
         return list(dict.fromkeys(specs)), None

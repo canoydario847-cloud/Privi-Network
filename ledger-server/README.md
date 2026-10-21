@@ -149,6 +149,31 @@ Signed proof that a person authorized an AI agent to spend, which any merchant o
 
 Public: `GET /mandates/<id>` (terms, signatures, budget, recent spends).
 
+## Privi Scan (public MCP trust registry)
+
+Privi Scan syncs the official MCP Registry. It reads every public streamable-HTTP server's tool list with `initialize` and `tools/list` only, and never calls a tool. It grades each server A-F for tool poisoning:
+
+- prompt-injection markers
+- concealment from the user
+- requests for SSH keys, `.env` files or seed phrases
+- tool shadowing
+- invisible characters
+- unauthenticated high-impact tools
+
+Every tool definition is hashed. The first observation and every change go into the Privi Ledger transparency log (Merkle tree, anchored on-chain). That gives anyone a permanent record of what a server's tools said and when they changed.
+
+| | |
+|---|---|
+| Directory | `/scan`, one server at `/scan/s/<server_id>` |
+| Free check | `mcp_server_check(url, expected_tools_hash?)`, or `GET /scan/api/check?url=&expected=` |
+| Search | `scan_search`, `scan_server`, `scan_changes`, `scan_stats`, or `/scan/api/servers`, `/scan/api/changes`, `/scan/api/stats` |
+| Watch (org key) | `scan_watch` pins the tools_hash and sends real-time `scan.tools_changed` / `scan.risk_found` / `scan.server_down` events on your `org` Live channel; free 3 servers, Pro 500 |
+| Owners | `scan_claim_start` / `scan_claim_verify` (token at `/.well-known/privi-scan.txt`), `scan_rescan`, `scan_owner_listing` (opt out) |
+| Badge | `/scan/badge/<server_id>.svg` |
+| Live channels | `scan` (public, delayed for free) and `scan:<server_id>` |
+
+Config: `SCAN_ENABLED` (default 1), `SCAN_INTERVAL` (300 s), `SCAN_BATCH` (40), `SCAN_REPROBE_S` (6 h), `SCAN_REGISTRY_URL`.
+
 ## Privi Live (real-time: streams, human approvals, kill switch, gateway, rooms)
 
 Everything here runs over WebSocket and server-sent events, backed by one durable event log (7 days of replay).

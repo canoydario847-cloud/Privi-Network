@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privi Scan: MCP Trust Registry</title>
+<meta name="description" content="Safety grades, tool-poisoning checks and a tamper-evident change history for every public MCP server. Free check before your agent connects.">
+<style>
+:root{--bg:#f7f7f5;--card:#fff;--ink:#16181d;--mute:#5d6470;--line:#e3e3df;--acc:#2b59c3;--ok:#1f9d55;--warn:#b7791f;--bad:#c53030;--chip:#eef1f6;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#171a20;--ink:#e8eaee;--mute:#9aa3b0;--line:#2a2f38;--acc:#7ea2ff;--ok:#48bb78;--warn:#ecc94b;--bad:#fc8181;--chip:#222833}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
+.wrap{max-width:1080px;margin:0 auto;padding:20px 16px 60px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand{font-weight:700;font-size:18px;letter-spacing:-.01em}.brand span{color:var(--mute);font-weight:500}
+h1{font-size:30px;line-height:1.15;margin:26px 0 8px;letter-spacing:-.02em;max-width:760px}
+.lede{color:var(--mute);max-width:720px;margin:0 0 18px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:18px 0}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.stat b{display:block;font-size:22px}.stat small{color:var(--mute)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:14px 0}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+input,select,button{font:inherit;border:1px solid var(--line);border-radius:8px;padding:9px 11px;background:var(--card);color:var(--ink)}
+input{flex:1;min-width:200px}button{background:var(--acc);border-color:var(--acc);color:#fff;cursor:pointer;font-weight:600}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute);font-weight:600}
+.g{display:inline-block;min-width:28px;text-align:center;border-radius:6px;padding:2px 6px;font-weight:700;color:#fff;background:#6b7280}
+.gA,.gB{background:var(--ok)}.gC{background:var(--warn)}.gD,.gF{background:var(--bad)}
+.v{font-size:12px;border-radius:99px;padding:2px 8px;background:var(--chip);white-space:nowrap}
+.v-ok{color:var(--ok)}.v-caution,.v-changed{color:var(--warn)}.v-danger{color:var(--bad);font-weight:700}
+.mute{color:var(--mute)}.mono{font-family:var(--mono);font-size:12.5px;word-break:break-all}
+.url{font-family:var(--mono);font-size:12px;color:var(--mute);word-break:break-all}
+.f{border-left:3px solid var(--line);padding:6px 10px;margin:8px 0}.f.high{border-color:var(--bad)}.f.medium{border-color:var(--warn)}.f.low{border-color:var(--acc)}
+details{border-top:1px solid var(--line);padding:8px 0}summary{cursor:pointer;font-weight:600}
+pre{white-space:pre-wrap;word-break:break-word;background:var(--chip);border-radius:8px;padding:10px;font:12px/1.45 var(--mono);max-height:340px;overflow:auto}
+.pager{display:flex;gap:8px;justify-content:center;margin-top:12px}.pager button{background:var(--card);color:var(--ink);border-color:var(--line)}
+.hide{display:none}.tbl{overflow-x:auto}
+@media (max-width:640px){h1{font-size:24px}.hm{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header><div class="brand">Privi Scan <span>· MCP trust registry</span></div>
+<nav class="row"><a href="/scan">Directory</a><a href="/scan#changes">Changes</a><a href="/scan#agents">For agents</a><a href="/live">Live feed</a></nav></header>
+<main id="app"></main>
+</div>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const vis=s=>esc(s).replace(/[​-‏⁠-⁤‪-‮⁦-⁩﻿]/g,m=>`<mark title="invisible character">U+${m.codePointAt(0).toString(16).toUpperCase()}</mark>`);
+const grade=g=>g?`<span class="g g${esc(g)}">${esc(g)}</span>`:`<span class="g">–</span>`;
+const verdict=v=>`<span class="v v-${esc(v)}">${esc(v)}</span>`;
+const ago=t=>{if(!t)return"never";const s=(Date.now()-Date.parse(t))/1000;return s<3600?Math.max(1,Math.round(s/60))+"m ago":s<86400?Math.round(s/3600)+"h ago":Math.round(s/86400)+"d ago"};
+const api=p=>fetch(p).then(r=>r.json());
+const origin=location.origin;
+
+async function home(){
+  const app=$("#app");
+  app.innerHTML=`<h1>Know what an MCP server will tell your agent before it connects.</h1>
+  <p class="lede">Privi Scan reads the tool definitions of every public server in the MCP Registry. It never calls a tool. It grades each server for tool poisoning: hidden instructions, hiding things from the user, asking for keys, and hijacking other tools. Every definition and every later change goes into a Merkle log anchored on-chain, so a rug pull leaves permanent evidence.</p>
+  <div class="card"><b>Check a server</b><div class="row" style="margin-top:8px"><input id="cu" placeholder="https://example.com/mcp" inputmode="url"><button id="cb">Check</button></div><div id="cr" class="mute" style="margin-top:8px"></div></div>
+  <div class="stats" id="st"></div>
+  <div class="card"><div class="row"><input id="q" placeholder="Search servers"><select id="gr"><option value="">All grades</option><option>A</option><option>B</option><option>C</option><option>D</option><option>F</option></select>
+  <select id="so"><option value="score">Safest first</option><option value="risk">Riskiest first</option><option value="changed">Recently changed</option><option value="new">Newest</option><option value="name">Name</option></select></div>
+  <div class="tbl"><table><thead><tr><th>Grade</th><th>Server</th><th>Verdict</th><th class="hm">Tools</th><th class="hm">Changes</th><th class="hm">Checked</th></tr></thead><tbody id="tb"><tr><td colspan="6" class="mute">Loading…</td></tr></tbody></table></div>
+  <div class="pager"><button id="pv">Previous</button><span id="pg" class="mute" style="align-self:center"></span><button id="nx">Next</button></div></div>
+  <h2 id="changes">Recent tool changes</h2><div class="card" id="ch"><span class="mute">Loading…</span></div>
+  <h2 id="agents">For agents and platforms</h2>
+  <div class="card"><p>Add Privi as an MCP server and call <b>mcp_server_check</b> before connecting anywhere new. It's free and needs no key.</p>
+  <pre>{"mcpServers":{"privi":{"type":"http","url":"${esc(origin)}/mcp"}}}</pre>
+  <p>Or use plain HTTP: <span class="mono">GET ${esc(origin)}/scan/api/check?url=&lt;endpoint&gt;&amp;expected=&lt;tools_hash&gt;</span></p>
+  <p>Pin a server's <span class="mono">tools_hash</span> when you approve it. Later checks with <span class="mono">expected</span> return <b>changed</b> if anything moved. <b>scan_watch</b> pins it for you and pushes real-time alerts over WebSocket (free: 3 servers, Pro: 500).</p>
+  <p><b>Server owners:</b> claim your listing with <span class="mono">scan_claim_start</span> to get an owner-verified badge, rescans and alerts:</p>
+  <pre>[![Privi Scan](${esc(origin)}/scan/badge/&lt;server_id&gt;.svg)](${esc(origin)}/scan/s/&lt;server_id&gt;)</pre></div>`;
+  let off=0,lim=50,t;
+  const load=async()=>{
+    const p=new URLSearchParams({q:$("#q").value,grade:$("#gr").value,sort:$("#so").value,limit:lim,offset:off});
+    const d=await api("/scan/api/servers?"+p);
+    $("#tb").innerHTML=d.items.length?d.items.map(s=>`<tr><td>${grade(s.grade)}</td><td><a href="/scan/s/${esc(s.server_id)}">${esc(s.title||s.name||s.url)}</a>${s.owner_verified?' <span title="owner verified">✓</span>':""}<div class="url">${esc(s.url)}</div></td><td>${verdict(s.verdict)}</td><td class="hm">${s.tool_count??"–"}</td><td class="hm">${s.changes||0}</td><td class="hm mute">${ago(s.last_probe)}</td></tr>`).join(""):`<tr><td colspan="6" class="mute">No servers match yet. The crawler adds more every few minutes.</td></tr>`;
+    $("#pg").textContent=d.total?`${off+1}–${Math.min(off+lim,d.total)} of ${d.total}`:"";
+    $("#pv").disabled=off===0;$("#nx").disabled=off+lim>=d.total;
+  };
+  $("#q").oninput=()=>{clearTimeout(t);t=setTimeout(()=>{off=0;load()},250)};
+  $("#gr").onchange=$("#so").onchange=()=>{off=0;load()};
+  $("#pv").onclick=()=>{off=Math.max(0,off-lim);load()};$("#nx").onclick=()=>{off+=lim;load()};
+  $("#cb").onclick=async()=>{const u=$("#cu").value.trim();if(!u)return;$("#cr").textContent="Checking (read-only, never calls tools)…";
+    const d=await api("/scan/api/check?url="+encodeURIComponent(u));
+    if(d.error){$("#cr").textContent=d.error;return}
+    $("#cr").innerHTML=d.server_id?`${verdict(d.verdict)} ${grade(d.grade)} ${esc(d.tool_count??0)} tools · <a href="/scan/s/${esc(d.server_id)}">full report</a><div class="mono">tools_hash ${esc(d.tools_hash||"–")}</div>`:`${verdict(d.verdict)} ${esc(d.detail||"")} ${esc(d.note||"")}`};
+  $("#cu").onkeydown=e=>{if(e.key==="Enter")$("#cb").click()};
+  load();
+  api("/scan/api/stats").then(s=>{const g=s.by_grade||{};$("#st").innerHTML=[["Servers tracked",s.servers],["Tools indexed",s.tools_indexed],["Changes recorded",s.tool_changes_recorded],["High-risk findings",s.servers_with_high_risk_findings],["Grade A/B",(g.A||0)+(g.B||0)]].map(([k,v])=>`<div class="stat"><b>${esc(v??0)}</b><small>${k}</small></div>`).join("")});
+  api("/scan/api/changes?limit=15").then(c=>{$("#ch").innerHTML=c.length?c.map(x=>`<div style="padding:6px 0;border-bottom:1px solid var(--line)"><a href="/scan/s/${esc(x.server_id)}">${esc(x.name||x.url)}</a> <span class="mute">${ago(x.at)}</span><div class="mute">${x.diff?`+${x.diff.added.length} added · −${x.diff.removed.length} removed · ~${x.diff.modified.length} modified ${x.diff.modified.length?"("+esc(x.diff.modified.slice(0,5).join(", "))+")":""}`:""}</div></div>`).join(""):'<span class="mute">No changes recorded yet. Changes appear after a server\'s second scan.</span>'});
+}
+
+async function detail(id){
+  const app=$("#app");app.innerHTML='<p class="mute">Loading…</p>';
+  const d=await api("/scan/api/servers/"+encodeURIComponent(id));
+  if(d.error){app.innerHTML=`<h1>Not found</h1><p class="mute">${esc(d.error)}</p>`;return}
+  document.title=`${d.title||d.name||d.url} · Privi Scan`;
+  const fs=d.findings_detail||[],ev=d.evidence||{};
+  app.innerHTML=`<h1>${esc(d.title||d.name||d.url)} ${d.owner_verified?'<span title="owner verified" style="font-size:20px">✓</span>':""}</h1>
+  <div class="url">${esc(d.url)}</div><p class="lede" style="margin-top:8px">${esc(d.description||"")}</p>
+  <div class="stats"><div class="stat"><b>${grade(d.grade)}</b><small>Grade${d.score!=null?" · "+d.score+"/100":""}</small></div><div class="stat"><b>${verdict(d.verdict)}</b><small>Verdict</small></div>
+  <div class="stat"><b>${d.tool_count??"–"}</b><small>Tools</small></div><div class="stat"><b>${d.changes}</b><small>Changes since first seen</small></div><div class="stat"><b>${ago(d.last_probe)}</b><small>Last checked · ${esc(d.status)}</small></div></div>
+  ${d.detail?`<p class="mute">${esc(d.detail)}</p>`:""}
+  <div class="card"><b>Findings</b>${fs.length?fs.map(f=>`<div class="f ${esc(f.severity)}"><b>${esc(f.severity)}</b> · ${esc(f.code.replace(/_/g," "))} · <span class="mono">${esc(f.tool)}</span><div>${esc(f.detail)}</div>${f.evidence?`<div class="mono mute">“${vis(f.evidence)}”</div>`:""}</div>`).join(""):'<p class="mute">No findings.</p>'}</div>
+  <div class="card"><b>Tools</b> <span class="mono mute">tools_hash ${esc(d.tools_hash||"–")}</span>${(d.tools||[]).map(t=>`<details><summary>${esc(t.name)} <span class="mono mute">${esc((t.hash||"").slice(0,12))}</span></summary><p>${vis(t.description||"")}</p><pre>${esc(JSON.stringify(t.inputSchema||{},null,2))}</pre></details>`).join("")||'<p class="mute">Tool definitions are not public (authentication required) or the server exposes none.</p>'}</div>
+  <div class="card"><b>History</b>${(d.history||[]).map(h=>`<div style="padding:6px 0;border-bottom:1px solid var(--line)"><b>${esc(h.kind.replace("_"," "))}</b> <span class="mute">${esc(h.at)}</span> ${grade(h.grade)} <span class="mono">${esc((h.tools_hash||"").slice(0,16))}</span>${h.diff?`<div class="mute">added ${esc(h.diff.added.join(", ")||"–")} · removed ${esc(h.diff.removed.join(", ")||"–")} · modified ${esc(h.diff.modified.join(", ")||"–")}</div>`:""}${h.entry_hash?`<div class="mono mute">log entry #${esc(h.ledger_seq)} · <a href="/log/inclusion?hash=${esc(h.entry_hash)}">inclusion proof</a></div>`:""}</div>`).join("")||'<p class="mute">No history yet.</p>'}</div>
+  <div class="card"><b>Evidence</b><p class="mute">${esc(ev.what||"")}</p><div class="mono">org ${esc(ev.org_id)} · stream ${esc(ev.stream_id)}</div><p class="mute">${esc(ev.tools_hash_rule||"")}</p>
+  <b>Badge</b><pre>[![Privi Scan](${esc(d.badge)})](${esc(d.page)})</pre><img src="${esc(d.badge)}" alt="Privi Scan badge"></div>`;
+}
+
+const m=location.pathname.match(/^\/scan\/s\/([A-Za-z0-9_]+)/);
+m?detail(m[1]):home();
+</script>
+</body>
+</html>

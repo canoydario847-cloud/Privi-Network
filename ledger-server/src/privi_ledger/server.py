@@ -41,12 +41,13 @@ from .fortress import Fortress, FortressError
 from .live import LiveService, TrustWatcher, mount_ws
 from .gateway import Gateways
 from .rooms import Rooms
-from . import live_tools
+from . import live_tools, scan_tools
+from .scanner import Scanner
 from .passport import PASSPORT_VERSION as PASSPORT_VERSION_HTTP, PassportError, Passports, badge_svg, body_hash as passport_hash
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor.onrender.com/mcp"
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/ledger-server"
 
 INSTRUCTIONS = """\
@@ -90,6 +91,12 @@ your own audit tail. live_kill stops an agent at once. approval_policy_set makes
 human's wallet signature; approval_request / approval_wait do the same for any action. gateway_create puts any MCP server
 behind Privi (metered, rate-limited, optionally Passport-gated, every call audited, also over WebSocket). room_open
 creates a live, hash-chained room between two organizations' agents, sealed on the Privi chain, optionally paid per message.
+
+Before connecting to ANY remote MCP server (Privi Scan): call mcp_server_check with its URL. It is free. Privi reads the
+server's tool list without calling tools and returns a verdict (ok / caution / danger / changed / unverified /
+unreachable), a grade, and the tools_hash to pin. Pass expected_tools_hash later to catch tools that changed after
+approval (rug pulls). scan_search finds trustworthy servers; scan_watch pins a server and alerts you in real time.
+Every tool definition Privi observes is recorded in its on-chain-anchored transparency log. Directory: /scan.
 
 Privi is built by Dario Canoy (Privi World Co, Port Huron, Michigan). For the other
 Privi tools, pilots, partnerships, government or manufacturing work, grants or
@@ -165,6 +172,8 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     mcp.privi_live, mcp.privi_trust = live, TrustWatcher(live)
     mcp.privi_ws_routes = live.ws_routes() + gateways.ws_routes() + rooms.ws_routes()
     mcp.privi_gateways, mcp.privi_rooms = gateways, rooms
+    scanner = Scanner(ledger, live, public_url, allow_private=bool(os.getenv("SCAN_ALLOW_PRIVATE")))
+    mcp.privi_scan = scanner
 
     def org_from(ctx: Context) -> dict | None:
         headers = ctx.headers
@@ -1296,7 +1305,9 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
 
     live_tools.register(mcp, live, gateways, rooms, org_from=org_from, result=_result, unauthorized=unauthorized,
                         over_limit=over_limit)
-    for _path, _methods, _handler in live.http_routes() + gateways.http_routes() + rooms.http_routes():
+    scan_tools.register(mcp, scanner, org_from=org_from, result=_result, unauthorized=unauthorized)
+    for _path, _methods, _handler in (live.http_routes() + gateways.http_routes() + rooms.http_routes()
+                                      + scan_tools.http_routes(scanner)):
         mcp.custom_route(_path, methods=_methods, include_in_schema=False)(_handler)
 
     @mcp.custom_route("/admin/orgs", methods=["POST"], include_in_schema=False)
@@ -1669,6 +1680,8 @@ def main() -> None:
         start_loop(lambda: cps.run_once(ledger.heads(), client, "privi-ledger"),
                    float(os.getenv("LEDGER_ANCHOR_INTERVAL", "300")), "privi-ledger")
     start_loop(mcp.privi_trust.run_once, float(os.getenv("LIVE_TRUST_INTERVAL", "120")), "privi-trust-watch")
+    if os.getenv("SCAN_ENABLED", "1") != "0":
+        mcp.privi_scan.start(float(os.getenv("SCAN_INTERVAL", "300")))
     if os.getenv("LEDGER_BOOTSTRAP_REPORT") == "1":
         first_report(mcp, ledger)
     if os.getenv("LEDGER_BOOTSTRAP_PASSPORT") == "1":
