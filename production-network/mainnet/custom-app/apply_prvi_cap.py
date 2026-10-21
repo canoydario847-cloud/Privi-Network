@@ -50,7 +50,7 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
         "\tevmChainID := cast.ToUint64(appOpts.Get(srvflags.EVMChainID))\n\tencodingConfig := evmencoding.MakeConfig(evmChainID)",
         "\tevmChainID := cast.ToUint64(appOpts.Get(srvflags.EVMChainID))\n"
         "\tif err := prvicap.ValidateEVMChainID(evmChainID); err != nil {\n"
-        "\t\tpanic(fmt.Errorf(\\"PRVI EVM chain identity rejected: %w\\", err))\n"
+        "\t\tpanic(fmt.Errorf(\"PRVI EVM chain identity rejected: %w\", err))\n"
         "\t}\n"
         "\tencodingConfig := evmencoding.MakeConfig(evmChainID)",
         "validate EVM chain identity before any bank or EVM keeper")
