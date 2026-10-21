@@ -6,6 +6,8 @@ on:
       - 'production-network/ops/render-validator-candidates.NONLIVE.json'
       - 'production-network/ops/render_validator_preflight.py'
       - 'production-network/ops/test_render_validator_preflight.py'
+      - 'production-network/ops/verify_render_release_bundle.py'
+      - 'production-network/ops/test_verify_render_release_bundle.py'
       - 'production-network/ops/RENDER_VALIDATOR_PREFLIGHT.md'
       - '.github/workflows/privi-render-validator-preflight.yml'
   push:
@@ -13,6 +15,8 @@ on:
       - 'production-network/ops/render-validator-candidates.NONLIVE.json'
       - 'production-network/ops/render_validator_preflight.py'
       - 'production-network/ops/test_render_validator_preflight.py'
+      - 'production-network/ops/verify_render_release_bundle.py'
+      - 'production-network/ops/test_verify_render_release_bundle.py'
       - 'production-network/ops/RENDER_VALIDATOR_PREFLIGHT.md'
       - '.github/workflows/privi-render-validator-preflight.yml'
 
@@ -30,6 +34,10 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest discover -s production-network/ops -p 'test_render_validator_preflight.py' -v
+      - name: Verify exact unsigned release bytes are never confused with production
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s production-network/ops -p 'test_verify_render_release_bundle.py' -v
       - name: Verify draft structure and never allow candidate to launch
         run: |
           set -euo pipefail
