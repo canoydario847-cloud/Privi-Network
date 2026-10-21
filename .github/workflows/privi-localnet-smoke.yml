@@ -58,7 +58,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/.upstream-capbuild/evmd"
-          GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^          # Compile an isolated pre-production command binary, never uploaded,
+          GOTOOLCHAIN=local go test -mod=mod -p 2 -run NoTestsMatchThisCompileProbe -timeout 20m . ./prvicap ./prvipop
           # executed as mainnet, issued, or distributed to operator hosts.
           GOTOOLCHAIN=local go build -mod=mod -p 2 -trimpath -buildvcs=false \
             -o "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY" ./cmd/evmd
