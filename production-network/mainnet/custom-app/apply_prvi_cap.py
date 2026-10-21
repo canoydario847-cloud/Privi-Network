@@ -280,6 +280,9 @@ func (app *EVMD) CheckPriviNativeERC20Invariant(ctx sdk.Context) error {
 \treturn app.ModuleManager.BeginBlock(ctx)
 }'''.replace("\\t", "\t"),
         '''func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {
+\tif err := app.PriviPoPKeeper.AssertInitialized(ctx,ctx.ChainID()); err != nil {
+\t\treturn sdk.BeginBlock{},fmt.Errorf("Privi PoP beginning-of-block registry denied: %w",err)
+\t}
 \tif err := app.PriviCapKeeper.Reconcile(ctx, app.BankKeeper); err != nil {
 \t\treturn sdk.BeginBlock{}, fmt.Errorf("PRVI beginning-of-block supply check denied: %w", err)
 \t}
@@ -296,6 +299,9 @@ func (app *EVMD) CheckPriviNativeERC20Invariant(ctx sdk.Context) error {
         '''func (app *EVMD) EndBlocker(ctx sdk.Context) (sdk.EndBlock, error) {
 \tresponse, endErr := app.ModuleManager.EndBlock(ctx)
 \tif endErr != nil { return response, endErr }
+\tif err := app.PriviPoPKeeper.AssertInitialized(ctx,ctx.ChainID()); err != nil {
+\t\treturn response,fmt.Errorf("Privi PoP end-of-block registry denied: %w",err)
+\t}
 \tif err := app.PriviCapKeeper.Reconcile(ctx, app.BankKeeper); err != nil {
 \t\treturn response, fmt.Errorf("PRVI end-of-block supply check denied: %w", err)
 \t}
