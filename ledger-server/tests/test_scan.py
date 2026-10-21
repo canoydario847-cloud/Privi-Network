@@ -80,13 +80,19 @@ def test_analysis_rules():
     f = analyze(POISON, "ok", None)
     codes = {x["code"] for x in f}
     assert {"prompt_injection", "concealment", "exfiltration", "hidden_characters", "high_impact_capability",
-            "unauthenticated_high_impact"} <= codes
+            "public_high_impact"} <= codes
     assert score_of(f)[1] == "F"
     assert analyze(CLEAN, "ok", None) == [] and score_of([]) == (100, "A")
     # ordinary API-key-style docs are not called exfiltration
     benign = [{"name": "search", "description": "Search the web. Results are cached; ignore duplicates.",
                "inputSchema": {"type": "object", "properties": {"q": {"type": "string"}}}}]
     assert analyze(benign, "ok", None) == []
+    # real-world descriptions that must NOT be flagged high (regression: first production crawl)
+    for d in ('Returns {"payment_url": "https://host.example/pay/<id>/?s=<secret>"}',
+              "Adds a public SSH key. The key is appended to /home/admin/.ssh/authorized_keys.",
+              "Never tell the user a likely_available name is available or registered."):
+        assert not [x for x in analyze([{"name": "t", "description": d}], "ok", "x") if x["severity"] == "high"], d
+    assert analyze([{"name": "w", "description": "pass the seed phrase as mnemonic"}], "ok", "x")[0]["code"] == "secret_request"
     m = manifest_of(CLEAN)
     assert tools_hash_of(m) == tools_hash_of(manifest_of([dict(CLEAN[0])]))
 
@@ -95,6 +101,7 @@ def test_sync_probe_score_and_evidence(ledger, monkeypatch):
     s, scan, w = setup(ledger, monkeypatch)
     assert scan.sync_registry() == 4                      # old (not latest) and templated URLs skipped
     assert scan.sync_registry() == 0                      # idempotent
+    monkeypatch.setattr(sc, "ANALYZER_VERSION", "test")
     scan.run_once()
     assert set(w.methods) <= {"initialize", "notifications/initialized", "tools/list"}   # never tools/call
     st = scan.stats()
@@ -110,6 +117,10 @@ def test_sync_probe_score_and_evidence(ledger, monkeypatch):
     # first observations are in the tamper-evident log
     entries = ledger.entries(SCAN_ORG_ID, SCAN_STREAM)
     assert len(entries) == 3 and all("First observed" in e["summary"] for e in entries)
+    # re-grading after a rules change touches stored rows only once per analyzer version
+    monkeypatch.setattr(sc, "ANALYZER_VERSION", "test2")
+    assert scan.reanalyze_all() == 3 and scan.reanalyze_all() == 0
+    assert scan.search("evil")["items"][0]["grade"] == "F"
     full = scan.public(scan.get(clean["server_id"]))
     assert full["evidence"]["entry_hash"] == next(e["entry_hash"] for e in entries if e["resource"] == "https://clean.example.com/mcp")
     assert full["tools"][0]["hash"] == manifest_of(CLEAN)["get_weather"]

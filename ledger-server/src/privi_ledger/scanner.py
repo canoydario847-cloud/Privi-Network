@@ -50,6 +50,7 @@ CHANGE_FLAG_DAYS = 30
 UA = "PriviScan/1.0 (read-only MCP trust probe; never calls tools; +https://privi-ledger.onrender.com/scan)"
 PROTOCOL = "2025-06-18"
 LISTED = ("ok", "auth_required", "paid_gate")
+ANALYZER_VERSION = "2"     # bump when rules change; stored servers are re-graded from their saved tools
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS scan_servers (
@@ -164,24 +165,28 @@ def _strings(obj: Any, out: list[str], depth: int = 0) -> None:
 
 
 I = re.IGNORECASE | re.DOTALL
+VERB = r"(read|cat|open|send|upload|include|pass|forward|post|paste|exfiltrate|copy|attach|share)"
+SECRET_FILE = (r"(\.ssh/id_|\bid_(rsa|ed25519|ecdsa|dsa)\b(?!\.pub)|\.ssh/(config|known_hosts)\b|\.aws/credentials|\.npmrc\b|\.netrc\b"
+               r"|claude_desktop_config|\bmcp\.json\b|\.cursor/mcp|\.env\b)")
+SECRET_WORD = r"(seed\s+phrase|mnemonic|private\s+keys?\b|wallet\s+keys?)"
 RULES: list[tuple[str, str, str, re.Pattern]] = [
     ("high", "prompt_injection", "text tries to override the agent's instructions",
-     re.compile(r"ignore\s+(all\s+|any\s+)?(the\s+)?(previous|prior|above|earlier|system)\s+(instructions|prompts?|rules|messages)"
-                r"|disregard\s+(all\s+|the\s+)?(previous|prior|above|system)\s+(instructions|prompts?|rules)"
-                r"|<\s*/?\s*(important|system|instructions?|secret|hidden)\s*>|\[\s*(system|important)\s*\]"
-                r"|new\s+system\s+prompt|you\s+are\s+now\s+(in\s+)?(developer|admin|god|jailbreak)", I)),
-    ("high", "concealment", "text tells the agent to hide something from the user",
-     re.compile(r"(do\s+not|don'?t|never)\s+(tell|inform|mention|reveal|show|notify|alert)\s+(this\s+|it\s+|anything\s+)?(to\s+)?the\s+user"
-                r"|without\s+(telling|informing|notifying|alerting)\s+the\s+user"
-                r"|the\s+user\s+(must|should)\s+(not|never)\s+(know|see|be\s+told|find\s+out)", I)),
-    ("high", "exfiltration", "text asks for private files, keys or secrets to be read or sent",
-     re.compile(r"(~|\$home|%userprofile%)?/?\.ssh/|\bid_(rsa|ed25519|ecdsa)\b|\.aws/credentials|\.npmrc|\.netrc"
-                r"|claude_desktop_config|\bmcp\.json\b|\.cursor/mcp"
-                r"|(seed\s+phrase|mnemonic|private\s+keys?|wallet\s+keys?).{0,80}(send|include|pass|forward|upload|append|paste|post)"
-                r"|(send|include|pass|forward|upload|append|paste|post).{0,80}(seed\s+phrase|mnemonic|private\s+keys?|\.env\b)"
-                r"|(read|cat|open|include)\s+.{0,30}\.env\b", I)),
+     re.compile(r"ignore\s+(all\s+|any\s+)?(the\s+|your\s+)?(previous|prior|above|earlier|system|other)\s+(instructions|prompts?|rules|messages)"
+                r"|disregard\s+(all\s+|the\s+|your\s+)?(previous|prior|above|system)\s+(instructions|prompts?|rules)"
+                r"|(^|[\s>])<\s*/?\s*(important|system|instructions?)\s*>|\[\s*(system|important)\s*\]\s*:?"
+                r"|new\s+system\s+prompt|you\s+are\s+now\s+(in\s+)?(developer|admin|god|jailbreak)\s+mode", I)),
+    ("high", "concealment", "text tells the agent to hide its actions or these instructions from the user",
+     re.compile(r"(do\s+not|don'?t|never)\s+(tell|inform|mention\s+to|notify|alert)\s+the\s+user\s+(about\s+|of\s+)?"
+                r"(this|these|that\s+you|what\s+you|the\s+(instruction|step|note|request|tool\s+call)s?)\b"
+                r"|(do\s+not|don'?t|never)\s+(mention|reveal|disclose|show)\s+(this|these)\s+(instruction|step|note|tool|requirement)s?\s+(to\s+the\s+user)?"
+                r"|without\s+(telling|informing|notifying|alerting|asking)\s+the\s+user"
+                r"|the\s+user\s+(must|should)\s+(not|never)\s+(know|see|be\s+told|find\s+out)\s+(about\s+)?(this|these|that)", I)),
+    ("high", "exfiltration", "text asks the agent to read or send private files (SSH keys, credentials, .env, MCP configs)",
+     re.compile(VERB + r"\b.{0,80}" + SECRET_FILE + r"|" + SECRET_FILE + r".{0,80}\b" + VERB + r"\b", I)),
+    ("medium", "secret_request", "text asks for a seed phrase or private key; an honest tool almost never needs one",
+     re.compile(VERB + r"\b.{0,60}" + SECRET_WORD + r"|" + SECRET_WORD + r".{0,60}\b" + VERB + r"\b", I)),
     ("medium", "tool_shadowing", "text tries to change how the agent uses other tools or servers",
-     re.compile(r"(instead\s+of|rather\s+than)\s+(using|calling)\s+(the\s+|any\s+)?(other|another|\w+[_.]\w+)\s+tool"
+     re.compile(r"(instead\s+of|rather\s+than)\s+(using|calling)\s+(the\s+|any\s+)?(other|another)\s+(tools?|servers?)"
                 r"|(always|must)\s+(call|use|run|invoke)\s+this\s+tool\s+(first|before|instead)"
                 r"|before\s+(using|calling)\s+any\s+other\s+tool"
                 r"|when(ever)?\s+(the\s+user|you)\s+(asks?|wants?|requests?)\s+to\s+.{0,60}(email|send|pay|transfer).{0,40}(use|call)\s+this\s+tool", I)),
@@ -229,8 +234,8 @@ def analyze(tools: list[dict] | None, status: str, auth: str | None, changed: li
         out.append({"severity": "info", "code": "high_impact_capability", "tool": ", ".join(impactful[:8]),
                     "detail": "can run commands, delete data or move money; require a human approval for these"})
         if status == "ok" and not auth:
-            out.append({"severity": "medium", "code": "unauthenticated_high_impact", "tool": ", ".join(impactful[:8]),
-                        "detail": "high-impact tools are reachable without any authentication"})
+            out.append({"severity": "low", "code": "public_high_impact", "tool": ", ".join(impactful[:8]),
+                        "detail": "high-impact tools are listed without authentication; confirm the server authenticates each call"})
     if changed:
         out.append({"severity": "medium", "code": "definition_changed", "tool": ", ".join(changed[:8]),
                     "detail": "tool definitions changed in the last 30 days; re-review before trusting (rug-pull risk)"})
@@ -520,13 +525,13 @@ class Scanner:
             score, grade = prev.get("score"), prev.get("grade")   # keep last known good analysis while temporarily down
         seq = ehash = None
         if kind:
-            summary = (f"First observed tools of MCP server {prev.get('name') or p.get('server_name') or sid}: {len(tools)} tools, "
-                       f"hash {th[:16]}, grade {grade}" if kind == "first_seen" else
-                       f"Tools of MCP server {prev.get('name') or sid} changed: +{len(diff['added'])} "
-                       f"-{len(diff['removed'])} ~{len(diff['modified'])}; hash {th[:16]}, grade {grade}")
+            label = prev.get("name") or p.get("server_name") or sid
+            summary = (f"First observed tools of MCP server {label}: {len(tools)} tools, tools_hash {th}" if kind == "first_seen" else
+                       f"Tools of MCP server {label} changed: +{len(diff['added'])} -{len(diff['removed'])} "
+                       f"~{len(diff['modified'])}; tools_hash {th}")
+            # facts only: what the server published and when. Grades are Privi's (revisable) opinion and are not logged.
             det = {"server_id": sid, "url": prev["url"], "registry_name": prev.get("name"), "tools_hash": th,
-                   "tool_count": len(tools), "score": score, "grade": grade, "kind": kind,
-                   "high_findings": [f["code"] + ":" + f["tool"][:60] for f in findings if f["severity"] == "high"][:20]}
+                   "tool_count": len(tools), "kind": kind, "tool_hashes_sample": {n[:60]: h for n, h in sorted(manifest.items())[:40]}}
             if diff:
                 det["diff"] = {k: (v[:40] if isinstance(v, list) else v) for k, v in diff.items()}
             try:
@@ -606,7 +611,33 @@ class Scanner:
                 (cutoff, day, limit)).fetchall()
         return [dict(r) for r in rows]
 
+    def reanalyze_all(self) -> int:
+        """Re-grade every stored tool list with the current rules (no network, no log entries: the evidence is the
+        tool definitions, which do not change; only Privi's opinion of them does)."""
+        with self.lock:
+            m = self.db.execute("SELECT v FROM scan_meta WHERE k='analyzer'").fetchone()
+            if m and m["v"] == ANALYZER_VERSION:
+                return 0
+            ids = [r["server_id"] for r in self.db.execute("SELECT server_id FROM scan_servers WHERE tools IS NOT NULL").fetchall()]
+        n = 0
+        for sid in ids:
+            row = self._row(sid)
+            if row is None or row.get("tools") is None:
+                continue
+            f = analyze(row["tools"], row["status"], row.get("auth"), row.get("changed_tools") or [])
+            sc, g = score_of(f)
+            with self.lock:
+                self.db.execute("UPDATE scan_servers SET findings=?, score=?, grade=? WHERE server_id=?", (canon(f), sc, g, sid))
+            n += 1
+        with self.lock:
+            self.db.execute("INSERT INTO scan_meta (k, v) VALUES ('analyzer', ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v",
+                            (ANALYZER_VERSION,))
+            self.db.commit()
+        print(f"privi-scan: re-graded {n} servers with analyzer v{ANALYZER_VERSION}", flush=True)
+        return n
+
     def run_once(self) -> int:
+        self.reanalyze_all()
         with self.lock:
             m = self.db.execute("SELECT v FROM scan_meta WHERE k='registry_synced'").fetchone()
         last = _parse(m["v"]) if m else None
@@ -693,6 +724,9 @@ class Scanner:
                                  f"({self.public_url}/scan/s/{sid}) before letting an agent use them.")
         return out
 
+    GRADING_NOTE = ("Grades and findings are automated heuristics over the server's public tool text, not a security audit "
+                    "or an accusation. Read the evidence. Owners can claim the listing (scan_claim_start) to rescan or respond.")
+
     def public(self, row: dict, full: bool = True) -> dict:
         sid = row["server_id"]
         f = row.get("findings") or []
@@ -708,7 +742,7 @@ class Scanner:
              "owner_verified": bool(row.get("claimed_org")),
              "page": f"{self.public_url}/scan/s/{sid}", "badge": f"{self.public_url}/scan/badge/{sid}.svg"}
         if full:
-            d.update(findings_detail=f, version=row.get("version"), website=row.get("website"), repository=row.get("repository"),
+            d.update(grading_note=self.GRADING_NOTE, findings_detail=f, version=row.get("version"), website=row.get("website"), repository=row.get("repository"),
                      server_name=row.get("server_name"), server_version=row.get("server_version"), protocol=row.get("protocol"),
                      latency_ms=row.get("latency_ms"), registry_status=row.get("registry_status"),
                      tools=[{"name": t.get("name"), "title": t.get("title"), "description": t.get("description"),
