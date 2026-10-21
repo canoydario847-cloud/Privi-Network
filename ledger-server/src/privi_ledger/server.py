@@ -103,7 +103,19 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
                  facilitator: Facilitator | None = None, anchor_client: AnchorClient | None = None) -> MCPServer:
     settings = settings or Settings.from_env()
     ledger = ledger or Ledger(settings.db_path)
-    paywall = Paywall(settings, facilitator)
+    _pub = os.getenv("LEDGER_PUBLIC_URL", "https://privi-ledger.onrender.com").rstrip("/")
+    paywall = Paywall(settings, facilitator, service={
+        "url": f"{_pub}/mcp", "serviceName": "Privi Ledger",
+        "tags": ["audit", "compliance", "ai-agents", "trust", "post-quantum"],
+        "iconUrl": "https://privi-discovery.onrender.com/icon.svg"},
+        discovery={"ledger_audit_stream": {
+            "inputSchema": {"type": "object", "properties": {
+                "org_id": {"type": "string", "description": "Organization ID, e.g. org_1a2b3c4d5e6f7a8b"},
+                "stream_id": {"type": "string", "description": "Stream ID, usually the agent's name"}},
+                "required": ["org_id", "stream_id"]},
+            "example": {"org_id": "org_ecaa55d291af2c57", "stream_id": "claude-build-2026-10-19"},
+            "output": {"found": True, "intact": True, "entry_count": 16, "failures": 0,
+                       "head_hash": "<64-hex>", "onchain_checkpoint": {"anchored": True}}}})
     checkpoints = Checkpoints(ledger._db, ledger._lock)
     anchor_url = os.getenv("LEDGER_ANCHOR_URL", DEFAULT_ANCHOR_URL)
     if anchor_client is None and os.getenv("LEDGER_ANCHOR_KEY"):
@@ -1604,8 +1616,10 @@ def main() -> None:
         mcp.run("stdio")
         return
     import uvicorn
-    uvicorn.run(mcp.streamable_http_app(host=args.host, stateless_http=True, json_response=True),
-                host=args.host, port=args.port)
+    from .usage import UsageMiddleware
+    app = UsageMiddleware(mcp.streamable_http_app(host=args.host, stateless_http=True, json_response=True),
+                          ledger._db, ledger._lock, "privi-ledger")
+    uvicorn.run(app, host=args.host, port=args.port)
 
 
 if __name__ == "__main__":

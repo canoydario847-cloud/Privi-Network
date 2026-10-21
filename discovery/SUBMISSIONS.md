@@ -7,6 +7,20 @@ Everything below is pre-written. Each one takes 2–5 minutes and needs your own
 - IndexNow: hub URLs pushed to Bing / Yandex / Naver / Seznam (feeds Copilot and DuckDuckGo). Key served at `/<INDEXNOW_KEY>.txt`.
 - Each MCP server's `instructions` now names you and links the hub.
 
+
+## 0. x402 Bazaar (Coinbase's discovery index for paying agents) — highest leverage
+
+Privi Verify and Privi Ledger now declare `extensions.bazaar` on every paid tool (x402 specs/extensions/bazaar.md),
+with the real MCP endpoint, input schema, example and output. The Coinbase facilitator indexes a tool after its
+first settled payment (up to 15 minutes). Trigger each once with a throwaway wallet holding a few cents of USDC on Base:
+
+    cd mcp-server && pip install eth-account
+    python scripts/test_payment.py --new-wallet        # prints an address; send it ~0.25 USDC on Base
+    python scripts/test_payment.py --allow-mainnet --url https://privi-verify.onrender.com/mcp --tool privi_verify_lot
+    python scripts/test_payment.py --allow-mainnet --url https://privi-verify.onrender.com/mcp --tool privi_chain_of_custody
+
+Usage is public at https://privi-ledger.onrender.com/stats and https://privi-verify.onrender.com/stats.
+
 ## Shared copy
 
 **Name:** Privi Ledger · Privi Verify · Privi Anchor (list separately where directories want one server per entry)

@@ -70,7 +70,19 @@ def build_server(
     store = store or LotStore(settings.db_path)
     if os.getenv("PRIVI_SEED_DEMO") == "1":
         seed_demo(store)
-    paywall = Paywall(settings, facilitator)
+    _pub = (settings.public_url or "https://privi-verify.onrender.com").rstrip("/")
+    paywall = Paywall(settings, facilitator, service={
+        "url": f"{_pub}/mcp", "serviceName": "Privi Verify",
+        "tags": ["supply-chain", "provenance", "manufacturing", "traceability", "verification"],
+        "iconUrl": "https://privi-discovery.onrender.com/icon.svg"},
+        discovery={
+            "privi_verify_lot": {"inputSchema": {"type": "object", "properties": {"lot_code": {"type": "string", "description": "Lot or batch code"}},
+                          "required": ["lot_code"]}, "example": {"lot_code": "DEMO-STEEL-0001"},
+                                  "output": {"found": True, "lot_code": "DEMO-STEEL-0001", "intact": True}},
+            "privi_chain_of_custody": {"inputSchema": {"type": "object", "properties": {"lot_code": {"type": "string", "description": "Lot or batch code"}},
+                          "required": ["lot_code"]}, "example": {"lot_code": "DEMO-STEEL-0001"},
+                                        "output": {"found": True, "lot_code": "DEMO-STEEL-0001",
+                                                    "integrity": {"intact": True}, "events": []}}})
     checkpoints = Checkpoints(store._db, store._lock)
     anchor_url = os.getenv("PRIVI_ANCHOR_URL", DEFAULT_ANCHOR_URL)
 
@@ -252,7 +264,9 @@ def main() -> None:
 
     import uvicorn
 
-    app = mcp.streamable_http_app(host=args.host, stateless_http=True, json_response=True)
+    from .usage import UsageMiddleware
+    app = UsageMiddleware(mcp.streamable_http_app(host=args.host, stateless_http=True, json_response=True),
+                          store._db, store._lock, "privi-verify")
     uvicorn.run(app, host=args.host, port=args.port)
 
 

@@ -28,6 +28,43 @@ PAYMENT_META_KEY = "x402/payment"
 RESPONSE_META_KEY = "x402/payment-response"
 MATCH_FIELDS = ("scheme", "network", "amount", "asset", "payTo")
 
+# JSON Schema validating extensions.bazaar.info for MCP tools (x402 specs/extensions/bazaar.md).
+BAZAAR_MCP_SCHEMA = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+        "input": {
+            "type": "object",
+            "properties": {
+                "type": {"type": "string", "const": "mcp"},
+                "toolName": {"type": "string"},
+                "description": {"type": "string"},
+                "transport": {"type": "string", "enum": ["streamable-http", "sse"]},
+                "inputSchema": {"type": "object"},
+                "example": {"type": "object"},
+            },
+            "required": ["type", "toolName", "inputSchema"],
+            "additionalProperties": False,
+        },
+        "output": {
+            "type": "object",
+            "properties": {"type": {"type": "string"}, "example": {"type": "object"}},
+            "required": ["type"],
+        },
+    },
+    "required": ["input"],
+}
+
+
+def bazaar_extension(tool: str, description: str, spec: dict) -> dict:
+    """x402 Bazaar discovery declaration for one paid MCP tool."""
+    info: dict[str, Any] = {"input": {"type": "mcp", "toolName": tool, "description": description,
+                                      "transport": "streamable-http", "inputSchema": spec["inputSchema"],
+                                      "example": spec["example"]}}
+    if spec.get("output") is not None:
+        info["output"] = {"type": "json", "example": spec["output"]}
+    return {"info": info, "schema": BAZAAR_MCP_SCHEMA}
+
 
 class Facilitator(Protocol):
     async def verify(self, payload: dict, requirements: dict) -> dict: ...
@@ -116,8 +153,13 @@ class HttpFacilitator:
 
 
 class Paywall:
-    def __init__(self, settings: Settings, facilitator: Facilitator | None = None):
+    def __init__(self, settings: Settings, facilitator: Facilitator | None = None,
+                 service: dict | None = None, discovery: dict[str, dict] | None = None):
+        """service: {"url": public MCP endpoint, "serviceName", "tags", "iconUrl"} for x402 resource metadata.
+        discovery: {tool: {"inputSchema", "example", "output"}} declared to the x402 Bazaar."""
         self.settings = settings
+        self.service = service or {}
+        self.discovery = discovery or {}
         self.facilitator = facilitator or HttpFacilitator(
             settings.facilitator_url, settings.facilitator_auth,
             cdp_key_id=getattr(settings, "cdp_key_id", ""), cdp_key_secret=getattr(settings, "cdp_key_secret", ""))
@@ -135,7 +177,17 @@ class Paywall:
         }
 
     def resource(self, tool: str, description: str) -> dict:
-        return {"url": f"mcp://tool/{tool}", "description": description, "mimeType": "application/json"}
+        if not self.service.get("url"):
+            return {"url": f"mcp://tool/{tool}", "description": description, "mimeType": "application/json"}
+        r = {"url": self.service["url"], "description": description, "mimeType": "application/json"}
+        for k in ("serviceName", "tags", "iconUrl"):
+            if self.service.get(k):
+                r[k] = self.service[k]
+        return r
+
+    def extensions(self, tool: str, description: str) -> dict:
+        spec = self.discovery.get(tool)
+        return {"bazaar": bazaar_extension(tool, description, spec)} if spec and self.service.get("url") else {}
 
     def payment_required(self, tool: str, description: str, error: str) -> CallToolResult:
         body = {
@@ -144,6 +196,9 @@ class Paywall:
             "resource": self.resource(tool, description),
             "accepts": [self.requirements(tool)],
         }
+        ext = self.extensions(tool, description)
+        if ext:
+            body["extensions"] = ext
         return CallToolResult(
             is_error=True,
             structured_content=body,
@@ -183,6 +238,16 @@ class Paywall:
             return self.payment_required(tool, description, "Payment required to access this resource")
 
         req = self.requirements(tool)
+        if isinstance(payload, dict):
+            # Clients should echo resource and extensions; fill them in if they did not, so the
+            # facilitator can index this tool in the x402 Bazaar on settlement. Not part of the signature.
+            payload.setdefault("resource", self.resource(tool, description))
+            ext = self.extensions(tool, description)
+            if ext:
+                payload.setdefault("extensions", {})
+                if isinstance(payload["extensions"], dict):
+                    for k, v in ext.items():
+                        payload["extensions"].setdefault(k, v)
         mismatch = self._matches(payload, req)
         if mismatch:
             return self.payment_required(tool, description, f"Invalid payment: {mismatch}")

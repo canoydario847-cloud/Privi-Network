@@ -865,3 +865,52 @@ def test_fortress_pq_log_tpi_bundle(ledger, monkeypatch, tmp_path):
     bad.write_text(json.dumps(b))
     r = subprocess.run([_sys.executable, str(script), str(bad)], capture_output=True, text=True)
     assert r.returncode == 1 and "INVALID" in r.stdout
+
+
+# ---------------- x402 Bazaar discovery + usage stats ----------------
+
+def test_bazaar_declaration_and_settle_payload(ledger, monkeypatch):
+    import jsonschema
+    fac = FakeFacilitator()
+    seen = {}
+
+    async def settle(payload, req):
+        seen["payload"] = payload
+        return {"success": True, "transaction": "0x" + "cd" * 32, "network": req["network"]}
+    fac.settle = settle
+    acme = ledger.create_org("Acme")
+    ledger.record(acme["org_id"], "agent-a", "claude", "tool_call", "x")
+    as_org(monkeypatch, None)
+
+    async def go():
+        async with Client(server(ledger, fac)) as c:
+            r = await c.call_tool("ledger_audit_stream", {"org_id": acme["org_id"], "stream_id": "agent-a"})
+            pr = r.structured_content
+            assert r.is_error and pr["resource"]["url"].endswith("/mcp") and pr["resource"]["serviceName"] == "Privi Ledger"
+            bz = pr["extensions"]["bazaar"]
+            jsonschema.validate(bz["info"], bz["schema"])
+            assert bz["info"]["input"]["toolName"] == "ledger_audit_stream"
+            jsonschema.validate(bz["info"]["input"]["example"], bz["info"]["input"]["inputSchema"])
+            payment = {"x402Version": 2, "accepted": pr["accepts"][0], "payload": {"signature": "0x"}}
+            ok = await c.call_tool("ledger_audit_stream", {"org_id": acme["org_id"], "stream_id": "agent-a"},
+                                   meta={"x402/payment": payment})
+            assert not ok.is_error and ok.structured_content["found"]
+    anyio.run(go)
+    p = seen["payload"]
+    assert p["resource"]["url"].endswith("/mcp") and p["extensions"]["bazaar"]["info"]["input"]["type"] == "mcp"
+
+
+def test_usage_stats_middleware(ledger):
+    from starlette.testclient import TestClient
+    from privi_ledger.usage import UsageMiddleware
+    app = UsageMiddleware(server(ledger).streamable_http_app(host="0.0.0.0", stateless_http=True, json_response=True),
+                          ledger._db, ledger._lock, "privi-ledger")
+    hdrs = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
+    with TestClient(app, base_url="http://localhost") as http:
+        for _ in range(3):
+            r = http.post("/mcp", headers=hdrs, json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                                                      "params": {"name": "fortress_keys", "arguments": {}}})
+            assert r.status_code == 200 and "ML-DSA-87" in r.text
+        http.post("/mcp", headers=hdrs, json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+        st = http.get("/stats").json()
+    assert st["by_tool_all_time"] == {"fortress_keys": 3} and st["today"] == 3 and st["total_tool_calls"] == 3

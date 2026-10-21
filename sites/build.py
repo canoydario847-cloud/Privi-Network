@@ -307,7 +307,7 @@ SITES["chainflow"] = page(
         ("Paid per check", "Buyers' agents pay a few cents in USDC on Base per verification through x402. Lookups by fingerprint are free."),
         ("Michigan first", "Built in Port Huron for the manufacturers around it, open to anyone."),
     ]))
-    + sec("For buyers' agents", f"<pre>privi_verify_lot(lot_id=\"DEMO-STEEL-0001\")\nprivi_chain_of_custody(lot_id=\"DEMO-STEEL-0001\")</pre><p class='note'>MCP endpoint: <code>{VERIFY}/mcp</code></p>"),
+    + sec("For buyers' agents", f"<pre>privi_verify_lot(lot_code=\"DEMO-STEEL-0001\")\nprivi_chain_of_custody(lot_code=\"DEMO-STEEL-0001\")</pre><p class='note'>MCP endpoint: <code>{VERIFY}/mcp</code></p>"),
 )
 
 SITES["developers"] = page(
