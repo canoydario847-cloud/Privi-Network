@@ -13,6 +13,8 @@ ROOT = Path(__file__).parent
 LEDGER = "https://privi-ledger.onrender.com"
 VERIFY = "https://privi-verify.onrender.com"
 ANCHOR = "https://privi-anchor.onrender.com"
+QUANTUM = "https://privi-quantum.onrender.com"
+RISK = "https://privi-risk.onrender.com"
 HUB = "https://privi-discovery.onrender.com"
 REPO = "https://github.com/canoydario847-cloud/Privi-Network"
 EMAIL = "dariocanoy@priviflow.us"
@@ -182,7 +184,9 @@ MCP_SNIPPET = f"""<pre>{{
   "mcpServers": {{
     "privi-ledger": {{ "url": "{LEDGER}/mcp" }},
     "privi-verify": {{ "url": "{VERIFY}/mcp" }},
-    "privi-anchor": {{ "url": "{ANCHOR}/mcp" }}
+    "privi-anchor": {{ "url": "{ANCHOR}/mcp" }},
+    "privi-quantum": {{ "url": "{QUANTUM}/mcp" }},
+    "privi-risk": {{ "url": "{RISK}/mcp" }}
   }}
 }}</pre>"""
 
@@ -412,6 +416,8 @@ HUB_SERVICES = [
     ("ledger", "Privi Ledger", f"{LEDGER}/health", f"{LEDGER}/stats", "stats", f"{LEDGER}/"),
     ("verify", "Privi Verify", f"{VERIFY}/health", f"{VERIFY}/stats", "stats", f"{VERIFY}/"),
     ("anchor", "Privi Anchor", f"{ANCHOR}/health", f"{ANCHOR}/status", "anchor", f"{ANCHOR}/"),
+    ("risk", "Privi Risk", f"{RISK}/health", None, "plain", f"{RISK}/"),
+    ("quantum", "Privi Quantum", f"{QUANTUM}/health", None, "plain", f"{QUANTUM}/"),
     ("guard", "Privi Guard", f"{LEDGER}/guard/v1/stats", None, "guard", URLS["guard"]),
     ("scan", "Privi Scan", f"{LEDGER}/scan/api/stats", None, "scan", f"{LEDGER}/scan"),
     ("log", "Transparency log", f"{LEDGER}/log/sth", None, "log", f"{LEDGER}/log/sth"),
@@ -488,6 +494,10 @@ def hub_body():
          f"{VERIFY}/mcp", URLS["chainflow"]),
         ("Anchor", "Proof of existence: anchor any hash on the Privi chain", "anchor_hashes, anchor_verify (free)",
          f"{ANCHOR}/mcp", URLS["developers"]),
+        ("Risk", "Pre-trade risk desk for traders and AI trading agents: position size, liquidation-before-stop check, risk of ruin, live VaR; signed GO/REDUCE/NO-TRADE report for 10 cents",
+         "risk_position_size, risk_of_ruin, risk_market_check (free)", f"{RISK}/mcp", f"{RISK}/"),
+        ("Quantum", "Quantum optimization (CVaR-QAOA) for factory decisions, post-quantum signed and anchored on chain; quantum-vulnerable crypto scanner",
+         "quantum_optimize, pqc_scan_code (free)", f"{QUANTUM}/mcp", f"{QUANTUM}/"),
         ("Government", "AI use-case inventory (OMB M-25-21) and post-quantum migration plans", "gov_ai_inventory_check, gov_pqc_plan",
          f"{LEDGER}/mcp", URLS["gov"]),
     ]

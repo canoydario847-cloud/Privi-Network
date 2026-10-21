@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "privi-risk-mcp"
+version = "0.1.0"
+description = "Pre-trade risk desk for crypto and market traders and AI trading agents: position sizing, liquidation check, risk of ruin, live VaR, and signed GO/REDUCE/NO-TRADE reports anchored on the Privi blockchain, as an MCP server."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Privi World Co" }, { name = "Dario Canoy" }]
+requires-python = ">=3.11"
+dependencies = ["mcp>=2.3,<3", "uvicorn>=0.30", "cryptography>=50", "numpy>=1.26"]
+keywords = ["mcp", "trading", "risk management", "position sizing", "crypto", "liquidation", "value at risk", "x402", "ai-agents"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "anyio>=4"]
+
+[project.scripts]
+privi-risk-mcp = "privi_risk.server:main"
+
+[project.urls]
+Homepage = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/risk-server"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/privi_risk"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

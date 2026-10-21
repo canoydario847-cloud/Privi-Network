@@ -174,3 +174,45 @@ services:
         value: "300"
       - key: QUANTUM_RATE_PER_MIN
         value: "20"
+
+  # ------------------------------------------------------------------ Privi Risk
+  - type: web
+    name: privi-risk
+    runtime: docker
+    plan: starter
+    region: virginia
+    dockerfilePath: ./risk-server/Dockerfile
+    dockerContext: ./risk-server
+    buildFilter:
+      paths: ["risk-server/**"]
+    healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: privi-risk-data           # keeps the post-quantum signing key and issued reports
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - fromGroup: privi-coinbase-cdp
+      - key: RISK_DB_PATH
+        value: /data/risk.db
+      - key: RISK_PUBLIC_URL
+        value: https://privi-risk.onrender.com
+      - key: RISK_NETWORK
+        value: base
+      - key: RISK_FACILITATOR_URL
+        value: https://api.cdp.coinbase.com/platform/v2/x402
+      - key: RISK_PAY_TO
+        value: "0x1990589FD200E043b8C6FD9ec5956c61b3071048"
+      - key: RISK_PRICE_PRETRADE_REPORT
+        value: "0.10"
+      - key: RISK_ANCHOR_URL
+        value: https://privi-anchor.onrender.com/mcp
+      - key: RISK_ANCHOR_API_KEY
+        fromService:
+          name: privi-anchor
+          type: web
+          envVarKey: ANCHOR_API_KEYS
+      - key: RISK_ANCHOR_INTERVAL
+        value: "300"
+      - key: RISK_RATE_PER_MIN
+        value: "30"
