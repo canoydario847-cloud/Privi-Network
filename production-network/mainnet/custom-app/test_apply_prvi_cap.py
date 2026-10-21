@@ -13,6 +13,7 @@ spec.loader.exec_module(module)
 APP = '''package evmd
 import (
     evmconfig "github.com/cosmos/evm/evmd/config"
+    "github.com/ethereum/go-ethereum/common"
 )
 type EVMD struct {
     BankKeeper            bankkeeper.Keeper
@@ -32,6 +33,7 @@ func test() {
         logger,
     )
     app.BankKeeper = app.BankKeeper.WithObjStoreKey(oKeys[banktypes.ObjectStoreKey])
+    app.EVMKeeper.EnableVirtualFeeCollection()
     app.ModuleManager = module.NewManager(
         bank.NewAppModule(appCodec, app.BankKeeper, app.AccountKeeper, nil),
     )
