@@ -51,14 +51,30 @@ jobs:
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/.upstream-capbuild/evmd"
-          GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^$' -timeout 20m . ./prvicap
+          # Disposable source fork: never edit the module cache or live validators.
+          GOTOOLCHAIN=local go mod download github.com/cosmos/cosmos-sdk@v0.54.3
+          sdk_root="$(go env GOMODCACHE)/github.com/cosmos/cosmos-sdk@v0.54.3"
+          sdk_copy_dir="$RUNNER_TEMP/privi-patched-sdk-app-only"
+          python3 "$GITHUB_WORKSPACE/production-network/mainnet/custom-app/patch_sdk_bank_source.py" --sdk-root "$sdk_root" --output-dir "$sdk_copy_dir"
+          GOTOOLCHAIN=local go mod edit -replace="github.com/cosmos/cosmos-sdk=$sdk_copy_dir"
+          # Preserve the Go module graph that this isolated binary will use.
+          GOTOOLCHAIN=local go list -m -json github.com/cosmos/cosmos-sdk > "$RUNNER_TEMP/privi-sdk-module.json"
+          GOTOOLCHAIN=local go test -mod=mod -p 2 -run 'a^' -timeout 20m . ./prvicap
           # Compile an isolated pre-production command binary, never uploaded,
           # executed as mainnet, issued, or distributed to operator hosts.
           GOTOOLCHAIN=local go build -mod=mod -p 2 -trimpath \
             -o "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY" ./cmd/evmd
           test -s "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY"
           sha256sum "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY"
-          go version -m "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY"
+          GOTOOLCHAIN=local go version -m "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY" \
+            > "$RUNNER_TEMP/privi-sdk-build-info.txt"
+          # Fail if executable metadata, selected module graph, or source
+          # contents deviate from the hardened SDK (not a signed release).
+          python3 "$GITHUB_WORKSPACE/production-network/mainnet/custom-app/verify_privi_sdk_binary.py" \
+            --module-json "$RUNNER_TEMP/privi-sdk-module.json" \
+            --build-info "$RUNNER_TEMP/privi-sdk-build-info.txt" \
+            --sdk-dir "$sdk_copy_dir"
+          cat "$RUNNER_TEMP/privi-sdk-build-info.txt"
           # Compile proof only: no genesis, validators, keys or real financial PRVI.
 
   sdk-prvi-capkeeper:
