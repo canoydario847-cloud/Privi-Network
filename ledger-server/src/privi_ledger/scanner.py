@@ -50,7 +50,7 @@ CHANGE_FLAG_DAYS = 30
 UA = "PriviScan/1.0 (read-only MCP trust probe; never calls tools; +https://privi-ledger.onrender.com/scan)"
 PROTOCOL = "2025-06-18"
 LISTED = ("ok", "auth_required", "paid_gate")
-ANALYZER_VERSION = "5"     # bump when rules change; stored servers are re-graded from their saved tools
+ANALYZER_VERSION = "6"     # bump when rules change; stored servers are re-graded from their saved tools
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS scan_servers (
@@ -194,11 +194,12 @@ RULES: list[tuple[str, str, str, re.Pattern]] = [
      re.compile(r"(do\s+not|don'?t|never)\s+(tell|inform|mention\s+to|notify|alert)\s+the\s+user\s+(about\s+|of\s+)?"
                 r"(this|these|that\s+you|what\s+you|the\s+(instruction|step|note|request|tool\s+call)s?)\b"
                 r"|(do\s+not|don'?t|never)\s+(mention|reveal|disclose|show)\s+(this|these)\s+(instruction|step|note|tool|requirement)s?\s+(to\s+the\s+user)?"
-                r"|without\s+(telling|informing|notifying|alerting|asking)\s+the\s+user"
+                r"|without\s+(telling|informing|notifying|alerting)\s+the\s+user"
                 r"|the\s+user\s+(must|should)\s+(not|never)\s+(know|see|be\s+told|find\s+out)\s+(about\s+)?(this|these|that)", I)),
     ("high", "exfiltration", "text asks the agent to read or send private files (SSH keys, credentials, .env, MCP configs)",
-     re.compile(OUT + r"\b.{0,80}" + SECRET_FILE + r"|" + SECRET_FILE + r".{0,80}\b" + OUT + r"\b"
-                r"|" + READ + r"\b.{0,60}" + PRIVATE_KEY, I)),
+     re.compile(OUT + r"\s+(the\s+|its\s+|their\s+|your\s+|all\s+)?(full\s+)?(contents?\s+of\s+|text\s+of\s+)?(the\s+|your\s+|~/?)?\S{0,25}" + SECRET_FILE
+                + r"|" + SECRET_FILE + r"[^.\n]{0,40}\b(and|then)\s+(send|upload|post|forward|pass|share|attach|include)\b"
+                + r"|" + READ + r"\s+(the\s+|your\s+)?\S{0,20}" + PRIVATE_KEY, I)),
     ("medium", "secret_request", "text asks for a seed phrase or private key; an honest tool almost never needs one",
      re.compile(VERB + r"\b.{0,60}" + SECRET_WORD + r"|" + SECRET_WORD + r".{0,60}\b" + VERB + r"\b", I)),
     ("medium", "tool_shadowing", "text tries to change how the agent uses other tools or servers",
@@ -214,6 +215,35 @@ IMPACT = re.compile(r"(^|[_.\-])(exec|execute|shell|bash|command|terminal|eval|r
 PENALTY = {"high": 35, "medium": 12, "low": 4, "info": 0}
 
 
+DESCRIBES = re.compile(r"\b(detects?|detecting|finds?|flags?|checks?\s+(for|whether|if|what)|scans?|scanning|identif\w*|look(s|ing)?\s+for"
+                       r"|such\s+as|e\.g\.|for\s+example|patterns?\s+(like|such)|leaks?|exposed?|blocks?|prevents?|protects?\s+against"
+                       r"|attacks?\s+(like|such)|injection)\b", re.I)
+CONFIG_ARG = re.compile(r"(claude_desktop_config|mcp_?config|cursor_?config|ssh_?config|aws_?credentials|dotenv|env_?file|netrc|npmrc)", re.I)
+
+
+def _texts(t: dict) -> str:
+    """Natural-language text of a tool (title, description, schema descriptions/enums/defaults), without property names."""
+    out: list[str] = []
+
+    def walk(o, depth=0):
+        if depth > 12:
+            return
+        if isinstance(o, str):
+            out.append(o)
+        elif isinstance(o, dict):
+            for k, v in o.items():
+                if k == "properties" and isinstance(v, dict):
+                    for pv in list(v.values())[:200]:
+                        walk(pv, depth + 1)
+                elif k not in ("type", "format", "pattern", "$schema", "$ref", "required"):
+                    walk(v, depth + 1)
+        elif isinstance(o, list):
+            for v in o[:200]:
+                walk(v, depth + 1)
+    walk({k: t.get(k) for k in ("title", "description", "inputSchema", "annotations")})
+    return "\n".join(out)
+
+
 def analyze(tools: list[dict] | None, status: str, auth: str | None, changed: list[str] | None = None) -> list[dict]:
     out: list[dict] = []
     if tools is None:
@@ -221,17 +251,27 @@ def analyze(tools: list[dict] | None, status: str, auth: str | None, changed: li
     impactful = []
     for t in tools:
         name = str(t.get("name", ""))[:120]
-        texts: list[str] = []
-        _strings({k: t.get(k) for k in ("title", "description", "inputSchema", "annotations")}, texts)
-        blob = "\n".join(texts)
+        blob = _texts(t)
         seen = set()
         for sev, code, why, rx in RULES:
-            m = rx.search(blob)
-            if m and code not in seen:
-                seen.add(code)
+            if code in seen:
+                continue
+            for m in rx.finditer(blob):
                 s = max(0, m.start() - 40)
-                out.append({"severity": sev, "code": code, "tool": name, "detail": why,
-                            "evidence": blob[s:m.end() + 40].replace("\n", " ")[:220]})
+                ev = blob[s:m.end() + 40].replace("\n", " ")[:220]
+                before = blob[max(0, m.start() - 120):m.start()]
+                quoted = blob[max(0, m.start() - 2):m.start()].strip()[-1:] in ("'", '"', "(", "\u201c")
+                if sev == "high" and (DESCRIBES.search(before) or quoted):
+                    # the text talks ABOUT the attack (a scanner, a firewall, a checker): note it, don't flag it
+                    if "describes_attack_patterns" not in seen:
+                        seen.add("describes_attack_patterns")
+                        out.append({"severity": "info", "code": "describes_attack_patterns", "tool": name,
+                                    "detail": "mentions attack phrases while describing what it detects or prevents (not counted)",
+                                    "evidence": ev})
+                    continue
+                seen.add(code)
+                out.append({"severity": sev, "code": code, "tool": name, "detail": why, "evidence": ev})
+                break
         if HIDDEN.search(blob) or HIDDEN.search(name):
             out.append({"severity": "medium", "code": "hidden_characters", "tool": name,
                         "detail": "invisible or terminal-control characters in the tool definition"})
@@ -241,6 +281,10 @@ def analyze(tools: list[dict] | None, status: str, auth: str | None, changed: li
                         "detail": f"description is {len(desc)} characters; long text can hide instructions"})
         props = ((t.get("inputSchema") or {}).get("properties") or {}) if isinstance(t.get("inputSchema"), dict) else {}
         bad = [p for p in props if SECRET_ARG.match(str(p))] if isinstance(props, dict) else []
+        cfg = [p for p in props if CONFIG_ARG.search(str(p))] if isinstance(props, dict) else []
+        if cfg:
+            out.append({"severity": "low", "code": "config_in_arguments", "tool": name,
+                        "detail": f"asks for {', '.join(cfg[:3])}; config files often contain API keys, so review before pasting"})
         if bad:
             out.append({"severity": "low", "code": "secret_in_arguments", "tool": name,
                         "detail": f"asks the agent to pass {', '.join(bad[:3])} as an argument (secrets end up in model context and logs)"})
