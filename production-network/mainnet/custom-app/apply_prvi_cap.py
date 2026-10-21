@@ -42,6 +42,18 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
         'evmconfig "github.com/cosmos/evm/evmd/config"\n'
         '\tprvicap "github.com/cosmos/evm/evmd/prvicap"',
         "cap import")
+    # The upstream Cosmos EVM demo chain ID must not be accepted by the
+    # PRVI-customized binary, even when a future genesis declares PRVI.
+    # Numeric uniqueness and the operator-approved production identity remain
+    # separate launch gates: this filter is necessary, not sufficient.
+    app = replace_once(app,
+        "\tevmChainID := cast.ToUint64(appOpts.Get(srvflags.EVMChainID))\n\tencodingConfig := evmencoding.MakeConfig(evmChainID)",
+        "\tevmChainID := cast.ToUint64(appOpts.Get(srvflags.EVMChainID))\n"
+        "\tif err := prvicap.ValidateEVMChainID(evmChainID); err != nil {\n"
+        "\t\tpanic(fmt.Errorf(\"PRVI EVM chain identity rejected: %w\", err))\n"
+        "\t}\n"
+        "\tencodingConfig := evmencoding.MakeConfig(evmChainID)",
+        "validate EVM chain identity before any bank or EVM keeper")
     app = replace_once(app,
         "\tBankKeeper            bankkeeper.Keeper",
         "\tBankKeeper            bankkeeper.Keeper\n\tPriviCapKeeper        prvicap.Keeper",
@@ -90,6 +102,15 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
         raise ValueError("raw bank migration exception must be unique")
     if app.count("app.BankKeeper = prvicap.RestrictedBank(baseBank, app.PriviCapKeeper)") != 1:
         raise ValueError("only one guarded module-facing bank injection allowed")
+    # Upstream writes the upgrade module version map before calling InitGenesis.
+    # Move it after all native PRVI genesis policy checks so rejected
+    # financial genesis cannot cause even preliminary consensus KV writes.
+    app = replace_once(app,
+        "\tif err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap()); err != nil {\n"
+        "\t\tpanic(err)\n"
+        "\t}\n\n",
+        "",
+        "defer upgrade version-map write until after PRVI genesis preflight")
     old_chainer = '\treturn app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)'
     new_chainer = '''\t// The bank supply is loaded by module initialization. Require its exact
 \t// declared native PRVI genesis supply, refusing default upstream TEST genesis.
@@ -105,7 +126,77 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \tif err := prvicap.ValidateGenesisBase(initialPRVI.String()); err != nil {
 \t\treturn nil, fmt.Errorf("PRVI pre-init genesis supply rejected: %w", err)
 \t}
-\tresponse, initErr := app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)
+\t// Native PRVI must actually be the EVM gas and staking denomination.
+\t// Do not allow a misleading genesis with capped aprvi but fees/stake in
+\t// upstream stake/atest. All checks precede consensus module writes.
+\tevmJSON, hasEVM := genesisState[evmtypes.ModuleName]
+\tif !hasEVM { return nil, fmt.Errorf("PRVI native genesis: missing EVM module") }
+\tvar evmGenesis evmtypes.GenesisState
+\tif err := app.appCodec.UnmarshalJSON(evmJSON, &evmGenesis); err != nil {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: malformed EVM module: %w", err)
+\t}
+\tif evmGenesis.Params.EvmDenom != prvicap.BaseDenom {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: EVM gas denomination must be aprvi")
+\t}
+\tstakingJSON, hasStaking := genesisState[stakingtypes.ModuleName]
+\tif !hasStaking { return nil, fmt.Errorf("PRVI native genesis: missing staking module") }
+\tvar stakingGenesis stakingtypes.GenesisState
+\tif err := app.appCodec.UnmarshalJSON(stakingJSON, &stakingGenesis); err != nil {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: malformed staking module: %w", err)
+\t}
+\tif stakingGenesis.Params.BondDenom != prvicap.BaseDenom {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: bonded staking denomination must be aprvi")
+\t}
+\tmintJSON, hasMint := genesisState[minttypes.ModuleName]
+\tif !hasMint { return nil, fmt.Errorf("PRVI native genesis: missing mint module") }
+\tvar mintGenesis minttypes.GenesisState
+\tif err := app.appCodec.UnmarshalJSON(mintJSON, &mintGenesis); err != nil {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: malformed mint module: %w", err)
+\t}
+\tif mintGenesis.Params.MintDenom != prvicap.BaseDenom ||
+\t\t!mintGenesis.Params.InflationMin.IsZero() ||
+\t\t!mintGenesis.Params.InflationMax.IsZero() ||
+\t\t!mintGenesis.Params.InflationRateChange.IsZero() ||
+\t\t!mintGenesis.Minter.Inflation.IsZero() ||
+\t\t!mintGenesis.Minter.AnnualProvisions.IsZero() {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: mint must target aprvi with ZERO inflation and provisions")
+\t}
+\t// Never inherit upstream permissionless ERC20 registration for a
+\t// financial native-denom candidate. No aprvi native/ERC20 conversion
+\t// pair is allowed in genesis, even if marked disabled. An upgrade or
+\t// governance change could reopen registration: separately review it.
+\terc20JSON, hasERC20 := genesisState[erc20types.ModuleName]
+\tif !hasERC20 { return nil, fmt.Errorf("PRVI native genesis: missing ERC20 module") }
+\tvar erc20Genesis erc20types.GenesisState
+\tif err := app.appCodec.UnmarshalJSON(erc20JSON, &erc20Genesis); err != nil {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: malformed ERC20 module: %w", err)
+\t}
+\tif erc20Genesis.Params.PermissionlessRegistration {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: permissionless ERC20 registration forbidden")
+\t}
+\tfor _, pair := range erc20Genesis.TokenPairs {
+\t\tif pair.Denom == prvicap.BaseDenom {
+\t\t\treturn nil, fmt.Errorf("PRVI native genesis: aprvi ERC20 token pair forbidden")
+\t\t}
+\t}
+\tmetadataValid := false
+\tfor _, meta := range bankGenesis.DenomMetadata {
+\t\tif meta.Base != prvicap.BaseDenom { continue }
+\t\tif metadataValid || meta.Display != "PRVI" {
+\t\t\treturn nil, fmt.Errorf("PRVI native genesis: duplicate/invalid aprvi metadata")
+\t\t}
+\t\tbaseFound, displayFound := false, false
+\t\tfor _, unit := range meta.DenomUnits {
+\t\t\tif unit.Denom == prvicap.BaseDenom && unit.Exponent == 0 {baseFound = true}
+\t\t\tif unit.Denom == "PRVI" && unit.Exponent == 18 {displayFound = true}
+\t\t}
+\t\tif !baseFound || !displayFound {
+\t\t\treturn nil, fmt.Errorf("PRVI native genesis: aprvi requires 18 decimal PRVI metadata")
+\t\t}
+\t\tmetadataValid = true
+\t}
+\tif !metadataValid {return nil, fmt.Errorf("PRVI native genesis: missing aprvi/PRVI metadata")}
+\t// Only after all native asset identity checks may consensus module writes begin.\n\tif err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap()); err != nil {\n\t\treturn nil, fmt.Errorf("PRVI genesis: upgrade version map: %w", err)\n\t}\n\tresponse, initErr := app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)
 \tif initErr != nil { return nil, initErr }
 \tif err := app.PriviCapKeeper.InitGenesis(ctx, initialPRVI.String(), app.BankKeeper); err != nil {
 \t\treturn nil, fmt.Errorf("PRVI cap genesis initialization denied: %w", err)
@@ -114,7 +205,7 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
     app = replace_once(app, old_chainer, new_chainer, "chain init fail-closed proof")
     # Verify all modifications before writing anything. No direct on-chain action.
     srcdir = source_repo / "production-network" / "mainnet" / "prvicap"
-    required = ["keeper.go", "sdk_bank_adapter.go"]
+    required = ["keeper.go", "sdk_bank_adapter.go", "chain_identity.go"]
     files = {}
     for name in required:
         content = (srcdir / name).read_text(encoding="utf-8")
@@ -123,6 +214,8 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
         files[name] = content
     if "func RestrictedBank" not in files["sdk_bank_adapter.go"]:
         raise ValueError("missing bank guard")
+    if "func ValidateEVMChainID" not in files["chain_identity.go"]:
+        raise ValueError("missing chain identity guard")
     # A helper constant for a dedicated, persistent SDK store, not memory KV.
     files["store.go"] = '''package prvicap
 
