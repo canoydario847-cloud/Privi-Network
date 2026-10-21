@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Generate a Go overlay for a PINNED Cosmos SDK bank source (build/test only).
+"""Build a disposable PINNED Cosmos SDK module copy for bank hardening tests.
 
 Protect external raw BaseKeeper MintCoins and UncheckedSetBalance without
 breaking *internal* legitimate bank sends and delegations. This is an
 experimental preproduction SDK source modification, not an app release.
-The immutable upstream module cache is READ ONLY: overlays live in a
-separate disposable output directory. No validator state is touched.
+The immutable upstream module cache is READ ONLY: patched SDK lives in a
+separate disposable module directory selected by Go's local replace directive. No validator state is touched.
 """
 import argparse
 import json
+import shutil
+import stat
 from pathlib import Path
 
 SDK_VERSION = "cosmos-sdk@v0.54.3"
@@ -97,20 +99,25 @@ func (k BaseSendKeeper) UncheckedSetBalance(ctx context.Context, addr sdk.AccAdd
     )
     if "k.UncheckedSetBalance(" in send or "k.UncheckedSetBalance(" in keeper:
         raise ValueError("unreviewed SDK bank internal unsafe setter site")
-    # Prevent files being added alongside original SDK module source.
+    # Go explicitly refuses -overlay replacements for files underneath
+    # GOMODCACHE. Instead copy the exact verified module to a throwaway
+    # location and use a LOCAL go.mod replace only inside the CI workspace.
+    # No writes to the cached module, any production node, or its data.
     output_dir = output_dir.resolve()
     if output_dir == sdk_root or sdk_root in output_dir.parents:
         raise ValueError("refusing SDK module cache overwrite")
-    output_dir.mkdir(parents=True, exist_ok=True)
-    target_send = output_dir / "send.go"
-    target_keeper = output_dir / "keeper.go"
-    target_send.write_text(send, encoding="utf-8")
-    target_keeper.write_text(keeper, encoding="utf-8")
-    overlay = output_dir / "overlay.json"
-    mapping = {str(send_file): str(target_send), str(keeper_file): str(target_keeper)}
-    overlay.write_text(json.dumps({"Replace": mapping}, indent=2) + "\n", encoding="utf-8")
-    return {"mode": "BUILD_ONLY", "financial_mainnet": "NO_GO",
-            "sdk_module": SDK_VERSION, "overlay": str(overlay), "files": sorted(mapping)}
+    if output_dir.exists():
+        raise ValueError("refusing to overwrite existing isolated SDK checkout")
+    shutil.copytree(sdk_root, output_dir)
+    target_send = output_dir / "x" / "bank" / "keeper" / "send.go"
+    target_keeper = output_dir / "x" / "bank" / "keeper" / "keeper.go"
+    for target, patched in ((target_send, send), (target_keeper, keeper)):
+        target.chmod(target.stat().st_mode | stat.S_IWUSR)
+        target.write_text(patched, encoding="utf-8")
+    return {"mode": "BUILD_ONLY_LOCAL_MODULE_REPLACEMENT",
+            "financial_mainnet": "NO_GO",
+            "sdk_module": SDK_VERSION, "module_dir": str(output_dir),
+            "patched_files": ["x/bank/keeper/send.go", "x/bank/keeper/keeper.go"]}
 
 
 def main():
