@@ -149,6 +149,9 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \tif popGenesis.ChainID != ctx.ChainID() {
 \t\treturn nil, fmt.Errorf("Privi PoP genesis: Cosmos chain identity mismatch")
 \t}
+\tif err := prvipop.ValidateGenesis(popGenesis.ChainID,popGenesis.Authorities); err != nil {
+\t\treturn nil,fmt.Errorf("Privi PoP genesis: unsafe author registry before SDK InitGenesis: %w",err)
+\t}
 \t// Native PRVI must actually be the EVM gas and staking denomination.
 \t// Do not allow a misleading genesis with capped aprvi but fees/stake in
 \t// upstream stake/atest. All checks precede consensus module writes.
