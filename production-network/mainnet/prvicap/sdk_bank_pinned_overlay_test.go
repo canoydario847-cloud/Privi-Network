@@ -125,6 +125,9 @@ func TestSDKPatchedNativeBurnCannotReopenMintBudget(t *testing.T) {
  })
  if err:=h.cap.InitGenesis(h.ctx,"100",h.bank);err!=nil {t.Fatal(err)}
  h.account.EXPECT().GetModuleAccount(h.ctx,"burnfixture").Return(burner)
+ // SDK v0.54.3 LockedCoins checks the burner account before debiting.
+ // Keep this expectation address-specific so an unrelated account lookup fails.
+ h.account.EXPECT().GetAccount(h.ctx,burner.GetAddress()).Return(burner).MinTimes(1)
  if err:=h.bank.BurnCoins(h.ctx,"burnfixture",sdk.NewCoins(sdk.NewInt64Coin(BaseDenom,40)));err!=nil {
    t.Fatalf("legitimate native burn rejected: %v",err)
  }
