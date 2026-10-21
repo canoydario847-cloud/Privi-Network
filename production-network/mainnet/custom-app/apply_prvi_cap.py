@@ -76,6 +76,20 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \tbaseBank = baseBank.WithObjStoreKey(oKeys[banktypes.ObjectStoreKey])
 \tapp.BankKeeper = prvicap.RestrictedBank(baseBank, app.PriviCapKeeper)'''
     app = replace_once(app, old_bank, new_bank, "apply restriction before bank injection")
+    # Cosmos SDK v0.54.3 x/bank migration registration currently requires a
+    # concrete BaseKeeper. The only exception receives a mint-restricted copy;
+    # all other modules receive the sealed direct-balance-denying interface.
+    # The residual raw keeper reference remains a financial launch blocker.
+    app = replace_once(app,
+        "bank.NewAppModule(appCodec, app.BankKeeper, app.AccountKeeper, nil)",
+        "bank.NewAppModule(appCodec,\n"
+        "\t\t\tbaseBank.WithMintCoinsRestriction(app.PriviCapKeeper.MintRestriction),\n"
+        "\t\t\tapp.AccountKeeper, nil)",
+        "SDK bank migration concrete keeper with native mint restriction")
+    if app.count("baseBank.WithMintCoinsRestriction(app.PriviCapKeeper.MintRestriction)") != 1:
+        raise ValueError("raw bank migration exception must be unique")
+    if app.count("app.BankKeeper = prvicap.RestrictedBank(baseBank, app.PriviCapKeeper)") != 1:
+        raise ValueError("only one guarded module-facing bank injection allowed")
     old_chainer = '\treturn app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)'
     new_chainer = '''\t// The bank supply is loaded by module initialization. Require its exact
 \t// declared native PRVI genesis supply, refusing default upstream TEST genesis.
