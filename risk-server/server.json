@@ -1,0 +1,19 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.canoydario847-cloud/privi-risk",
+  "title": "Privi Risk",
+  "description": "Pre-trade risk desk for traders and AI trading agents: position size, liquidation-before-stop check, risk of ruin, live crypto VaR. Free; signed GO/REDUCE/NO-TRADE report $0.10 USDC via x402.",
+  "version": "0.1.0",
+  "websiteUrl": "https://privi-discovery.onrender.com",
+  "repository": {
+    "url": "https://github.com/canoydario847-cloud/Privi-Network",
+    "source": "github",
+    "subfolder": "risk-server"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://privi-risk.onrender.com/mcp"
+    }
+  ]
+}

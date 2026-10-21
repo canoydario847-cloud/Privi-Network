@@ -221,6 +221,23 @@
         "quantum_verify",
         "pqc_scan_code"
       ]
+    },
+    {
+      "name": "Privi Risk",
+      "registry_id": "io.github.canoydario847-cloud/privi-risk",
+      "url": "https://privi-risk.onrender.com/mcp",
+      "transport": "streamable-http",
+      "description": "Pre-trade risk desk for crypto and market traders and AI trading agents. Free: position size calculator with fees and a liquidation-before-stop check for leveraged perps/futures; risk of ruin Monte Carlo with Kelly and max safe risk per trade; live crypto volatility, ATR, VaR and Expected Shortfall. Paid ($0.10 USDC on Base via x402): signed GO / REDUCE / NO-TRADE pre-trade report, post-quantum (ML-DSA-87) and anchored on the Privi chain.",
+      "pricing": "free tools; $0.10 USDC per signed pre-trade report (x402)",
+      "auth": "none (x402 for the paid report)",
+      "tools": [
+        "risk_position_size",
+        "risk_of_ruin",
+        "risk_market_check",
+        "risk_pretrade_report",
+        "risk_verify",
+        "risk_status"
+      ]
     }
   ],
   "chain": {
