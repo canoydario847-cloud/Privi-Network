@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: [feat/life-ai-studio-multiagent]
-    paths: ['.github/workflows/bnb-priv-real-token-check.yml']
+    paths: ['.github/workflows/bnb-priv-real-token-check.yml', 'life-ai-studio/tools/bnb_priv_readonly_check.py']
 jobs:
   contract:
     runs-on: ubuntu-latest
