@@ -168,18 +168,19 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
             return _result({"error": str(e)}, is_error=True)
         if not chain:
             return _result({"error": "chain access is not configured on this server"}, is_error=True)
-        rec = None
-        if not tx_hash:
-            rec = store.find_leaf(leaf)
-            if not rec or not rec.get("tx_hash"):
-                return _result({"hash": leaf, "verified": False, "reason": "no anchor found for this hash"})
+        rec = store.find_leaf(leaf)
+        if tx_hash and rec and rec.get("tx_hash") and rec["tx_hash"].lower() != tx_hash.lower():
+            rec = None  # the caller is asking about a different anchor of this hash; check that one on chain
+        if not tx_hash and (not rec or not rec.get("tx_hash")):
+            return _result({"hash": leaf, "verified": False, "reason": "no anchor found for this hash"})
+        if rec and rec.get("tx_hash"):
             if rec.get("chain_id") is not None and rec["chain_id"] != settings.chain_id:
                 net = "the Privi EVM Devnet" if rec["chain_id"] == AnchorStore.LEGACY_CHAIN_ID else f"chain {rec['chain_id']}"
                 return _result({"hash": leaf, "verified": None, "anchored_on_chain_id": rec["chain_id"], "tx_hash": rec["tx_hash"],
                                 "proof": rec["proof"], "block_number": rec.get("block_number"), "block_time": rec.get("block_time"),
                                 "reason": f"anchored on {net} before Privi moved to Base; that transaction lives on that chain, "
                                           "not on Base. Re-anchor the hash to get a Base receipt."})
-            tx_hash, proof = rec["tx_hash"], rec["proof"]
+            tx_hash, proof = rec["tx_hash"], proof or rec["proof"]
         proof = proof or []
         try:
             tx = await anyio.to_thread.run_sync(chain.transaction, tx_hash)
@@ -323,6 +324,40 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
     return mcp
 
 
+def reconcile_pending(chain, store: AnchorStore, limit: int = 50) -> int:
+    """Settle batches left 'pending' because their receipt took longer than the request waited.
+    Returns how many changed state (confirmed or failed)."""
+    changed = 0
+    for b in store.pending_on_current_chain(limit):
+        try:
+            r = chain.receipt(b["tx_hash"])
+        except Exception:
+            continue
+        if not r:
+            continue
+        ok = int(r.get("status", "0x0"), 16) == 1
+        block = int(r["blockNumber"], 16)
+        ts = chain.block_timestamp(block) if ok else None
+        store.update_batch(b["batch_id"], status="confirmed" if ok else "failed", block_number=block, block_time=ts)
+        changed += 1
+    return changed
+
+
+def start_reconciler(chain, store: AnchorStore, interval_s: float = 120.0) -> None:
+    import threading
+
+    def loop():
+        while True:
+            time.sleep(interval_s)
+            try:
+                n = reconcile_pending(chain, store)
+                if n:
+                    print(f"privi-anchor: settled {n} pending anchor(s)", flush=True)
+            except Exception as e:
+                print(f"privi-anchor: reconcile failed: {e}", flush=True)
+    threading.Thread(target=loop, daemon=True, name="privi-anchor-reconcile").start()
+
+
 def startup_check(settings: Settings, chain: JsonRpcChain, store: AnchorStore) -> None:
     """Log chain health. With ANCHOR_GENESIS=1 and no confirmed anchor yet, wait (in the background)
     until the wallet has gas, then anchor and verify a genesis record on chain."""
@@ -387,6 +422,7 @@ def main() -> None:
     chain = JsonRpcChain(settings.rpc_url, settings.chain_id, settings.private_key) if settings.private_key else None
     if chain:
         startup_check(settings, chain, store)
+        start_reconciler(chain, store)
     mcp = build_server(settings, chain, store)
     if args.stdio:
         mcp.run("stdio")
