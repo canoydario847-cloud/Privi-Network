@@ -22,6 +22,7 @@ def check(genesis):
         return ["missing or malformed bank balances"], 0
     total = 0
     seen_addresses = set()
+    seen_native = False
     for account in balances:
         if not isinstance(account, dict) or not isinstance(account.get("coins"), list):
             errors.append("malformed account or coin list")
@@ -44,6 +45,7 @@ def check(genesis):
             seen_denoms.add(denom)
             if denom != DENOM:
                 continue
+            seen_native = True
             amount = coin.get("amount")
             if not isinstance(amount, str) or not amount.isascii() or not amount.isdecimal() or (len(amount) > 1 and amount.startswith("0")):
                 errors.append("noncanonical native amount")
@@ -71,6 +73,8 @@ def check(genesis):
         errors.append("bank native supply differs from balances")
     if total > CAP:
         errors.append("native genesis supply exceeds 1B PRVI")
+    if not seen_native:
+        errors.append("native PRVI denomination absent from balances")
     if total == 0:
         errors.append("no positive native PRVI allocation")
     if not balances:
