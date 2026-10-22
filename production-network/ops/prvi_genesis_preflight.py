@@ -40,6 +40,13 @@ def check(genesis):
                 errors.append("zero/negative native amount")
             total += n
     supply = app.get("bank", {}).get("supply", [])
+    # Reject ambiguous duplicate supply entries, including non-native denoms.
+    supply_denoms = set()
+    for coin in supply:
+        denom = coin.get("denom")
+        if denom in supply_denoms:
+            errors.append("duplicate supply denom")
+        supply_denoms.add(denom)
     declared = [c.get("amount") for c in supply if c.get("denom") == DENOM]
     if len(declared) != 1 or not isinstance(declared[0], str) or not declared[0].isascii() or not declared[0].isdecimal() or (len(declared[0]) > 1 and declared[0].startswith("0")):
         errors.append("missing or malformed declared native supply")
@@ -47,6 +54,8 @@ def check(genesis):
         errors.append("bank native supply differs from balances")
     if total > CAP:
         errors.append("native genesis supply exceeds 1B PRVI")
+    if total == 0:
+        errors.append("no positive native PRVI allocation")
     if not balances:
         errors.append("missing bank balances")
     return errors, total
