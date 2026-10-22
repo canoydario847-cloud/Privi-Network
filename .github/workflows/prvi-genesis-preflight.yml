@@ -20,4 +20,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run offline genesis preflight unit tests
         working-directory: production-network/ops
-        run: python3 -m unittest -v test_prvi_genesis_preflight.py
+        run: |
+          pwd
+          ls -la privi_genesis_preflight.py test_prvi_genesis_preflight.py
+          python3 -m unittest -v test_prvi_genesis_preflight.py
