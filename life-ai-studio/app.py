@@ -84,6 +84,9 @@ class CogWalletInput(BaseModel):
 class CogWalletProof(CogWalletInput):
     signature: str
 
+class CogDeploymentInput(BaseModel):
+    tx_hash: str
+
 class CogUseInput(BaseModel):
     event_id: str
     idempotency_key: str = Field(min_length=8, max_length=180)
@@ -321,11 +324,16 @@ def save_file(project_id: str, data: FileInput, user=Depends(member_wallet)):
     except ValueError as exc:
         fail(400, str(exc))
     with store.transaction() as db:
-        row = db.execute("SELECT version FROM files WHERE project_id=? AND path=?",
+        row = db.execute("SELECT version,content FROM files WHERE project_id=? AND path=?",
                          (project_id, path)).fetchone()
         current_version = row["version"] if row else 0
         if current_version != data.expected_version:
             fail(409, "File changed. Refresh to avoid overwriting another agent.")
+        if row and not db.execute(
+              "SELECT 1 FROM cog_events WHERE project_id=? AND path=?",(project_id,path)).fetchone():
+            cogvative.attest(db,store.uid("cog"),user["id"],project_id,path,
+                current_version,row["content"],"historical_author_unverified",
+                "existing_snapshot_observed_now_not_original_creation",credit_cost=None)
         db.execute("INSERT INTO files (project_id,path,content,version) VALUES(?,?,?,?) "
                    "ON CONFLICT(project_id,path) DO UPDATE SET content=excluded.content, "
                    "version=excluded.version",
@@ -372,8 +380,12 @@ async def run_one(run_id, provider, project, task, user_id, snapshots, suggestio
                 snapshot_versions = {f["path"]: f["version"] for f in snapshots}
                 proposed["files"] = [{**p, "expected_version": snapshot_versions.get(p["path"],0)}
                                      for p in proposed["files"]]
+                pid=store.uid("patch")
+                for file in proposed["files"]:
+                    cogvative.sign_agent_proposal(db,pid,file["path"],file["content"],
+                                                  provider,run_id,AGENT_COST)
                 db.execute("INSERT INTO proposals VALUES(?,?,?,?,?,?)",
-                           (store.uid("patch"), run_id, project["id"], proposed["summary"],
+                           (pid, run_id, project["id"], proposed["summary"],
                             json.dumps(proposed), "pending"))
     except Exception as exc:
         # Refund failed provider requests; do not expose provider tokens or URLs in errors.
@@ -536,6 +548,13 @@ def apply_proposal(project_id: str, proposal_id: str, user=Depends(member_wallet
             if (row["version"] if row else 0) != f["expected_version"]:
                 fail(409, "Merge conflict: an agent or member changed "+f["path"])
         for f in changed:
+            prior=db.execute("SELECT content,version FROM files WHERE project_id=? AND path=?",
+                            (project_id,f["path"])).fetchone()
+            if prior and not db.execute("SELECT 1 FROM cog_events WHERE project_id=? AND path=?",
+                                        (project_id,f["path"])).fetchone():
+                cogvative.attest(db,store.uid("cog"),user["id"],project_id,f["path"],
+                    prior["version"],prior["content"],"historical_author_unverified",
+                    "existing_snapshot_observed_now_not_original_creation",credit_cost=None)
             db.execute("INSERT INTO files VALUES(?,?,?,?) "
                        "ON CONFLICT(project_id,path) DO UPDATE SET "
                        "content=excluded.content,version=excluded.version",
@@ -585,6 +604,62 @@ def cogvative_detail(project_id: str,event_id: str,user=Depends(current)):
     return {"event":dict(e),"lines":lines,"verification":
         "ed25519_verified" if result is True else
         "hash_integrity_only_unverified_issuer" if result is None else "INVALID"}
+
+
+
+@app.get("/api/projects/{project_id}/cogvative/proposals")
+def cogvative_proposal_signatures(project_id: str,user=Depends(current)):
+    own(project_id,user)
+    with store.transaction() as db:
+        rows=db.execute("SELECT s.proposal_id,s.path,s.agent,s.run_id,s.stamp_utc,s.event_hash,"
+           "s.signature_hex,s.pubkey_hex FROM cog_proposal_signatures s "
+           "JOIN proposals p ON p.id=s.proposal_id WHERE p.project_id=?",
+           (project_id,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.post("/api/projects/{project_id}/cogvative/{event_id}/deployment")
+async def record_cogvative_deployment(project_id: str,event_id: str,data: CogDeploymentInput,
+                                      user=Depends(member_wallet)):
+    """Record receipt-verified *gas*, never unverified source/bytecode equivalence."""
+    own(project_id,user)
+    config=payconfig()
+    if not config: fail(503,"Verified native PRVI mainnet unavailable")
+    if not re.fullmatch(r"0x[a-fA-F0-9]{64}",data.tx_hash):
+        fail(400,"Invalid transaction hash")
+    await verify_chain(config)
+    chain,rpc_url,treasury,unit,confirms,genesis=config
+    tx=await rpc(rpc_url,"eth_getTransactionByHash",[data.tx_hash])
+    receipt=await rpc(rpc_url,"eth_getTransactionReceipt",[data.tx_hash])
+    tip=await rpc(rpc_url,"eth_blockNumber",[])
+    if not tx or not receipt or not tx.get("blockNumber"):
+        fail(409,"Transaction is not mined")
+    block=await rpc(rpc_url,"eth_getBlockByNumber",[tx["blockNumber"],False])
+    if (tx.get("from","").lower()!=user["wallet"].lower() or tx.get("to") is not None
+        or receipt.get("status")!="0x1"
+        or not re.fullmatch(r"0x[0-9a-fA-F]{40}",receipt.get("contractAddress") or "")
+        or receipt.get("transactionHash","").lower()!=data.tx_hash.lower()
+        or receipt.get("blockHash")!=tx.get("blockHash")
+        or not block or block.get("hash")!=tx.get("blockHash")
+        or int(tip,16)-int(receipt["blockNumber"],16)+1<confirms):
+        fail(409,"Not a confirmed wallet-owned Privi contract deployment receipt")
+    gas=int(receipt["gasUsed"],16)*int(receipt["effectiveGasPrice"],16)
+    if gas<=0: fail(409,"Invalid verified gas amount")
+    with store.transaction() as db:
+        event=db.execute("SELECT * FROM cog_events WHERE id=? AND owner_id=? AND project_id=?",
+                         (event_id,user["id"],project_id)).fetchone()
+        if not event: fail(404,"Signature not found")
+        if db.execute("SELECT 1 FROM cog_deployments WHERE tx_hash=? OR event_id=?",
+                      (data.tx_hash.lower(),event_id)).fetchone():
+            fail(409,"Deployment receipt already attributed")
+        db.execute("INSERT INTO cog_deployments VALUES(?,?,?,?,?,?,?)",
+                   (data.tx_hash.lower(),event_id,chain,receipt["contractAddress"].lower(),
+                    str(gas),store.now(),
+                    "verified_contract_creation_from_member; source_build_equivalence_not_proven"))
+        db.execute("UPDATE cog_events SET prvi_deploy_wei=? WHERE id=?",(str(gas),event_id))
+    return {"event_id":event_id,"gas_paid_wei":str(gas),"native_token":"PRVI",
+            "source_build_equivalence_proven":False,
+            "receipt_verified":True}
 
 
 @app.post("/api/projects/{project_id}/cogvative/{agent}/wallet/challenge")
@@ -640,7 +715,7 @@ def cogvative_wallet_link(project_id: str,agent: str,data: CogWalletProof,
             "provider_endorsement_verified":False}
 
 
-@app.get("/api/projects/{project_id}/cogvative/royalties")
+@app.get("/api/projects/{project_id}/cogvative/royalty-balances")
 def cogvative_royalties(project_id: str,user=Depends(current)):
     own(project_id,user)
     with store.transaction() as db:

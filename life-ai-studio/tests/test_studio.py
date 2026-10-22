@@ -256,7 +256,7 @@ def test_cogvative_signs_every_saved_line_and_preserves_inherited_authorship():
     person=member()
     p=client.post('/api/projects',json={'title':'Cogvative signed code','kind':'code'}).json()['id']
     one=client.put('/api/projects/'+p+'/files',json={
-        'path':'src/hello.py','content':'alpha = 1\\nbeta = 2\\n','expected_version':0})
+        'path':'src/hello.py','content':'alpha = 1\nbeta = 2\n','expected_version':0})
     assert one.status_code==200,one.text
     assert one.json()['cogvative']['signature_status']=='ed25519_signed'
     eid=one.json()['cogvative']['event_id']
@@ -268,7 +268,7 @@ def test_cogvative_signs_every_saved_line_and_preserves_inherited_authorship():
     assert all(line['author_time'].endswith('Z') for line in detail.json()['lines'])
     assert detail.json()['event']['prvi_deploy_wei'] is None
     two=client.put('/api/projects/'+p+'/files',json={
-        'path':'src/hello.py','content':'alpha = 1\\nbeta = 3\\n','expected_version':1})
+        'path':'src/hello.py','content':'alpha = 1\nbeta = 3\n','expected_version':1})
     assert two.status_code==200,two.text
     d=client.get('/api/projects/'+p+'/cogvative/event/'+two.json()['cogvative']['event_id']).json()
     assert d['verification']=='ed25519_verified'
@@ -284,7 +284,7 @@ def test_cogvative_agent_proposal_and_royalty_call(monkeypatch):
     p=client.post('/api/projects',json={'title':'Agent Royalty Code','kind':'code'}).json()['id']
     async def mocked(provider,instructions,prompt):
         return json.dumps({'summary':'agent wrote code','files':[{
-            'path':'src/agent.py','content':'x = 10\\ny = x\\n'}]})
+            'path':'src/agent.py','content':'x = 10\ny = x\n'}]})
     monkeypatch.setattr(agents,'generate',mocked)
     run=client.post('/api/projects/'+p+'/run-team',json={
         'agents':['chatgpt'],'task':'Write one source file'})
@@ -332,5 +332,5 @@ def test_cogvative_requires_issuer_key_except_explicit_sandbox(monkeypatch):
     import pytest
     with pytest.raises(RuntimeError,match="signing key required"):
         client.put('/api/projects/'+p+'/files',json={
-            'path':'src/cannot.py','content':'a=1\\n','expected_version':0})
+            'path':'src/cannot.py','content':'a=1\n','expected_version':0})
     assert client.get('/api/projects/'+p+'/files').json()==[]
