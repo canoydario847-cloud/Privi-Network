@@ -32,18 +32,26 @@ CREATE INDEX IF NOT EXISTS idx_leaves_leaf ON leaves (leaf);
 
 
 class AnchorStore:
-    def __init__(self, path: str = "anchor.db"):
+    # Anchors made before Privi moved to Base were all on the Privi EVM Devnet.
+    LEGACY_CHAIN_ID = 262144
+
+    def __init__(self, path: str = "anchor.db", chain_id: int | None = None):
         self._lock = threading.Lock()
+        self.chain_id = chain_id
         self._db = sqlite3.connect(path, check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         self._db.executescript(SCHEMA)
+        cols = {r[1] for r in self._db.execute("PRAGMA table_info(batches)")}
+        if "chain_id" not in cols:  # migrate: remember which chain each anchor lives on
+            self._db.execute("ALTER TABLE batches ADD COLUMN chain_id INTEGER")
+            self._db.execute("UPDATE batches SET chain_id=? WHERE chain_id IS NULL", (self.LEGACY_CHAIN_ID,))
         self._db.commit()
 
     def new_batch(self, root: str, proofs: dict[str, list[str]], label: str, client: str) -> int:
         with self._lock:
             cur = self._db.execute(
-                "INSERT INTO batches (root, status, label, client, created_at) VALUES (?, 'sending', ?, ?, ?)",
-                (root, label, client, datetime.now(timezone.utc).isoformat(timespec="seconds")),
+                "INSERT INTO batches (root, status, label, client, created_at, chain_id) VALUES (?, 'sending', ?, ?, ?, ?)",
+                (root, label, client, datetime.now(timezone.utc).isoformat(timespec="seconds"), self.chain_id),
             )
             bid = cur.lastrowid
             self._db.executemany("INSERT INTO leaves (leaf, batch_id, proof) VALUES (?,?,?)",
@@ -64,11 +72,11 @@ class AnchorStore:
         return dict(r) if r else None
 
     def find_leaf(self, leaf: str) -> dict | None:
-        """Best record for a hash: a confirmed batch first, then the newest attempt."""
+        """Best record for a hash: one on the current chain first, then confirmed, then the oldest attempt."""
         r = self._db.execute(
             """SELECT l.leaf, l.proof, b.* FROM leaves l JOIN batches b USING (batch_id)
-               WHERE l.leaf=? ORDER BY (b.status='confirmed') DESC, b.batch_id ASC LIMIT 1""",
-            (leaf,),
+               WHERE l.leaf=? ORDER BY (b.chain_id IS ?) DESC, (b.status='confirmed') DESC, b.batch_id ASC LIMIT 1""",
+            (leaf, self.chain_id),
         ).fetchone()
         if not r:
             return None
@@ -76,10 +84,22 @@ class AnchorStore:
         d["proof"] = json.loads(d["proof"])
         return d
 
+    def sent_since(self, seconds: int) -> int:
+        """Anchor transactions attempted on the current chain in the last `seconds` (gas budget)."""
+        since = datetime.fromtimestamp(datetime.now(timezone.utc).timestamp() - seconds, timezone.utc).isoformat(timespec="seconds")
+        return self._db.execute("SELECT COUNT(*) FROM batches WHERE chain_id IS ? AND created_at >= ? AND status != 'failed'",
+                                (self.chain_id, since)).fetchone()[0]
+
+    def confirmed_on_current_chain(self) -> int:
+        return self._db.execute("SELECT COUNT(*) FROM batches WHERE chain_id IS ? AND status='confirmed'",
+                                (self.chain_id,)).fetchone()[0]
+
     def stats(self) -> dict:
         r = self._db.execute(
             "SELECT COUNT(*) AS batches, SUM(status='confirmed') AS confirmed, "
-            "MAX(CASE WHEN status='confirmed' THEN block_time END) AS last_time FROM batches").fetchone()
-        n = self._db.execute("SELECT COUNT(*) FROM leaves").fetchone()[0]
+            "MAX(CASE WHEN status='confirmed' THEN block_time END) AS last_time FROM batches WHERE chain_id IS ?",
+            (self.chain_id,)).fetchone()
+        n = self._db.execute("SELECT COUNT(*) FROM leaves JOIN batches USING (batch_id) WHERE chain_id IS ?",
+                             (self.chain_id,)).fetchone()[0]
         return {"batches": r["batches"] or 0, "confirmed_batches": r["confirmed"] or 0, "hashes": n,
                 "last_confirmed_block_time": r["last_time"]}

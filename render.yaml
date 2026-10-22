@@ -33,19 +33,24 @@ services:
     envVars:
       - key: ANCHOR_DB_PATH
         value: /data/anchor.db
+      # Privi anchors on Base until the Privi chain mainnet launches.
       - key: ANCHOR_RPC_URL
-        value: https://privi-evm-devnet-development.up.railway.app
+        value: https://mainnet.base.org
       - key: ANCHOR_CHAIN_ID
-        value: "262144"
+        value: "8453"
       - key: ANCHOR_NETWORK_NAME
-        value: Privi EVM Devnet (valueless TEST gas)
+        value: Base (until the Privi chain mainnet launches)
+      - key: ANCHOR_EXPLORER_TX_URL
+        value: https://basescan.org/tx/
+      - key: ANCHOR_MAX_TX_PER_DAY      # gas budget: ~500 Base txs/day is well under $1/day
+        value: "500"
       - key: ANCHOR_RATE_PER_MIN
         value: "30"
       - key: ANCHOR_GENESIS
         value: "1"
       - key: ANCHOR_API_KEYS          # shared with Ledger and Verify below
         generateValue: true
-      - key: ANCHOR_PRIVATE_KEY       # gas wallet on the Privi devnet (copy from Railway privi-anchor)
+      - key: ANCHOR_PRIVATE_KEY       # anchor wallet; needs a little ETH on Base (≈ $5 lasts weeks)
         sync: false
 
   # ------------------------------------------------------------------ Privi Ledger

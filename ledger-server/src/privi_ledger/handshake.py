@@ -4,7 +4,7 @@ Company A's agent offers a handshake describing a dealing with company B (a
 payment, a data transfer, a delivery, an agreement). A's log records the offer.
 When B's agent accepts, B's log records the same terms, A's log records the
 acceptance, and a pair hash binding the terms and both entries is anchored on
-the Privi chain. Neither side can later deny or rewrite the dealing alone: each
+chain (Base, until the Privi chain mainnet). Neither side can later deny or rewrite the dealing alone: each
 log holds the other side's entry hash, and the pair is fixed on chain.
 
 Only works when both organizations use Privi Ledger.

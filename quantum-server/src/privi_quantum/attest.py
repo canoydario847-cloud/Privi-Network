@@ -5,7 +5,7 @@
 Ed25519 (classical) + ML-DSA-87 (NIST FIPS 204, the CNSA 2.0 parameter set), over
 the canonical JSON body. Both must verify. A future quantum computer that breaks
 Ed25519 still cannot forge a Privi Quantum result, and the body hash is anchored
-on the Privi chain so the time it was issued is fixed too.
+on chain (Base) so the time it was issued is fixed too.
 
 Keys are deterministic from two 32-byte seeds (env QUANTUM_SIGNING_SEED as 128 hex
 chars, or generated once and kept in the database on the persistent disk).

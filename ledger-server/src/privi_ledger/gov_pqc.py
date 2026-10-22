@@ -10,7 +10,7 @@ sensitive past 2030, with TLS 1.3 (or successor) support by Jan 2, 2030.
 This module keeps a versioned cryptographic inventory per system (every
 change written to the agency's tamper-evident "pqc-inventory" log), classifies
 algorithms, builds a prioritized migration plan with per-asset deadlines and
-findings, and exports the CBOM + plan sealed on the Privi chain.
+findings, and exports the CBOM + plan sealed on chain (Base).
 
 The rules below follow public summaries of the order and memo; confirm
 against the official texts and NIST IR 8547 before relying on them.
