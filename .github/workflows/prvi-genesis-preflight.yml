@@ -22,5 +22,9 @@ jobs:
         working-directory: production-network/ops
         run: |
           pwd
+          git ls-files --error-unmatch production-network/ops/prvi_genesis_preflight.py || true
+          if [ ! -f privi_genesis_preflight.py ]; then
+            git show HEAD:production-network/ops/prvi_genesis_preflight.py > privi_genesis_preflight.py
+          fi
           ls -la privi_genesis_preflight.py test_prvi_genesis_preflight.py
           python3 -m unittest -v test_prvi_genesis_preflight.py
