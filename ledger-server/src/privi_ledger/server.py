@@ -41,7 +41,7 @@ from .fortress import Fortress, FortressError
 from .live import LiveService, TrustWatcher, mount_ws
 from .gateway import Gateways
 from .rooms import Rooms
-from . import live_tools, scan_tools
+from . import live_tools, scan_tools, dual_payments
 from .scanner import Scanner
 from .guard import Guard
 from . import guard_tools
@@ -229,6 +229,9 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
                 "ledger_read_stream": "organization API key",
                 "ledger_list_streams": "organization API key",
                 "ledger_signup": "free (free plan: monthly entry limit)",
+                "privi_payment_options": "free; USDC x402 unchanged, PRVI_TEST simulation disabled by default",
+                "privi_test_payment_quote": "valueless staging simulation only; organization API key",
+                "privi_test_payment_simulate": "valueless staging simulation only; NO paid service access",
                 "ledger_upgrade_pro": f"${settings.prices_usd['ledger_upgrade_pro']} per 30 days (x402), unlimited entries",
                 "passport_issue": f"organization API key; free on Pro/enterprise, ${settings.prices_usd['passport_issue']} per passport (x402) on the free plan",
                 "passport_verify": "free", "passport_gate": "free", "passport_list": "organization API key",
@@ -1333,6 +1336,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     scan_tools.register(mcp, scanner, org_from=org_from, result=_result, unauthorized=unauthorized)
     guard_tools.register(mcp, guard, paywall, org_from=org_from, result=_result, unauthorized=unauthorized,
                          payments_enabled=settings.payments_enabled)
+    dual_payments.register(mcp, settings, org_from=org_from, result=_result, unauthorized=unauthorized)
     for _path, _methods, _handler in (live.http_routes() + gateways.http_routes() + rooms.http_routes()
                                       + scan_tools.http_routes(scanner) + guard_tools.http_routes(guard, paywall, ledger, settings, plans.signup)):
         mcp.custom_route(_path, methods=_methods, include_in_schema=False)(_handler)

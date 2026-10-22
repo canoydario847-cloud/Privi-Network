@@ -247,3 +247,42 @@ The `Dockerfile` runs on Railway with a volume at `/data`. Start on `base-sepoli
 ## License
 
 MIT © 2026 Dario Canoy, Privi World Co
+
+
+## Dual-payment groundwork: USDC production billing + valueless PRVI_TEST simulation
+
+The existing **USDC via x402** payment tools are unchanged. The additive MCP tool
+`privi_payment_options` reports two clearly distinct paths:
+
+- **USDC_X402**: the existing real/staging payment rail, depending on `LEDGER_NETWORK`
+  and `LEDGER_PAYMENTS_ENABLED`. All settlement still passes the existing facilitator.
+- **PRVI_TEST_SIMULATION**: a strictly off-chain, no-value **developer simulator**.
+  It cannot pay for a service, issue or move PRVI, grant Ledger Pro, add Guard credits,
+  activate any financial chain, or be used as a settlement attestation.
+
+The simulator is **disabled by default**. To enable it in a disposable development
+or isolated staging service, set `PRVI_TEST_PAYMENT_MODE=1` **and**
+`LEDGER_NETWORK=base-sepolia`. When `LEDGER_NETWORK=base`, simulation is always
+forced off even if the flag is set. Keep the flag at `0` in production.
+
+A verified existing Ledger organization with its API key can run:
+
+1. `privi_payment_options` (no key required; lists methods and launch status).
+2. `privi_test_payment_quote` with `sku=ledger_upgrade_pro` (API key required).
+3. `privi_test_payment_simulate` with the returned quote ID and
+   `acknowledgement="VALUELESS TEST ONLY"` (same organization key).
+
+A simulated receipt says `SIMULATED_NOT_PAID`, `paid: false`, `settled: false`,
+`service_unlocked: false` and `real_transaction_hash: null`. Quotes expire after
+10 minutes, are bound to one organization, are one-use only, and are held
+in ephemeral process memory. Real USDC billing continues exclusively through
+existing tools such as `ledger_upgrade_pro` and the original x402 facilitator.
+
+**Native PRVI real settlement is not enabled.** The PRVI mainnet release, fee
+and token economics, security audit, independent validators, legal review,
+chain ID, oracle/quote policy, custody and payment replay protections must pass
+separately reviewed launch gates before any real-value PRVI path is designed.
+
+Run the isolated developer safety suite:
+
+    cd ledger-server && python -m pytest tests/test_dual_payments.py
