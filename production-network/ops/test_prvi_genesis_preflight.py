@@ -15,6 +15,19 @@ class PreflightTests(unittest.TestCase):
         self.assertTrue(check(g)[0])
     def test_bad_amount(self):
         self.assertTrue(check(genesis("-1"))[0])
+    def test_duplicate_account(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["balances"].append(dict(g["app_state"]["bank"]["balances"][0]))
+        self.assertIn("duplicate account address", check(g)[0])
+
+    def test_duplicate_native_denom(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["balances"][0]["coins"].append({"denom": "aprvi", "amount": "1"})
+        self.assertIn("duplicate coin denom in account", check(g)[0])
+
+    def test_noncanonical_leading_zero(self):
+        self.assertIn("noncanonical native amount", check(genesis("0100"))[0])
+
     def test_missing_balances(self):
         self.assertTrue(check({"app_state": {"bank": {"balances": [], "supply": [{"denom": "aprvi", "amount": "0"}]}}})[0])
 
