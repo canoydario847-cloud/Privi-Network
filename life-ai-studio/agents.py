@@ -18,7 +18,7 @@ SANDBOX_AGENTS = {
     "demo-frontend": {"name":"Sandbox Frontend (simulation)", "path":"src/demo_frontend.js",
                       "source":"export function greeting(name) { return `Hello, ${name}!`; }\\n"},
     "demo-backend": {"name":"Sandbox Backend (simulation)", "path":"src/demo_backend.py",
-                     "source":"def health():\\n    return {\'status\': \'ok\'}\\n"},
+                     "source":"def health():\\n    return {'status': 'ok'}\\n"},
     "demo-qa": {"name":"Sandbox QA (simulation)", "path":"tests/demo_qa.py",
                 "source":"def test_example():\\n    assert 1 + 1 == 2\\n"},
 }
@@ -41,9 +41,9 @@ async def generate(provider, instructions, prompt):
     if provider in SANDBOX_AGENTS and os.getenv("LIFE_STAGING_ONLY") == "1":
         sample=SANDBOX_AGENTS[provider]
         if "For coding tasks respond ONLY" in instructions:
-            return json.dumps({"summary":f"[SANDBOX SIMULATION] {sample[\'name\']} proposed one example file",
+            return json.dumps({"summary":f"[SANDBOX SIMULATION] {sample['name']} proposed one example file",
                                "files":[{"path":sample["path"], "content":sample["source"]}]})
-        return f"[SANDBOX SIMULATION] {sample[\'name\']} responds: {prompt[-250:]}."
+        return f"[SANDBOX SIMULATION] {sample['name']} responds: {prompt[-250:]}."
     if provider not in SERVICES:
         raise ValueError("Unknown AI provider")
     cfg = SERVICES[provider]
