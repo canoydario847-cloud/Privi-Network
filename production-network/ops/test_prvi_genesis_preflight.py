@@ -36,6 +36,19 @@ class PreflightTests(unittest.TestCase):
     def test_zero_native_allocation(self):
         self.assertIn("no positive native PRVI allocation", check(genesis(0))[0])
 
+    def test_malformed_app_state(self):
+        self.assertIn("missing or malformed app_state", check({"app_state": []})[0])
+
+    def test_malformed_account(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["balances"] = [None]
+        self.assertIn("malformed account or coin list", check(g)[0])
+
+    def test_malformed_supply(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["supply"] = [None]
+        self.assertIn("malformed bank supply coin", check(g)[0])
+
     def test_missing_balances(self):
         self.assertTrue(check({"app_state": {"bank": {"balances": [], "supply": [{"denom": "aprvi", "amount": "0"}]}}})[0])
 
