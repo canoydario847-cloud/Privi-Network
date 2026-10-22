@@ -11,11 +11,21 @@ DENOM = "aprvi"
 
 def check(genesis):
     errors = []
+    if not isinstance(genesis, dict) or not isinstance(genesis.get("app_state"), dict):
+        return ["missing or malformed app_state"], 0
     app = genesis.get("app_state", {})
-    balances = app.get("bank", {}).get("balances", [])
+    bank = app.get("bank")
+    if not isinstance(bank, dict):
+        return ["missing or malformed bank state"], 0
+    balances = bank.get("balances")
+    if not isinstance(balances, list):
+        return ["missing or malformed bank balances"], 0
     total = 0
     seen_addresses = set()
     for account in balances:
+        if not isinstance(account, dict) or not isinstance(account.get("coins"), list):
+            errors.append("malformed account or coin list")
+            continue
         address = account.get("address")
         if not isinstance(address, str) or not address:
             errors.append("missing account address")
@@ -25,6 +35,9 @@ def check(genesis):
             seen_addresses.add(address)
         seen_denoms = set()
         for coin in account.get("coins", []):
+            if not isinstance(coin, dict) or not isinstance(coin.get("denom"), str):
+                errors.append("malformed coin")
+                continue
             denom = coin.get("denom")
             if denom in seen_denoms:
                 errors.append("duplicate coin denom in account")
@@ -39,7 +52,11 @@ def check(genesis):
             if n <= 0:
                 errors.append("zero/negative native amount")
             total += n
-    supply = app.get("bank", {}).get("supply", [])
+    supply = bank.get("supply")
+    if not isinstance(supply, list):
+        return errors + ["missing or malformed bank supply"], total
+    if any(not isinstance(coin, dict) or not isinstance(coin.get("denom"), str) for coin in supply):
+        return errors + ["malformed bank supply coin"], total
     # Reject ambiguous duplicate supply entries, including non-native denoms.
     supply_denoms = set()
     for coin in supply:
