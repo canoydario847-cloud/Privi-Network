@@ -23,6 +23,7 @@ def check(genesis):
     total = 0
     seen_addresses = set()
     seen_native = False
+    balance_totals = {}
     for account in balances:
         if not isinstance(account, dict) or not isinstance(account.get("coins"), list):
             errors.append("malformed account or coin list")
@@ -43,6 +44,14 @@ def check(genesis):
             if denom in seen_denoms:
                 errors.append("duplicate coin denom in account")
             seen_denoms.add(denom)
+            amount_any = coin.get("amount")
+            if not isinstance(amount_any, str) or not amount_any.isascii() or not amount_any.isdecimal() or (len(amount_any) > 1 and amount_any.startswith("0")):
+                errors.append("noncanonical coin amount")
+                continue
+            value = int(amount_any)
+            if value <= 0:
+                errors.append("nonpositive coin amount")
+            balance_totals[denom] = balance_totals.get(denom, 0) + value
             if denom != DENOM:
                 continue
             seen_native = True
@@ -61,11 +70,19 @@ def check(genesis):
         return errors + ["malformed bank supply coin"], total
     # Reject ambiguous duplicate supply entries, including non-native denoms.
     supply_denoms = set()
+    supply_totals = {}
     for coin in supply:
         denom = coin.get("denom")
         if denom in supply_denoms:
             errors.append("duplicate supply denom")
         supply_denoms.add(denom)
+        amount = coin.get("amount")
+        if not isinstance(amount, str) or not amount.isascii() or not amount.isdecimal() or (len(amount) > 1 and amount.startswith("0")):
+            errors.append("noncanonical supply amount")
+        else:
+            supply_totals[denom] = int(amount)
+    if balance_totals != supply_totals:
+        errors.append("bank supply differs from balances across denominations")
     declared = [c.get("amount") for c in supply if c.get("denom") == DENOM]
     if len(declared) != 1 or not isinstance(declared[0], str) or not declared[0].isascii() or not declared[0].isdecimal() or (len(declared[0]) > 1 and declared[0].startswith("0")):
         errors.append("missing or malformed declared native supply")
