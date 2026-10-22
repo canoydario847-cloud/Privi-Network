@@ -6,7 +6,19 @@ Everything below is pre-written. Each one takes 2–5 minutes and needs your own
 - Official MCP Registry: privi-ledger, privi-verify, privi-anchor republished at 0.2.0 with discovery-hub links (GitHub Action, Oct 20).
 - IndexNow: hub URLs pushed to Bing / Yandex / Naver / Seznam (feeds Copilot and DuckDuckGo). Key served at `/<INDEXNOW_KEY>.txt`.
 - Each MCP server's `instructions` now names you and links the hub.
+- Privi Call and Privi Quantum added to the registry publish job (listed as io.github.canoydario847-cloud/privi-call and /privi-quantum when their server.json lands on main).
 
+
+## New: Privi Call (list it everywhere below as its own entry)
+
+**One-liner:** One number for every AI agent: route MCP calls to any agent, every call sealed in a public on-chain log.
+
+**Short (≤160):** Call any AI agent by number with one MCP tool call. Free to Privi agents, 50/day free to others, then $0.001. Public call log anchored on Base.
+
+**Endpoint:** `https://privi-call.onrender.com/mcp` · live log `https://privi-call.onrender.com` · tags `agent-network` `a2a` `routing` `call-log` `x402` `directory`
+
+Extra places that fit Privi Call specifically: the A2A agent directories (a2aregistry.org, a2a.directory) using
+`https://privi-call.onrender.com/.well-known/agent-card.json`, and the MCP "aggregators/gateways" category on PulseMCP and Glama.
 
 ## 0. x402 Bazaar (Coinbase's discovery index for paying agents) — highest leverage
 
@@ -23,7 +35,7 @@ Usage is public at https://privi-ledger.onrender.com/stats and https://privi-ver
 
 ## Shared copy
 
-**Name:** Privi Ledger · Privi Verify · Privi Anchor (list separately where directories want one server per entry)
+**Name:** Privi Ledger · Privi Verify · Privi Anchor · Privi Quantum · Privi Call (list separately where directories want one server per entry)
 
 **One-liner:** Verifiable infrastructure for AI agents — pay, prove, and audit on-chain.
 
@@ -37,13 +49,15 @@ Privi gives AI agents the trust layer they need to do real work for companies an
 - Ledger `https://privi-ledger.onrender.com/mcp` (streamable-http)
 - Verify `https://privi-verify.onrender.com/mcp`
 - Anchor `https://privi-anchor.onrender.com/mcp`
+- Quantum `https://privi-quantum.onrender.com/mcp`
+- Call `https://privi-call.onrender.com/mcp`
 - Hub / docs `https://privi-discovery.onrender.com`
 - Repo `https://github.com/canoydario847-cloud/Privi-Network`
 
 **Categories/tags:** Security & Compliance, Blockchain, Developer Tools, Finance, Supply Chain · `audit-log` `compliance` `x402` `usdc` `base` `proof-of-existence` `supply-chain` `government` `a2a`
 
 ## 1. Smithery (biggest MCP directory; agents search it directly)
-https://smithery.ai → Sign in with GitHub → Add server → "Remote server" → paste each endpoint URL. Use the short description. Three entries.
+https://smithery.ai → Sign in with GitHub → Add server → "Remote server" → paste each endpoint URL. Use the short description. Five entries.
 
 ## 2. PulseMCP
 https://www.pulsemcp.com/submit → one form per server; link the repo subfolder and the hub.

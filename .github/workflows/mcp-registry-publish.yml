@@ -5,7 +5,7 @@ name: Publish MCP server to MCP Registry
 on:
   push:
     branches: [main]
-    paths: ["mcp-server/server.json", "ledger-server/server.json", "anchor-server/server.json", ".github/workflows/mcp-registry-publish.yml"]
+    paths: ["mcp-server/server.json", "ledger-server/server.json", "anchor-server/server.json", "quantum-server/server.json", "call-server/server.json", ".github/workflows/mcp-registry-publish.yml"]
   workflow_dispatch:
 
 jobs:
@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        server: ["mcp-server", "ledger-server", "anchor-server"]
+        server: ["mcp-server", "ledger-server", "anchor-server", "quantum-server", "call-server"]
     defaults:
       run:
         working-directory: ${{ matrix.server }}

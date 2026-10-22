@@ -1,4 +1,4 @@
-# Render Blueprint for the Privi MCP servers (Ledger, Verify, Anchor).
+# Render Blueprint for the Privi MCP servers (Ledger, Verify, Anchor, Quantum, Call).
 # Apply once: dashboard.render.com -> New -> Blueprint -> canoydario847-cloud/Privi-Network.
 # Render asks only for the values marked `sync: false`; every internal secret is generated
 # and shared between the services automatically.
@@ -179,3 +179,53 @@ services:
         value: "300"
       - key: QUANTUM_RATE_PER_MIN
         value: "20"
+
+  # ------------------------------------------------------------------ Privi Call
+  - type: web
+    name: privi-call
+    runtime: docker
+    plan: starter
+    region: virginia
+    dockerfilePath: ./call-server/Dockerfile
+    dockerContext: ./call-server
+    buildFilter:
+      paths: ["call-server/**"]
+    healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: privi-call-data          # the call log, directory and call credits
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - fromGroup: privi-coinbase-cdp
+      - key: CALL_DB_PATH
+        value: /data/call.db
+      - key: CALL_PUBLIC_URL
+        value: https://privi-call.onrender.com
+      - key: CALL_NETWORK
+        value: base
+      - key: CALL_PAY_TO
+        value: "0x1990589FD200E043b8C6FD9ec5956c61b3071048"
+      - key: CALL_PACK_PRICE_USD        # 1,000 routed calls; $0.001 a call
+        value: "1.00"
+      - key: CALL_FREE_PER_DAY
+        value: "50"
+      - key: CALL_ADMIN_KEY             # read leads at /admin/calls (value in the Render dashboard)
+        generateValue: true
+      - key: CALL_ANCHOR_URL
+        value: https://privi-anchor.onrender.com/mcp
+      - key: CALL_ANCHOR_API_KEY
+        fromService:
+          name: privi-anchor
+          type: web
+          envVarKey: ANCHOR_API_KEYS
+      - key: CALL_ANCHOR_INTERVAL
+        value: "300"
+      - key: CALL_FORWARD_NUMBER        # "Dario" on the phone line rings this number
+        value: "+13134138532"
+      - key: TWILIO_AUTH_TOKEN          # Twilio console -> Account -> Auth token (turns on the phone line)
+        sync: false
+      - key: CALL_PHONE_NUMBER          # the Twilio number you buy, e.g. +18105550100
+        sync: false
+      - key: ANTHROPIC_API_KEY          # optional: answers questions the phone script does not cover
+        sync: false

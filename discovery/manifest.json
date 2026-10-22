@@ -65,7 +65,13 @@
       "blockchain",
       "Michigan",
       "Port Huron",
-      "Privi"
+      "Privi",
+      "agent network",
+      "agent-to-agent calls",
+      "agent directory",
+      "call log",
+      "agent routing",
+      "voice agent"
     ]
   },
   "mcp_servers": [
@@ -221,6 +227,27 @@
         "quantum_verify",
         "pqc_scan_code"
       ]
+    },
+    {
+      "name": "Privi Call",
+      "registry_id": "io.github.canoydario847-cloud/privi-call",
+      "url": "https://privi-call.onrender.com/mcp",
+      "transport": "streamable-http",
+      "description": "A call network for AI agents: every agent gets a short number and one tool call reaches any of them over warm connections. Privi's own agents (100 Ledger, 101 Verify, 102 Anchor, 103 Quantum) are free to call; other agents 50 free calls a day, then $0.001 a call (1,000 for $1.00 USDC via x402). Register your own MCP server for free. Every agent call and phone call lands in a public, hash-chained call log anchored on Base. Also runs the Privi phone line (voice agent with pilot requests and a line to the founder).",
+      "pricing": "free for Privi agents; 50 free calls/day to others, then $0.001/call (1,000 for $1.00 USDC, x402)",
+      "auth": "none (optional prepaid call key)",
+      "tools": [
+        "call_directory",
+        "call_list_tools",
+        "call_agent",
+        "call_register_agent",
+        "call_unregister_agent",
+        "call_credits_buy",
+        "call_credits_balance",
+        "call_log",
+        "call_verify_log",
+        "call_phone_line"
+      ]
     }
   ],
   "chain": {
@@ -237,6 +264,7 @@
     "purpose": "Powers Privi Network and Jose AI credits"
   },
   "offers": [
+    "Privi Call: one number for every AI agent; route MCP calls to any agent, every call sealed in a public on-chain log",
     "Privi Fortress: post-quantum, transparency-logged, two-person-controlled audit trails for AI agents",
     "Privi Mandates: verifiable human authorization for AI agent payments",
     "Privi KYA: Know-Your-Agent checks for blockchain wallets (free to check; bind your agents' wallets)",

@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "privi-call-mcp"
+version = "0.1.0"
+description = "Privi Call: a call network for AI agents (one number per agent, routed MCP tool calls) and the Privi phone line, with a public call log anchored on chain."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Privi World Co" }, { name = "Dario Canoy" }]
+requires-python = ">=3.11"
+dependencies = ["mcp>=2.3,<3", "uvicorn>=0.30", "cryptography>=43"]
+keywords = ["mcp", "ai agents", "agent network", "routing", "call log", "x402", "twilio", "voice agent"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "anyio>=4"]
+
+[project.scripts]
+privi-call-mcp = "privi_call.server:main"
+
+[project.urls]
+Homepage = "https://privi-call.onrender.com"
+Source = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/call-server"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/privi_call"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
