@@ -193,7 +193,7 @@ SITES["home"] = page(
     "Privi gives AI agents a tamper-evident record, a trust credential, wallet checks and spending mandates, all verifiable on chain.",
     "Proof for everything your AI agents do",
     "Privi records what agents do in a log nobody can quietly rewrite, then turns that history into credentials other companies can check in one call. Every proof is signed twice, once with a post-quantum algorithm, and anchored on the Privi chain.",
-    [("Start free", URLS["developers"]), ("Talk to the founder", f"mailto:{EMAIL}")],
+    [("Start free", f"{URLS['developers']}/start/"), ("Talk to the founder", f"mailto:{EMAIL}")],
     STH_WIDGET,
     sec("What Privi does", defs([
         ("Ledger", "An append-only, hash-linked log of every agent action. Edits, deletions and reordering are detectable. Sealed compliance reports export as PDF."),
@@ -368,7 +368,7 @@ SITES["developers"] = page(
     "Connect AI agents to Privi Ledger, Verify and Anchor over MCP. Free tier, x402 payments in USDC, every proof verifiable.",
     "Connect your agent in one config block",
     "Privi runs as three MCP servers. Point your agent at them, sign up for a free organization from inside the agent, and start recording actions. Upgrades and paid checks settle in USDC on Base through x402.",
-    [("Add the servers", "#connect"), ("Read llms.txt", f"{HUB}/llms.txt")],
+    [("Start free", f"{URLS['developers']}/start/"), ("Add the servers", "#connect"), ("Read llms.txt", f"{HUB}/llms.txt")],
     STH_WIDGET,
     f'<section id="connect"><h2>Add the servers</h2>{MCP_SNIPPET}<p class="note">All three are also listed in the official MCP Registry as io.github.canoydario847-cloud/privi-ledger, privi-verify and privi-anchor.</p></section>'
     + sec("First five minutes", steps([
