@@ -117,3 +117,107 @@ def test_failed_provider_is_refunded(monkeypatch):
     assert outcome.status_code==200
     assert outcome.json()['credits']==user['credits']
     assert outcome.json()['runs'][0]['status']=='failed'
+
+
+def test_team_up_assigns_distinct_roles_and_proposes_files_concurrently(monkeypatch):
+    import asyncio
+    member()
+    project=client.post('/api/projects',json={'title':'Team Up Code','kind':'code'}).json()['id']
+    saw=set()
+    both=asyncio.Event()
+    async def mock(provider, instructions, prompt):
+        saw.add(provider)
+        if len(saw)==2:
+            both.set()
+        await asyncio.wait_for(both.wait(),timeout=1)
+        assert 'Your assigned Team Up role:' in prompt
+        return json.dumps({'summary':provider,'files':[
+            {'path':'src/'+provider+'.py','content':'# teamwork'}]})
+    monkeypatch.setattr(agents,'generate',mock)
+    result=client.post('/api/projects/'+project+'/run-team',json={
+        'agents':['chatgpt','claude'],'task':'Build a full application','mode':'team_up'})
+    assert result.status_code==200,result.text
+    assert result.json()['mode']=='team_up'
+    assert len(set(result.json()['assignments'].values()))==2
+    assert set(saw)=={'chatgpt','claude'}
+    assert len(client.get('/api/projects/'+project+'/proposals').json())==2
+    assert len(client.get('/api/projects/'+project+'/files').json())==0  # human merge required
+
+
+def test_team_up_rejects_one_agent_or_noncode_project():
+    member()
+    project=client.post('/api/projects',json={'title':'Novel Draft','kind':'writing'}).json()['id']
+    result=client.post('/api/projects/'+project+'/run-team',json={
+        'agents':['chatgpt','claude'],'task':'Write stories together','mode':'team_up'})
+    assert result.status_code==400
+    code=client.post('/api/projects',json={'title':'Coding Together','kind':'code'}).json()['id']
+    assert client.post('/api/projects/'+code+'/run-team',json={
+        'agents':['chatgpt'],'task':'Build code','mode':'team_up'}).status_code==400
+
+
+def test_fast_lane_uses_fastest_success_and_member_scoped_cache(monkeypatch):
+    import asyncio
+    u=member()
+    p=client.post('/api/projects',json={'title':'Fast lane','kind':'research'}).json()['id']
+    called=[]
+    async def mock(name,instructions,prompt):
+        called.append(name)
+        await asyncio.sleep(.02 if name=='claude' else .3)
+        return name+' answered'
+    monkeypatch.setattr(agents,'generate',mock)
+    before=u['credits']
+    req={'question':'What is the architecture of this system?',
+         'providers':['chatgpt','claude']}
+    answer=client.post('/api/projects/'+p+'/fast-answer',json=req)
+    assert answer.status_code==200,answer.text
+    assert answer.json()['provider']=='claude'
+    assert answer.json()['quantum_hardware_used'] is False
+    assert answer.json()['charged_credits']==4
+    assert before-4==client.get('/api/me').json()['credits']
+    assert len(called)==2
+    second=client.post('/api/projects/'+p+'/fast-answer',json=req)
+    assert second.status_code==200
+    assert second.json()['cached'] is True
+    assert second.json()['charged_credits']==0
+    assert len(called)==2
+    other=member()
+    assert client.post('/api/projects/'+p+'/fast-answer',json=req).status_code==404
+
+
+def test_fast_lane_fallback_and_refunds_failed_request(monkeypatch):
+    import asyncio
+    u=member()
+    p=client.post('/api/projects',json={'title':'Fault tolerance','kind':'code'}).json()['id']
+    async def mock(name,instructions,prompt):
+        if name=='chatgpt':
+            raise RuntimeError('simulated unavailable provider')
+        await asyncio.sleep(.005)
+        return 'usable answer'
+    monkeypatch.setattr(agents,'generate',mock)
+    response=client.post('/api/projects/'+p+'/fast-answer',json={
+        'question':'Answer despite failure','providers':['chatgpt','claude']})
+    assert response.status_code==200,response.text
+    assert response.json()['provider']=='claude'
+    # First provider failed and was refunded. Second provider cost 2.
+    assert client.get('/api/me').json()['credits']==u['credits']-2
+
+
+def test_asset_registry_never_fakes_ai_coins_or_live_swaps(monkeypatch):
+    import multichain
+    member()
+    reg=client.get('/api/networks/assets')
+    assert reg.status_code==200
+    assert reg.json()['swap_live'] is False
+    assert all(not item['official_crypto_token_verified']
+        for item in reg.json()['agent_providers'])
+    assert client.post('/api/networks/swap/quote',json={
+        'from_asset':'GROK','to_asset':'PRVI','amount':'1'}).status_code==503
+    monkeypatch.setenv('PRIVI_REVIEWED_ASSETS_JSON',json.dumps([{
+        'symbol':'SAMP','chain_id':8453,'contract':'0x'+'1'*40,'decimals':18}]))
+    assets=multichain.validated_assets()
+    assert len(assets)==1
+    assert assets[0]['swap_enabled'] is False
+    assert assets[0]['provider_affiliation']=='not_asserted'
+    monkeypatch.setenv('PRIVI_REVIEWED_ASSETS_JSON',json.dumps([{
+        'symbol':'FAKE','chain_id':8453,'contract':'0x'+'0'*40,'decimals':18}]))
+    assert multichain.validated_assets()==[]
