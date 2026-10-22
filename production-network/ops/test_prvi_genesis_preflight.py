@@ -54,6 +54,18 @@ class PreflightTests(unittest.TestCase):
         g["app_state"]["bank"]["balances"][0]["coins"][0]["denom"] = "other"
         self.assertIn("native PRVI denomination absent from balances", check(g)[0])
 
+    def test_other_denom_supply_mismatch(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["balances"][0]["coins"].append({"denom": "uatom", "amount": "5"})
+        g["app_state"]["bank"]["supply"].append({"denom": "uatom", "amount": "6"})
+        self.assertIn("bank supply differs from balances across denominations", check(g)[0])
+
+    def test_matching_other_denom(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["balances"][0]["coins"].append({"denom": "uatom", "amount": "5"})
+        g["app_state"]["bank"]["supply"].append({"denom": "uatom", "amount": "5"})
+        self.assertEqual(check(g)[0], [])
+
     def test_missing_balances(self):
         self.assertTrue(check({"app_state": {"bank": {"balances": [], "supply": [{"denom": "aprvi", "amount": "0"}]}}})[0])
 
