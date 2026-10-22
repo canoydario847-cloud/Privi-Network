@@ -28,6 +28,14 @@ class PreflightTests(unittest.TestCase):
     def test_noncanonical_leading_zero(self):
         self.assertIn("noncanonical native amount", check(genesis("0100"))[0])
 
+    def test_duplicate_supply_denom(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["supply"].append({"denom": "aprvi", "amount": "100"})
+        self.assertIn("duplicate supply denom", check(g)[0])
+
+    def test_zero_native_allocation(self):
+        self.assertIn("no positive native PRVI allocation", check(genesis(0))[0])
+
     def test_missing_balances(self):
         self.assertTrue(check({"app_state": {"bank": {"balances": [], "supply": [{"denom": "aprvi", "amount": "0"}]}}})[0])
 
