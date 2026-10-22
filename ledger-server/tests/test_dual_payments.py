@@ -92,3 +92,45 @@ def test_quotes_are_not_money_or_exchange_rates():
         assert q["asset"] == "PRVI_TEST" and q["simulation_units"] == 1
         assert q["conversion_rate"] is None
         assert q["on_chain"] is False
+
+
+def test_mcp_registration_requires_org_and_never_grants_pro(monkeypatch):
+    """Integration of the additive MCP-tool layer with a fake MCP decorator."""
+    import sys
+    import types
+    from types import SimpleNamespace
+    from privi_ledger import dual_payments
+
+    fake_mcp = types.ModuleType("mcp")
+    fake_mcp_server = types.ModuleType("mcp.server")
+    fake_mcpserver = types.ModuleType("mcp.server.mcpserver")
+    fake_mcpserver.Context = type("Context", (), {})
+    fake_types = types.ModuleType("mcp_types")
+    fake_types.ToolAnnotations = lambda **kw: kw
+    for name, mod in (("mcp", fake_mcp), ("mcp.server", fake_mcp_server),
+                      ("mcp.server.mcpserver", fake_mcpserver), ("mcp_types", fake_types)):
+        monkeypatch.setitem(sys.modules, name, mod)
+
+    class FakeMCP:
+        def __init__(self):
+            self.tools = {}
+        def tool(self, **kwargs):
+            def decorator(fn):
+                self.tools[fn.__name__] = fn
+                return fn
+            return decorator
+
+    m = FakeMCP()
+    st = SimpleNamespace(network_key="base-sepolia", payments_enabled=True, prices_usd=PRICES)
+    monkeypatch.setenv("PRVI_TEST_PAYMENT_MODE", "1")
+    dual_payments.register(m, st, org_from=lambda ctx: getattr(ctx, "org", None),
+                           result=lambda obj, is_error=False: {**obj, "is_error": is_error},
+                           unauthorized={"is_error": True, "error": "unauthorized"})
+    assert m.tools["privi_payment_options"]()["payments"][0]["method"] == "USDC_X402"
+    bad = m.tools["privi_test_payment_quote"](SimpleNamespace(org=None), "ledger_upgrade_pro")
+    assert bad["is_error"] is True
+    ctx = SimpleNamespace(org={"org_id": "org_valid"})
+    q = m.tools["privi_test_payment_quote"](ctx, "ledger_upgrade_pro")
+    assert not q["is_error"]
+    receipt = m.tools["privi_test_payment_simulate"](ctx, q["quote_id"], ACKNOWLEDGEMENT)
+    assert receipt["paid"] is False and receipt["service_unlocked"] is False
