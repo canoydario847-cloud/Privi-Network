@@ -334,3 +334,129 @@ def test_cogvative_requires_issuer_key_except_explicit_sandbox(monkeypatch):
         client.put('/api/projects/'+p+'/files',json={
             'path':'src/cannot.py','content':'a=1\n','expected_version':0})
     assert client.get('/api/projects/'+p+'/files').json()==[]
+
+
+def _bnb_test_setup(monkeypatch):
+    import hashlib
+    import app as application
+    contract='0xbf154ff2577f4b85db7b2ee910db5880d06e0f64'
+    treasury='0x'+'9'*40
+    code='0x6001600055'
+    monkeypatch.setenv('BNB_PRIV_PAYMENTS_ENABLED','1')
+    monkeypatch.setenv('BNB_PRIV_RPC_URL','https://example.org/verified-bsc-rpc')
+    monkeypatch.setenv('BNB_PRIV_TOKEN_ADDRESS',contract)
+    monkeypatch.setenv('BNB_PRIV_TREASURY_ADDRESS',treasury)
+    monkeypatch.setenv('BNB_PRIV_CODE_SHA256',hashlib.sha256(bytes.fromhex(code[2:])).hexdigest())
+    monkeypatch.setenv('BNB_PRIV_DECIMALS','18')
+    monkeypatch.setenv('BNB_PRIV_UNITS_PER_CREDIT',str(10**18))
+    monkeypatch.setenv('BNB_PRIV_REQUIRED_CONFIRMATIONS','12')
+    monkeypatch.setattr(application,'COOKIE_SECURE',True)
+    monkeypatch.setattr(application,'STAGING_MODE',False)
+    return contract,treasury,code
+
+
+def test_bnb_priv_real_token_payment_mocks_confirmed_log_and_blocks_replay(monkeypatch):
+    import app as application
+    import bnb_priv
+    import store as datastore
+    account=member()
+    contract,treasury,code=_bnb_test_setup(monkeypatch)
+    tx_hash='0x'+'a'*64
+    block_hash='0x'+'b'*64
+    quote_data={}
+    async def fake_rpc(url,method,params):
+        if method=='eth_chainId': return '0x38'
+        if method=='eth_getCode': return code
+        if method=='eth_call': return hex(18)
+        if method=='eth_blockNumber': return hex(140)
+        if method=='eth_getBlockByNumber':
+            return {'hash':block_hash,'timestamp':hex(datastore.now()+5)}
+        if method=='eth_getTransactionByHash':
+            return {'from':account['wallet'],'to':contract,'input':quote_data['token_transfer_data'],
+                    'value':'0x0','blockHash':block_hash,'blockNumber':hex(121)}
+        if method=='eth_getTransactionReceipt':
+            return {'transactionHash':tx_hash,'status':'0x1','blockHash':block_hash,'blockNumber':hex(121),
+                    'logs':[{'address':contract,'topics':[
+                        bnb_priv.TRANSFER_TOPIC,
+                        '0x'+'0'*24+account['wallet'][2:].lower(),
+                        '0x'+'0'*24+treasury[2:].lower()],
+                        'data':hex(int(quote_data['amount_units']))}]}
+        raise AssertionError(method)
+    monkeypatch.setattr(application,'rpc',fake_rpc)
+    status=client.get('/api/payments/bnb-priv/status')
+    assert status.status_code==200
+    assert status.json()['payments_configured']
+    assert status.json()['chain_id']==56
+    assert status.json()['symbol_not_independently_verified']
+    quote=client.post('/api/payments/bnb-priv/quote',json={'credits':3})
+    assert quote.status_code==200,quote.text
+    quote_data.update(quote.json())
+    assert quote_data['amount_units']==str(3*10**18)
+    assert quote_data['amount_fiat_usd'] is None
+    before=client.get('/api/me').json()['credits']
+    paid=client.post('/api/payments/bnb-priv/redeem',json={
+       'quote_id':quote_data['quote_id'],'tx_hash':tx_hash})
+    assert paid.status_code==200,paid.text
+    assert paid.json()['credits_added']==3
+    assert paid.json()['fiat_income_usd'] is None
+    assert client.get('/api/me').json()['credits']==before+3
+    reused=client.post('/api/payments/bnb-priv/redeem',json={
+       'quote_id':quote_data['quote_id'],'tx_hash':tx_hash})
+    assert reused.status_code==409
+    assert client.get('/api/me').json()['credits']==before+3
+    other=member()
+    assert client.post('/api/payments/bnb-priv/redeem',json={
+       'quote_id':quote_data['quote_id'],'tx_hash':tx_hash}).status_code==409
+
+
+def test_bnb_priv_payment_fails_closed_for_wrong_chain_and_missing_treasury(monkeypatch):
+    import app as application
+    account=member()
+    contract,treasury,code=_bnb_test_setup(monkeypatch)
+    async def bogus_chain(url,method,params):
+        return '0x61' if method=='eth_chainId' else code
+    monkeypatch.setattr(application,'rpc',bogus_chain)
+    assert client.post('/api/payments/bnb-priv/quote',json={'credits':1}).status_code==503
+    monkeypatch.setenv('BNB_PRIV_TREASURY_ADDRESS','')
+    assert client.get('/api/payments/bnb-priv/status').json()['payments_configured'] is False
+    assert client.post('/api/payments/bnb-priv/quote',json={'credits':1}).status_code==503
+    monkeypatch.setenv('BNB_PRIV_TREASURY_ADDRESS',treasury)
+    monkeypatch.setattr(application,'STAGING_MODE',True)
+    assert client.post('/api/payments/bnb-priv/quote',json={'credits':1}).status_code==503
+
+
+def test_bnb_priv_receipt_rejects_forged_or_underpaid_logs(monkeypatch):
+    import app as application
+    import bnb_priv
+    import store as datastore
+    account=member()
+    contract,treasury,code=_bnb_test_setup(monkeypatch)
+    # All RPC responses below are deterministic test fixtures.
+    async def valid_rpc(url,method,params):
+        if method=='eth_chainId': return '0x38'
+        if method=='eth_getCode': return code
+        if method=='eth_call': return '0x12'
+        if method=='eth_blockNumber': return '0x90'
+        if method=='eth_getBlockByNumber':
+            return {'hash':'0x'+'b'*64,'timestamp':hex(datastore.now())}
+        if method=='eth_getTransactionByHash':
+            return {'from':account['wallet'],'to':contract,
+                    'input':bnb_priv.calldata(treasury,10**18),'value':'0x0',
+                    'blockHash':'0x'+'b'*64,'blockNumber':'0x80'}
+        if method=='eth_getTransactionReceipt':
+            return {'transactionHash':'0x'+'c'*64,'status':'0x1','blockHash':'0x'+'b'*64,
+                    'blockNumber':'0x80','logs':[{'address':contract,'topics':[
+                        bnb_priv.TRANSFER_TOPIC,'0x'+'0'*24+account['wallet'][2:].lower(),
+                        '0x'+'0'*24+treasury[2:].lower()], 'data':hex(10**18-1)}]}
+        raise AssertionError(method)
+    monkeypatch.setattr(application,'rpc',valid_rpc)
+    quote=client.post('/api/payments/bnb-priv/quote',json={'credits':1})
+    assert quote.status_code==200,quote.text
+    previous=client.get('/api/me').json()['credits']
+    denied=client.post('/api/payments/bnb-priv/redeem',json={
+        'quote_id':quote.json()['quote_id'],'tx_hash':'0x'+'c'*64})
+    assert denied.status_code==409,denied.text
+    assert client.get('/api/me').json()['credits']==previous
+    monkeypatch.setenv('BNB_PRIV_UNITS_PER_CREDIT',str(2*10**18))
+    assert client.post('/api/payments/bnb-priv/redeem',json={
+        'quote_id':quote.json()['quote_id'],'tx_hash':'0x'+'c'*64}).status_code==409

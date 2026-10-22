@@ -71,6 +71,28 @@ def init():
           service TEXT NOT NULL, amount INTEGER NOT NULL, platform_fee_micros INTEGER NOT NULL DEFAULT 0,
           idempotency TEXT NOT NULL, created INTEGER NOT NULL, UNIQUE(user_id,idempotency)
         );
+        CREATE TABLE IF NOT EXISTS bnb_priv_quotes (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          wallet TEXT NOT NULL,
+          credits INTEGER NOT NULL,
+          amount_units TEXT NOT NULL,
+          contract TEXT NOT NULL,
+          treasury TEXT NOT NULL,
+          code_sha256 TEXT NOT NULL,
+          decimals INTEGER NOT NULL,
+          created INTEGER NOT NULL,
+          expires INTEGER NOT NULL,
+          used_tx TEXT UNIQUE
+        );
+        CREATE TABLE IF NOT EXISTS bnb_priv_redemptions (
+          tx_hash TEXT PRIMARY KEY,
+          quote_id TEXT NOT NULL UNIQUE,
+          user_id TEXT NOT NULL,
+          amount_units TEXT NOT NULL,
+          credits INTEGER NOT NULL,
+          created INTEGER NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS quotes (
           id TEXT PRIMARY KEY, user_id TEXT NOT NULL, wallet TEXT NOT NULL,
           credits INTEGER NOT NULL, amount_wei TEXT NOT NULL, expires INTEGER NOT NULL, created INTEGER NOT NULL,

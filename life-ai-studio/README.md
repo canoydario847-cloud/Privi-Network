@@ -165,3 +165,45 @@ Historical data is not retroactively forged into signed creation events.
 `POST /api/projects/{project_id}/cogvative/{event_id}/deployment`,
 `POST /api/projects/{project_id}/cogvative/{agent}/wallet/challenge`,
 `POST /api/projects/{project_id}/cogvative/{agent}/wallet/link`.
+
+
+## BNB PRIV token payments — distinct from native PRVI
+
+The BNB Smart Chain **PRIV** token identified by the founder is distinct from the
+proposed native Privi **PRVI** coin. Candidate user-supplied address (not
+independently verified in this release): `0xbf154Ff2577F4B85db7B2ee910Db5880D06e0f64`.
+Do not treat ticker/name alone as identity. An operator must independently
+verify the contract, the token's transfer behavior, merchant treasury and the
+smallest-unit price before enabling payments.
+
+The LIFE API implements optional direct ERC-20/BEP-20 transfer payment
+`POST /api/payments/bnb-priv/quote` and
+`POST /api/payments/bnb-priv/redeem` on **BNB mainnet chain ID 56**. Status:
+`GET /api/payments/bnb-priv/status`. No custody of purchaser keys,
+browser-signed **transfer() only**, never allowance or infinite approvals.
+
+The gateway is **off by default** and deliberately incompatible with
+`LIFE_STAGING_ONLY=1`. Enabling requires `BNB_PRIV_PAYMENTS_ENABLED=1`,
+`LIFE_COOKIE_SECURE=1`, a trusted HTTPS mainnet RPC, an independently
+approved token contract and exact SHA-256 of its currently deployed runtime
+bytecode, token decimals, treasury address, fixed price in smallest-token
+units per LIFE credit and at least 12 confirmed blocks. Every quote checks
+the actual network ID, bytecode fingerprint and decimals. Redemption verifies
+the matched quote, member-linked wallet, exact token contract, direct ERC-20
+transfer(address,uint256) input, zero native value, matching Transfer event,
+canonical block and receipt success, transaction timestamp, depth, replay
+protection, and immutable ledger idempotency before crediting LIFE membership.
+
+Price is in units of PRIV, **not USD**. No sale, liquidity, conversion price,
+redemption value, investor return, or current market listing is guaranteed.
+Real customer payouts and deposits must be monitored separately. A secure,
+durable production database and customer support/refund procedures are still
+required. Never submit real payments to staging, a test wallet or an
+unverified merchant address.
+
+### Existing USDC paid service
+The `ledger-server` code already documents Privi Ledger's USDC-on-Base
+x402 paid audit tools and a $29 USDC/30-day Pro plan. Real receipt settlement
+and a merchant-owned payout address need to be verified from the running
+service independently; source documentation is not proof of revenue.
+Customer-facing landing: `https://privi-ledger.onrender.com/mcp`.

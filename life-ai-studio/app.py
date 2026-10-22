@@ -20,6 +20,7 @@ import store
 import fastlane
 import multichain
 import cogvative
+import bnb_priv
 
 app = FastAPI(title="Privi LIFE AI Studio", version="0.1.0")
 store.init()
@@ -162,7 +163,7 @@ def stylesheet():
     return FileResponse(STATIC / "style.css", media_type="text/css")
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "privi-life-ai-studio", "staging": STAGING_MODE, "prvi_settlement_enabled": payment_ready()}
+    return {"status": "ok", "service": "privi-life-ai-studio", "staging": STAGING_MODE, "prvi_settlement_enabled": payment_ready(), "bnb_priv_payment_configured": bnb_priv.configured(STAGING_MODE, COOKIE_SECURE) is not None}
 
 @app.get("/api/public-config")
 def public_config():
@@ -245,7 +246,7 @@ def me(user=Depends(current)):
 def catalog(user=Depends(current)):
     return {"agents": agents.catalog(), "services": [
         {"id": k, "name": v[0], "credits": v[1], "integrated": v[2]} for k,v in UTILITIES.items()
-    ], "real_prvi_payments": payment_ready(), "fee_bps": FEE_BPS}
+    ], "real_prvi_payments": payment_ready(), "bnb_priv_payments_configured": bnb_priv.configured(STAGING_MODE, COOKIE_SECURE) is not None, "fee_bps": FEE_BPS}
 
 @app.post("/api/wallet/challenge")
 def challenge(data: WalletInput, user=Depends(current)):
@@ -826,6 +827,99 @@ async def rpc(url, method, params):
     if "error" in data or "result" not in data:
         fail(503, "Blockchain RPC unavailable")
     return data["result"]
+
+
+@app.get("/api/payments/bnb-priv/status")
+def bnb_priv_payment_status():
+    cfg = bnb_priv.configured(STAGING_MODE, COOKIE_SECURE)
+    return {
+        "asset": "PRIV",
+        "network": "BNB Smart Chain",
+        "chain_id": 56,
+        "symbol_not_independently_verified": True,
+        "payments_configured": cfg is not None,
+        "payments_live": bool(cfg),
+        "token_contract": cfg.contract if cfg else None,
+        "merchant_treasury": cfg.treasury if cfg else None,
+        "token_decimals": cfg.token_decimals if cfg else None,
+        "units_per_credit": str(cfg.units_per_credit) if cfg else None,
+        "confirmations": cfg.confirmations if cfg else None,
+        "native_PRVI_separate": True,
+        "staging_blocks_real_payments": STAGING_MODE,
+        "source": "operator-reviewed contract config; chain validated for each quote",
+    }
+
+
+@app.post("/api/payments/bnb-priv/quote")
+async def bnb_priv_quote(data: QuoteInput, user=Depends(member_wallet)):
+    """Pay for LIFE credits with separately issued BNB PRIV, never PRVI_TEST."""
+    cfg = bnb_priv.configured(STAGING_MODE, COOKIE_SECURE)
+    if not cfg:
+        fail(503, "BNB PRIV payments not enabled: review token, treasury, rate and runtime code")
+    try:
+        await bnb_priv.validate_contract(cfg, rpc)
+    except bnb_priv.InvalidPayment as exc:
+        fail(503, str(exc))
+    units = cfg.units_per_credit * data.credits
+    if units >= 2**256:
+        fail(400, "Token amount exceeds ERC20 limits")
+    ident=store.uid("privq")
+    now=store.now()
+    with store.transaction() as db:
+        db.execute("INSERT INTO bnb_priv_quotes VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL)",
+                   (ident,user["id"],user["wallet"].lower(),data.credits,str(units),
+                    cfg.contract,cfg.treasury,cfg.code_sha256,cfg.token_decimals,now,now+1800))
+    return {"quote_id":ident,"chain_id_hex":"0x38","token_contract":cfg.contract,
+            "to":cfg.treasury,"amount_units":str(units),"decimals":cfg.token_decimals,
+            "token_transfer_data":bnb_priv.calldata(cfg.treasury,units),
+            "credits":data.credits,"expires":now+1800,
+            "required_confirmations":cfg.confirmations,"asset":"BNB PRIV",
+            "amount_fiat_usd":None,
+            "warning":"Token is not USD; price, trading liquidity and cash conversion are not guaranteed"}
+
+
+@app.post("/api/payments/bnb-priv/redeem")
+async def bnb_priv_redeem(data: RedeemInput, user=Depends(member_wallet)):
+    cfg = bnb_priv.configured(STAGING_MODE, COOKIE_SECURE)
+    if not cfg:
+        fail(503, "BNB PRIV payments not enabled")
+    if not re.fullmatch(r"0x[a-fA-F0-9]{64}",data.tx_hash):
+        fail(400,"Invalid BNB transaction hash")
+    with store.transaction() as db:
+        quote = db.execute("SELECT * FROM bnb_priv_quotes WHERE id=? AND user_id=? "
+                           "AND wallet=? AND expires>? AND used_tx IS NULL",
+                           (data.quote_id,user["id"],user["wallet"].lower(),store.now())).fetchone()
+        if not quote:
+            fail(409, "BNB PRIV quote expired or already redeemed")
+        q=dict(quote)
+    if (q["contract"] != cfg.contract or q["treasury"] != cfg.treasury or
+        q["code_sha256"] != cfg.code_sha256 or q["decimals"] != cfg.token_decimals
+        or int(q["amount_units"]) != cfg.units_per_credit*q["credits"]):
+        fail(409, "BNB PRIV payment configuration changed since quote")
+    try:
+        proof=await bnb_priv.verify_transfer(cfg,q,data.tx_hash,rpc)
+    except bnb_priv.InvalidPayment as exc:
+        fail(409,str(exc))
+    tx=data.tx_hash.lower()
+    with store.transaction() as db:
+        taken=db.execute("SELECT 1 FROM bnb_priv_redemptions WHERE tx_hash=?",
+                         (tx,)).fetchone()
+        fresh=db.execute("SELECT * FROM bnb_priv_quotes WHERE id=? AND user_id=? "
+                         "AND wallet=? AND expires>? AND used_tx IS NULL",
+                         (q["id"],user["id"],q["wallet"],store.now())).fetchone()
+        if taken or not fresh:
+            fail(409,"Token transaction already used or quote expired")
+        db.execute("INSERT INTO bnb_priv_redemptions VALUES(?,?,?,?,?,?)",
+                   (tx,q["id"],user["id"],q["amount_units"],q["credits"],store.now()))
+        db.execute("UPDATE bnb_priv_quotes SET used_tx=? WHERE id=?",(tx,q["id"]))
+        db.execute("UPDATE users SET credits=credits+? WHERE id=?",(q["credits"],user["id"]))
+        db.execute("INSERT INTO ledger VALUES(?,?,?,?,?,?,?,?)",
+                   (store.uid("led"),user["id"],"credit","bnb_priv_token_payment",
+                    q["credits"],0,"bnbpriv:"+tx,store.now()))
+    return {"status":"confirmed","asset":"BNB PRIV","amount_units":q["amount_units"],
+            "credits_added":q["credits"],"balance":store.get_user(user["id"])["credits"],
+            "receipt":proof,"fiat_income_usd":None}
+
 
 @app.post("/api/wallet/quote")
 async def buy_quote(data: QuoteInput, user=Depends(member_wallet)):
