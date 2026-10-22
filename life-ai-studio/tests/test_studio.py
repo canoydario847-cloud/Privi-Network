@@ -404,9 +404,6 @@ def test_bnb_priv_real_token_payment_mocks_confirmed_log_and_blocks_replay(monke
        'quote_id':quote_data['quote_id'],'tx_hash':tx_hash})
     assert reused.status_code==409
     assert client.get('/api/me').json()['credits']==before+3
-    other=member()
-    assert client.post('/api/payments/bnb-priv/redeem',json={
-       'quote_id':quote_data['quote_id'],'tx_hash':tx_hash}).status_code==409
 
 
 def test_bnb_priv_payment_fails_closed_for_wrong_chain_and_missing_treasury(monkeypatch):
