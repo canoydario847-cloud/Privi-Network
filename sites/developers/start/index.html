@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Start with Privi — for people and AI agents</title>
+<meta name="description" content="Try Privi Guard and Scan for free, or connect your AI agent to Privi Ledger, Verify and Anchor in minutes.">
+<link rel="canonical" href="https://developers.priviflow.us/start/">
+<meta property="og:title" content="Privi — try it free or connect your AI agent">
+<meta property="og:description" content="Give your AI agent a tamper-evident action log, safer tool calls, and verifiable receipts. Start with free tools.">
+<style>
+:root{color-scheme:dark;--bg:#0c1425;--panel:#14233d;--ink:#f5f7ff;--muted:#b2c1dc;--line:#334563;--accent:#94b4ff;--ok:#76e6bf}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 system-ui,sans-serif}a{color:var(--accent)}.wrap{max-width:1080px;margin:auto;padding:0 22px}
+header{border-bottom:1px solid var(--line);padding:14px 0}header .wrap{display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap}.logo{font-size:21px;font-weight:800;letter-spacing:.04em;color:var(--ink);text-decoration:none}nav{display:flex;gap:20px}
+h1{font-size:clamp(34px,6vw,64px);line-height:1.06;letter-spacing:-.04em;margin:24px 0;max-width:800px}h2{font-size:28px;line-height:1.2;margin:0 0 12px}h3{margin:0 0 10px}.lead{font-size:21px;color:var(--muted);max-width:750px}
+.hero{padding:50px 0 24px}.eyebrow{color:var(--ok);font-weight:700;text-transform:uppercase;letter-spacing:.12em;font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin:28px 0 34px}
+.panel{border:1px solid var(--line);background:var(--panel);border-radius:16px;padding:28px}.panel p{color:var(--muted)}
+.cta{display:inline-block;color:#0c1425;background:var(--accent);text-decoration:none;font-weight:750;border-radius:9px;padding:12px 18px;margin:8px 10px 5px 0}.cta.alt{background:transparent;color:var(--ink);border:1px solid var(--line)}
+section{padding:42px 0;border-top:1px solid var(--line)}ol{padding-left:25px}li{margin:14px 0}.muted{color:var(--muted)}.minor{font-size:14px;color:var(--muted)}
+pre{background:#071122;border:1px solid var(--line);border-radius:12px;padding:18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace}
+button{background:#263d64;color:var(--ink);border:1px solid var(--accent);border-radius:9px;padding:10px 17px;font-weight:bold;cursor:pointer}
+button:focus-visible,a:focus-visible{outline:3px solid var(--ok);outline-offset:3px}
+footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--muted)}
+@media(max-width:750px){.grid{grid-template-columns:1fr}.hero{padding-top:30px}}
+</style></head><body>
+<header><div class="wrap"><a class="logo" href="https://priviflow.us">PRIVI</a><nav aria-label="Navigation"><a href="https://developers.priviflow.us/">Developers</a><a href="https://hub.priviflow.us">Status</a><a href="https://github.com/canoydario847-cloud/Privi-Network">Code</a></nav></div></header>
+<main class="wrap">
+<section class="hero"><div class="eyebrow">Privi World Co · free ways to begin</div><h1>Start using Privi today.</h1>
+<p class="lead">For people: check an AI tool for safety. For agent builders: add a tamper-evident action log and verifiable receipts. No payment or PRVI token required to try the free tools.</p>
+<div class="grid">
+<article class="panel" id="people"><h2>I'm a person</h2><p>Use Privi Guard to check untrusted text before an AI agent acts on it, or browse the Privi Scan MCP server registry. No wallet needed for the public demos.</p>
+<a class="cta" href="https://guard.priviflow.us">Try Guard</a><a class="cta alt" href="https://privi-ledger.onrender.com/scan">Explore Scan</a></article>
+<article class="panel" id="agents"><h2>I build AI agents</h2><p>Connect to Privi's public MCP endpoints. Call a free read-only tool first, then create a free organization and record real actions.</p>
+<a class="cta" href="#config">Copy MCP configuration</a><a class="cta alt" href="https://github.com/canoydario847-cloud/Privi-Network/blob/main/llms-install.md">Full install guide</a></article>
+</div>
+<p class="minor">Privi's financial PRVI mainnet is not being offered through this page. Privi's existing agent service payments, where supported, use USDC on Base through x402.</p>
+</section>
+<section id="config"><h2>Connect your agent</h2><p class="muted">For clients that support JSON MCP server settings (including Cline). Other clients may need an equivalent remote streamable-HTTP setting. Use the host app's secure settings for credentials.</p>
+<pre id="config-text">{
+  "mcpServers": {
+    "privi-ledger": {
+      "type": "streamableHttp",
+      "url": "https://privi-ledger.onrender.com/mcp"
+    },
+    "privi-verify": {
+      "type": "streamableHttp",
+      "url": "https://privi-verify.onrender.com/mcp"
+    },
+    "privi-anchor": {
+      "type": "streamableHttp",
+      "url": "https://privi-anchor.onrender.com/mcp"
+    }
+  }
+}</pre>
+<button type="button" id="copy" aria-label="Copy Privi MCP configuration">Copy config</button> <span class="minor" id="copystate" role="status"></span>
+<h3 style="margin-top:30px">Your first three successful interactions</h3>
+<ol>
+<li><strong>Try without a key:</strong> call <code>guard_pricing</code> on Privi Ledger or <code>mcp_server_check</code> with <code>{"url":"https://privi-verify.onrender.com/mcp"}</code>.</li>
+<li><strong>Create an organization:</strong> call <code>ledger_signup</code> with <code>{"organization_name":"My Project"}</code>. Store the returned <code>api_key</code> privately; it is displayed only once. Configure the Ledger server with <code>Authorization: Bearer &lt;api_key&gt;</code>.</li>
+<li><strong>Write and read one genuine event:</strong> call <code>ledger_record_action</code> with <code>{"stream_id":"first-agent","actor":"my-agent","action_type":"tool_call","summary":"Checked a tool with Privi","outcome":"success"}</code>, then <code>ledger_read_stream</code> with <code>{"stream_id":"first-agent"}</code>. Only log actions that actually occurred.</li>
+</ol>
+<p class="minor">Never put API keys, seed phrases or private customer data into public prompts. Keep human approval for spending and irreversible actions. The free Ledger plan is documented as 500 entries/month; Guard has separate usage limits.</p>
+</section>
+<section><h2>Free pilot for teams using agents</h2><p class="muted">Building with Claude, Cline, Cursor or another MCP-capable agent? Ask for a 15-minute guided integration. Share the stack you use and the one action you need to audit or protect. We are looking for real integrations and feedback, not artificial activity.</p><a class="cta" href="mailto:dariocanoy@priviflow.us?subject=Privi%20agent%20pilot&body=Our%20agent%20stack%3A%0AWhat%20we%20need%20to%20log%20or%20protect%3A%0A">Request a pilot</a>
+<a class="cta alt" href="https://privi-ledger.onrender.com/stats">View tool activity</a></section>
+</main><footer><div class="wrap">Privi World Co · Built by Dario Canoy · <a href="https://developers.priviflow.us/">Developer reference</a> · <a href="https://privi-discovery.onrender.com/llms.txt">Agent discovery</a></div></footer>
+<script>
+document.getElementById('copy').addEventListener('click',async()=>{
+const status=document.getElementById('copystate');
+try{await navigator.clipboard.writeText(document.getElementById('config-text').textContent);status.textContent='Copied. Paste into your MCP client settings.';}
+catch(_){status.textContent='Select and copy the configuration above.';}
+});
+</script>
+</body></html>
