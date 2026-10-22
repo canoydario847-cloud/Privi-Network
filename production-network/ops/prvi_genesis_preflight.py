@@ -14,12 +14,25 @@ def check(genesis):
     app = genesis.get("app_state", {})
     balances = app.get("bank", {}).get("balances", [])
     total = 0
+    seen_addresses = set()
     for account in balances:
+        address = account.get("address")
+        if not isinstance(address, str) or not address:
+            errors.append("missing account address")
+        elif address in seen_addresses:
+            errors.append("duplicate account address")
+        else:
+            seen_addresses.add(address)
+        seen_denoms = set()
         for coin in account.get("coins", []):
-            if coin.get("denom") != DENOM:
+            denom = coin.get("denom")
+            if denom in seen_denoms:
+                errors.append("duplicate coin denom in account")
+            seen_denoms.add(denom)
+            if denom != DENOM:
                 continue
             amount = coin.get("amount")
-            if not isinstance(amount, str) or not amount.isascii() or not amount.isdecimal():
+            if not isinstance(amount, str) or not amount.isascii() or not amount.isdecimal() or (len(amount) > 1 and amount.startswith("0")):
                 errors.append("noncanonical native amount")
                 continue
             n = int(amount)
@@ -28,7 +41,7 @@ def check(genesis):
             total += n
     supply = app.get("bank", {}).get("supply", [])
     declared = [c.get("amount") for c in supply if c.get("denom") == DENOM]
-    if len(declared) != 1 or not isinstance(declared[0], str) or not declared[0].isascii() or not declared[0].isdecimal():
+    if len(declared) != 1 or not isinstance(declared[0], str) or not declared[0].isascii() or not declared[0].isdecimal() or (len(declared[0]) > 1 and declared[0].startswith("0")):
         errors.append("missing or malformed declared native supply")
     elif int(declared[0]) != total:
         errors.append("bank native supply differs from balances")
