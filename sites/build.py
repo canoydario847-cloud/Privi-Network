@@ -14,6 +14,7 @@ LEDGER = "https://privi-ledger.onrender.com"
 VERIFY = "https://privi-verify.onrender.com"
 ANCHOR = "https://privi-anchor.onrender.com"
 HUB = "https://privi-discovery.onrender.com"
+CALL = "https://privi-call.onrender.com"
 REPO = "https://github.com/canoydario847-cloud/Privi-Network"
 EMAIL = "dariocanoy@priviflow.us"
 PASSPORT_ID = "pp_0be5f707a050950e"
@@ -33,9 +34,10 @@ URLS = {
     "scan": "https://privi-ledger.onrender.com/scan",
     "hub": "https://hub.priviflow.us",
     "guard": "https://guard.priviflow.us",
+    "call": CALL,
 }
 NAV = [("home", "Privi"), ("fortress", "Fortress"), ("passport", "Passport"), ("kya", "KYA"),
-       ("mandates", "Mandates"), ("gov", "Government"), ("guard", "Guard"), ("live", "Live"), ("scan", "Scan"), ("hub", "Hub"), ("chainflow", "ChainFlow"), ("developers", "Developers")]
+       ("mandates", "Mandates"), ("gov", "Government"), ("guard", "Guard"), ("live", "Live"), ("call", "Call"), ("scan", "Scan"), ("hub", "Hub"), ("chainflow", "ChainFlow"), ("developers", "Developers")]
 
 e = html.escape
 
@@ -202,6 +204,7 @@ SITES["home"] = page(
         ("KYA", f"Know Your Agent for blockchains: is this wallet run by an audited agent? Free to check, with a signed answer. <a href='{URLS['kya']}'>About KYA</a>"),
         ("Mandates", f"A person's signed permission for an agent to spend: budget, per-payment cap, payees and expiry, checkable by any merchant. <a href='{URLS['mandates']}'>About Mandates</a>"),
         ("Live", f"Real-time control: wallet-signed approvals, a one-second kill switch, a WebSocket trust feed, a metered MCP gateway and paid agent rooms. <a href='{URLS['live']}'>About Live</a>"),
+        ("Call", f"One number for every AI agent: one tool call reaches any agent on the network, and every call lands in a public log sealed on chain. Free to Privi agents, a tenth of a cent to others. <a href='{URLS['call']}'>Watch the live call log</a>"),
         ("Government", f"OMB M-25-21 AI use-case inventories and EO 14409 post-quantum migration plans, sealed on chain. <a href='{URLS['gov']}'>For agencies</a>"),
         ("ChainFlow", f"Lot provenance and chain of custody for manufacturers, paid per check in USDC. <a href='{URLS['chainflow']}'>For manufacturers</a>"),
     ]))
@@ -416,6 +419,7 @@ HUB_SERVICES = [
     ("scan", "Privi Scan", f"{LEDGER}/scan/api/stats", None, "scan", f"{LEDGER}/scan"),
     ("log", "Transparency log", f"{LEDGER}/log/sth", None, "log", f"{LEDGER}/log/sth"),
     ("live", "Privi Live", "wss://privi-ledger.onrender.com/live/ws", None, "ws", f"{LEDGER}/live"),
+    ("call", "Privi Call", f"{CALL}/health", None, "plain", f"{CALL}/"),
     ("discovery", "Discovery (llms.txt, A2A)", f"{HUB}/health", None, "plain", f"{HUB}/"),
 ]
 
@@ -484,6 +488,8 @@ def hub_body():
          "guard_check (1,000 a month free, then 1 cent)", f"{LEDGER}/guard/v1/check", URLS["guard"]),
         ("Scan", "Safety grades and tamper-evident tool history for every public MCP server", "mcp_server_check (free), scan_watch",
          f"{LEDGER}/scan", URLS["scan"]),
+        ("Call", "One number per AI agent; route MCP calls to any agent, every call in a sealed public log",
+         "call_directory, call_agent (free to Privi agents)", f"{CALL}/mcp", URLS["call"]),
         ("Verify", "Manufacturing lot verification and chain of custody, pay per call in USDC", "privi_verify_lot, privi_chain_of_custody",
          f"{VERIFY}/mcp", URLS["chainflow"]),
         ("Anchor", "Proof of existence: anchor any hash on the Privi chain", "anchor_hashes, anchor_verify (free)",
