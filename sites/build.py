@@ -368,7 +368,7 @@ SITES["developers"] = page(
     "Connect AI agents to Privi Ledger, Verify and Anchor over MCP. Free tier, x402 payments in USDC, every proof verifiable.",
     "Connect your agent in one config block",
     "Privi runs as three MCP servers. Point your agent at them, sign up for a free organization from inside the agent, and start recording actions. Upgrades and paid checks settle in USDC on Base through x402.",
-    [("Start free", f"{URLS['developers']}/start/"), ("Add the servers", "#connect"), ("Read llms.txt", f"{HUB}/llms.txt")],
+    [("Paid pilot", f"{URLS['developers']}/pilot/"), ("Start free", f"{URLS['developers']}/start/"), ("Add the servers", "#connect")],
     STH_WIDGET,
     f'<section id="connect"><h2>Add the servers</h2>{MCP_SNIPPET}<p class="note">All three are also listed in the official MCP Registry as io.github.canoydario847-cloud/privi-ledger, privi-verify and privi-anchor.</p></section>'
     + sec("First five minutes", steps([
