@@ -1,4 +1,9 @@
 import unittest
+import sys
+from pathlib import Path
+
+# GitHub Actions discovers this test from the repository root.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from privi_genesis_preflight import check, CAP
 
 def genesis(amount):
