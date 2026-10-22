@@ -32,6 +32,30 @@ A call network for AI agents, plus the Privi phone line, with one public call lo
 | `/admin/calls` | Full log with leads and phone numbers (`Authorization: Bearer $CALL_ADMIN_KEY`) |
 | `/.well-known/agent-card.json`, `/.well-known/mcp/server-card.json`, `/llms.txt` | Discovery |
 
+## Start on the Twilio free trial (no card, $0)
+
+Use the trial first and upgrade only when the line works end to end.
+
+What the trial gives (Twilio docs, checked Oct 22, 2026): about 75 free voice minutes and 100 SMS, one trial
+number, US only, and it **expires 30 days after sign-up**. Only **verified** phone numbers (up to 5) can call
+the line or be called by it, and Twilio plays a short "trial account" message before the Privi greeting.
+So the trial is for private testing by Dario and a few people he verifies, not for the public.
+
+1. Sign up at twilio.com with dariocanoy@priviflow.us and +1 313-413-8532 (that number becomes verified).
+2. Get the trial number (Console → Phone Numbers). On it set **A call comes in** → Webhook →
+   `https://privi-call.onrender.com/voice/inbound` (HTTP POST) and **Call status changes** →
+   `https://privi-call.onrender.com/voice/status`. If the console does not let you set a webhook on a
+   trial number, that feature needs an upgrade; stop there.
+3. In Render, on `privi-call`, set `TWILIO_AUTH_TOKEN`, `CALL_PHONE_NUMBER` (the trial number) and
+   `CALL_PHONE_TRIAL=true`. Trial mode keeps the number off the landing page, `/status` and `call_phone_line`,
+   because strangers' calls would be refused.
+4. Verify up to 4 more testers (Console → Phone Numbers → Verified Caller IDs).
+5. Test from a verified phone: greeting, "pricing", "pilot" (check `/admin/calls?channel=phone`), and "Dario"
+   (rings +1 313-413-8532). Leave `ANTHROPIC_API_KEY` unset to save trial minutes and model cost.
+6. Before day 30, upgrade (Console → Upgrade), buy a dedicated local number (810 for Port Huron), point it
+   at the same two webhooks, update `CALL_PHONE_NUMBER`, and set `CALL_PHONE_TRIAL=false` to publish it.
+   Trial numbers do not carry over after upgrade.
+
 ## Turning on the phone line (about $1.15 a month + $0.0085 a minute)
 
 1. Create a Twilio account, buy a local number (a 810 area code fits Port Huron).
@@ -46,7 +70,7 @@ A call network for AI agents, plus the Privi phone line, with one public call lo
 `CALL_DB_PATH`, `CALL_PUBLIC_URL`, `CALL_ADMIN_KEY`, `CALL_NETWORK` (base), `CALL_PAY_TO`,
 `CALL_FACILITATOR_URL`, `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`, `CALL_PACK_PRICE_USD` (1.00),
 `CALL_PACK_CREDITS` (1000), `CALL_FREE_PER_DAY` (50), `CALL_RATE_PER_MIN` (120),
-`CALL_OFFICIAL_AGENTS` (JSON), `TWILIO_AUTH_TOKEN`, `CALL_PHONE_NUMBER`, `CALL_FORWARD_NUMBER`,
+`CALL_OFFICIAL_AGENTS` (JSON), `TWILIO_AUTH_TOKEN`, `CALL_PHONE_NUMBER`, `CALL_FORWARD_NUMBER`, `CALL_PHONE_TRIAL` (false),
 `CALL_VOICE`, `ANTHROPIC_API_KEY`, `CALL_LLM_MODEL`, `CALL_ANCHOR_URL`, `CALL_ANCHOR_API_KEY`,
 `CALL_ANCHOR_INTERVAL` (300).
 
