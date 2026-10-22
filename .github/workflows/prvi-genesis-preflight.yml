@@ -1,0 +1,23 @@
+name: PRVI genesis preflight
+on:
+  pull_request:
+    paths:
+      - 'production-network/ops/prvi_genesis_preflight.py'
+      - 'production-network/ops/test_prvi_genesis_preflight.py'
+      - '.github/workflows/prvi-genesis-preflight.yml'
+  push:
+    paths:
+      - 'production-network/ops/prvi_genesis_preflight.py'
+      - 'production-network/ops/test_prvi_genesis_preflight.py'
+      - '.github/workflows/prvi-genesis-preflight.yml'
+permissions:
+  contents: read
+jobs:
+  offline-genesis-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run offline genesis preflight unit tests
+        working-directory: production-network/ops
+        run: python3 -m unittest -v test_prvi_genesis_preflight.py
