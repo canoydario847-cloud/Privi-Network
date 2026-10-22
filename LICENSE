@@ -1,21 +1,21 @@
-MIT License
+PRIVI WORLD CORP — PROPRIETARY SOURCE LICENSE
+Effective for new original contributions first published after this license change: October 22, 2026
 
-Copyright (c) 2026 canoydario847-cloud
+Copyright (c) 2026 Privi World Corp. All rights reserved.
+Owner designation provided by Dario Canoy on behalf of Privi World Corp.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. SCOPE. To the extent Privi World Corp owns the applicable copyright, new original source code and documentation first distributed by the rights holder under this license after its effective date are proprietary. No license to copy, modify, distribute, sublicense, host, or commercially exploit such material is granted without separate written authorization from Privi World Corp.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+2. EXISTING MIT RIGHTS PRESERVED. The repository previously carried the MIT License. Material previously distributed under that license remains available to recipients under the MIT terms applicable to their copies. This license does not revoke, narrow, or retroactively condition those rights. See LICENSE-MIT-PRIOR and the Git history. Existing MIT-covered material is not automatically relicensed merely by changing this file.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+3. THIRD-PARTY MATERIAL. Dependencies, upstream projects, contributed material, and other third-party code remain governed by their own licenses. Nothing here claims ownership of third-party works or overrides their terms.
+
+4. COMMERCIAL ACCESS. For proprietary material actually covered by Section 1, commercial usage, API access, redistribution, or source licensing may be offered under a separate written agreement. Any PRVI token fees or royalties require an explicit, applicable agreement and lawful implementation; they are not imposed on MIT-licensed copies by this notice.
+
+5. OWNERSHIP AND CONTRIBUTIONS. This notice is an assertion of claimed rights, not proof of authorship or a transfer of rights. Contributions not owned or validly licensed by Privi World Corp are excluded unless the necessary rights have been obtained.
+
+6. NO WARRANTY. TO THE MAXIMUM EXTENT PERMITTED BY LAW, PROPRIETARY MATERIAL IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND.
+
+7. PERMISSIONS. For licensing requests contact Privi World Corp through the official Privi Hub at https://privi-hub.onrender.com/.
+
+NOTICE: This repository contains historical MIT-licensed code and may include third-party licensed code. Do not treat the entire Git history or all existing files as exclusively proprietary.
