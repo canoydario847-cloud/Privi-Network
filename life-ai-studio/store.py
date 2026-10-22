@@ -68,12 +68,12 @@ def init():
         );
         CREATE TABLE IF NOT EXISTS ledger (
           id TEXT PRIMARY KEY, user_id TEXT NOT NULL, kind TEXT NOT NULL,
-          service TEXT NOT NULL, amount INTEGER NOT NULL, platform_fee INTEGER NOT NULL DEFAULT 0,
+          service TEXT NOT NULL, amount INTEGER NOT NULL, platform_fee_micros INTEGER NOT NULL DEFAULT 0,
           idempotency TEXT NOT NULL, created INTEGER NOT NULL, UNIQUE(user_id,idempotency)
         );
         CREATE TABLE IF NOT EXISTS quotes (
           id TEXT PRIMARY KEY, user_id TEXT NOT NULL, wallet TEXT NOT NULL,
-          credits INTEGER NOT NULL, amount_wei TEXT NOT NULL, expires INTEGER NOT NULL,
+          credits INTEGER NOT NULL, amount_wei TEXT NOT NULL, expires INTEGER NOT NULL, created INTEGER NOT NULL,
           used_tx TEXT
         );
         CREATE TABLE IF NOT EXISTS redemptions (
@@ -117,7 +117,7 @@ def charge(user_id, service, amount, key, fee_bps=1000):
         db.execute("UPDATE users SET credits=credits-? WHERE id=?", (amount, user_id))
         db.execute("INSERT INTO ledger VALUES (?,?,?,?,?,?,?,?)",
                    (uid("led"), user_id, "charge", service, -amount,
-                    amount * fee_bps // 10000, key, now()))
+                    amount * fee_bps * 100, key, now()))
         return True
 
 def credit(user_id, amount, service, key):

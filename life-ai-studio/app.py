@@ -332,6 +332,9 @@ async def run_team(project_id: str, data: TeamRun, user=Depends(member_wallet)):
     total = AGENT_COST * len(run_ids)
     with store.transaction() as db:
         balance = db.execute("SELECT credits FROM users WHERE id=?", (user["id"],)).fetchone()
+        active = db.execute("SELECT COUNT(*) AS n FROM runs r JOIN projects p ON r.project_id=p.id WHERE p.owner_id=? AND r.status='running'", (user["id"],)).fetchone()["n"]
+        if active + len(run_ids) > 12:
+            fail(429, "Too many active agents; finish current runs before starting more")
         if not balance or balance["credits"] < total:
             fail(402, "Insufficient Privi utility credits")
         db.execute("UPDATE users SET credits=credits-? WHERE id=?", (total,user["id"]))
@@ -340,7 +343,7 @@ async def run_team(project_id: str, data: TeamRun, user=Depends(member_wallet)):
                        (run_id, project_id, provider, "running", data.task, store.now()))
             db.execute("INSERT INTO ledger VALUES (?,?,?,?,?,?,?,?)",
                        (store.uid("led"),user["id"],"charge","agent_run",-AGENT_COST,
-                        AGENT_COST*FEE_BPS//10000, "run:"+run_id,store.now()))
+                        AGENT_COST*FEE_BPS*100, "run:"+run_id,store.now()))
         snapshots = [dict(r) for r in db.execute(
             "SELECT path,content,version FROM files WHERE project_id=? ORDER BY path LIMIT 50",
             (project_id,)).fetchall()]
@@ -392,18 +395,28 @@ def payconfig():
         chain_id = int(os.environ["PRVI_EVM_CHAIN_ID"])
         rpc = os.environ["PRVI_RPC_URL"]
         treasury = os.environ["PRVI_TREASURY_ADDRESS"].lower()
+        genesis = os.environ["PRVI_GENESIS_BLOCK_HASH"].lower()
         per_credit = int(os.environ["PRVI_WEI_PER_CREDIT"])
         confirms = int(os.getenv("PRVI_REQUIRED_CONFIRMATIONS", "12"))
         if (chain_id in (0,1,56,97,11155111,262144) or chain_id < 100 or
-            not rpc.startswith("https://") or not re.fullmatch(r"0x[a-f0-9]{40}", treasury) or
+            not rpc.startswith("https://") or not re.fullmatch(r"0x[a-f0-9]{64}", genesis) or
+            not re.fullmatch(r"0x[a-f0-9]{40}", treasury) or
             per_credit <= 0 or confirms < 12 or not COOKIE_SECURE):
             return None
-        return chain_id,rpc,treasury,per_credit,confirms
+        return chain_id,rpc,treasury,per_credit,confirms,genesis
     except (KeyError,ValueError):
         return None
 
 def payment_ready():
     return payconfig() is not None
+
+async def verify_chain(config):
+    chain_id,rpc_url,treasury,unit,confirms,genesis=config
+    if int(await rpc(rpc_url,'eth_chainId',[]),16)!=chain_id:
+        fail(503,'Configured chain does not match RPC')
+    block=await rpc(rpc_url,'eth_getBlockByNumber',['0x0',False])
+    if not block or block.get('hash','').lower()!=genesis:
+        fail(503,'PRVI chain genesis does not match verified configuration')
 
 async def rpc(url, method, params):
     async with httpx.AsyncClient(timeout=20, follow_redirects=False) as client:
@@ -419,14 +432,13 @@ async def buy_quote(data: QuoteInput, user=Depends(member_wallet)):
     config = payconfig()
     if not config:
         fail(503, "Native PRVI purchases are disabled pending verified mainnet release")
-    chain_id,rpc_url,treasury,unit,confirms = config
-    if int(await rpc(rpc_url,"eth_chainId",[]),16) != chain_id:
-        fail(503,"Configured chain does not match RPC")
+    chain_id,rpc_url,treasury,unit,confirms,genesis = config
+    await verify_chain(config)
     amount_wei = str(unit * data.credits)
     quote_id = store.uid("quote")
     with store.transaction() as db:
-        db.execute("INSERT INTO quotes VALUES (?,?,?,?,?,?,NULL)",
-                   (quote_id,user["id"],user["wallet"],data.credits,amount_wei,store.now()+900))
+        db.execute("INSERT INTO quotes VALUES (?,?,?,?,?,?,?,NULL)",
+                   (quote_id,user["id"],user["wallet"],data.credits,amount_wei,store.now()+7200,store.now()))
     return {"quote_id":quote_id,"to":treasury,"value_hex":hex(int(amount_wei)),
             "chain_id_hex":hex(chain_id),"credits":data.credits,"required_confirmations":confirms}
 
@@ -444,12 +456,12 @@ async def redeem(data: RedeemInput, user=Depends(member_wallet)):
         if not quote:
             fail(409,"Quote expired or already redeemed")
         q = dict(quote)
-    chain,rpc_url,treasury,unit,confirms=config
-    if int(await rpc(rpc_url,"eth_chainId",[]),16)!=chain:
-        fail(503,"RPC chain changed")
+    chain,rpc_url,treasury,unit,confirms,genesis=config
+    await verify_chain(config)
     tx = await rpc(rpc_url,"eth_getTransactionByHash",[data.tx_hash])
     receipt = await rpc(rpc_url,"eth_getTransactionReceipt",[data.tx_hash])
     height = await rpc(rpc_url,"eth_blockNumber",[])
+    block = await rpc(rpc_url,"eth_getBlockByNumber",[tx["blockNumber"],False]) if tx and tx.get("blockNumber") else None
     if not tx or not receipt or not tx.get("blockNumber") or not receipt.get("blockNumber"):
         fail(409,"Transaction is not mined")
     if (tx.get("from","").lower()!=q["wallet"] or
@@ -458,6 +470,8 @@ async def redeem(data: RedeemInput, user=Depends(member_wallet)):
         int(receipt.get("status","0x0"),16)!=1 or
         receipt.get("transactionHash","").lower()!=data.tx_hash.lower() or
         receipt.get("blockHash")!=tx.get("blockHash") or
+        not block or block.get("hash")!=tx.get("blockHash") or
+        int(block.get("timestamp","0x0"),16)<q["created"] or
         int(height,16)-int(receipt["blockNumber"],16)+1<confirms):
         fail(409,"Transaction did not pass wallet, amount, receipt or confirmation checks")
     with store.transaction() as db:

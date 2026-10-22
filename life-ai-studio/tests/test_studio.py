@@ -91,3 +91,29 @@ def test_reject_cross_origin_writes():
     response=client.post("/api/auth/signup",headers={"origin":"https://evil.example"},
        json={"email":"attack@example.com","password":"strong_password_123"})
     assert response.status_code==403
+
+
+def test_service_charge_is_idempotent_and_fee_is_fractional(monkeypatch):
+    user=member()
+    key='s'*48
+    monkeypatch.setenv('PRIVI_SERVICE_KEYS_JSON',json.dumps({'life_backup':key}))
+    payload={'user_id':user['id'],'service':'life_backup','idempotency_key':'backup-idempotent-24680'}
+    first=client.post('/api/internal/charge',headers={'x-privi-service-key':key},json=payload)
+    second=client.post('/api/internal/charge',headers={'x-privi-service-key':key},json=payload)
+    assert first.status_code==second.status_code==200
+    assert first.json()['balance']==second.json()['balance']==9
+    ledger=client.get('/api/wallet/ledger').json()
+    record=next(e for e in ledger if e['idempotency']=='backup-idempotent-24680')
+    assert record['platform_fee_micros']==100000
+
+
+def test_failed_provider_is_refunded(monkeypatch):
+    user=member()
+    project=client.post('/api/projects',json={'title':'Refund Test','kind':'code'}).json()['id']
+    async def unavailable(*args,**kwargs):
+        raise RuntimeError('offline')
+    monkeypatch.setattr(agents,'generate',unavailable)
+    outcome=client.post('/api/projects/'+project+'/run-team',json={'agents':['chatgpt'],'task':'Write code safely'})
+    assert outcome.status_code==200
+    assert outcome.json()['credits']==user['credits']
+    assert outcome.json()['runs'][0]['status']=='failed'

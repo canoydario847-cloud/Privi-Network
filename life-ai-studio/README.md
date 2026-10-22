@@ -9,7 +9,7 @@
 - Parallel AI provider requests to OpenAI (Responses), Anthropic (Messages), xAI (Chat Completions), Hey Jose adapter, and a configured custom compatible adapter
 - Shared versioned project files, parallel agent proposals, review queue, atomic human-approved merges, optimistic concurrency checks and merge conflicts; no automatic execution of untrusted AI-generated code
 - LIFE member wallet ownership binding using EVM personal_sign challenge, expires and one-time nonce
-- Metered utility credits + fee accounting and internal authenticated idempotent debit endpoint for Hey Jose, LIFE backups, IoT, Privi Guard, Ledger, Anchor, Verify, Privi OS, AI metadata services
+- Metered utility credits + fractional platform fee accounting (microcredit precision) and internal authenticated idempotent debit endpoint for Hey Jose, LIFE backups, IoT, Privi Guard, Ledger, Anchor, Verify, Privi OS, AI metadata services
 - Native PRVI **verification scaffold disabled by default**. Once an independently audited, live native PRVI EVM mainnet and payment policies exist, administrators can configure fixed pricing in native PRVI wei per credit and chain receipt verification. Blocks misconfigured/local demo/test/BNB/Ethereum networks, requires >=12 confirmations, wallet identity, treasury, value, receipt success, and unique transaction hash
 - Does not mint PRVI, issue tokens, bridge BNB PRIV, or treat valueless TEST/PRVI_TEST as payment.
 
@@ -56,3 +56,6 @@ This is a **single-instance MVP** using SQLite. Use an encrypted durable disk/vo
 
 ### License & ownership
 Privi World Co. Intended new repo name: `privi-life-ai-network`; original Privi sources: [Privi-Network](https://github.com/canoydario847-cloud/Privi-Network).
+
+### Fee precision and network binding
+Utility fees are recorded in **microcredits**, preserving fractions of credits; the browser displays them in decimal credit units. PRVI settlement configuration also requires `PRVI_GENESIS_BLOCK_HASH` to match block zero, not only a chain ID. Purchase quotes expire after 2 hours; mined transfer blocks must not predate the quote. Network administrators must independently verify all these settings; native-token purchases remain disabled by default.
