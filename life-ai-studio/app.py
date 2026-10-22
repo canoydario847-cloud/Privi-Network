@@ -6,6 +6,7 @@ import json
 import os
 import re
 import secrets
+import time
 from pathlib import Path
 
 import httpx
@@ -26,6 +27,8 @@ ORIGIN = os.getenv("PUBLIC_ORIGIN", "http://localhost:8080").rstrip("/")
 COOKIE_SECURE = os.getenv("LIFE_COOKIE_SECURE", "0") == "1"
 FEE_BPS = 1000
 AGENT_COST = 2
+STAGING_MODE = os.getenv("LIFE_STAGING_ONLY", "0") == "1"
+_demo_requests = {}  # One process only: sandbox is NOT a production signup service.
 
 # Product-wide PRVI utility directory. Other Privi services consume credits
 # through the authenticated /api/internal/charge API after integration.
@@ -144,10 +147,41 @@ def stylesheet():
     return FileResponse(STATIC / "style.css", media_type="text/css")
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "privi-life-ai-studio", "prvi_settlement_enabled": payment_ready()}
+    return {"status": "ok", "service": "privi-life-ai-studio", "staging": STAGING_MODE, "prvi_settlement_enabled": payment_ready()}
+
+@app.get("/api/public-config")
+def public_config():
+    return {"staging": STAGING_MODE, "real_money_enabled": payment_ready()}
+
+@app.post("/api/auth/demo")
+def demo_login(request: Request, response: Response):
+    """Disposable isolated sandbox; fake EVM address and valueless demo credits."""
+    if not STAGING_MODE:
+        fail(404, "Not available")
+    existing = store.session_user(request.cookies.get("life_session"))
+    if existing:
+        return store.get_user(existing["id"])
+    ip = request.client.host if request.client else "unknown"
+    current = time.monotonic()
+    # Prevent unbounded public account creation on a free ephemeral host.
+    recent = [t for t in _demo_requests.get(ip, []) if current-t < 3600]
+    if len(recent) >= 5:
+        fail(429, "Sandbox account limit reached for this hour")
+    _demo_requests[ip] = recent + [current]
+    user_id = store.uid("demo")
+    email = f"{secrets.token_hex(12)}@example.invalid"
+    fake_wallet = "0x" + secrets.token_hex(20)
+    with store.transaction() as db:
+        db.execute("INSERT INTO users (id,email,pwdhash,wallet,member_since) VALUES(?,?,?,?,?)",
+                   (user_id,email,password_hash(secrets.token_urlsafe(32)),fake_wallet,store.now()))
+    store.credit(user_id, 60, "SANDBOX_VALUELESS_CREDITS", "demo:"+user_id)
+    session_response(response,user_id)
+    return {**store.get_user(user_id), "demo": True}
 
 @app.post("/api/auth/signup")
 def signup(data: AuthInput, response: Response):
+    if STAGING_MODE:
+        fail(403, "Public signup is disabled in sandbox: use disposable Demo Workspace")
     email = data.email.strip().lower()
     if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
         fail(400, "Invalid email")
@@ -169,6 +203,8 @@ def signup(data: AuthInput, response: Response):
 
 @app.post("/api/auth/login")
 def login(data: AuthInput, response: Response):
+    if STAGING_MODE:
+        fail(403, "Public login disabled in disposable sandbox")
     with store.transaction() as db:
         row = db.execute("SELECT * FROM users WHERE email=?", (data.email.strip().lower(),)).fetchone()
     if not row or not valid_password(data.password, row["pwdhash"]):
@@ -198,6 +234,8 @@ def catalog(user=Depends(current)):
 
 @app.post("/api/wallet/challenge")
 def challenge(data: WalletInput, user=Depends(current)):
+    if STAGING_MODE:
+        fail(403, "Use a sandbox wallet only; real wallet linking disabled")
     if not re.fullmatch(r"0x[a-fA-F0-9]{40}", data.wallet):
         fail(400, "Invalid EVM wallet address")
     wallet = data.wallet.lower()
@@ -213,6 +251,8 @@ def challenge(data: WalletInput, user=Depends(current)):
 
 @app.post("/api/wallet/link")
 def wallet_link(data: WalletLink, user=Depends(current)):
+    if STAGING_MODE:
+        fail(403, "Wallet linking disabled in sandbox")
     with store.transaction() as db:
         row = db.execute("SELECT * FROM challenges WHERE user_id=? AND wallet=? AND expires>?",
                          (user["id"], data.wallet.lower(), store.now())).fetchone()
@@ -340,7 +380,7 @@ async def run_team(project_id: str, data: TeamRun, user=Depends(member_wallet)):
     ready = {a["id"] for a in agents.catalog() if a["ready"]}
     if not set(data.agents).issubset(ready):
         fail(400, "One or more agents are not configured")
-    if any(a not in agents.SERVICES for a in data.agents):
+    if any(a not in agents.SERVICES and (not STAGING_MODE or a not in agents.SANDBOX_AGENTS) for a in data.agents):
         fail(400, "Unknown agent")
     roles = ["Frontend & user experience", "Backend & integrations",
              "Tests & quality assurance", "Security & reliability",
@@ -495,7 +535,7 @@ def ledger(user=Depends(current)):
             (user["id"],)).fetchall()]
 
 def payconfig():
-    if os.getenv("PRVI_MAINNET_PAYMENTS_ENABLED") != "1":
+    if STAGING_MODE or os.getenv("PRVI_MAINNET_PAYMENTS_ENABLED") != "1":
         return None
     try:
         chain_id = int(os.environ["PRVI_EVM_CHAIN_ID"])

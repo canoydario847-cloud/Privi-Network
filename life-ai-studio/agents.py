@@ -14,8 +14,17 @@ SERVICES = {
     "custom": {"key": "EXTRA_AGENT_KEY", "model": "EXTRA_AGENT_MODEL", "label": "Custom AI"},
 }
 
+SANDBOX_AGENTS = {
+    "demo-frontend": {"name":"Sandbox Frontend (simulation)", "path":"src/demo_frontend.js",
+                      "source":"export function greeting(name) { return `Hello, ${name}!`; }\\n"},
+    "demo-backend": {"name":"Sandbox Backend (simulation)", "path":"src/demo_backend.py",
+                     "source":"def health():\\n    return {\'status\': \'ok\'}\\n"},
+    "demo-qa": {"name":"Sandbox QA (simulation)", "path":"tests/demo_qa.py",
+                "source":"def test_example():\\n    assert 1 + 1 == 2\\n"},
+}
+
 def catalog():
-    return [
+    normal = [
         {"id": key, "name": val["label"], "ready": (
             bool(os.getenv("JOSE_AGENT_URL")) if key == "hey-jose" else
             bool(os.getenv("EXTRA_AGENT_URL") and os.getenv("EXTRA_AGENT_MODEL")) if key == "custom" else
@@ -23,8 +32,18 @@ def catalog():
         )}
         for key, val in SERVICES.items()
     ]
+    if os.getenv("LIFE_STAGING_ONLY") == "1":
+        normal.extend({"id": key, "name": value["name"], "ready": True, "simulation": True}
+                      for key,value in SANDBOX_AGENTS.items())
+    return normal
 
 async def generate(provider, instructions, prompt):
+    if provider in SANDBOX_AGENTS and os.getenv("LIFE_STAGING_ONLY") == "1":
+        sample=SANDBOX_AGENTS[provider]
+        if "For coding tasks respond ONLY" in instructions:
+            return json.dumps({"summary":f"[SANDBOX SIMULATION] {sample[\'name\']} proposed one example file",
+                               "files":[{"path":sample["path"], "content":sample["source"]}]})
+        return f"[SANDBOX SIMULATION] {sample[\'name\']} responds: {prompt[-250:]}."
     if provider not in SERVICES:
         raise ValueError("Unknown AI provider")
     cfg = SERVICES[provider]

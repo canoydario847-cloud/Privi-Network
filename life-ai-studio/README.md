@@ -100,3 +100,14 @@ assets; `POST /api/networks/swap/quote` rejects all live swaps.
 **Testing:** `pytest -q` covers joint concurrent code proposals, distinct
 roles, human merge requirement, fastest-provider racing, fallback, scoped
 cache, refunds, and fail-closed swap/token policy.
+
+## Disposable Render staging preview
+With `LIFE_STAGING_ONLY=1`, `/api/auth/demo` creates a throwaway sandbox identity,
+synthetic non-custodial display address and 60 **valueless** trial credits. Browser
+shows a staging warning, blocks real wallet linking and normal signup/login,
+and exposes three explicitly simulated demo coding agents for Team Up or Fast Lane.
+No provider API keys are configured and no swaps or PRVI purchases can be made
+(even if payment environment variables were accidentally set). Demo data lives
+in ephemeral SQLite, so preview state resets on restart or redeploy. Do not use
+real emails, passwords, personal files, live wallet credentials or customer data.
+This is a UI/functional demonstration, not a public membership launch.

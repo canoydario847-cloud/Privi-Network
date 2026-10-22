@@ -221,3 +221,30 @@ def test_asset_registry_never_fakes_ai_coins_or_live_swaps(monkeypatch):
     monkeypatch.setenv('PRIVI_REVIEWED_ASSETS_JSON',json.dumps([{
         'symbol':'FAKE','chain_id':8453,'contract':'0x'+'0'*40,'decimals':18}]))
     assert multichain.validated_assets()==[]
+
+
+def test_staging_demo_disables_real_wallet_and_payments(monkeypatch):
+    import app as application
+    monkeypatch.setattr(application,'STAGING_MODE',True)
+    monkeypatch.setenv('LIFE_STAGING_ONLY','1')
+    try:
+        client.post('/api/auth/logout')
+        demo=client.post('/api/auth/demo')
+        assert demo.status_code==200,demo.text
+        assert demo.json()['credits']==60
+        assert demo.json()['email'].endswith('@example.invalid')
+        assert client.post('/api/wallet/challenge',json={'wallet':demo.json()['wallet']}).status_code==403
+        assert client.post('/api/wallet/quote',json={'credits':2}).status_code==503
+        assert client.post('/api/auth/signup',json={'email':'real@example.com','password':'123456789012'}).status_code==403
+        catalog=client.get('/api/catalog').json()
+        assert len([x for x in catalog['agents'] if x.get('simulation')])==3
+        prj=client.post('/api/projects',json={'title':'Sandbox App','kind':'code'}).json()['id']
+        outcome=client.post('/api/projects/'+prj+'/run-team',json={
+            'agents':['demo-frontend','demo-backend'],'task':'Propose sample code',
+            'mode':'team_up'})
+        assert outcome.status_code==200,outcome.text
+        assert len(client.get('/api/projects/'+prj+'/proposals').json())==2
+        assert len(client.get('/api/projects/'+prj+'/files').json())==0
+    finally:
+        client.post('/api/auth/logout')
+        monkeypatch.setattr(application,'STAGING_MODE',False)
