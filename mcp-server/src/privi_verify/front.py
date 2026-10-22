@@ -18,6 +18,10 @@ code,pre{{font:14px ui-monospace,monospace;background:#eef1f6;border-radius:6px}
 <p>Everything Privi offers, with live status: <a href="https://privi-hub.onrender.com">Privi Hub</a>.</p></body></html>"""
 
 
+CORS = [(b"access-control-allow-origin", b"*"),
+        (b"access-control-expose-headers", b"Mcp-Session-Id, PAYMENT-REQUIRED, PAYMENT-RESPONSE, X-PAYMENT-RESPONSE")]
+
+
 class QuickGet:
     def __init__(self, app, name: str, slug: str, public_url: str, path: str = "/mcp"):
         self.app, self.path = app, path
@@ -26,7 +30,27 @@ class QuickGet:
             "code": -32000, "message": "Method not allowed: this MCP server takes JSON-RPC over POST (streamable HTTP, stateless)"}}).encode()
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] == "http" and scope.get("method") in ("GET", "HEAD") and scope.get("path", "").rstrip("/") == self.path:
+        on_path = scope["type"] == "http" and scope.get("path", "").rstrip("/") == self.path
+        if on_path and scope.get("method") == "OPTIONS":
+            # CORS preflight: browser-based MCP clients (web inspectors, demo pages) can call this endpoint.
+            # Safe with "*": callers send their own keys in headers; no cookies or ambient credentials are used.
+            await send({"type": "http.response.start", "status": 204, "headers": CORS + [
+                (b"access-control-allow-methods", b"POST, GET, DELETE, OPTIONS"),
+                (b"access-control-allow-headers", b"Content-Type, Accept, Authorization, Mcp-Session-Id, "
+                                                   b"Mcp-Protocol-Version, Last-Event-ID, PAYMENT-SIGNATURE, X-PAYMENT"),
+                (b"access-control-max-age", b"86400"), (b"content-length", b"0")]})
+            await send({"type": "http.response.body", "body": b""})
+            return
+        if on_path and scope.get("method") not in ("GET", "HEAD"):
+            async def send_cors(message):
+                if message["type"] == "http.response.start":
+                    have = {k.lower() for k, _ in message.get("headers", [])}
+                    message = {**message, "headers": list(message.get("headers", [])) +
+                               [h for h in CORS if h[0] not in have]}
+                await send(message)
+            await self.app(scope, receive, send_cors)
+            return
+        if on_path and scope.get("method") in ("GET", "HEAD"):
             headers = dict(scope.get("headers") or [])
             accept = headers.get(b"accept", b"").decode("latin-1").lower()
             if "text/html" in accept and "text/event-stream" not in accept:
@@ -34,7 +58,7 @@ class QuickGet:
             else:
                 status, ctype, body = 405, b"application/json", self.body
             await send({"type": "http.response.start", "status": status,
-                        "headers": [(b"content-type", ctype), (b"allow", b"POST, DELETE, OPTIONS"),
+                        "headers": CORS + [(b"content-type", ctype), (b"allow", b"POST, DELETE, OPTIONS"),
                                     (b"content-length", str(len(body)).encode()), (b"cache-control", b"no-store")]})
             await send({"type": "http.response.body", "body": b"" if scope["method"] == "HEAD" else body})
             return
