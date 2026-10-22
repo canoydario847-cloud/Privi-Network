@@ -27,7 +27,7 @@ from . import merkle
 from .chain import Chain, JsonRpcChain, RpcError, wait_receipt
 from .store import AnchorStore
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/anchor-server"
 MAX_HASHES = 100
 

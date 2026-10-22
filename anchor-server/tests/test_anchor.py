@@ -256,3 +256,23 @@ def test_server_card(store):
     with TestClient(s.streamable_http_app(host="0.0.0.0", stateless_http=True, json_response=True)) as http:
         card = http.get("/.well-known/mcp/server-card.json").json()
         assert card["serverInfo"]["name"] == "privi-anchor" and any(t["name"] == "anchor_verify" for t in card["tools"])
+
+
+def test_rpc_sends_user_agent(monkeypatch):
+    """Public Base RPCs answer 403 to Python's default User-Agent; we must send our own."""
+    import io
+    import json as _json
+    import urllib.request
+    from privi_anchor import chain as chain_mod
+
+    seen = {}
+
+    def fake_urlopen(req, timeout=None):
+        seen["ua"] = req.get_header("User-agent")
+        return io.BytesIO(_json.dumps({"jsonrpc": "2.0", "id": 1, "result": "0x2105"}).encode())
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    c = chain_mod.JsonRpcChain.__new__(chain_mod.JsonRpcChain)
+    c.rpc_url, c.timeout, c._id = "https://mainnet.base.org", 5, 0
+    assert c.remote_chain_id() == 8453
+    assert seen["ua"].startswith("privi-anchor/") and "Python-urllib" not in seen["ua"]
