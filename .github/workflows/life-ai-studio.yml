@@ -22,4 +22,6 @@ jobs:
           cache: 'pip'
           cache-dependency-path: life-ai-studio/requirements.txt
       - run: pip install -r requirements.txt
+      - run: python -m compileall -q .
+      - run: node --check public/app.js
       - run: pytest -q
