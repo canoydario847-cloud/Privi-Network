@@ -1,0 +1,33 @@
+name: LIFE AI Studio tests
+on:
+  push:
+    paths:
+      - 'life-ai-studio/**'
+      - '.github/workflows/life-ai-studio.yml'
+  pull_request:
+    paths:
+      - 'life-ai-studio/**'
+      - '.github/workflows/life-ai-studio.yml'
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: life-ai-studio
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: life-ai-studio/requirements.txt
+      - run: pip install -r requirements.txt
+      - run: python -m compileall -q .
+      - run: node --check public/app.js
+      - run: pytest -q
+      - name: Package standalone repo source
+        run: cd .. && zip -qr life-ai-studio-source.zip life-ai-studio -x 'life-ai-studio/data/*' 'life-ai-studio/**/__pycache__/*'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: privi-life-ai-network-source
+          path: life-ai-studio-source.zip

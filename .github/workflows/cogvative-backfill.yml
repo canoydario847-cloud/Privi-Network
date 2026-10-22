@@ -1,0 +1,31 @@
+# © 2026 Privi World Co. Privi Cogvative Signature™.
+name: Privi Cogvative historical line provenance
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/privi-cogvative-signatures-royalties]
+    paths:
+      - 'life-ai-studio/**'
+      - '.github/workflows/cogvative-backfill.yml'
+jobs:
+  backfill-history:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Reconstruct every available Git-authored text line
+        run: python life-ai-studio/tools/backfill_git.py --root . --output cogvative-git-backfill.jsonl
+      - name: Preserve audit report for manual review
+        uses: actions/upload-artifact@v4
+        with:
+          name: privi-cogvative-git-line-history
+          path: |
+            cogvative-git-backfill.jsonl
+            cogvative-git-backfill.jsonl.summary.json
+          retention-days: 30
