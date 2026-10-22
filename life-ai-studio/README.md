@@ -59,3 +59,44 @@ Privi World Co. Intended new repo name: `privi-life-ai-network`; original Privi 
 
 ### Fee precision and network binding
 Utility fees are recorded in **microcredits**, preserving fractions of credits; the browser displays them in decimal credit units. PRVI settlement configuration also requires `PRVI_GENESIS_BLOCK_HASH` to match block zero, not only a chain ID. Purchase quotes expire after 2 hours; mined transfer blocks must not predate the quote. Network administrators must independently verify all these settings; native-token purchases remain disabled by default.
+
+
+## Team Up, Fast Lane, and multi-chain registry
+
+- **Team Up**: choose 2–6 configured AI providers in a coding project and click
+  "Team Up · Code Together". A parallel task round assigns frontend, backend,
+  testing, security, documentation and integration responsibilities. Every agent
+  receives the same approved project snapshot and an explicit role. Responses
+  become *proposals*; no agent can silently overwrite files or execute code.
+  Human review and versioned conflict detection still apply. This is one
+  simultaneous round, not a claim of live multi-user text cursors.
+- **Fast Answers**: race up to three configured providers concurrently and
+  return the first usable answer, cancelling remaining tasks where possible.
+  Cache identical queries for the same LIFE member, project, agent selection
+  and shared-file versions for 180 seconds. Fast Lane is **classical concurrent
+  scheduling**, with no QPU/quantum processor or speed guarantee. First result
+  may be quicker than waiting for all, but provider API bills can still occur
+  for cancelled requests. LIFE credits charge per dispatched model; exceptions
+  are refunded. Cross-member cache reuse is prohibited.
+- **Swap & Bridges**: read-only asset display and operator-reviewed ERC-20
+  registry via `PRIVI_REVIEWED_ASSETS_JSON`. The PRVI native asset requires
+  separate chain/genesis verification. **Zero live bridge routes, zero swap
+  execution or token approvals**; `POST /api/networks/swap/quote` fails 503.
+  An AI vendor API does not imply a proprietary blockchain or native crypto
+  token. Do not describe unaffiliated GROK, CLAUDE or CHATGPT-ticker tokens as
+  official vendor payment assets.
+
+The next *separate* release gate for swaps would require independent smart
+contract audits, two-chain proofs/finality handling, canonical wrapped asset
+registry, independent relayers, liquidity, rate/oracle limits, replay protection,
+user slippage limits, MEV controls, and jurisdiction/compliance review.
+Do not route user assets to a bridge before those conditions are met.
+
+**Endpoints:** `POST /api/projects/{project_id}/run-team` supports
+`mode="team_up"`; `POST /api/projects/{project_id}/fast-answer` accepts
+`question` and `providers`; `GET /api/networks/assets` lists registered
+assets; `POST /api/networks/swap/quote` rejects all live swaps.
+
+**Testing:** `pytest -q` covers joint concurrent code proposals, distinct
+roles, human merge requirement, fastest-provider racing, fallback, scoped
+cache, refunds, and fail-closed swap/token policy.

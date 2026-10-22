@@ -16,6 +16,8 @@ from pydantic import BaseModel, Field
 
 import agents
 import store
+import fastlane
+import multichain
 
 app = FastAPI(title="Privi LIFE AI Studio", version="0.1.0")
 store.init()
@@ -29,6 +31,7 @@ AGENT_COST = 2
 # through the authenticated /api/internal/charge API after integration.
 UTILITIES = {
     "agent_run": ("Team AI agent execution", 2, True),
+    "fast_answer": ("Fast Lane parallel response", 2, True),
     "code_review": ("Collaborative code review", 2, True),
     "hey_jose": ("Hey Jose assistant", 1, False),
     "life_backup": ("LIFE settings and data backup", 1, False),
@@ -60,6 +63,11 @@ class FileInput(BaseModel):
 class TeamRun(BaseModel):
     task: str = Field(min_length=4, max_length=4500)
     agents: list[str] = Field(min_length=1, max_length=6)
+    mode: str = "parallel"  # team_up gives each member an explicit coding role
+
+class FastAnswerRequest(BaseModel):
+    question: str = Field(min_length=4, max_length=4500)
+    providers: list[str] = Field(min_length=1, max_length=3)
 class QuoteInput(BaseModel):
     credits: int = Field(ge=1, le=1000)
 class RedeemInput(BaseModel):
@@ -287,7 +295,7 @@ def proposals(project_id: str, user=Depends(current)):
                           (project_id,)).fetchall()
     return [{**dict(r), "payload": json.loads(r["payload"])} for r in rows]
 
-async def run_one(run_id, provider, project, task, user_id, snapshots, suggestions):
+async def run_one(run_id, provider, project, task, user_id, snapshots, suggestions, responsibility=""):
     files_context = json.dumps(snapshots, ensure_ascii=False)[:45000]
     instructions = ("You are one of several independent agents working together in Privi LIFE AI Studio. "
         "Only propose changes; NEVER claim to have run code or deployed software. "
@@ -298,7 +306,9 @@ async def run_one(run_id, provider, project, task, user_id, snapshots, suggestio
         "Do not include secrets, private keys, or destructive instructions.")
     prompt = (f"Project: {project['title']} ({project['kind']})\nShared task: {task}\n"
               f"Committed shared files: {files_context}\nOther agent proposals available for review: "
-              f"{json.dumps(suggestions)[:12000]}\nWork on a distinct component where sensible.")
+              f"{json.dumps(suggestions)[:12000]}\nWork on a distinct component where sensible.\n"
+              f"Your assigned Team Up role: {responsibility or 'General collaborator'}. "
+              "Coordinate interfaces through shared requirements. Do not claim another agent approved your code.")
     try:
         result = await agents.generate(provider, instructions, prompt)
         proposed = agents.extract_code_proposal(result) if project["kind"] == "code" else None
@@ -321,6 +331,10 @@ async def run_one(run_id, provider, project, task, user_id, snapshots, suggestio
 @app.post("/api/projects/{project_id}/run-team")
 async def run_team(project_id: str, data: TeamRun, user=Depends(member_wallet)):
     project = own(project_id, user)
+    if data.mode not in ("parallel", "team_up"):
+        fail(400, "Unsupported team mode")
+    if data.mode == "team_up" and (project["kind"] != "code" or len(data.agents) < 2):
+        fail(400, "Team Up requires a coding project and at least two agents")
     if len(set(data.agents)) != len(data.agents):
         fail(400, "Duplicate agents")
     ready = {a["id"] for a in agents.catalog() if a["ready"]}
@@ -328,6 +342,10 @@ async def run_team(project_id: str, data: TeamRun, user=Depends(member_wallet)):
         fail(400, "One or more agents are not configured")
     if any(a not in agents.SERVICES for a in data.agents):
         fail(400, "Unknown agent")
+    roles = ["Frontend & user experience", "Backend & integrations",
+             "Tests & quality assurance", "Security & reliability",
+             "Documentation & developer experience", "System integration"]
+    responsibilities = {provider: roles[i] for i, provider in enumerate(data.agents)} if data.mode == "team_up" else {}
     run_ids = [store.uid("run") for _ in data.agents]
     total = AGENT_COST * len(run_ids)
     with store.transaction() as db:
@@ -340,7 +358,8 @@ async def run_team(project_id: str, data: TeamRun, user=Depends(member_wallet)):
         db.execute("UPDATE users SET credits=credits-? WHERE id=?", (total,user["id"]))
         for run_id, provider in zip(run_ids, data.agents):
             db.execute("INSERT INTO runs (id,project_id,agent,status,task,created) VALUES(?,?,?,?,?,?)",
-                       (run_id, project_id, provider, "running", data.task, store.now()))
+                       (run_id, project_id, provider, "running",
+                        (f"[Team Up: {responsibilities[provider]}] " if responsibilities else "") + data.task, store.now()))
             db.execute("INSERT INTO ledger VALUES (?,?,?,?,?,?,?,?)",
                        (store.uid("led"),user["id"],"charge","agent_run",-AGENT_COST,
                         AGENT_COST*FEE_BPS*100, "run:"+run_id,store.now()))
@@ -350,10 +369,97 @@ async def run_team(project_id: str, data: TeamRun, user=Depends(member_wallet)):
         previews = [dict(r) for r in db.execute(
             "SELECT summary FROM proposals WHERE project_id=? AND status='pending' LIMIT 15",
             (project_id,)).fetchall()]
-    await asyncio.gather(*(run_one(run_id, provider, project, data.task, user["id"], snapshots, previews)
+    await asyncio.gather(*(run_one(run_id, provider, project, data.task, user["id"], snapshots, previews,
+                                        responsibilities.get(provider, ""))
                            for run_id, provider in zip(run_ids, data.agents)))
     return {"runs": list_runs(project_id,user), "proposals": proposals(project_id,user),
+            "mode": data.mode, "assignments": responsibilities,
             "credits": store.get_user(user["id"])["credits"]}
+
+
+@app.get("/api/networks/assets")
+def network_assets(user=Depends(current)):
+    """AI vendors are API providers, not presumed crypto networks."""
+    return multichain.inventory(payconfig())
+
+
+@app.post("/api/networks/swap/quote")
+def swap_quote(user=Depends(member_wallet)):
+    # No real quoted rate, calldata, wallet approvals, or relayer until a
+    # third-party audited bridge and verified token allowlist are integrated.
+    fail(503, "PRVI cross-chain swaps are disabled: no audited route or liquidity source")
+
+
+@app.post("/api/projects/{project_id}/fast-answer")
+async def fast_answer(project_id: str, data: FastAnswerRequest, user=Depends(member_wallet)):
+    project = own(project_id, user)
+    if len(set(data.providers)) != len(data.providers):
+        fail(400, "Duplicate providers")
+    ready = {a["id"] for a in agents.catalog() if a["ready"]}
+    if not set(data.providers).issubset(ready):
+        fail(400, "One or more AI providers are unavailable")
+    # Key includes LIFE member and project ID, question, exact configured
+    # agent selection and accepted file versions. Other members never share cache.
+    with store.transaction() as db:
+        versions = [dict(row) for row in db.execute(
+            "SELECT path,version FROM files WHERE project_id=? ORDER BY path", (project_id,))]
+    context_fingerprint = hashlib.sha256(json.dumps({
+        "uid": user["id"], "project": project_id, "question": data.question,
+        "providers": data.providers, "versions": versions
+    },sort_keys=True).encode()).hexdigest()
+    cached = fastlane.cache.get(context_fingerprint)
+    if cached is not None:
+        return {**cached, "cached": True, "charged_credits": 0}
+
+    run_ids = [store.uid("fast") for _ in data.providers]
+    total = AGENT_COST * len(run_ids)
+    with store.transaction() as db:
+        active = db.execute("SELECT COUNT(*) AS n FROM runs r JOIN projects p ON r.project_id=p.id WHERE p.owner_id=? AND r.status='running'", (user["id"],)).fetchone()["n"]
+        row = db.execute("SELECT credits FROM users WHERE id=?", (user["id"],)).fetchone()
+        if active + len(run_ids) > 12:
+            fail(429, "Too many running agents")
+        if not row or row["credits"] < total:
+            fail(402, "Insufficient Privi utility credits")
+        db.execute("UPDATE users SET credits=credits-? WHERE id=?", (total, user["id"]))
+        for name, run_id in zip(data.providers, run_ids):
+            db.execute("INSERT INTO runs (id,project_id,agent,status,task,created) VALUES (?,?,?,?,?,?)",
+                       (run_id,project_id,name,"running","[Fast Lane] "+data.question,store.now()))
+            db.execute("INSERT INTO ledger VALUES (?,?,?,?,?,?,?,?)",
+                       (store.uid("led"), user["id"], "charge", "fast_answer", -AGENT_COST,
+                        AGENT_COST*FEE_BPS*100, "fast:"+run_id,store.now()))
+
+    async def one_provider(name, run_id):
+        try:
+            reply = await agents.generate(
+                name, "Answer precisely and concisely. Never claim to be a quantum processor. "
+                      "Do not reveal credentials, and separate speculation from facts.",
+                f"Project: {project['title']}\\nQuestion: {data.question}")
+            with store.transaction() as db:
+                db.execute("UPDATE runs SET status='done',output=? WHERE id=?",
+                           (reply[:90000], run_id))
+            return reply
+        except asyncio.CancelledError:
+            # A cancelled dispatched request might have cost provider API tokens.
+            with store.transaction() as db:
+                db.execute("UPDATE runs SET status='cancelled' WHERE id=?", (run_id,))
+            raise
+        except Exception:
+            with store.transaction() as db:
+                db.execute("UPDATE runs SET status='failed',error=? WHERE id=?",
+                           ("AI provider failed", run_id))
+            store.credit(user["id"],AGENT_COST,"FAST_FAILED_REFUND","refund:"+run_id)
+            raise
+    workers = {name: (lambda p=name,r=r_id: one_provider(p,r))
+               for name,r_id in zip(data.providers,run_ids)}
+    try:
+        answer = await fastlane.first_success(workers)
+    except RuntimeError:
+        fail(502,"No selected provider returned an answer")
+    payload = {**answer, "cached": False, "charged_credits": total,
+               "quantum_hardware_used": False, "method": "classical_parallel_first_success"}
+    fastlane.cache.put(context_fingerprint,payload)
+    return payload
+
 
 @app.post("/api/projects/{project_id}/proposals/{proposal_id}/apply")
 def apply_proposal(project_id: str, proposal_id: str, user=Depends(member_wallet)):
