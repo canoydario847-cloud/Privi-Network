@@ -227,5 +227,7 @@ services:
         sync: false
       - key: CALL_PHONE_NUMBER          # the Twilio number you buy, e.g. +18105550100
         sync: false
+      - key: CALL_PHONE_TRIAL           # "true" on the Twilio free trial: number stays off public pages
+        value: "true"
       - key: ANTHROPIC_API_KEY          # optional: answers questions the phone script does not cover
         sync: false

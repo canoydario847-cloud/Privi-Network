@@ -23,7 +23,7 @@ regulators are pressing carriers on — "Know Your Agent" for voice.
 
 | Phase | Privi is legally | Numbers come from | What ships | Gate to the next phase |
 |---|---|---|---|---|
-| **1. Reseller on a CPaaS** (now) | A customer of Twilio/Telnyx/Bandwidth | The upstream provider, in Privi's account | Privi phone line, Privi numbers for agents (sub-accounts), AI receptionist, sealed log, x402 billing | 25 paying number customers or a pilot that needs Privi's own name on calls |
+| **1. Reseller on a CPaaS** (now; start on the Twilio free trial) | A customer of Twilio/Telnyx/Bandwidth | The upstream provider, in Privi's account | Privi phone line, Privi numbers for agents (sub-accounts), AI receptionist, sealed log, x402 billing | 25 paying number customers or a pilot that needs Privi's own name on calls |
 | **2. Interconnected VoIP provider** | A registered voice service provider | Still upstream | Privi's own FCC registrations, own STIR/SHAKEN certificate, Robocall Mitigation Database entry, 911 and CPNI programs | Volume where wholesale rates beat CPaaS retail |
 | **3. Direct numbering access** | VoIP provider holding its own number blocks | NANPA / Pooling Administrator, under FCC authorization | Number inventory, porting, Michigan-first local numbers | Need for own switching / interconnection |
 | **4. Facilities / CLEC** (optional) | Competitive local exchange carrier in Michigan | Own | Own interconnection, possibly quantum-secured trunks (see `../quantum-networking/`) | — |

@@ -185,3 +185,23 @@ def test_intents_and_safety():
     for bad in ("http://example.com/mcp", "https://localhost/mcp", "https://127.0.0.1/mcp", "https://user:pw@example.com/mcp"):
         with pytest.raises(RouteError):
             check_public_endpoint(bad)
+
+
+def test_phone_trial_keeps_number_private(tmp_path):
+    s, store, mcp = make(tmp_path, phone_trial=True)
+    app = mcp.streamable_http_app(stateless_http=True, json_response=True)
+    with TestClient(app) as http:
+        assert "+18105550100" not in http.get("/").text
+        st = http.get("/status").json()
+        assert st["phone"] is None and st["phone_trial"] is True
+        base = {"CallSid": "CA2", "From": "+13134138532", "To": "+18105550100"}
+        url = s.public_url + "/voice/inbound"
+        r = http.post("/voice/inbound", content=urlencode(base), headers={
+            "content-type": "application/x-www-form-urlencoded", "x-twilio-signature": sign(url, base)})
+        assert r.status_code == 200 and "<Gather" in r.text
+
+    async def go():
+        async with Client(mcp) as c:
+            r = await c.call_tool("call_phone_line", {})
+            assert "+18105550100" not in json.dumps(r.structured_content)
+    anyio.run(go)

@@ -5,7 +5,9 @@ Order matters. Each item is one PR unless noted. Use `company/templates/AGENT_TA
 
 ## Now (Phase 1)
 
-- [ ] **STOP: Dario** — buy the Privi phone number (810 area code fits Port Huron) and set `TWILIO_AUTH_TOKEN`, `CALL_PHONE_NUMBER` on `privi-call` in Render.
+- [x] T0. Trial mode for the phone line (`CALL_PHONE_TRIAL`): number hidden from public pages while on the Twilio free trial.
+- [ ] **STOP: Dario** — start the Twilio free trial and test privately (steps in `call-server/README.md`, "Start on the Twilio free trial"). Trial ends 30 days after sign-up.
+- [ ] **STOP: Dario** — after the trial works: upgrade, buy the Privi phone number (810 area code fits Port Huron), set `CALL_PHONE_NUMBER` and `CALL_PHONE_TRIAL=false` on `privi-call` in Render.
 - [ ] T1. Provider adapter interface + Twilio adapter (`providers/`), with fakes for tests. No live purchases in tests.
 - [ ] T2. Numbers table and routing table; `/voice/inbound` routes by dialled number; default route = current Privi line.
 - [ ] T3. MCP tools `number_search`, `number_list`, `number_route` (free) and `number_buy`, `number_release` (x402, closed until CDP keys).

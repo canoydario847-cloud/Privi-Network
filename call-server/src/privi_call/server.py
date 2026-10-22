@@ -318,6 +318,9 @@ def build_server(settings: Settings | None = None, store: Store | None = None, r
     @mcp.tool(title="The Privi phone line", annotations=READ_ONLY)
     def call_phone_line() -> dict[str, Any]:
         """The number humans can call to reach the Privi voice agent (pilots, pricing, or the founder)."""
+        if s.phone_trial:
+            return {"phone": "in private testing (opens to the public soon)", "answers": "24/7 voice agent; says pricing, "
+                    "products, takes pilot requests, and puts callers through to Dario Canoy", "email": "dariocanoy@priviflow.us"}
         return {"phone": s.phone_number or "being set up", "answers": "24/7 voice agent; says pricing, products, "
                 "takes pilot requests, and puts callers through to Dario Canoy", "email": "dariocanoy@priviflow.us"}
 
@@ -410,10 +413,11 @@ def build_server(settings: Settings | None = None, store: Store | None = None, r
     # ---------------- public pages and data ----------------
 
     cors = {"Access-Control-Allow-Origin": "*"}
+    public_phone = "" if s.phone_trial else (s.phone_number or "")
 
     def status_body() -> dict[str, Any]:
         return {"service": "privi-call", "version": __version__, "copyright": COPYRIGHT, "mcp": mcp_url,
-                "phone": s.phone_number or None, "stats": store.stats(), "head": store.head(),
+                "phone": public_phone or None, "phone_trial": s.phone_trial, "stats": store.stats(), "head": store.head(),
                 "pricing": {"privi_agents": "free", "other_agents": f"{s.free_calls_per_day} free calls/day, then "
                             f"${ROUTED_PRICE}/call ({s.pack_credits} for ${s.pack_price_usd} USDC via x402)",
                             "credit_sales_open": s.payments_ready},
@@ -494,7 +498,7 @@ def build_server(settings: Settings | None = None, store: Store | None = None, r
     @mcp.custom_route("/", methods=["GET"], include_in_schema=False)
     async def root(_: Request) -> HTMLResponse:
         return HTMLResponse(page.replace("{{MCP_URL}}", mcp_url)
-                            .replace("{{PHONE}}", s.phone_number or "")
+                            .replace("{{PHONE}}", public_phone)
                             .replace("{{FREE}}", str(s.free_calls_per_day))
                             .replace("{{PACK}}", f"{s.pack_credits:,} calls for ${s.pack_price_usd}"))
 

@@ -3,6 +3,7 @@
 Newest first. One line each: date — decision — who decided — link. Agents add a line when Dario
 decides something in a PR or chat; never edit past lines.
 
+- 2026-10-22 — Start the Privi phone line on the Twilio free trial before paying — Dario
 - 2026-10-22 — Build the agent workspace for the Privi Call carrier and the Privi Quantum Network (this folder) — Dario
 - 2026-10-21 — Privi Call (agent call network + Twilio phone line, sealed call log) built in `call-server/` — Dario
 - 2026-10-21 — Move PRIVI token and Anchor checkpoints to Base until the Privi chain mainnet — Dario

@@ -76,6 +76,7 @@ class Settings:
     voice_insecure: bool = False       # tests only: skip Twilio signature check
     forward_number: str = "+13134138532"
     phone_number: str = ""             # the public Privi line, shown on pages
+    phone_trial: bool = False          # Twilio free trial: only verified numbers can call, so keep the number off public pages
     voice: str = "Polly.Matthew-Neural"
     llm_api_key: str = ""
     llm_model: str = "claude-haiku-5-5"
@@ -108,6 +109,7 @@ class Settings:
         s.voice_insecure = _bool("CALL_VOICE_INSECURE", False)
         s.forward_number = e("CALL_FORWARD_NUMBER", s.forward_number).strip()
         s.phone_number = e("CALL_PHONE_NUMBER", "").strip()
+        s.phone_trial = _bool("CALL_PHONE_TRIAL", False)
         s.voice = e("CALL_VOICE", s.voice)
         s.llm_api_key = e("ANTHROPIC_API_KEY", "").strip()
         s.llm_model = e("CALL_LLM_MODEL", s.llm_model)
