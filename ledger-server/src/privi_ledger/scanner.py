@@ -39,8 +39,10 @@ SCAN_ORG_ID = "org_5ca95ca95ca95ca9"
 SCAN_STREAM = "mcp-registry"
 REPROBE_S = float(os.getenv("SCAN_REPROBE_S", str(6 * 3600)))
 SYNC_S = float(os.getenv("SCAN_SYNC_S", str(6 * 3600)))
-BATCH = int(os.getenv("SCAN_BATCH", "150"))
-WORKERS = int(os.getenv("SCAN_WORKERS", "16"))
+BATCH = int(os.getenv("SCAN_BATCH", "60"))
+WORKERS = int(os.getenv("SCAN_WORKERS", "4"))
+# Pause between probe chunks so a sweep never starves the web server (Render health checks time out at 5 s).
+CHUNK_PAUSE_S = float(os.getenv("SCAN_CHUNK_PAUSE", "0.5"))
 FRESH_S = 3600                      # a check newer than this is served from cache
 LIVE_PROBES_PER_MIN = int(os.getenv("SCAN_LIVE_PER_MIN", "20"))
 MAX_BODY = 2_000_000
@@ -742,8 +744,14 @@ class Scanner:
         batch = self.due(BATCH)
         if not batch:
             return 0
+        results = []
+        chunk = max(1, WORKERS * 2)
         with ThreadPoolExecutor(max_workers=WORKERS) as ex:
-            results = list(ex.map(lambda r: (r["server_id"], self.probe(r["url"])), batch))
+            for i in range(0, len(batch), chunk):
+                part = batch[i:i + chunk]
+                results.extend(ex.map(lambda r: (r["server_id"], self.probe(r["url"])), part))
+                if i + chunk < len(batch) and CHUNK_PAUSE_S > 0:
+                    time.sleep(CHUNK_PAUSE_S)
         changed = 0
         for sid, p in results:
             try:
@@ -752,6 +760,7 @@ class Scanner:
                 changed += int(after.get("tools_hash") != before.get("tools_hash"))
             except Exception as e:
                 print(f"privi-scan: store {sid} failed: {e}", flush=True)
+            time.sleep(0)  # yield the GIL between stores so requests keep being served
         print(f"privi-scan: probed {len(batch)}, {changed} new or changed", flush=True)
         return changed
 

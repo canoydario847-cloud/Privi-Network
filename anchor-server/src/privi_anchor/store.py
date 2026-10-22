@@ -90,6 +90,12 @@ class AnchorStore:
         return self._db.execute("SELECT COUNT(*) FROM batches WHERE chain_id IS ? AND created_at >= ? AND status != 'failed'",
                                 (self.chain_id, since)).fetchone()[0]
 
+    def pending_on_current_chain(self, limit: int = 50) -> list[dict]:
+        """Batches sent on the current chain whose receipt was not seen in time (oldest first)."""
+        rows = self._db.execute("SELECT * FROM batches WHERE chain_id IS ? AND status='pending' AND tx_hash IS NOT NULL "
+                                "ORDER BY batch_id ASC LIMIT ?", (self.chain_id, limit)).fetchall()
+        return [dict(r) for r in rows]
+
     def confirmed_on_current_chain(self) -> int:
         return self._db.execute("SELECT COUNT(*) FROM batches WHERE chain_id IS ? AND status='confirmed'",
                                 (self.chain_id,)).fetchone()[0]

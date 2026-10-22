@@ -323,6 +323,40 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
     return mcp
 
 
+def reconcile_pending(chain, store: AnchorStore, limit: int = 50) -> int:
+    """Settle batches left 'pending' because their receipt took longer than the request waited.
+    Returns how many changed state (confirmed or failed)."""
+    changed = 0
+    for b in store.pending_on_current_chain(limit):
+        try:
+            r = chain.receipt(b["tx_hash"])
+        except Exception:
+            continue
+        if not r:
+            continue
+        ok = int(r.get("status", "0x0"), 16) == 1
+        block = int(r["blockNumber"], 16)
+        ts = chain.block_timestamp(block) if ok else None
+        store.update_batch(b["batch_id"], status="confirmed" if ok else "failed", block_number=block, block_time=ts)
+        changed += 1
+    return changed
+
+
+def start_reconciler(chain, store: AnchorStore, interval_s: float = 120.0) -> None:
+    import threading
+
+    def loop():
+        while True:
+            time.sleep(interval_s)
+            try:
+                n = reconcile_pending(chain, store)
+                if n:
+                    print(f"privi-anchor: settled {n} pending anchor(s)", flush=True)
+            except Exception as e:
+                print(f"privi-anchor: reconcile failed: {e}", flush=True)
+    threading.Thread(target=loop, daemon=True, name="privi-anchor-reconcile").start()
+
+
 def startup_check(settings: Settings, chain: JsonRpcChain, store: AnchorStore) -> None:
     """Log chain health. With ANCHOR_GENESIS=1 and no confirmed anchor yet, wait (in the background)
     until the wallet has gas, then anchor and verify a genesis record on chain."""
@@ -387,6 +421,7 @@ def main() -> None:
     chain = JsonRpcChain(settings.rpc_url, settings.chain_id, settings.private_key) if settings.private_key else None
     if chain:
         startup_check(settings, chain, store)
+        start_reconciler(chain, store)
     mcp = build_server(settings, chain, store)
     if args.stdio:
         mcp.run("stdio")

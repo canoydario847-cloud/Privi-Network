@@ -276,3 +276,23 @@ def test_rpc_sends_user_agent(monkeypatch):
     c.rpc_url, c.timeout, c._id = "https://mainnet.base.org", 5, 0
     assert c.remote_chain_id() == 8453
     assert seen["ua"].startswith("privi-anchor/") and "Python-urllib" not in seen["ua"]
+
+
+def test_pending_batches_settle_in_background(store, monkeypatch):
+    from privi_anchor.server import reconcile_pending
+    monkeypatch.setenv("ANCHOR_ALLOW_LOCAL", "1")
+    chain = FakeChain(mine=False)
+    store.chain_id = chain.chain_id
+
+    async def go():
+        async with Client(build_server(Settings(), chain, store, receipt_timeout=0.2)) as c:
+            r = (await c.call_tool("anchor_hashes", {"hashes": [h("late")]})).structured_content
+            assert r["status"] == "pending"
+    anyio.run(go)
+    assert reconcile_pending(chain, store) == 0          # still not mined: stays pending
+    assert store.find_leaf(h("late"))["status"] == "pending"
+    chain.mine = True
+    assert reconcile_pending(chain, store) == 1          # mined later: settled without anyone calling verify
+    rec = store.find_leaf(h("late"))
+    assert rec["status"] == "confirmed" and rec["block_number"] and rec["block_time"]
+    assert reconcile_pending(chain, store) == 0
