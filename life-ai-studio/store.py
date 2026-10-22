@@ -76,6 +76,46 @@ def init():
           credits INTEGER NOT NULL, amount_wei TEXT NOT NULL, expires INTEGER NOT NULL, created INTEGER NOT NULL,
           used_tx TEXT
         );
+        -- Attestations are append-only per project file version.
+        CREATE TABLE IF NOT EXISTS cog_events (
+          id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, project_id TEXT NOT NULL,
+          path TEXT NOT NULL, version INTEGER NOT NULL, agent TEXT NOT NULL,
+          source TEXT NOT NULL, run_id TEXT, stamp_utc TEXT NOT NULL,
+          content_sha256 TEXT NOT NULL, prev_event_sha256 TEXT,
+          line_manifest_sha256 TEXT NOT NULL, event_hash TEXT NOT NULL UNIQUE,
+          signature_hex TEXT, pubkey_hex TEXT, credit_cost INTEGER,
+          prvi_deploy_wei TEXT, rights_notice TEXT NOT NULL, payload_json TEXT NOT NULL,
+          UNIQUE(project_id,path,version)
+        );
+        CREATE TABLE IF NOT EXISTS cog_lines (
+          event_id TEXT NOT NULL, line_no INTEGER NOT NULL,
+          line_text TEXT NOT NULL, line_sha256 TEXT NOT NULL,
+          author_agent TEXT NOT NULL, author_time TEXT NOT NULL,
+          origin_event TEXT NOT NULL,
+          PRIMARY KEY(event_id,line_no)
+        );
+        CREATE TABLE IF NOT EXISTS cog_claim_challenges (
+          user_id TEXT NOT NULL, project_id TEXT NOT NULL,
+          agent TEXT NOT NULL, wallet TEXT NOT NULL,
+          message TEXT NOT NULL, expires INTEGER NOT NULL,
+          PRIMARY KEY(user_id,project_id,agent)
+        );
+        CREATE TABLE IF NOT EXISTS cog_wallets (
+          user_id TEXT NOT NULL, project_id TEXT NOT NULL,
+          agent TEXT NOT NULL, wallet TEXT NOT NULL,
+          linked_at INTEGER NOT NULL, PRIMARY KEY(user_id,project_id,agent)
+        );
+        CREATE TABLE IF NOT EXISTS cog_royalty_calls (
+          id TEXT PRIMARY KEY, user_id TEXT NOT NULL, project_id TEXT NOT NULL,
+          event_id TEXT NOT NULL, idem TEXT NOT NULL, credits INTEGER NOT NULL,
+          royalty_micros INTEGER NOT NULL, created INTEGER NOT NULL,
+          UNIQUE(user_id,idem)
+        );
+        CREATE TABLE IF NOT EXISTS cog_royalties (
+          call_id TEXT NOT NULL, agent TEXT NOT NULL, credited_wallet TEXT,
+          line_count INTEGER NOT NULL, amount_micros INTEGER NOT NULL,
+          status TEXT NOT NULL, PRIMARY KEY(call_id,agent)
+        );
         CREATE TABLE IF NOT EXISTS redemptions (
           tx_hash TEXT PRIMARY KEY, quote_id TEXT NOT NULL UNIQUE, user_id TEXT NOT NULL,
           credits INTEGER NOT NULL, created INTEGER NOT NULL
