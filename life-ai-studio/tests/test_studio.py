@@ -11,6 +11,7 @@ os.environ["OPENAI_MODEL"] = "mock"
 os.environ["ANTHROPIC_API_KEY"] = "mock-not-a-real-key"
 os.environ["ANTHROPIC_MODEL"] = "mock"
 os.environ["PRVI_MAINNET_PAYMENTS_ENABLED"] = "0"
+os.environ["PRIVI_COGVATIVE_ED25519_SEED"] = "01" * 32
 
 from eth_account import Account
 from eth_account.messages import encode_defunct
@@ -248,3 +249,88 @@ def test_staging_demo_disables_real_wallet_and_payments(monkeypatch):
     finally:
         client.post('/api/auth/logout')
         monkeypatch.setattr(application,'STAGING_MODE',False)
+
+
+def test_cogvative_signs_every_saved_line_and_preserves_inherited_authorship():
+    import cogvative
+    person=member()
+    p=client.post('/api/projects',json={'title':'Cogvative signed code','kind':'code'}).json()['id']
+    one=client.put('/api/projects/'+p+'/files',json={
+        'path':'src/hello.py','content':'alpha = 1\\nbeta = 2\\n','expected_version':0})
+    assert one.status_code==200,one.text
+    assert one.json()['cogvative']['signature_status']=='ed25519_signed'
+    eid=one.json()['cogvative']['event_id']
+    detail=client.get('/api/projects/'+p+'/cogvative/event/'+eid)
+    assert detail.status_code==200
+    assert detail.json()['verification']=='ed25519_verified'
+    assert len(detail.json()['lines'])==2
+    assert all(line['author_agent']=='life-member:'+person['id'] for line in detail.json()['lines'])
+    assert all(line['author_time'].endswith('Z') for line in detail.json()['lines'])
+    assert detail.json()['event']['prvi_deploy_wei'] is None
+    two=client.put('/api/projects/'+p+'/files',json={
+        'path':'src/hello.py','content':'alpha = 1\\nbeta = 3\\n','expected_version':1})
+    assert two.status_code==200,two.text
+    d=client.get('/api/projects/'+p+'/cogvative/event/'+two.json()['cogvative']['event_id']).json()
+    assert d['verification']=='ed25519_verified'
+    assert d['lines'][0]['origin_event']==eid
+    assert d['lines'][1]['origin_event']!=eid
+    assert d['lines'][0]['author_time']==detail.json()['lines'][0]['author_time']
+    assert d['event']['prev_event_sha256']==detail.json()['event']['event_hash']
+
+
+def test_cogvative_agent_proposal_and_royalty_call(monkeypatch):
+    import json
+    user=member()
+    p=client.post('/api/projects',json={'title':'Agent Royalty Code','kind':'code'}).json()['id']
+    async def mocked(provider,instructions,prompt):
+        return json.dumps({'summary':'agent wrote code','files':[{
+            'path':'src/agent.py','content':'x = 10\\ny = x\\n'}]})
+    monkeypatch.setattr(agents,'generate',mocked)
+    run=client.post('/api/projects/'+p+'/run-team',json={
+        'agents':['chatgpt'],'task':'Write one source file'})
+    assert run.status_code==200,run.text
+    signed=client.get('/api/projects/'+p+'/cogvative/proposals')
+    assert signed.status_code==200
+    assert len(signed.json())==1
+    assert signed.json()[0]['signature_hex']
+    proposal=client.get('/api/projects/'+p+'/proposals').json()[0]
+    applied=client.post('/api/projects/'+p+'/proposals/'+proposal['id']+'/apply')
+    assert applied.status_code==200,applied.text
+    events=client.get('/api/projects/'+p+'/cogvative').json()
+    assert len(events)==1
+    assert events[0]['agent']=='chatgpt'
+    assert events[0]['credit_cost']==2
+    eid=events[0]['id']
+    before=client.get('/api/me').json()['credits']
+    first=client.post('/api/projects/'+p+'/cogvative/code-use',json={
+        'event_id':eid,'idempotency_key':'code-call-unique-123456'})
+    assert first.status_code==200,first.text
+    assert first.json()['charged_credits']==1
+    assert first.json()['royalty_micros']==400000
+    second=client.post('/api/projects/'+p+'/cogvative/code-use',json={
+        'event_id':eid,'idempotency_key':'code-call-unique-123456'})
+    assert second.status_code==200
+    assert second.json()['repeat'] is True
+    assert client.get('/api/me').json()['credits']==before-1
+    r=client.get('/api/projects/'+p+'/cogvative/royalty-balances')
+    assert r.status_code==200,r.text
+    assert len(r.json()['amounts'])==1
+    assert r.json()['amounts'][0]['agent']=='chatgpt'
+    assert r.json()['amounts'][0]['amount_micros']==400000
+    assert r.json()['amounts'][0]['status']=='awaiting_wallet_claim'
+    assert client.post('/api/projects/'+p+'/cogvative/code-use',json={
+        'event_id':'bogus','idempotency_key':'code-call-unique-123456'}).status_code==409
+    assert client.post('/api/projects/'+p+'/cogvative/'+eid+'/deployment',json={
+        'tx_hash':'0x'+'a'*64}).status_code==503
+
+
+def test_cogvative_requires_issuer_key_except_explicit_sandbox(monkeypatch):
+    import cogvative
+    person=member()
+    p=client.post('/api/projects',json={'title':'Signing fail closed','kind':'code'}).json()['id']
+    monkeypatch.delenv('PRIVI_COGVATIVE_ED25519_SEED',raising=False)
+    import pytest
+    with pytest.raises(RuntimeError,match="signing key required"):
+        client.put('/api/projects/'+p+'/files',json={
+            'path':'src/cannot.py','content':'a=1\\n','expected_version':0})
+    assert client.get('/api/projects/'+p+'/files').json()==[]

@@ -111,3 +111,57 @@ No provider API keys are configured and no swaps or PRVI purchases can be made
 in ephemeral SQLite, so preview state resets on restart or redeploy. Do not use
 real emails, passwords, personal files, live wallet credentials or customer data.
 This is a UI/functional demonstration, not a public membership launch.
+\n## Privi Cogvative Signature™ — code authorship and royalty metering
+© 2026 Privi World Co (this original platform module); underlying code rights
+remain governed by each contributor's agreement and each component's license.
+
+Every approved code file save and human-approved agent merge now adds an immutable
+`cog_events` record plus EVERY current line in `cog_lines`. Each line carries
+its exact text, SHA-256, first observed agent attribution and UTC timestamp.
+Unchanged lines preserve their earlier recorded attribution through version
+merges. Generated but unapproved agent code receives a separate proposal
+attestation before the human approves it. The signed canonical event includes
+the file version, full content SHA-256, per-line manifest SHA-256, previous event
+hash, run ID/agent, timestamp and LIFE generation credits.
+
+Set `PRIVI_COGVATIVE_ED25519_SEED` to a secure random, server-side 32-byte
+Ed25519 seed encoded as 64 hex digits in a secure environment/secret manager.
+In real (non-sandbox) mode, signing is **required** and writes fail closed
+without the key. Staging explicitly labels unkeyed records HASH-ONLY / UNSIGNED.
+Do not commit or expose signing secrets. Back up keys and plan rotation.
+
+The API shows `prvi_deploy_wei=null` until a *verified real native mainnet
+contract creation receipt*, initiated by the user's bound wallet, is linked
+after confirmations. Gas is `gasUsed * effectiveGasPrice` wei. That receipt
+proves a PRVI-chain deployment occurred but NOT that deployed machine code
+was built from the attested source. Before settlement can be called complete,
+reproducible build and bytecode verification remain required.
+
+`POST /api/projects/{project_id}/cogvative/code-use` charges exactly ONE
+LIFE utility credit once per idempotency key and attributes 40% of the charge
+as pending agent microcredits pro-rata by signed source lines. Privi's existing
+10% service fee remains separately accounted (not added to the one-credit
+price). An agent wallet may be registered only after an EVM signed wallet
+challenge; this proves wallet CONTROL, not affiliation with an AI provider.
+Royalties are bookkeeping, not redeemable PRVI, and payouts are disabled.
+A potential **1 PRVI per call** tariff is stored as a NON-LIVE proposal,
+not charged on-chain. Licensed platform API access is the only metered boundary:
+Privi cannot automatically charge for copied/off-platform code use.
+
+**Legacy whole-repository backfill:** `python life-ai-studio/tools/backfill_git.py
+--root . --output cogvative-git-backfill.jsonl` inventories every accessible
+Git-tracked UTF-8 line (other than binary and secret-named files) using
+`git blame --line-porcelain`. It outputs line hashes and historical Git
+author/commit/times in a downloadable Actions artifact; all historical AI
+identities are marked UNKNOWN/UNVERIFIED, deploy PRVI cost remains UNKNOWN.
+Historical data is not retroactively forged into signed creation events.
+
+**Endpoints:** `/api/cogvative/about`,
+`GET /api/projects/{project_id}/cogvative`,
+`GET /api/projects/{project_id}/cogvative/event/{event_id}`,
+`GET /api/projects/{project_id}/cogvative/proposals`,
+`GET /api/projects/{project_id}/cogvative/royalty-balances`,
+`POST /api/projects/{project_id}/cogvative/code-use`,
+`POST /api/projects/{project_id}/cogvative/{event_id}/deployment`,
+`POST /api/projects/{project_id}/cogvative/{agent}/wallet/challenge`,
+`POST /api/projects/{project_id}/cogvative/{agent}/wallet/link`.

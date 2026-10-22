@@ -96,6 +96,8 @@ def attest(db, ident, owner_id, project_id, path, version, code, agent, source,
     }
     digest = hexdigest(canonical(payload))
     key = signing_key()
+    if not key and os.getenv("LIFE_STAGING_ONLY") != "1":
+        raise RuntimeError("Cogvative signing key required outside sandbox")
     signature = key.sign(bytes.fromhex(digest)).hex() if key else None
     pubkey = (key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw).hex()
               if key else None)
@@ -145,6 +147,29 @@ def verify(event, lines):
     except (ValueError, Exception):
         return False
     return True
+
+
+def sign_agent_proposal(db, proposal_id, path, code, agent, run_id, cost):
+    """Sign agent-produced code as a proposal, prior to human approval."""
+    key=signing_key()
+    if not key and os.getenv("LIFE_STAGING_ONLY") != "1":
+        raise RuntimeError("Cogvative signing key required outside sandbox")
+    stamp=timestamp()
+    lines=[{"line":n+1,"code":line,"sha256":hexdigest(line.encode("utf-8"))}
+           for n,line in enumerate(code.splitlines(keepends=True))]
+    payload={"schema":"privi.cogvative.proposal.v1","proposal_id":proposal_id,
+             "path":path,"agent":agent,"run_id":run_id,"timestamp_utc":stamp,
+             "content_sha256":hexdigest(code.encode("utf-8")),"lines":lines,
+             "life_credits_charged_for_agent_request":cost,
+             "prvi_deploy_gas_wei":None,"rights_notice":NOTICE}
+    digest=hexdigest(canonical(payload))
+    signature=key.sign(bytes.fromhex(digest)).hex() if key else None
+    pubkey=(key.public_key().public_bytes(Encoding.Raw,PublicFormat.Raw).hex()
+            if key else None)
+    db.execute("INSERT INTO cog_proposal_signatures VALUES(?,?,?,?,?,?,?,?,?)",
+               (proposal_id,path,agent,run_id,stamp,digest,signature,pubkey,
+                canonical(payload).decode("utf-8")))
+    return digest
 
 
 def divide_royalties(lines, royalty_micros):

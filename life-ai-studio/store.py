@@ -105,6 +105,18 @@ def init():
           agent TEXT NOT NULL, wallet TEXT NOT NULL,
           linked_at INTEGER NOT NULL, PRIMARY KEY(user_id,project_id,agent)
         );
+        CREATE TABLE IF NOT EXISTS cog_proposal_signatures (
+          proposal_id TEXT NOT NULL, path TEXT NOT NULL, agent TEXT NOT NULL,
+          run_id TEXT NOT NULL, stamp_utc TEXT NOT NULL, event_hash TEXT NOT NULL,
+          signature_hex TEXT, pubkey_hex TEXT, payload_json TEXT NOT NULL,
+          PRIMARY KEY(proposal_id,path)
+        );
+        CREATE TABLE IF NOT EXISTS cog_deployments (
+          tx_hash TEXT PRIMARY KEY, event_id TEXT NOT NULL UNIQUE,
+          chain_id INTEGER NOT NULL, contract_address TEXT NOT NULL,
+          verified_native_gas_wei TEXT NOT NULL, verified_at INTEGER NOT NULL,
+          attribution TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS cog_royalty_calls (
           id TEXT PRIMARY KEY, user_id TEXT NOT NULL, project_id TEXT NOT NULL,
           event_id TEXT NOT NULL, idem TEXT NOT NULL, credits INTEGER NOT NULL,

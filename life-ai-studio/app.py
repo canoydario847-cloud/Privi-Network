@@ -571,7 +571,7 @@ def cogvative_list(project_id: str, user=Depends(current)):
              "deployment_prvi_wei":e["prvi_deploy_wei"]} for e in events]
 
 
-@app.get("/api/projects/{project_id}/cogvative/{event_id}")
+@app.get("/api/projects/{project_id}/cogvative/event/{event_id}")
 def cogvative_detail(project_id: str,event_id: str,user=Depends(current)):
     own(project_id,user)
     with store.transaction() as db:
