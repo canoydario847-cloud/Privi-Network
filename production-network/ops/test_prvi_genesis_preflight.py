@@ -49,6 +49,11 @@ class PreflightTests(unittest.TestCase):
         g["app_state"]["bank"]["supply"] = [None]
         self.assertIn("malformed bank supply coin", check(g)[0])
 
+    def test_native_denom_missing_from_balances(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["balances"][0]["coins"][0]["denom"] = "other"
+        self.assertIn("native PRVI denomination absent from balances", check(g)[0])
+
     def test_missing_balances(self):
         self.assertTrue(check({"app_state": {"bank": {"balances": [], "supply": [{"denom": "aprvi", "amount": "0"}]}}})[0])
 
