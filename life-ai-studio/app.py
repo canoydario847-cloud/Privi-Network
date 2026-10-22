@@ -19,6 +19,7 @@ import agents
 import store
 import fastlane
 import multichain
+import cogvative
 
 app = FastAPI(title="Privi LIFE AI Studio", version="0.1.0")
 store.init()
@@ -36,6 +37,7 @@ UTILITIES = {
     "agent_run": ("Team AI agent execution", 2, True),
     "fast_answer": ("Fast Lane parallel response", 2, True),
     "code_review": ("Collaborative code review", 2, True),
+    "cogvative_code_call": ("Signed code-use royalty allocation", 1, True),
     "hey_jose": ("Hey Jose assistant", 1, False),
     "life_backup": ("LIFE settings and data backup", 1, False),
     "iot_ledger": ("Privi IoT event processing", 1, False),
@@ -76,6 +78,19 @@ class QuoteInput(BaseModel):
 class RedeemInput(BaseModel):
     quote_id: str
     tx_hash: str
+class CogWalletInput(BaseModel):
+    wallet: str
+
+class CogWalletProof(CogWalletInput):
+    signature: str
+
+class CogDeploymentInput(BaseModel):
+    tx_hash: str
+
+class CogUseInput(BaseModel):
+    event_id: str
+    idempotency_key: str = Field(min_length=8, max_length=180)
+
 class InternalCharge(BaseModel):
     user_id: str
     service: str
@@ -309,16 +324,23 @@ def save_file(project_id: str, data: FileInput, user=Depends(member_wallet)):
     except ValueError as exc:
         fail(400, str(exc))
     with store.transaction() as db:
-        row = db.execute("SELECT version FROM files WHERE project_id=? AND path=?",
+        row = db.execute("SELECT version,content FROM files WHERE project_id=? AND path=?",
                          (project_id, path)).fetchone()
         current_version = row["version"] if row else 0
         if current_version != data.expected_version:
             fail(409, "File changed. Refresh to avoid overwriting another agent.")
+        if row and not db.execute(
+              "SELECT 1 FROM cog_events WHERE project_id=? AND path=?",(project_id,path)).fetchone():
+            cogvative.attest(db,store.uid("cog"),user["id"],project_id,path,
+                current_version,row["content"],"historical_author_unverified",
+                "existing_snapshot_observed_now_not_original_creation",credit_cost=None)
         db.execute("INSERT INTO files (project_id,path,content,version) VALUES(?,?,?,?) "
                    "ON CONFLICT(project_id,path) DO UPDATE SET content=excluded.content, "
                    "version=excluded.version",
                    (project_id, path, data.content, current_version+1))
-    return {"path": path, "version": current_version+1}
+        proof = cogvative.attest(db,store.uid("cog"),user["id"],project_id,path,
+                current_version+1,data.content,"life-member:"+user["id"],"member_write",credit_cost=0)
+    return {"path": path, "version": current_version+1, "cogvative": proof}
 
 @app.get("/api/projects/{project_id}/runs")
 def list_runs(project_id: str, user=Depends(current)):
@@ -358,8 +380,12 @@ async def run_one(run_id, provider, project, task, user_id, snapshots, suggestio
                 snapshot_versions = {f["path"]: f["version"] for f in snapshots}
                 proposed["files"] = [{**p, "expected_version": snapshot_versions.get(p["path"],0)}
                                      for p in proposed["files"]]
+                pid=store.uid("patch")
+                for file in proposed["files"]:
+                    cogvative.sign_agent_proposal(db,pid,file["path"],file["content"],
+                                                  provider,run_id,AGENT_COST)
                 db.execute("INSERT INTO proposals VALUES(?,?,?,?,?,?)",
-                           (store.uid("patch"), run_id, project["id"], proposed["summary"],
+                           (pid, run_id, project["id"], proposed["summary"],
                             json.dumps(proposed), "pending"))
     except Exception as exc:
         # Refund failed provider requests; do not expose provider tokens or URLs in errors.
@@ -514,18 +540,246 @@ def apply_proposal(project_id: str, proposal_id: str, user=Depends(member_wallet
         if proposal["status"] != "pending":
             fail(409, "Proposal already closed")
         changed = json.loads(proposal["payload"])["files"]
+        source_run = db.execute("SELECT agent FROM runs WHERE id=?",(proposal["run_id"],)).fetchone()
+        agent_name = source_run["agent"] if source_run else "unknown_agent"
         for f in changed:
             row = db.execute("SELECT version FROM files WHERE project_id=? AND path=?",
                              (project_id, f["path"])).fetchone()
             if (row["version"] if row else 0) != f["expected_version"]:
                 fail(409, "Merge conflict: an agent or member changed "+f["path"])
         for f in changed:
+            prior=db.execute("SELECT content,version FROM files WHERE project_id=? AND path=?",
+                            (project_id,f["path"])).fetchone()
+            if prior and not db.execute("SELECT 1 FROM cog_events WHERE project_id=? AND path=?",
+                                        (project_id,f["path"])).fetchone():
+                cogvative.attest(db,store.uid("cog"),user["id"],project_id,f["path"],
+                    prior["version"],prior["content"],"historical_author_unverified",
+                    "existing_snapshot_observed_now_not_original_creation",credit_cost=None)
             db.execute("INSERT INTO files VALUES(?,?,?,?) "
                        "ON CONFLICT(project_id,path) DO UPDATE SET "
                        "content=excluded.content,version=excluded.version",
                        (project_id,f["path"],f["content"],f["expected_version"]+1))
+            cogvative.attest(db,store.uid("cog"),user["id"],project_id,f["path"],
+                f["expected_version"]+1,f["content"],agent_name,"agent_proposal_approved",
+                run_id=proposal["run_id"],credit_cost=AGENT_COST)
         db.execute("UPDATE proposals SET status='applied' WHERE id=?", (proposal_id,))
     return {"status": "applied", "files": [f["path"] for f in changed]}
+
+
+@app.get("/api/cogvative/about")
+def cogvative_about():
+    return {"feature":cogvative.BRAND,"rights_notice":cogvative.NOTICE,
+        "royalty_bps":cogvative.ROYALTY_BPS,
+        "code_use_credit_charge":cogvative.CALL_CREDITS,
+        "proposed_prvi_per_call_wei":str(cogvative.PROPOSED_PRVI_PER_CALL_WEI),
+        "prvi_real_transfer_enabled":False,"agent_payout_enabled":False,
+        "verified_git_history_does_not_prove_ai_authorship":True,
+        "platform_tracking_only":True,
+        "ed25519_signatures_configured":cogvative.signing_key() is not None,
+        "deployment_gas": "unknown until a cryptographically verified deployment receipt is attached"}
+
+
+@app.get("/api/projects/{project_id}/cogvative")
+def cogvative_list(project_id: str, user=Depends(current)):
+    own(project_id,user)
+    with store.transaction() as db:
+        events=db.execute("SELECT id,path,version,agent,source,stamp_utc,"
+           "event_hash,signature_hex,pubkey_hex,credit_cost,prvi_deploy_wei,rights_notice "
+           "FROM cog_events WHERE project_id=? ORDER BY rowid DESC LIMIT 200",(project_id,)).fetchall()
+    return [{**dict(e),"signature_status":"ed25519_signed" if e["signature_hex"] else "hash_only_unsigned",
+             "deployment_prvi_wei":e["prvi_deploy_wei"]} for e in events]
+
+
+@app.get("/api/projects/{project_id}/cogvative/event/{event_id}")
+def cogvative_detail(project_id: str,event_id: str,user=Depends(current)):
+    own(project_id,user)
+    with store.transaction() as db:
+        e=db.execute("SELECT * FROM cog_events WHERE project_id=? AND id=?",
+                     (project_id,event_id)).fetchone()
+        if not e: fail(404,"Signature not found")
+        lines=[dict(r) for r in db.execute(
+            "SELECT line_no,line_text,line_sha256,author_agent,author_time,origin_event "
+            "FROM cog_lines WHERE event_id=? ORDER BY line_no",(event_id,))]
+    result=cogvative.verify(e,lines)
+    return {"event":dict(e),"lines":lines,"verification":
+        "ed25519_verified" if result is True else
+        "hash_integrity_only_unverified_issuer" if result is None else "INVALID"}
+
+
+
+@app.get("/api/projects/{project_id}/cogvative/proposals")
+def cogvative_proposal_signatures(project_id: str,user=Depends(current)):
+    own(project_id,user)
+    with store.transaction() as db:
+        rows=db.execute("SELECT s.proposal_id,s.path,s.agent,s.run_id,s.stamp_utc,s.event_hash,"
+           "s.signature_hex,s.pubkey_hex FROM cog_proposal_signatures s "
+           "JOIN proposals p ON p.id=s.proposal_id WHERE p.project_id=?",
+           (project_id,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.post("/api/projects/{project_id}/cogvative/{event_id}/deployment")
+async def record_cogvative_deployment(project_id: str,event_id: str,data: CogDeploymentInput,
+                                      user=Depends(member_wallet)):
+    """Record receipt-verified *gas*, never unverified source/bytecode equivalence."""
+    own(project_id,user)
+    config=payconfig()
+    if not config: fail(503,"Verified native PRVI mainnet unavailable")
+    if not re.fullmatch(r"0x[a-fA-F0-9]{64}",data.tx_hash):
+        fail(400,"Invalid transaction hash")
+    await verify_chain(config)
+    chain,rpc_url,treasury,unit,confirms,genesis=config
+    tx=await rpc(rpc_url,"eth_getTransactionByHash",[data.tx_hash])
+    receipt=await rpc(rpc_url,"eth_getTransactionReceipt",[data.tx_hash])
+    tip=await rpc(rpc_url,"eth_blockNumber",[])
+    if not tx or not receipt or not tx.get("blockNumber"):
+        fail(409,"Transaction is not mined")
+    block=await rpc(rpc_url,"eth_getBlockByNumber",[tx["blockNumber"],False])
+    if (tx.get("from","").lower()!=user["wallet"].lower() or tx.get("to") is not None
+        or receipt.get("status")!="0x1"
+        or not re.fullmatch(r"0x[0-9a-fA-F]{40}",receipt.get("contractAddress") or "")
+        or receipt.get("transactionHash","").lower()!=data.tx_hash.lower()
+        or receipt.get("blockHash")!=tx.get("blockHash")
+        or not block or block.get("hash")!=tx.get("blockHash")
+        or int(tip,16)-int(receipt["blockNumber"],16)+1<confirms):
+        fail(409,"Not a confirmed wallet-owned Privi contract deployment receipt")
+    gas=int(receipt["gasUsed"],16)*int(receipt["effectiveGasPrice"],16)
+    if gas<=0: fail(409,"Invalid verified gas amount")
+    with store.transaction() as db:
+        event=db.execute("SELECT * FROM cog_events WHERE id=? AND owner_id=? AND project_id=?",
+                         (event_id,user["id"],project_id)).fetchone()
+        if not event: fail(404,"Signature not found")
+        if db.execute("SELECT 1 FROM cog_deployments WHERE tx_hash=? OR event_id=?",
+                      (data.tx_hash.lower(),event_id)).fetchone():
+            fail(409,"Deployment receipt already attributed")
+        db.execute("INSERT INTO cog_deployments VALUES(?,?,?,?,?,?,?)",
+                   (data.tx_hash.lower(),event_id,chain,receipt["contractAddress"].lower(),
+                    str(gas),store.now(),
+                    "verified_contract_creation_from_member; source_build_equivalence_not_proven"))
+        db.execute("UPDATE cog_events SET prvi_deploy_wei=? WHERE id=?",(str(gas),event_id))
+    return {"event_id":event_id,"gas_paid_wei":str(gas),"native_token":"PRVI",
+            "source_build_equivalence_proven":False,
+            "receipt_verified":True}
+
+
+@app.post("/api/projects/{project_id}/cogvative/{agent}/wallet/challenge")
+def cogvative_wallet_challenge(project_id: str,agent: str,data: CogWalletInput,
+                              user=Depends(member_wallet)):
+    own(project_id,user)
+    if STAGING_MODE:
+        fail(403,"Real payout wallets are disabled in valueless sandbox")
+    if not re.fullmatch(r"[a-zA-Z0-9_-]{2,64}",agent):
+        fail(400,"Invalid agent")
+    if not re.fullmatch(r"0x[a-fA-F0-9]{40}",data.wallet) or int(data.wallet,16)==0:
+        fail(400,"Invalid wallet")
+    expires=store.now()+300
+    wallet=data.wallet.lower()
+    nonce=secrets.token_urlsafe(24)
+    message=(f"Privi Cogvative Signature agent royalty payout wallet claim\\n"
+             f"Origin: {ORIGIN}\\nMember: {user['id']}\\nProject: {project_id}\\n"
+             f"Agent: {agent}\\nWallet: {wallet}\\nNonce: {nonce}\\nExpires: {expires}\\n"
+             "Wallet control proof only, NOT an AI provider endorsement or token payout.")
+    with store.transaction() as db:
+        db.execute("INSERT INTO cog_claim_challenges VALUES(?,?,?,?,?,?) "
+                   "ON CONFLICT(user_id,project_id,agent) DO UPDATE SET "
+                   "wallet=excluded.wallet,message=excluded.message,expires=excluded.expires",
+                   (user["id"],project_id,agent,wallet,message,expires))
+    return {"message":message,"wallet":wallet,"expires":expires}
+
+
+@app.post("/api/projects/{project_id}/cogvative/{agent}/wallet/link")
+def cogvative_wallet_link(project_id: str,agent: str,data: CogWalletProof,
+                         user=Depends(member_wallet)):
+    own(project_id,user)
+    if STAGING_MODE: fail(403,"Payout wallets disabled in sandbox")
+    with store.transaction() as db:
+        challenge=db.execute(
+            "SELECT * FROM cog_claim_challenges WHERE user_id=? AND project_id=? "
+            "AND agent=? AND wallet=? AND expires>?",
+            (user["id"],project_id,agent,data.wallet.lower(),store.now())).fetchone()
+        if not challenge: fail(400,"Missing/expired wallet proof")
+        try:
+            from eth_account.messages import encode_defunct
+            recovered=Account.recover_message(encode_defunct(text=challenge["message"]),
+                                               signature=data.signature).lower()
+        except Exception:
+            fail(400,"Signature could not be recovered")
+        if not hmac.compare_digest(recovered,challenge["wallet"]):
+            fail(403,"Payout wallet proof mismatch")
+        db.execute("INSERT INTO cog_wallets VALUES(?,?,?,?,?) ON CONFLICT(user_id,project_id,agent) "
+                   "DO UPDATE SET wallet=excluded.wallet,linked_at=excluded.linked_at",
+                   (user["id"],project_id,agent,recovered,store.now()))
+        db.execute("DELETE FROM cog_claim_challenges WHERE user_id=? AND project_id=? AND agent=?",
+                   (user["id"],project_id,agent))
+    return {"agent":agent,"wallet":recovered,"verified_control":True,"payout_live":False,
+            "provider_endorsement_verified":False}
+
+
+@app.get("/api/projects/{project_id}/cogvative/royalty-balances")
+def cogvative_royalties(project_id: str,user=Depends(current)):
+    own(project_id,user)
+    with store.transaction() as db:
+        rows=db.execute("SELECT r.agent,r.credited_wallet,r.status,"
+           "SUM(r.amount_micros) AS amount_micros,SUM(r.line_count) AS credited_lines "
+           "FROM cog_royalties r JOIN cog_royalty_calls c ON c.id=r.call_id "
+           "WHERE c.project_id=? GROUP BY r.agent,r.credited_wallet,r.status",
+           (project_id,)).fetchall()
+    return {"unit":"valueless LIFE microcredits accounting until real PRVI settlement",
+            "amounts":[dict(row) for row in rows],"real_prvi_distributed":False}
+
+
+@app.post("/api/projects/{project_id}/cogvative/code-use")
+def cogvative_code_use(project_id: str,data: CogUseInput,user=Depends(member_wallet)):
+    """Meter an authorized platform code-access call; never execute arbitrary AI code.
+
+    Royalties accrue to signed wallet claims as accounting entries only.
+    No PRVI mint, PRVI debit, transfer or custody can occur here.
+    """
+    own(project_id,user)
+    cost=cogvative.CALL_CREDITS
+    with store.transaction() as db:
+        prior=db.execute("SELECT * FROM cog_royalty_calls WHERE user_id=? AND idem=?",
+                         (user["id"],data.idempotency_key)).fetchone()
+        if prior:
+            if prior["project_id"]!=project_id or prior["event_id"]!=data.event_id:
+                fail(409,"Idempotency key reused for different code")
+            return {"call_id":prior["id"],"charged_credits":prior["credits"],
+                    "repeat":True,"real_prvi_paid":False}
+        event=db.execute("SELECT * FROM cog_events WHERE project_id=? AND id=?",
+                         (project_id,data.event_id)).fetchone()
+        if not event: fail(404,"Code attestation not found")
+        approved=db.execute("SELECT version FROM files WHERE project_id=? AND path=?",
+                            (project_id,event["path"])).fetchone()
+        if not approved or approved["version"]!=event["version"]:
+            fail(409,"Select the latest approved code attestation")
+        lines=[dict(r) for r in db.execute("SELECT * FROM cog_lines WHERE event_id=? ORDER BY line_no",
+                                          (data.event_id,)).fetchall()]
+        if not lines: fail(400,"No code lines to license")
+        if cogvative.verify(event,lines) is False:
+            fail(409,"Code attestation verification failed")
+        payer=db.execute("SELECT credits FROM users WHERE id=?",(user["id"],)).fetchone()
+        if payer["credits"]<cost: fail(402,"Insufficient LIFE credits")
+        call_id=store.uid("call")
+        royalty_micros=cost*cogvative.ROYALTY_BPS*100
+        db.execute("UPDATE users SET credits=credits-? WHERE id=?",(cost,user["id"]))
+        db.execute("INSERT INTO ledger VALUES(?,?,?,?,?,?,?,?)",
+                   (store.uid("led"),user["id"],"charge","cogvative_code_call",-cost,
+                    cost*FEE_BPS*100,data.idempotency_key,store.now()))
+        db.execute("INSERT INTO cog_royalty_calls VALUES(?,?,?,?,?,?,?,?)",
+                   (call_id,user["id"],project_id,event["id"],data.idempotency_key,
+                    cost,royalty_micros,store.now()))
+        allocations=cogvative.divide_royalties(lines,royalty_micros)
+        for agent,line_count,amount in allocations:
+            claim=db.execute("SELECT wallet FROM cog_wallets WHERE user_id=? AND project_id=? "
+                             "AND agent=?",(user["id"],project_id,agent)).fetchone()
+            wallet=claim["wallet"] if claim else None
+            db.execute("INSERT INTO cog_royalties VALUES(?,?,?,?,?,?)",
+                       (call_id,agent,wallet,line_count,amount,
+                        "accrued_unpaid" if wallet else "awaiting_wallet_claim"))
+    return {"call_id":call_id,"charged_credits":cost,"repeat":False,
+            "royalty_micros":royalty_micros,"real_prvi_paid":False,
+            "payout_status":"accrued_only_not_transferred"}
+
 
 @app.get("/api/wallet/ledger")
 def ledger(user=Depends(current)):
