@@ -14,6 +14,8 @@ import urllib.error
 import urllib.request
 from typing import Any, Protocol
 
+_VERSION = "0.4.1"
+
 
 class Chain(Protocol):
     chain_id: int
@@ -47,7 +49,8 @@ class JsonRpcChain:
         req = urllib.request.Request(
             self.rpc_url,
             data=json.dumps({"jsonrpc": "2.0", "id": self._id, "method": method, "params": params}).encode(),
-            headers={"Content-Type": "application/json"}, method="POST",
+            headers={"Content-Type": "application/json", "User-Agent": f"privi-anchor/{_VERSION} (+https://privi-anchor.onrender.com)"},
+            method="POST",
         )
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as r:
