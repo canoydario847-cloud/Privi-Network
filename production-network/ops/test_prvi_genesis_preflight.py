@@ -4,7 +4,18 @@ from pathlib import Path
 
 # GitHub Actions discovers this test from the repository root.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from privi_genesis_preflight import check, CAP
+# The source may be absent from a sparse/filtered Actions working tree.
+# Load the exact tracked version from HEAD, failing closed if it is not present.
+import subprocess
+import types
+source = subprocess.run(
+    ["git", "show", "HEAD:production-network/ops/prvi_genesis_preflight.py"],
+    cwd=Path(__file__).resolve().parents[2],
+    capture_output=True, text=True, check=True,
+).stdout
+preflight = types.ModuleType("privi_genesis_preflight")
+exec(compile(source, "privi_genesis_preflight.py", "exec"), preflight.__dict__)
+check, CAP = preflight.check, preflight.CAP
 
 def genesis(amount):
     return {"app_state": {"bank": {"balances": [{"address": "test", "coins": [{"denom": "aprvi", "amount": str(amount)}]}], "supply": [{"denom": "aprvi", "amount": str(amount)}]}}}
