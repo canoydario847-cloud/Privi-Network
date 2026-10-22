@@ -46,7 +46,7 @@ def check(genesis):
             seen_denoms.add(denom)
             amount_any = coin.get("amount")
             if not isinstance(amount_any, str) or not amount_any.isascii() or not amount_any.isdecimal() or (len(amount_any) > 1 and amount_any.startswith("0")):
-                errors.append("noncanonical coin amount")
+                errors.append("noncanonical native amount" if denom == DENOM else "noncanonical coin amount")
                 continue
             value = int(amount_any)
             if value <= 0:
