@@ -30,6 +30,8 @@ Built by **Dario Canoy**, Privi World Co, Port Huron, Michigan. Live status of e
 | `sites/` | Product websites and the Privi Hub | — | — |
 | `production-network/`, `jose-*` | Privi EVM chain (id 262144) and Jose Coin (JOSE) on Base | | |
 
+**Building Privi with AI agents:** start at [AGENTS.md](AGENTS.md) — includes the [Privi Call carrier](company/telecom/README.md) and [Privi Quantum Network](company/quantum-networking/README.md) playbooks.
+
 **For AI agents:** [llms.txt](https://privi-discovery.onrender.com/llms.txt) · [A2A card](https://privi-discovery.onrender.com/.well-known/agent.json) · [MCP manifest](https://privi-discovery.onrender.com/.well-known/mcp.json) · server cards at `/.well-known/mcp/server-card.json` on each server.
 
 Contact: dariocanoy@priviflow.us. Owner wallet: `0x1990589FD200E043b8C6FD9ec5956c61b3071048`. MIT licensed.
