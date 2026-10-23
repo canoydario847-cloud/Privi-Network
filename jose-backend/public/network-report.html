@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Jose AI | Privi Network Report Card</title>
+<meta name="description" content="Jose monitors Privi web services every five seconds, grades observed availability and shows nonfinancial participation credits.">
+<link rel="stylesheet" href="/network-report.css">
+</head>
+<body>
+<header class="nav"><a href="https://jose-site.onrender.com" class="brand">JOSE<span>AI</span></a><nav><a href="/dashboard.html">My apps</a><a href="https://privi-hub.onrender.com">Privi Hub</a></nav></header>
+<main>
+<section class="intro">
+<div class="eyebrow"><span class="pulse"></span> JOSE WATCH · AUTOMATED SERVICE MONITOR</div>
+<h1>Privi Network <em>Report Card</em></h1>
+<p class="lead">Jose checks six Privi service endpoints every <strong>5 seconds</strong> and reports what actually responded. Monitoreo de servicios Privi en tiempo real.</p>
+<div class="fine">Observed HTTP service availability only. This is not proof of PRVI mainnet, PoP consensus, independent validators, or issuance.</div>
+</section>
+<section class="overview" aria-label="Current report">
+<div class="grade-block"><div class="label">NETWORK SERVICE GRADE</div><div class="grade" id="grade">N/A</div><div id="grade-state" class="muted">Starting monitor...</div></div>
+<div class="metric"><div class="label">HEALTH SCORE</div><div class="metric-value" id="score">—</div><div class="muted">Measured availability + latency</div></div>
+<div class="metric"><div class="label">RESPONDING NOW</div><div class="metric-value" id="responding">—</div><div class="muted">Across monitored services</div></div>
+<div class="metric"><div class="label">LAST CHECK</div><div class="metric-value small" id="checked">—</div><div class="muted" id="observations">Waiting for measurements</div></div>
+</section>
+<section class="briefing"><div class="brief-head">JOSE'S AUTOMATED BRIEFING</div><p id="briefing" role="status">Gathering initial network checks.</p></section>
+<section class="details">
+<div class="section-top"><div><div class="eyebrow">SERVICE OBSERVABILITY</div><h2>Individual report cards</h2></div><span class="muted">Five-second server probes · last 10 minutes maximum</span></div>
+<div id="services" class="services" aria-live="polite"><p>Awaiting checks...</p></div>
+<div class="trend"><div class="section-top"><strong>Recent checks</strong><span class="muted">Green = all 6 responding; amber = partial; red = outage</span></div><div id="trend" class="trend-cells" aria-label="Recent health history"></div></div>
+</section>
+<section class="reward-section">
+<div class="section-top"><div><div class="eyebrow">PRIVI PARTICIPATION · BETA</div><h2>Duration &amp; Call Rewards</h2></div><span class="chip">NOT REAL PRVI</span></div>
+<p class="muted maxtext">Signed-in users and configured AI agents can accumulate <strong>nontransferable, nonredeemable participation credits</strong> for eligible connected time and authenticated network-report inspections. Up to 1 credit per verified minute and 2 credits per qualified inspection, with strict daily caps. No real PRVI is minted or promised.</p>
+<div class="participation-signal"><div><div class="label">AUTHENTICATED PARTICIPATION · PAST 60 SECONDS</div><strong id="active-participants">0</strong><span class="muted" id="participation-detail">0 users · 0 agents</span></div><p class="muted">A growing number of qualified connected accounts indicates ecosystem engagement. It does <strong>not</strong> improve the infrastructure grade or prove PoP validators are online.</p></div>
+<div id="reward-guest"><a class="button" href="/login.html?next=network-report.html">Sign in to track your participation</a></div>
+<div id="reward-member" hidden>
+<div class="reward-grid">
+<div><div class="label">BETA CREDITS</div><div class="metric-value" id="credits">0</div></div>
+<div><div class="label">QUALIFIED MINUTES</div><div class="metric-value" id="minutes">0</div></div>
+<div><div class="label">QUALIFIED INSPECTIONS</div><div class="metric-value" id="inspections">0</div></div>
+<div><div class="label">TODAY'S CONNECTED MINUTES</div><div class="metric-value" id="today-minutes">0</div></div>
+</div>
+<div class="actions"><button id="inspect" type="button" class="button">Run Jose report inspection</button><span id="reward-status" role="status" class="muted"></span></div>
+<ol id="activity" class="activity"></ol>
+</div>
+</section>
+<section class="method"><h2>How grading and credits work</h2><p>Each grade is computed from monitored HTTP availability, response speed, and the most recent probe results. A grade appears only after at least three fresh cycles; stale or missing data is marked unavailable. User heartbeats never increase the availability grade. Participation credits are account-level, rate-limited, capped daily, and not an on-chain asset.</p><p><strong>Always-on limitation:</strong> the five-second task runs only while Jose's backend process is active. On a sleeping or restarted free server, monitoring pauses and its recent history resets. For continuous 24/7 monitoring, use a persistent paid instance, external uptime checks, durable database and alert delivery.</p></section>
+<footer>© 2026 Privi World Corp · Jose AI monitoring use case · <a href="https://privi-hub.onrender.com/ownership.html">Code ownership &amp; licensing</a></footer>
+</main>
+<script type="module" src="/network-report.js"></script>
+</body></html>

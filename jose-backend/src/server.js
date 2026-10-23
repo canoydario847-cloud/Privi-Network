@@ -6,6 +6,8 @@ import crypto from 'crypto';
 import { db } from './store.js';
 import { hashPassword, verifyPassword, encryptSecret, decryptSecret, randomToken } from './crypto-utils.js';
 import { plugins, getPlugin } from './plugins/index.js';
+import { createNetworkMonitor } from './network-monitor.js';
+import { createParticipationEngine, getAgentActor, POLICY } from './participation.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '../public');
@@ -19,8 +21,30 @@ const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 // CSRF attempts. In-memory is fine: a connect flow finishes in minutes.
 const pendingOAuth = new Map();
 
+// Jose checks ONLY fixed, server-owned Privi endpoints every five seconds.
+// These are web-service checks, not native blockchain quorum verification.
+const monitor = createNetworkMonitor();
+const participation = createParticipationEngine({ store: db });
+
+function participationActor(req) {
+  // Explicit invalid Bearer credentials must never fall back to a browser cookie.
+  if (req.headers.authorization) return getAgentActor(req.headers.authorization);
+  const user = getCurrentUser(req);
+  return user ? 'user:' + user.id : null;
+}
+
+function canMutateParticipation(req) {
+  if (!req.headers.origin) return Boolean(req.headers.authorization);
+  try {
+    const origin = new URL(req.headers.origin);
+    return (origin.protocol === 'https:' ||
+      (origin.protocol === 'http:' && origin.hostname === 'localhost')) &&
+      origin.host === req.headers.host;
+  } catch { return false; }
+}
+
 function sendJson(res, status, obj) {
-  res.writeHead(status, { 'Content-Type': 'application/json' });
+  res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
   res.end(JSON.stringify(obj));
 }
 
@@ -136,6 +160,43 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { email: user.email, plugins: publicPluginList(user) });
     }
 
+    // ---- Jose live service report card and beta participation credits ----
+    if (req.method === 'GET' && url.pathname === '/health') {
+      return sendJson(res, 200, { ok: true, service: 'jose-backend',
+        monitorRunning: true, realPrviIssued: false });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/network/report-card') {
+      return sendJson(res, 200, {
+        ...monitor.report(),
+        participation: participation.activeSummary(),
+      });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/rewards/policy') {
+      return sendJson(res, 200, {
+        ...POLICY,
+        eligibility: 'Authenticated sessions or preconfigured agent Bearer tokens only',
+      });
+    }
+    if (url.pathname === '/api/rewards/me' && req.method === 'GET') {
+      const actor = participationActor(req);
+      if (!actor) return sendJson(res, 401, { error: 'Authentication required.' });
+      return sendJson(res, 200, participation.get(actor, monitor.report()));
+    }
+    if (url.pathname === '/api/rewards/heartbeat' && req.method === 'POST') {
+      const actor = participationActor(req);
+      if (!actor) return sendJson(res, 401, { error: 'Authentication required.' });
+      if (!canMutateParticipation(req)) return sendJson(res, 403, { error: 'Origin not permitted.' });
+      return sendJson(res, 200, participation.heartbeat(actor, monitor.report()));
+    }
+    if (url.pathname === '/api/network/inspect' && req.method === 'POST') {
+      const actor = participationActor(req);
+      if (!actor) return sendJson(res, 401, { error: 'Authentication required.' });
+      if (!canMutateParticipation(req)) return sendJson(res, 403, { error: 'Origin not permitted.' });
+      const report = monitor.report();
+      const result = participation.inspect(actor, report);
+      return sendJson(res, 200, { ...result, report });
+    }
+
     // ---- plugin connect / callback (real OAuth, per plugins/*.js) ----
     if (req.method === 'GET' && url.pathname.startsWith('/connect/')) {
       const user = getCurrentUser(req);
@@ -214,7 +275,8 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Jose backend listening on ${BASE_URL}`);
+  monitor.start();
+  console.log(`Jose backend listening on ${BASE_URL} — network checks every 5 seconds while process is running`);
   for (const p of plugins) {
     console.log(`  ${p.name}: ${p.isConfigured() ? 'configured' : `NOT configured (missing ${p.missingEnvVars().join(', ')})`}`);
   }
