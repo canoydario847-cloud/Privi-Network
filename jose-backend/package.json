@@ -1,11 +1,12 @@
 {
   "name": "jose-backend",
   "version": "1.0.0",
-  "description": "Jose account + plugin/OAuth backend — WhatsApp Business, WeChat, Mercado Libre",
+  "description": "Jose multilingual assistant, Privi five-second health report card and verified-duration participation credits",
   "type": "module",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "test": "node --test test/*.test.js"
   },
-  "license": "MIT"
+  "license": "SEE LICENSE IN ../LICENSE"
 }
