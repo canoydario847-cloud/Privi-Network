@@ -65,6 +65,27 @@ jobs:
           GOTOOLCHAIN=local go build -mod=mod -p 2 -trimpath \
             -o "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY" ./cmd/evmd
           test -s "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY"
+          # Prove the built CUSTOM binary itself rejects the upstream developer
+          # EVM chain identity. Isolate home/logs in the disposable CI runner.
+          # A timeout or any unrelated startup error is a FAILURE, not proof.
+          set +e
+          timeout 30s "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY" start \
+            --home "$RUNNER_TEMP/privi-invalid-chainid-home" \
+            --evm-chain-id 262144 \
+            > "$RUNNER_TEMP/privi-rejected-chain.log" 2>&1
+          reject_status=$?
+          set -e
+          if [ "$reject_status" -eq 0 ] || [ "$reject_status" -eq 124 ]; then
+            echo "Custom binary did not promptly reject upstream developer EVM chain ID" >&2
+            cat "$RUNNER_TEMP/privi-rejected-chain.log"
+            exit 1
+          fi
+          if ! grep -q 'PRVI EVM chain identity rejected' "$RUNNER_TEMP/privi-rejected-chain.log"; then
+            echo "Custom PRVI chain-ID guard did not trigger (unrelated error?)" >&2
+            cat "$RUNNER_TEMP/privi-rejected-chain.log"
+            exit 1
+          fi
+          echo "Custom PRVI binary rejected upstream dev EVM chain identity, as required."
           sha256sum "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY"
           GOTOOLCHAIN=local go version -m "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY" \
             > "$RUNNER_TEMP/privi-sdk-build-info.txt"
