@@ -1,0 +1,56 @@
+name: Jose LIVE report card read-only deployment smoke
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/jose-live-reportcard-smoke.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  live-reportcard:
+    name: Verify deployed Jose live health and nonfinancial policy (read-only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Request public Jose health, report card, policy and page
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 3 --retry-delay 5 \
+            --max-time 45 https://jose-backend-vbuu.onrender.com/health > /tmp/jose-health.json
+          curl --fail --silent --show-error --location --retry 3 --retry-delay 5 \
+            --max-time 45 https://jose-backend-vbuu.onrender.com/api/network/report-card > /tmp/jose-report1.json
+          curl --fail --silent --show-error --location --retry 3 --retry-delay 5 \
+            --max-time 45 https://jose-backend-vbuu.onrender.com/api/rewards/policy > /tmp/jose-policy.json
+          curl --fail --silent --show-error --location --retry 3 --retry-delay 5 \
+            --max-time 45 https://jose-backend-vbuu.onrender.com/network.html > /tmp/jose-page.html
+      - name: Verify actual network observation advances over the 5-second interval
+        run: |
+          set -euo pipefail
+          sleep 9
+          curl --fail --silent --show-error --location --retry 3 --retry-delay 5 \
+            --max-time 45 https://jose-backend-vbuu.onrender.com/api/network/report-card > /tmp/jose-report2.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          health=json.loads(Path('/tmp/jose-health.json').read_text())
+          first=json.loads(Path('/tmp/jose-report1.json').read_text())
+          report=json.loads(Path('/tmp/jose-report2.json').read_text())
+          policy=json.loads(Path('/tmp/jose-policy.json').read_text())
+          html=Path('/tmp/jose-page.html').read_text()
+          assert health['ok'] is True and health['service']=='jose-backend'
+          assert report['monitoringScope']=='APPLICATION_SERVICES_ONLY'
+          assert report['consensusHealthVerified'] is False
+          assert report['financialMainnetActivated'] is False
+          assert report['financialRewardClaimsAllowed'] is False
+          assert report['checkedEverySeconds']==5
+          assert len(report['services'])==5
+          assert report['grade'] in ('A','B','C','D','F','N/A')
+          assert report['checkedAt'] is not None, 'Jose produced no actual observations'
+          assert first['checkedAt'] != report['checkedAt'], 'Five-second monitoring did not advance'
+          assert policy['nativePrviMinting'] is False
+          assert policy['unit']=='NONTRANSFERABLE_PARTICIPATION_POINTS'
+          assert 'id="grade"' in html and 'id="services"' in html
+          print('Jose production HTTP smoke PASSED: observed changing service checks; no PRVI minting.')
+          print('Fresh report timestamp:', report['checkedAt'])
+          print('Health grade:',report['grade'],'score:',report['score'])
+          PY
