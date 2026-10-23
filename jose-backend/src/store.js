@@ -2,7 +2,7 @@
 // deps, so it runs anywhere Node runs without npm install) — fine for a
 // first version; swap for a real database (Render Postgres, etc.) once
 // usage grows past what a single JSON file comfortably handles.
-import { readFileSync, writeFileSync, existsSync, renameSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -16,7 +16,9 @@ function load() {
   try {
     return JSON.parse(readFileSync(DB_FILE, 'utf8'));
   } catch {
-    return { users: {}, sessions: {}, connections: {} };
+    // Never silently reset existing credentials or provisional credits after
+    // a corrupted/unreadable DB file. Operator restoration is required.
+    throw new Error('Jose database read failed; refusing data reset');
   }
 }
 
@@ -26,7 +28,8 @@ function persist() {
   // Write to a temp file then rename, so a crash mid-write can't corrupt
   // the store.
   const tmp = DB_FILE + '.tmp';
-  writeFileSync(tmp, JSON.stringify(state, null, 2));
+  mkdirSync(path.dirname(DB_FILE), { recursive: true, mode: 0o700 });
+  writeFileSync(tmp, JSON.stringify(state, null, 2), { mode: 0o600 });
   renameSync(tmp, DB_FILE);
 }
 
