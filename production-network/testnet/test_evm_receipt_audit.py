@@ -21,7 +21,7 @@ class FakeRPC:
           "eth_getTransactionByHash":{"hash":HASH,"from":FROM,"to":TO,"value":"0x64","input":"0x","blockHash":BHASH,"blockNumber":"0x8","chainId":"0x40000","gas":"0x7530","gasPrice":"0x3b9aca00"},
           "eth_getTransactionReceipt":{"transactionHash":HASH,"status":"0x1","blockNumber":"0x8","blockHash":BHASH,"gasUsed":"0x5208","effectiveGasPrice":"0x3b9aca00"},
           "eth_blockNumber":"0x9",
-          "eth_getBlockByNumber":{"hash":BHASH,"transactions":[HASH]}
+          "eth_getBlockByNumber":{"number":"0x8","hash":BHASH,"transactions":[HASH]}
         }
     def call(self,method,params=None):
         if method=="eth_getBlockByNumber" and params==["0x0",False]:
@@ -119,6 +119,16 @@ class EVMReceiptTests(unittest.TestCase):
         self.rpc.values["eth_getTransactionByHash"]["blockNumber"]="0x7"
         with self.assertRaisesRegex(ValueError,"block height disagreement"):
             self.verify()
+    def test_canonical_block_height_disagreement(self):
+        self.rpc.values["eth_getBlockByNumber"]["number"]="0x7"
+        with self.assertRaisesRegex(ValueError,"canonical block height disagrees"):
+            self.verify()
+    def test_canonical_block_height_missing_or_malformed(self):
+        for bad in (None,"8","0x"):
+            with self.subTest(bad=bad):
+                self.rpc.values["eth_getBlockByNumber"]["number"]=bad
+                with self.assertRaisesRegex(ValueError,"canonical block number"):
+                    self.verify()
     def test_missing_transaction_block_height(self):
         self.rpc.values["eth_getTransactionByHash"].pop("blockNumber")
         with self.assertRaisesRegex(ValueError,"transaction blockNumber"):
