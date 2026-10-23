@@ -99,3 +99,16 @@ test('rejects raw unauthenticated identifiers as rewards actor', () => {
   assert.throws(() => engine.heartbeat('anonymous', good), /Invalid authenticated/);
   assert.throws(() => engine.inspect('user:!', good), /Invalid authenticated/);
 });
+
+test('authenticated participant count rises without changing infrastructure grade', () => {
+  const { engine, good, clock } = fixture();
+  assert.equal(engine.activeSummary().activeAccountsLast60Seconds, 0);
+  engine.heartbeat(alice, good);
+  engine.inspect('agent:monitor01', good);
+  assert.equal(engine.activeSummary().activeAccountsLast60Seconds, 2);
+  assert.equal(engine.activeSummary().activeUsers, 1);
+  assert.equal(engine.activeSummary().activeAgents, 1);
+  assert.equal(engine.activeSummary().infrastructureGradeContribution, 0);
+  clock(61_000);
+  assert.equal(engine.activeSummary().activeAccountsLast60Seconds, 0);
+});
