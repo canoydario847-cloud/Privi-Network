@@ -1,0 +1,40 @@
+name: Jose 5-second Privi health and nonfinancial duration rewards
+on:
+  pull_request:
+    paths:
+      - 'jose-backend/**'
+      - 'jose-site/**'
+      - 'sites/hub/index.html'
+      - '.github/workflows/jose-network-rewards.yml'
+  push:
+    paths:
+      - 'jose-backend/**'
+      - 'jose-site/**'
+      - 'sites/hub/index.html'
+      - '.github/workflows/jose-network-rewards.yml'
+permissions:
+  contents: read
+jobs:
+  monitor-and-reward-tests:
+    name: Verify health grade, anti-farming and server APIs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check syntax and run offline tests
+        run: |
+          set -euo pipefail
+          node --check jose-backend/src/network-monitor.js
+          node --check jose-backend/src/participation.js
+          node --check jose-backend/src/server.js
+          node --check jose-backend/public/network-report.js
+          node --test jose-backend/test/*.test.js
+      - name: Confirm no financial mint or public redeem endpoint
+        run: |
+          set -euo pipefail
+          grep -q "realPrviIssued: false" jose-backend/src/participation.js
+          grep -q "financialMainnetVerified: false" jose-backend/src/network-monitor.js
+          ! grep -q "/api/rewards/redeem" jose-backend/src/server.js
