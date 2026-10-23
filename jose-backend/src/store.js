@@ -11,7 +11,7 @@ const DB_FILE = process.env.DB_FILE || path.join(__dirname, '../data/db.json');
 
 function load() {
   if (!existsSync(DB_FILE)) {
-    return { users: {}, sessions: {}, connections: {} };
+    return { users: {}, sessions: {}, connections: {}, rewardStates: {} };
   }
   try {
     return JSON.parse(readFileSync(DB_FILE, 'utf8'));
@@ -31,6 +31,15 @@ function persist() {
 }
 
 export const db = {
+  // Beta reward credits: persisted by authenticated account or agent identity.
+  // Single-process JSON storage. Move to transactional SQL before multi-instance use.
+  getRewardState(actor) { return state.rewardStates?.[actor] || null; },
+  putRewardState(actor, record) {
+    state.rewardStates = state.rewardStates || {};
+    state.rewardStates[actor] = record;
+    persist();
+  },
+
   // --- users ---
   getUserByEmail(email) {
     return Object.values(state.users).find((u) => u.email === email) || null;
