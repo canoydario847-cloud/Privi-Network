@@ -1,0 +1,53 @@
+# PRVI MAINNET OPERATOR TEMPLATE ONLY. DO NOT RUN UNTIL GENESIS, IMAGE AND
+# SIGNER CONFIG HAVE PASSED INDEPENDENT RELEASE AUTHORIZATION.
+# One operator owns one validator and one separate sentry. Seven copies of
+# this stack controlled by one person are NOT seven independent operators.
+name: privi-operator
+services:
+  validator:
+    profiles: ["approved-mainnet-launch"]
+    image: "${PRIVI_NODE_IMAGE:?REQUIRED_DOCKER_IMAGE_WITH_SHA256_DIGEST}"
+    entrypoint: ["/usr/local/bin/evmd"]
+    command: ["start", "--home=/state", "--json-rpc.enable=false"]
+    user: "1025:1025"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./validator-state:/state:rw
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    restart: unless-stopped
+    networks:
+      - internal-validator
+    # NO published host ports. Bind a validator only to its private sentry.
+    # Do not expose its consensus signer, RPC, pprof, gRPC or administrative API.
+
+  sentry:
+    profiles: ["approved-mainnet-launch"]
+    image: "${PRIVI_NODE_IMAGE:?REQUIRED_DOCKER_IMAGE_WITH_SHA256_DIGEST}"
+    entrypoint: ["/usr/local/bin/evmd"]
+    command: ["start", "--home=/state", "--json-rpc.enable=false"]
+    user: "1025:1025"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./sentry-state:/state:rw
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    ports:
+      - "${PRIVI_P2P_BIND_ADDRESS:?SET_PUBLIC_SENTRY_IP}:26656:26656/tcp"
+    restart: unless-stopped
+    networks:
+      - internal-validator
+      - p2p-public
+    # NO validator private signing keys in sentry-state.
+    # Configure validator/sentry private_peers + persistent_peers before start.
+
+networks:
+  internal-validator:
+    internal: true
+  p2p-public: {}
