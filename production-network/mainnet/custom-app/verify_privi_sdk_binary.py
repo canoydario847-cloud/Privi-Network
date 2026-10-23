@@ -24,6 +24,9 @@ MARKERS = {
     "x/bank/keeper/genesis.go": (
         "var priviBankGenesisApplied = []byte{",
         "PRVI SDK bank: repeated InitGenesis forbidden",
+        "PRVI SDK bank: native genesis supply above hard cap",
+        "PRVI SDK bank: native genesis balances above hard cap",
+        "PRVI SDK bank: native genesis supply does not match balances",
         "rawKV.Set(priviBankGenesisApplied, []byte{1})",
     ),
 }

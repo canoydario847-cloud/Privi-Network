@@ -4,7 +4,13 @@ The source-pinned disposable Cosmos SDK v0.54.3 overlay is NOT part of any
 deployed production binary. It restricts raw `MintCoins`, native
 `UncheckedSetBalance`, and now repeated raw `InitGenesis` calls. Unmodified
 SDK `InitGenesis` directly writes both native account balances and total supply
-without calling `MintCoins`.
+without calling `MintCoins`. The patched bank `InitGenesis` now rejects
+native genesis supply above the **1,000,000,000 PRVI** lifetime ceiling
+(10^27 `aprvi`), allocation totals above that ceiling and any mismatch
+between declared native supply and the sum of native account balances.
+All checks occur before bank parameters, balance collections or supply
+receive state changes. The source pin and isolated SDK tests cover the
+exact cap, a one-base-unit overflow, and over/underdeclared supply.
 
 The one-time marker is stored at key `ff 50 52 56 49 01` in the bank module
 store, with the pinned SDK bank collections occupying prefixes 0 through 5.

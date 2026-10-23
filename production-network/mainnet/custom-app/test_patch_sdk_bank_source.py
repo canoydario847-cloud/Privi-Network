@@ -78,6 +78,12 @@ class BankSDKOverlayTests(unittest.TestCase):
         changed_keeper=(module_copy/"x"/"bank"/"keeper"/"keeper.go").read_text()
         changed_genesis=(module_copy/"x"/"bank"/"keeper"/"genesis.go").read_text()
         self.assertIn('repeated InitGenesis forbidden',changed_genesis)
+        self.assertIn('new(big.Int).Exp(big.NewInt(10), big.NewInt(27), nil)',changed_genesis)
+        self.assertIn('native genesis supply above hard cap',changed_genesis)
+        self.assertIn('native genesis balances above hard cap',changed_genesis)
+        self.assertIn('native genesis supply does not match balances',changed_genesis)
+        self.assertLess(changed_genesis.index('native genesis supply above hard cap'),
+                        changed_genesis.index('rawKV := k.storeService.OpenKVStore'))
         self.assertIn('rawKV.Has(priviBankGenesisApplied)',changed_genesis)
         self.assertIn('rawKV.Set(priviBankGenesisApplied, []byte{1})',changed_genesis)
         self.assertEqual(changed_genesis.count('var priviBankGenesisApplied ='),1)
