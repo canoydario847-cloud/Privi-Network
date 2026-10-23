@@ -49,6 +49,10 @@ function showReport(data) {
   set('checked', dateText(data.checkedAt));
   set('observations', data.sampleCycles + ' cycles · ' + data.observationWindowSeconds + 's observed');
   set('briefing', data.assessment);
+  const participation = data.participation || {};
+  set('active-participants', participation.activeAccountsLast60Seconds ?? 0);
+  set('participation-detail', (participation.activeUsers ?? 0) + ' users · ' +
+    (participation.activeAgents ?? 0) + ' agents');
   const wrap = $('services'); wrap.replaceChildren(...data.services.map(serviceCard));
   const trend = $('trend'); trend.replaceChildren(...data.lastCycles.map(c => {
     const cell = document.createElement('div');
