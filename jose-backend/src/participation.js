@@ -44,6 +44,31 @@ export function createParticipationEngine({ store, now = () => Date.now() }) {
   if (!store || typeof store.getRewardState !== 'function' || typeof store.putRewardState !== 'function') {
     throw new Error('Reward engine requires a persistent single-process state store');
   }
+  // Ephemeral per-process unique authenticated actors. This is an ecosystem
+  // participation signal, NOT validator power, resilience or availability.
+  const activeActors = new Map();
+  function activeSummary() {
+    const t = now();
+    for (const [actor, seen] of activeActors) {
+      if (t - seen > MINUTE || t < seen) activeActors.delete(actor);
+    }
+    const actors = [...activeActors.keys()];
+    return {
+      activeAccountsLast60Seconds: actors.length,
+      activeUsers: actors.filter(x => x.startsWith('user:')).length,
+      activeAgents: actors.filter(x => x.startsWith('agent:')).length,
+      infrastructureGradeContribution: 0,
+      note: 'Authenticated participation is an engagement signal, not a consensus-security or uptime metric.',
+    };
+  }
+  function markActive(actor) {
+    activeActors.set(actor, now());
+    if (activeActors.size > 10000) {
+      activeSummary();
+      // Bound memory even if an attacker forces many accounts to cycle.
+      while (activeActors.size > 10000) activeActors.delete(activeActors.keys().next().value);
+    }
+  }
   function newState(day) {
     return {
       day, credits: 0, lifetimePresenceMinutes: 0, lifetimeInspections: 0,
@@ -78,6 +103,7 @@ export function createParticipationEngine({ store, now = () => Date.now() }) {
     // Frequent identical tabs/call bursts do not accelerate the clock.
     if (gap > 0 && gap < 10_000) return summarize(state, network, false);
     const healthy = qualifiedNetwork(network);
+    if (healthy) markActive(actor);
     if (healthy && gap >= 10_000 && gap <= 30_000 &&
         state.presenceMinutesToday < POLICY.maxPresenceMinutesPerUtcDay) {
       // No credit for missed/sleeping sessions or unmeasured time.
@@ -106,6 +132,7 @@ export function createParticipationEngine({ store, now = () => Date.now() }) {
       (state.lastInspectionAt === null || t - state.lastInspectionAt >= MINUTE) &&
       state.inspectionsToday < POLICY.maxInspectionsPerUtcDay;
     if (eligible) {
+      markActive(actor);
       state.lastInspectionAt = t;
       state.inspectionsToday += 1;
       state.lifetimeInspections += 1;
@@ -135,5 +162,5 @@ export function createParticipationEngine({ store, now = () => Date.now() }) {
     const t = now();
     return summarize(account(actor, t), network, qualifiedNetwork(network));
   }
-  return { heartbeat, inspect, get };
+  return { heartbeat, inspect, get, activeSummary };
 }
