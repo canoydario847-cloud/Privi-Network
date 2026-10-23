@@ -1,0 +1,45 @@
+name: Privi Render validator candidate verification (no deployment)
+on:
+  pull_request:
+    paths:
+      - "production-network/ops/render_validator_preflight.py"
+      - "production-network/ops/test_render_validator_preflight.py"
+      - "production-network/ops/render-validator-candidates.NONLIVE.json"
+      - "production-network/ops/RENDER_VALIDATOR_PREFLIGHT.md"
+      - ".github/workflows/privi-render-validator-preflight.yml"
+  push:
+    paths:
+      - "production-network/ops/render_validator_preflight.py"
+      - "production-network/ops/test_render_validator_preflight.py"
+      - "production-network/ops/render-validator-candidates.NONLIVE.json"
+      - "production-network/ops/RENDER_VALIDATOR_PREFLIGHT.md"
+      - ".github/workflows/privi-render-validator-preflight.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  read-only-render-validator-gate:
+    name: Verify validator metadata and NO-GO protections (NONFINANCIAL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run adversarial validation regression suite
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s production-network/ops -p test_render_validator_preflight.py -v
+      - name: Check candidate structure but forbid production authorization
+        run: |
+          set -euo pipefail
+          python3 production-network/ops/render_validator_preflight.py \
+            production-network/ops/render-validator-candidates.NONLIVE.json --mode draft
+          set +e
+          python3 production-network/ops/render_validator_preflight.py \
+            production-network/ops/render-validator-candidates.NONLIVE.json --mode production \
+            > "$RUNNER_TEMP/privi-render-no-go.log" 2>&1
+          status=$?
+          set -e
+          test "$status" -eq 3
+          grep -q "FINANCIAL MAINNET: NOT LIVE" "$RUNNER_TEMP/privi-render-no-go.log"
+          grep -q "NO-GO" "$RUNNER_TEMP/privi-render-no-go.log"
+          echo "Verified: NO DEPLOYMENT, NO FINANCIAL MAINNET AUTHORIZATION"
