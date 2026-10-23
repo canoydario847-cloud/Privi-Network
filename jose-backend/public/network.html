@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Jose AI — Privi Network Report Card</title>
+  <meta name="description" content="Jose's five-second Privi application-service checks, health grades and verified duration participation points.">
+  <style>
+    :root{color-scheme:light dark;--bg:#0c1827;--pane:#16273d;--border:#2c4665;--muted:#a8bed4;--text:#f0f5ff;--teal:#8ef3d3;--gold:#ffcf80;--red:#ff918f}
+    *{box-sizing:border-box}body{font:16px/1.55 system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);margin:0}
+    a{color:var(--teal)}.wrap{max-width:1080px;margin:auto;padding:28px 20px 70px}
+    header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;padding-bottom:22px;border-bottom:1px solid var(--border)}
+    .brand{font-size:1.3rem;font-weight:750;letter-spacing:.03em;color:var(--text);text-decoration:none}
+    nav{display:flex;gap:18px;font-size:.9rem}
+    h1{font-size:clamp(2rem,5vw,3.7rem);line-height:1.06;letter-spacing:-.025em;margin:38px 0 10px}
+    h2{font-size:1.4rem;margin:0 0 14px}
+    .lede,.hint{color:var(--muted);max-width:780px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:28px}
+    .card{border:1px solid var(--border);background:var(--pane);border-radius:18px;padding:24px;min-width:0}
+    .wide{grid-column:1/-1}
+    .stat{font-weight:800;font-size:clamp(2.3rem,5vw,4.2rem);line-height:1.1}
+    .kicker{font-size:.76rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);font-weight:700}
+    .score{display:flex;align-items:end;gap:20px}
+    #grade{font-size:5.5rem;font-weight:900;line-height:.98;color:var(--gold)}
+    #score{font-size:2.1rem;font-weight:700}
+    .health{display:grid;gap:12px}
+    .service{display:grid;grid-template-columns:1.5fr .7fr .5fr;gap:12px;align-items:center;border-bottom:1px solid var(--border);padding:14px 0}
+    .service:last-child{border:0}
+    .pill{border-radius:999px;border:1px solid var(--border);padding:4px 10px;font-size:.79rem;width:max-content}
+    .pill.up{color:var(--teal);border-color:var(--teal)}.pill.down{color:var(--red);border-color:var(--red)}
+    .muted{color:var(--muted)}.bars{height:90px;display:flex;align-items:end;gap:5px;margin:18px 0 8px;border-bottom:1px solid var(--border)}
+    .bar{flex:1;min-width:4px;background:var(--teal);border-radius:4px 4px 0 0;opacity:.9}
+    input[type=range]{width:100%;accent-color:var(--teal);margin:15px 0}
+    .reward-preview{display:flex;align-items:baseline;gap:12px}.reward-preview strong{font-size:2rem;color:var(--teal)}
+    .info{padding:12px 16px;border:1px solid var(--border);border-radius:10px;margin-top:18px;background:#102034}
+    .tiny{font-size:.85rem;color:var(--muted)}button{background:var(--teal);color:#07251c;border:0;border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:700}
+    .footnote{margin-top:20px;color:var(--muted);font-size:.9rem}
+    @media(max-width:730px){.grid{grid-template-columns:1fr}.wide{grid-column:auto}.service{grid-template-columns:1fr auto}.service .latency{grid-column:1/-1}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <a class="brand" href="/dashboard.html">JOSE AI / PRIVI</a>
+  <nav><a href="https://privi-hub.onrender.com/">Privi Hub</a><a href="/dashboard.html">My Jose Apps</a></nav>
+</header>
+<main>
+  <p class="kicker" style="margin-top:36px">Privi World Corp · network operations</p>
+  <h1>Network report card</h1>
+  <p class="lede">Jose checks five Privi application health endpoints every <strong>5 seconds</strong> while the monitoring server is running. Grades measure application availability and latency, not blockchain consensus or financial-mainnet readiness.</p>
+  <div class="grid">
+    <section class="card">
+      <div class="kicker">Jose's current grade</div>
+      <div class="score"><span id="grade" aria-live="polite">—</span><div><div id="score">Pending</div><div class="muted">Application health</div></div></div>
+      <p id="summary" class="hint" role="status">Checking for a new report...</p>
+      <p class="tiny">Updated: <span id="checked">Awaiting first check</span> · <span id="freshness">—</span></p>
+    </section>
+    <section class="card">
+      <div class="kicker">Healthy services</div>
+      <div class="stat" id="availability">— / 5</div>
+      <p class="hint">Five HTTP health endpoints: Ledger, Verify, Anchor, Call and Quantum.</p>
+      <div class="kicker" style="margin-top:22px">Recent grades</div>
+      <div id="history" class="bars" aria-label="Latest 12 application health samples"></div>
+      <p class="tiny">One sample approximately every 5 seconds. No synthetic blockchain blocks.</p>
+    </section>
+    <section class="card wide">
+      <h2>Jose's service-by-service report</h2>
+      <div id="services" class="health"><p class="muted">No completed service checks yet.</p></div>
+      <div class="info"><strong>Scope:</strong> A healthy website or API does not prove blockchain validator quorum, native PoP finality, or PRVI issuance security. Financial mainnet remains unverified.</div>
+    </section>
+    <section class="card">
+      <div class="kicker">Network utility</div>
+      <h2>Duration Rewards</h2>
+      <p class="hint">Users and agents can earn <strong>prelaunch participation points</strong> when a trusted Privi work service verifies both their connection duration and completed useful actions. Being connected without useful verified work earns zero.</p>
+      <p class="tiny">Verified users: 1 point / eligible 5 seconds. Verified agents: same formula, with a separate daily cap. One attested action supports up to 30 seconds of connected time. No on-chain token minting or redemption.</p>
+      <p class="hint" id="issuer">Checking reward issuer configuration...</p>
+    </section>
+    <section class="card">
+      <div class="kicker">Illustration only · not an award</div>
+      <h2>Estimated points</h2>
+      <label for="seconds">Verified connection duration: <strong id="seconds-label">60 seconds</strong></label>
+      <input id="seconds" type="range" min="5" max="300" step="5" value="60">
+      <label for="actions">Verified useful actions: <strong id="actions-label">2</strong></label>
+      <input id="actions" type="range" min="0" max="50" step="1" value="2">
+      <div class="reward-preview"><strong id="estimate">14</strong><span class="muted">estimated nonfinancial points</span></div>
+      <p class="tiny">This preview awards nothing. Actual entries require signed, non-replayed work evidence from an authorized issuer, server verification, service-health eligibility and daily limits.</p>
+    </section>
+    <section class="card wide">
+      <h2>My verified participation</h2>
+      <div class="reward-preview"><strong id="earned">—</strong><span id="earn-unit">No balance loaded</span></div>
+      <p class="hint" id="balance-note">Sign in to Jose to see verified prelaunch participation points. Agents require trusted work-receipt integration.</p>
+      <p class="footnote">Jose measures existing Privi application-service health. Running Jose on Render's free tier may pause checks during idle sleep or deployments, so it is not yet a guaranteed 24/7 operations monitor. Report grades become unavailable when observations go stale.</p>
+    </section>
+  </div>
+</main>
+</div>
+<script type="module">
+const el = (id) => document.getElementById(id);
+function applyReport(r) {
+  el('grade').textContent = r.grade || 'N/A';
+  el('grade').style.color = r.grade === 'A' || r.grade === 'B' ? 'var(--teal)' : r.grade === 'F' ? 'var(--red)' : 'var(--gold)';
+  el('score').textContent = r.score === null ? 'No current score' : r.score + ' / 100';
+  el('summary').textContent = r.summary;
+  el('checked').textContent = r.checkedAt ? new Date(r.checkedAt).toLocaleString() : 'Not checked';
+  el('freshness').textContent = r.fresh ? 'current' : 'stale or pending';
+  el('availability').textContent = r.available + ' / ' + r.total;
+  const items = el('services'); items.replaceChildren();
+  for (const svc of r.services) {
+    const row = document.createElement('div'); row.className='service';
+    const name = document.createElement('strong'); name.textContent=svc.name;
+    const status = document.createElement('span');
+    status.className='pill ' + (svc.healthy ? 'up' : 'down');
+    status.textContent=svc.status;
+    const latency = document.createElement('span'); latency.className='latency muted';
+    latency.textContent=svc.latencyMs === null ? svc.detail : svc.latencyMs + ' ms · ' + svc.detail;
+    row.append(name,status,latency);items.append(row);
+  }
+  const bars=el('history');bars.replaceChildren();
+  for(const point of r.history) {
+    const bar=document.createElement('div');bar.className='bar';
+    bar.style.height=Math.max(2,point.score)+'%';
+    bar.style.background=point.score>=80?'var(--teal)':point.score>=60?'var(--gold)':'var(--red)';
+    bar.title=new Date(point.checkedAt).toLocaleTimeString()+' · '+point.grade+' ('+point.score+'/100)';
+    bars.append(bar);
+  }
+}
+async function refresh() {
+  try {
+    const response=await fetch('/api/network/report-card',{cache:'no-store'});
+    if (!response.ok) throw new Error('Service temporarily unavailable');
+    applyReport(await response.json());
+  } catch {
+    el('grade').textContent='N/A';el('score').textContent='Offline';
+    el('summary').textContent='Jose report API is currently unreachable.';
+    el('freshness').textContent='unavailable';
+  }
+}
+function estimate() {
+  const seconds=Number(el('seconds').value),actions=Number(el('actions').value);
+  const verified=Math.min(seconds,actions*30);
+  const points=actions===0?0:Math.floor(verified/5)+actions;
+  el('seconds-label').textContent=seconds+' seconds';
+  el('actions-label').textContent=String(actions);
+  el('estimate').textContent=String(points);
+}
+el('seconds').addEventListener('input',estimate);
+el('actions').addEventListener('input',estimate);
+estimate();refresh();
+setInterval(refresh,5000);
+fetch('/api/rewards/policy',{cache:'no-store'}).then(r=>r.json()).then(p=>{
+  el('issuer').textContent=p.signedIssuerConfigured?
+    'Trusted receipt issuer configured. Signed receipts can earn provisional points.' :
+    'Trusted receipt issuer not configured. No rewards can be credited yet.';
+}).catch(()=>el('issuer').textContent='Reward policy unavailable.');
+fetch('/api/rewards/me',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(p=>{
+  if(!p){el('earn-unit').textContent='Sign in to view points';return;}
+  el('earned').textContent=String(p.totalPoints);
+  el('earn-unit').textContent='nontransferable prelaunch points';
+  el('balance-note').textContent='Points today: '+p.todayPoints+'. Last verified: '+(p.lastVerifiedAt||'never')+'. No financial PRVI has been minted.';
+}).catch(()=>el('earn-unit').textContent='Unable to load balance');
+</script>
+</body>
+</html>
