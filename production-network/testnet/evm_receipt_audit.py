@@ -64,6 +64,8 @@ def check(rpc, tx_hash, chain_id, sender, recipient, amount_wei, confirmations=1
     block=rpc.call("eth_getBlockByNumber",[hex(height),False])
     if not isinstance(block,dict):
         raise ValueError("receipt block missing")
+    if hexint(block.get("number"),"canonical block number")!=height:
+        raise ValueError("canonical block height disagrees with transaction receipt")
     blockhash=block.get("hash")
     if not isinstance(blockhash,str) or not TXHASH.fullmatch(blockhash):
         raise ValueError("invalid block hash")
