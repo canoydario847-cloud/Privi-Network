@@ -1,0 +1,45 @@
+name: Jose Privi Network Report Card and Duration Rewards
+on:
+  pull_request:
+    paths:
+      - "jose-backend/**"
+      - "jose-site/index.html"
+      - "sites/hub/index.html"
+      - ".github/workflows/jose-privi-network-rewards.yml"
+  push:
+    paths:
+      - "jose-backend/**"
+      - "jose-site/index.html"
+      - "sites/hub/index.html"
+      - ".github/workflows/jose-privi-network-rewards.yml"
+permissions:
+  contents: read
+jobs:
+  jose-network-reward-tests:
+    name: Report card and signed nonfinancial rewards regression tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Parse Jose backend server and safety modules
+        run: |
+          set -euo pipefail
+          node --check jose-backend/src/server.js
+          node --check jose-backend/src/network-monitor.js
+          node --check jose-backend/src/duration-rewards.js
+          node --check jose-backend/src/store.js
+      - name: Run offline monitoring and reward abuse regressions
+        run: npm --prefix jose-backend test
+      - name: Confirm report card is available and PRVI minting is disabled
+        run: |
+          set -euo pipefail
+          test -s jose-backend/public/network.html
+          grep -q 'setInterval(refresh,5000)' jose-backend/public/network.html
+          grep -q "networkMonitor.start()" jose-backend/src/server.js
+          grep -q "nativePrviMinting: false" jose-backend/src/duration-rewards.js
+          grep -q 'NONTRANSFERABLE_PARTICIPATION_POINTS' jose-backend/src/duration-rewards.js
+          echo "OFF-CHAIN ONLY; no PRVI issuance or mainnet launch in this workflow."
