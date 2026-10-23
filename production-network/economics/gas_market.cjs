@@ -66,7 +66,7 @@ function aggregateFeeReceipts({chainId,genesisHash,receipts}){
     evidenceLevel:"USER_SUPPLIED_DEV_RECEIPTS_NOT_INDEPENDENTLY_VALIDATED",
     financialMainnet:false});
 }
-/** Arithmetic of caller-supplied allocations is NOT authenticated bank-state evidence. */
+/** Caller-supplied allocations reconcile arithmetic, NOT authenticated bank-state evidence. */
 function reconcileActualFeeAllocation({observedChargedGasWei,actualBurnedWei,
   actualValidatorPaymentsWei,actualTreasuryReceiptsWei,actualOtherDestinationsWei}){
   const paid=unsigned(observedChargedGasWei,"gas charged");
@@ -90,24 +90,26 @@ function reconcileActualFeeAllocation({observedChargedGasWei,actualBurnedWei,
  * to maximize a single transaction is not a recommendation to overcharge.
  */
 function advisoryEip1559Quote({baseFeeWei,priorityFeeWei,customerMaxFeePerGasWei,
-   estimatedGas,customerMaxTotalWei}){
+   estimatedGas,signedGasLimit,customerMaxTotalWei}){
   const base=unsigned(baseFeeWei,"base fee"),priority=unsigned(priorityFeeWei,"priority fee");
   const customerMax=unsigned(customerMaxFeePerGasWei,"customer max fee per gas",{nonZero:true});
   const gas=unsigned(estimatedGas,"estimated gas",{nonZero:true});
+  const signedLimit=unsigned(signedGasLimit,"signed gas limit",{nonZero:true});
   const budget=unsigned(customerMaxTotalWei,"customer fee budget",{nonZero:true});
-  need(gas<=1000000n,"Do not quote runaway gas consumption");
+  need(gas<=1000000n&&signedLimit<=1000000n,"Do not quote runaway gas consumption");
+  need(signedLimit>=gas,"Signed gas limit cannot be lower than estimated gas");
   need(base<=customerMax,"Network base fee exceeds customer-approved limit");
   // EIP1559 effective price is bounded by the customer's maximum.
   const effective=(base+priority>customerMax)?customerMax:base+priority;
-  // The observed effective price can rise before inclusion. A transaction
-  // may spend as much as gasLimit * maxFeePerGas, not gasLimit * this quote.
-  const estimatedCharged=gas*effective;
-  const worstCaseCharged=gas*customerMax;
-  need(worstCaseCharged<=budget,"Worst-case fee quote exceeds customer's signed budget");
+  const chargedMax=gas*effective;
+  // The quote is advisory and base fees can change before inclusion. Never
+  // recommend signing maxFeePerGas * gasLimit above the customer's total cap,
+  // even when today's lower estimated effective price fits that cap.
+  const signedWorstCase=signedLimit*customerMax;
+  need(signedWorstCase<=budget,"Worst-case signed gas fee exceeds customer's signed budget");
   return Object.freeze({quotedGasPriceWei:effective.toString(),
-    estimatedQuotedGasWei:estimatedCharged.toString(),
-    maxQuotedGasWei:worstCaseCharged.toString(),
-    requiredGasLimit:gas.toString(),requiredMaxFeePerGasWei:customerMax.toString(),
+    maxQuotedGasWei:chargedMax.toString(),
+    maxAuthorizedGasWei:signedWorstCase.toString(),signedGasLimit:signedLimit.toString(),
     baseFeeWei:base.toString(),includedTipWei:(effective-base).toString(),
     mayChangeBeforeInclusion:true,noOnchainEnforcement:true});
 }

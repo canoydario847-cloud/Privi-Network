@@ -13,6 +13,7 @@ spec.loader.exec_module(module)
 APP = '''package evmd
 import (
     evmconfig "github.com/cosmos/evm/evmd/config"
+    "github.com/ethereum/go-ethereum/common"
 )
 type EVMD struct {
     BankKeeper            bankkeeper.Keeper
@@ -32,6 +33,7 @@ func test() {
         logger,
     )
     app.BankKeeper = app.BankKeeper.WithObjStoreKey(oKeys[banktypes.ObjectStoreKey])
+    app.EVMKeeper.EnableVirtualFeeCollection()
     app.ModuleManager = module.NewManager(
         bank.NewAppModule(appCodec, app.BankKeeper, app.AccountKeeper, nil),
     )
@@ -47,6 +49,11 @@ func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {
 }
 func (app *EVMD) EndBlocker(ctx sdk.Context) (sdk.EndBlock, error) {
     return app.ModuleManager.EndBlock(ctx)
+}
+func (app *EVMD) setPostHandler() {
+    postHandler, err := posthandler.NewPostHandler(posthandler.HandlerOptions{})
+    if err != nil { panic(err) }
+    app.SetPostHandler(postHandler)
 }
 '''
 APP = "\n".join(("\t" * ((len(line) - len(line.lstrip(" "))) // 4)) + line.lstrip(" ") for line in APP.split("\n"))
@@ -68,6 +75,10 @@ class PatcherTests(unittest.TestCase):
         (source / "chain_identity.go").write_text(
             "package prvicap\nfunc ValidateEVMChainID(id uint64) error { return nil }\n", encoding="utf-8"
         )
+        pop_source = self.repo / "production-network" / "mainnet" / "pop"
+        pop_source.mkdir(parents=True)
+        for name in ("position.go","keeper.go","wire.go"):
+            (pop_source / name).write_text("package position\n",encoding="utf-8")
         self.app_file = self.upstream / "evmd" / "app.go"
         self.app_file.write_text(APP, encoding="utf-8")
 
@@ -109,6 +120,46 @@ class PatcherTests(unittest.TestCase):
         self.assertLess(app.index("prvicap.RestrictedBank"), app.index("return app.ModuleManager.InitGenesis")
                         if "return app.ModuleManager.InitGenesis" in app else app.index("response, initErr"))
         self.assertIn("prvicap.StoreKey", app)
+        self.assertIn("prvipop.StoreKey", app)
+        self.assertIn("app.PriviPoPKeeper = popKeeper", app)
+        self.assertIn('appOpts.Get("privi.pop.allow_unpinned_dev")',app)
+        self.assertIn("evmChainID!=424242",app)
+        self.assertIn("Privi PoP trusted registry digest REQUIRED outside explicit valueless CI",app)
+        self.assertIn("Privi PoP genesis: unpinned dev chain identity forbidden",app)
+        self.assertLess(app.index("Privi PoP trusted registry digest REQUIRED"),
+                        app.index("evmencoding.MakeConfig(evmChainID)"))
+        self.assertEqual(app.count("app.PriviPoPTrustedDigest = popPin"),1)
+
+        self.assertIn("func (app *EVMD) PostTxProcessing(", app)
+        self.assertIn("receipt.Status != ethtypes.ReceiptStatusSuccessful",app)
+        self.assertIn("prvipop.DecodeEnvelope(msg.Data)",app)
+        self.assertIn("common.HexToAddress(prvipop.PoPSinkEVMAddress)", app)
+        self.assertIn("ctx.ExecMode() != sdk.ExecModeFinalize", app)
+        self.assertIn("app.PriviPoPKeeper.Apply(ctx,position)", app)
+        self.assertIn("app.EVMKeeper.SetHooks(app)", app)
+        self.assertIn("app.EVMKeeper.HasHooks()",app)
+        self.assertIn("Privi PoP position tx may not transfer value", app)
+        self.assertEqual(app.count("app.EVMKeeper.SetHooks(app)"), 1)
+        self.assertEqual(app.count("app.PriviPoPKeeper.Apply(ctx,position)"),1)
+        self.assertNotIn("ApplyPriviPoPFromFinalizedTx(",app)
+        self.assertIn("package position",(self.upstream/"evmd"/"prvipop"/"wire.go").read_text())
+        self.assertEqual(app.count("app.PriviPoPKeeper.AssertInitialized(ctx,ctx.ChainID())"),1)
+        self.assertEqual(app.count("app.checkPriviPoPRegistry(ctx)"),3)
+        self.assertIn("app.PriviPoPKeeper.AssertPinnedGenesis(ctx,ctx.ChainID(),app.PriviPoPTrustedDigest)",app)
+        self.assertIn("prvipop.GenesisDigest(popGenesis.ChainID,popGenesis.Authorities)",app)
+        self.assertIn("Privi PoP genesis: operator-pinned authorization digest mismatch",app)
+        self.assertLess(app.index("operator-pinned authorization digest mismatch"),
+                        app.index("app.UpgradeKeeper.SetModuleVersionMap"))
+        self.assertIn("Privi PoP beginning-of-block registry denied",app)
+        self.assertIn("Privi PoP end-of-block registry denied",app)
+        self.assertIn("app.PriviPoPKeeper.InitGenesis(ctx,popGenesis.ChainID,popGenesis.Authorities)",app)
+        self.assertIn("Privi PoP genesis: authorization registry absent",app)
+        self.assertIn("Privi PoP genesis: Cosmos chain identity mismatch",app)
+        self.assertIn("prvipop.ValidateGenesis(popGenesis.ChainID,popGenesis.Authorities)",app)
+        self.assertLess(app.index("prvipop.ValidateGenesis("),app.index("app.UpgradeKeeper.SetModuleVersionMap"))
+        self.assertIn("package position",(self.upstream/"evmd"/"prvipop"/"position.go").read_text())
+        self.assertLess(app.index("Privi PoP genesis: authorization registry absent"),
+                        app.index("app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)"))
         self.assertIn("prvicap.ValidateEVMChainID(evmChainID)", app)
         self.assertIn("PRVI EIP-155 app identity rejected", app)
         self.assertLess(app.index("prvicap.ValidateEVMChainID(evmChainID)"), app.index("bankkeeper.NewBaseKeeper("))

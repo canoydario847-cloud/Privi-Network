@@ -49,11 +49,30 @@ else
     exit 1
   fi
 fi
+# Render validators are a secret-free NONLIVE candidate, not a deployment.
+# The provider-facing checker refuses web services masquerading as BFT signers.
+python3 "$ROOT/ops/render_validator_preflight.py" \
+  "$ROOT/ops/render-validator-candidates.NONLIVE.json" --mode draft
+if python3 "$ROOT/ops/render_validator_preflight.py" \
+  "$ROOT/ops/render-validator-candidates.NONLIVE.json" --mode production; then
+  echo "FATAL: candidate Render topology authorized mainnet" >&2
+  exit 1
+else
+  status=$?
+  if [[ "$status" -ne 3 ]]; then
+    echo "Render validator production guard returned unexpected status $status" >&2
+    exit 1
+  fi
+fi
 node --check "$ROOT/ops/legacy_state_copy.js"
 node --test "$ROOT/ops/test_legacy_state_copy.js"
 node --test "$ROOT/ops/test_verify_operator_attestations.cjs"
 node --test "$ROOT/testnet/test_send_disposable_test_transfer.cjs"
 node --test "$ROOT/testnet/test_deploy_disposable_counter.cjs"
+# Point of Position (PoP) logical-stamp signature/sequence/hash prototype.
+# This verifies offline records; it is NOT a native PoP BFT consensus engine,
+# does not prove economic valuation and cannot authorize financial launch.
+(cd "$ROOT/mainnet/pop" && GOTOOLCHAIN=local go test -mod=mod -count=1 ./...)
 # Hard-cap reference is a pure-Go OFF-CHAIN accounting model, not deployed
 # Cosmos SDK consensus code. Race tests exercise simultaneous candidate mints.
 command -v go >/dev/null

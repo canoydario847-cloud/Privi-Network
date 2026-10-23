@@ -43,8 +43,10 @@ gas and overall fee budget. An unsafe or unaffordable quote is rejected; it does
 spending limits. The maximum transaction exposure is the user-approved
 **gas limit multiplied by maxFeePerGas**, not the lower current effective
 price estimate. Quoted limits remain advisory: the eventual transaction
-builder must enforce both returned `requiredGasLimit` and
-`requiredMaxFeePerGasWei` (or stricter limits). It is *advisory*: Cosmos EVM
+builder must enforce both returned `signedGasLimit` and `customerMaxFeePerGasWei` (or stricter limits),
+and a user-approved worst-case total budget. `maxQuotedGasWei` is only
+an estimated price-times-usage figure; the maximum exposure
+is separately reported as `maxAuthorizedGasWei`. It is *advisory*: Cosmos EVM
 fee routing, block congestion responses, EIP-1559 actual base-fee burning,
 validator rewards and on-chain fee accounting must be reviewed in the
 exact pinned native PoP implementation before changing any production

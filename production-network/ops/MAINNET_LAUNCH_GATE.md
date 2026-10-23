@@ -55,6 +55,22 @@ financial validators**. Confirm genuine cross-host CometBFT identity and
 block hashes independently before considering them even a validated
 multi-service TEST network.
 
+## Owner-selected Render hosting provider — 2026-10-20
+
+The owner has selected **Render** for the proposed four production validator
+services, **conditionally on validation of its infrastructure security**.
+See [Render production validator preflight](RENDER_VALIDATOR_PREFLIGHT.md).
+
+Render private services support same-region P2P communications and paid persistent
+disks; however, a disk-backed service lacks zero-downtime deploys and private
+networking does not automatically cross Render regions. Four containers in one
+region share a provider failure domain. The launch gate **still requires four
+unique signers, distinct host identities, fault-isolation evidence, safe
+remote signing, resilient peer connectivity and documented recovery**.
+No Render production validator is currently verified or deployed (0/4).
+If Render cannot meet the fault-isolation/signing/network requirements,
+production stays blocked until the owner approves a compliant architecture.
+
 ## Required evidence before GO decision
 
 | Gate | Acceptance evidence | Status |

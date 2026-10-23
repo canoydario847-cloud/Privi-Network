@@ -40,6 +40,7 @@ jobs:
           python3 production-network/mainnet/custom-app/patch_pinned_erc20_mutations.py \
             --upstream "$RUNNER_TEMP/.upstream-capbuild"
           gofmt -w "$RUNNER_TEMP/.upstream-capbuild/evmd/app.go" "$RUNNER_TEMP/.upstream-capbuild/evmd/prvicap/"*.go \
+            "$RUNNER_TEMP/.upstream-capbuild/evmd/prvipop/"*.go \
             "$RUNNER_TEMP/.upstream-capbuild/x/erc20/keeper/params.go" \
             "$RUNNER_TEMP/.upstream-capbuild/x/erc20/keeper/token_pairs.go"
           git -C "$RUNNER_TEMP/.upstream-capbuild" diff --check
@@ -47,7 +48,15 @@ jobs:
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/.upstream-capbuild/evmd"
-          GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^$' -timeout 20m . ./prvicap
+          # Build and package only with the reviewed hardened Cosmos SDK.
+          GOTOOLCHAIN=local go mod download github.com/cosmos/cosmos-sdk@v0.54.3
+          sdk_root="$(go env GOMODCACHE)/github.com/cosmos/cosmos-sdk@v0.54.3"
+          sdk_copy_dir="$RUNNER_TEMP/privi-patched-sdk-app-only"
+          python3 "$GITHUB_WORKSPACE/production-network/mainnet/custom-app/patch_sdk_bank_source.py" \
+            --sdk-root "$sdk_root" --output-dir "$sdk_copy_dir"
+          GOTOOLCHAIN=local go mod edit -replace="github.com/cosmos/cosmos-sdk=$sdk_copy_dir"
+          GOTOOLCHAIN=local go list -m -json github.com/cosmos/cosmos-sdk > "$RUNNER_TEMP/privi-sdk-module.json"
+          GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^$' -timeout 20m . ./prvicap ./prvipop
           mkdir -p "$RUNNER_TEMP/privi-unsigned-test-binary"
           GOTOOLCHAIN=local go build -mod=mod -p 2 -trimpath -buildvcs=false \
             -o "$RUNNER_TEMP/privi-unsigned-test-binary/privi-evmd-UNSIGNED-TEST-ONLY" ./cmd/evmd
@@ -91,7 +100,12 @@ jobs:
           EOF
           printf 'privi_source_commit=%s\nupstream_cosmos_evm_tag=%s\nupstream_cosmos_evm_commit=%s\n' \
             "$GITHUB_SHA" "v0.7.3" "c3ae9067a7eadcdea55a5192226916deb44c71c4" > "$OUT/BUILD-PROVENANCE.txt"
-          go version -m "$OUT/privi-evmd-UNSIGNED-TEST-ONLY" > "$OUT/GO-BUILD-INFO.txt"
+          GOTOOLCHAIN=local go version -m "$OUT/privi-evmd-UNSIGNED-TEST-ONLY" > "$OUT/GO-BUILD-INFO.txt"
+          # Do not publish even a valueless review artifact with the raw SDK.
+          python3 "$GITHUB_WORKSPACE/production-network/mainnet/custom-app/verify_privi_sdk_binary.py" \
+            --module-json "$RUNNER_TEMP/privi-sdk-module.json" \
+            --build-info "$OUT/GO-BUILD-INFO.txt" \
+            --sdk-dir "$RUNNER_TEMP/privi-patched-sdk-app-only"
           (cd "$OUT" && sha256sum privi-evmd-UNSIGNED-TEST-ONLY GO-BUILD-INFO.txt BUILD-PROVENANCE.txt READ-ME-FIRST.txt > SHA256SUMS)
           (cd "$OUT" && sha256sum -c SHA256SUMS)
       - name: Upload short-lived unsigned review artifact (never a financial release)

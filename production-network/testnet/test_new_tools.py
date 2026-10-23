@@ -27,7 +27,7 @@ class Tests(unittest.TestCase):
             if path.startswith('/block?'):return {'block_id':{'hash':'abc'}}
             if path.startswith('/validators?'):return {'validators':validators,'total':'4'}
             if path.startswith('/commit?'):return {'signed_header':{'commit':{
-                'block_id':{'hash':'abc'},
+                'height':'41', 'block_id':{'hash':'abc'},
                 'signatures':[{'validator_address':v['address'],'block_id_flag':2,'signature':'AA=='} for v in validators]}}}
             raise RuntimeError(path)
         with patch('consensus_audit.get',side_effect=fake):

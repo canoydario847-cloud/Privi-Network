@@ -42,6 +42,17 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
         'evmconfig "github.com/cosmos/evm/evmd/config"\n'
         '\tprvicap "github.com/cosmos/evm/evmd/prvicap"',
         "cap import")
+    app = replace_once(app,
+        '\tprvicap "github.com/cosmos/evm/evmd/prvicap"',
+        '\tprvicap "github.com/cosmos/evm/evmd/prvicap"\n'
+        '\tprvipop "github.com/cosmos/evm/evmd/prvipop"',
+        "pop import")
+    app = replace_once(app,
+        '\t"github.com/ethereum/go-ethereum/common"',
+        '\t"github.com/ethereum/go-ethereum/common"\n'
+        '\t"github.com/ethereum/go-ethereum/core"\n'
+        '\tethtypes "github.com/ethereum/go-ethereum/core/types"',
+        "actual EVM receipt hook imports")
     # Validate the EIP-155 chain identity before module/codec construction;
     # the upstream dev chain ID must never slip into a financial PRVI binary.
     app = replace_once(app,
@@ -52,14 +63,38 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
         "\t}\n"
         "\tencodingConfig := evmencoding.MakeConfig(evmChainID)",
         "reject upstream default EVM chain ID before constructing keepers")
+    # This policy executes after EIP-155 validation but BEFORE global VM
+    # fork configuration and keeper construction, so a generic chain cannot
+    # silently launch with a self-supplied PoP signer registry.
+    app = replace_once(app,
+        "\tencodingConfig := evmencoding.MakeConfig(evmChainID)",
+        '''\tvar popPin string
+\tif rawPin:=appOpts.Get("privi.pop.trusted_registry_digest");rawPin!=nil {
+\t\tvalue,ok:=rawPin.(string)
+\t\tif !ok||len(value)!=64 {panic("Privi PoP registry pin must be lowercase 64-hex")}
+\t\tfor _,r:=range value {
+\t\t\tif !((r>='0'&&r<='9')||(r>='a'&&r<='f')){
+\t\t\t\tpanic("Privi PoP registry pin must be lowercase 64-hex")
+\t\t\t}
+\t\t}
+\t\tpopPin=value
+\t}
+\tif popPin=="" {
+\t\tallow,ok:=appOpts.Get("privi.pop.allow_unpinned_dev").(bool)
+\t\tif !ok||!allow||evmChainID!=424242 {
+\t\t\tpanic("Privi PoP trusted registry digest REQUIRED outside explicit valueless CI")
+\t\t}
+\t}
+\tencodingConfig := evmencoding.MakeConfig(evmChainID)''',
+        "fail closed on missing non-CI PoP registry pin")
     app = replace_once(app,
         "\tBankKeeper            bankkeeper.Keeper",
-        "\tBankKeeper            bankkeeper.Keeper\n\tPriviCapKeeper        prvicap.Keeper",
+        "\tBankKeeper            bankkeeper.Keeper\n\tPriviCapKeeper        prvicap.Keeper\n\tPriviPoPKeeper        prvipop.Keeper\n\tPriviPoPTrustedDigest string",
         "cap keeper field")
     app = replace_once(app,
         "\t\tauthtypes.StoreKey, banktypes.StoreKey, stakingtypes.StoreKey,",
         "\t\tauthtypes.StoreKey, banktypes.StoreKey, stakingtypes.StoreKey,\n"
-        "\t\tprvicap.StoreKey,",
+        "\t\tprvicap.StoreKey,\n\t\tprvipop.StoreKey,",
         "mount dedicated merkle KV state")
     old_bank = '''\tapp.BankKeeper = bankkeeper.NewBaseKeeper(
 \t\tappCodec,
@@ -75,6 +110,13 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \tpriviCap, capErr := prvicap.New(runtime.NewKVStoreService(keys[prvicap.StoreKey]))
 \tif capErr != nil { panic(capErr) }
 \tapp.PriviCapKeeper = priviCap
+\t// Native PoP company/zone state is mounted to Cosmos consensus KV.
+\t// Its author registry will be loaded from reviewed chain genesis.
+\tpopKeeper, popErr := prvipop.NewKeeper(runtime.NewKVStoreService(keys[prvipop.StoreKey]))
+\tif popErr != nil { panic(popErr) }
+\tapp.PriviPoPKeeper = popKeeper
+\t// Reuse the pinned digest already validated before global EVM setup.
+\tapp.PriviPoPTrustedDigest = popPin
 \tbaseBank := bankkeeper.NewBaseKeeper(
 \t\tappCodec,
 \t\truntime.NewKVStoreService(keys[banktypes.StoreKey]),
@@ -125,6 +167,38 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \tinitialPRVI := bankGenesis.Supply.AmountOf(prvicap.BaseDenom)
 \tif err := prvicap.ValidateGenesisBase(initialPRVI.String()); err != nil {
 \t\treturn nil, fmt.Errorf("PRVI cap declared genesis denied before module init: %w", err)
+\t}
+\t// PoP company/zone authors must be pinned to immutable chain genesis.
+\tpopJSON, hasPoP := genesisState[prvipop.StoreKey]
+\tif !hasPoP { return nil, fmt.Errorf("Privi PoP genesis: authorization registry absent") }
+\tvar popGenesis struct {
+\t\tChainID string `json:"chain_id"`
+\t\tAuthorities []prvipop.Authority `json:"authorities"`
+\t}
+\tif err := json.Unmarshal(popJSON, &popGenesis); err != nil {
+\t\treturn nil, fmt.Errorf("Privi PoP genesis: malformed authorization registry: %w",err)
+\t}
+\tif popGenesis.ChainID != ctx.ChainID() {
+\t\treturn nil, fmt.Errorf("Privi PoP genesis: Cosmos chain identity mismatch")
+\t}
+\t// Only the two hardcoded NONFINANCIAL Cosmos fixtures may omit the
+\t// external registry digest. No arbitrary Cosmos chain may use dev mode.
+\tif app.PriviPoPTrustedDigest=="" &&
+\t\tpopGenesis.ChainID!="privi-ci-only-not-financial-1" &&
+\t\tpopGenesis.ChainID!="privi-valueless-genesis-probe-1" {
+\t\treturn nil,fmt.Errorf("Privi PoP genesis: unpinned dev chain identity forbidden")
+\t}
+\tif err := prvipop.ValidateGenesis(popGenesis.ChainID,popGenesis.Authorities); err != nil {
+\t\treturn nil,fmt.Errorf("Privi PoP genesis: unsafe author registry before SDK InitGenesis: %w",err)
+\t}
+\t// Reject a substituted same-chain author key BEFORE any module initializes.
+\t// The trusted pin must come from a separately authenticated release.
+\tif app.PriviPoPTrustedDigest != "" {
+\t\tgot,err := prvipop.GenesisDigest(popGenesis.ChainID,popGenesis.Authorities)
+\t\tif err != nil {return nil,fmt.Errorf("Privi PoP genesis: digest calculation denied: %w",err)}
+\t\tif got != app.PriviPoPTrustedDigest {
+\t\t\treturn nil,fmt.Errorf("Privi PoP genesis: operator-pinned authorization digest mismatch")
+\t\t}
 \t}
 \t// Native PRVI must actually be the EVM gas and staking denomination.
 \t// Do not allow a misleading genesis with capped aprvi but fees/stake in
@@ -208,6 +282,9 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \tif err := app.PriviCapKeeper.InitGenesis(ctx, initialPRVI.String(), app.BankKeeper); err != nil {
 \t\treturn nil, fmt.Errorf("PRVI cap genesis initialization denied: %w", err)
 \t}
+\tif err := app.PriviPoPKeeper.InitGenesis(ctx,popGenesis.ChainID,popGenesis.Authorities); err != nil {
+\t\treturn nil,fmt.Errorf("Privi PoP genesis authorization denied: %w",err)
+\t}
 \tif err := app.CheckPriviNativeERC20Invariant(ctx); err != nil {
 \t\treturn nil, fmt.Errorf("PRVI native genesis ERC20 runtime state denied: %w", err)
 \t}
@@ -218,7 +295,16 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
     # This is defense in depth: it does not atomically forbid every possible
     # in-block transient create/delete route or unreviewed keeper mutation.
     # The per-block token-pair walk requires load/performance testing.
-    invariant = '''// CheckPriviNativeERC20Invariant verifies live ERC20 state rather than
+    invariant = '''// checkPriviPoPRegistry uses a separately supplied signer pin when present.
+// Missing pins remain DEV-ONLY and may not authorize a financial mainnet.
+func (app *EVMD) checkPriviPoPRegistry(ctx sdk.Context) error {
+\tif app.PriviPoPTrustedDigest != "" {
+\t\treturn app.PriviPoPKeeper.AssertPinnedGenesis(ctx,ctx.ChainID(),app.PriviPoPTrustedDigest)
+\t}
+\treturn app.PriviPoPKeeper.AssertInitialized(ctx,ctx.ChainID())
+}
+
+// CheckPriviNativeERC20Invariant verifies live ERC20 state rather than
 // just unsigned genesis declarations. No runtime auto-correction: a
 // forbidden state makes block execution fail closed. This is O(token pairs).
 func (app *EVMD) CheckPriviNativeERC20Invariant(ctx sdk.Context) error {
@@ -251,6 +337,9 @@ func (app *EVMD) CheckPriviNativeERC20Invariant(ctx sdk.Context) error {
 \treturn app.ModuleManager.BeginBlock(ctx)
 }'''.replace("\\t", "\t"),
         '''func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {
+\tif err := app.checkPriviPoPRegistry(ctx); err != nil {
+\t\treturn sdk.BeginBlock{},fmt.Errorf("Privi PoP beginning-of-block registry denied: %w",err)
+\t}
 \tif err := app.PriviCapKeeper.Reconcile(ctx, app.BankKeeper); err != nil {
 \t\treturn sdk.BeginBlock{}, fmt.Errorf("PRVI beginning-of-block supply check denied: %w", err)
 \t}
@@ -267,6 +356,9 @@ func (app *EVMD) CheckPriviNativeERC20Invariant(ctx sdk.Context) error {
         '''func (app *EVMD) EndBlocker(ctx sdk.Context) (sdk.EndBlock, error) {
 \tresponse, endErr := app.ModuleManager.EndBlock(ctx)
 \tif endErr != nil { return response, endErr }
+\tif err := app.checkPriviPoPRegistry(ctx); err != nil {
+\t\treturn response,fmt.Errorf("Privi PoP end-of-block registry denied: %w",err)
+\t}
 \tif err := app.PriviCapKeeper.Reconcile(ctx, app.BankKeeper); err != nil {
 \t\treturn response, fmt.Errorf("PRVI end-of-block supply check denied: %w", err)
 \t}
@@ -276,6 +368,83 @@ func (app *EVMD) CheckPriviNativeERC20Invariant(ctx sdk.Context) error {
 \treturn response, nil
 }'''.replace("\\t", "\t"),
         "post-block supply invariant")
+    # Pinned Cosmos EVM v0.7.3 reports EVM reverts as MsgEthereumTxResponse
+    # VmError while the Cosmos SDK runMsgs error may still be NIL. Therefore
+    # the SDK PostHandler's "success" bool is NOT an EVM success proof!
+    # Move native PoP writes to the EVM keeper's PostTxProcessing hook,
+    # where the actual per-message receipt.Status is available. The EVM
+    # keeper runs hooks in a CacheContext and commits only when the hook
+    # and EVM both succeed. Do not mutate PoP state from an SDK posthandler.
+    evmPoPHook = '''// PostTxProcessing is a native EVM receipt-aware hook, NOT an SDK
+// posthandler. A successful Cosmos SDK tx alone cannot authorize PoP:
+// Ethereum VM errors can return nil Cosmos handler error with status=0.
+// Native PoP state is committed only after receipt.Status=1.
+func (app *EVMD) PostTxProcessing(
+\tctx sdk.Context, sender common.Address, msg core.Message, receipt *ethtypes.Receipt,
+) error {
+\tif msg.To == nil || *msg.To != common.HexToAddress(prvipop.PoPSinkEVMAddress) { return nil }
+\t// Any PoP-looking EVM call to this dedicated sink MUST fail closed on
+\t// missing receipt or unsuccessful EVM execution, not silently earn value.
+\tif ctx.ExecMode() != sdk.ExecModeFinalize {
+\t\treturn fmt.Errorf("Privi PoP hook outside finalized transaction")
+\t}
+\tif receipt == nil || receipt.Status != ethtypes.ReceiptStatusSuccessful {
+\t\treturn fmt.Errorf("Privi PoP execution receipt unsuccessful")
+\t}
+\tif msg.Value == nil || msg.Value.Sign()!=0 {
+\t\treturn fmt.Errorf("Privi PoP position tx may not transfer value")
+\t}
+\tif msg.GasLimit > 1000000 {
+\t\treturn fmt.Errorf("Privi PoP position gas limit exceeds test-only bound")
+\t}
+\t// Ensure this address has no EVM runtime bytecode. A code-bearing sink
+\t// could revert or execute side effects other than position verification.
+\tif len(app.EVMKeeper.GetCode(ctx,app.EVMKeeper.GetCodeHash(ctx,*msg.To)))!=0 {
+\t\treturn fmt.Errorf("Privi PoP sink EVM contract code forbidden")
+\t}
+\t// Validate the optional external registry pin again in the receipt hook:
+\t// a same-block author-key substitution cannot be credited to PoP.
+\tif err:=app.checkPriviPoPRegistry(ctx);err!=nil {
+\t\treturn fmt.Errorf("Privi PoP receipt signer registry denied: %w",err)
+\t}
+\tposition,decodeErr:=prvipop.DecodeEnvelope(msg.Data)
+\tif decodeErr!=nil {
+\t\treturn fmt.Errorf("Privi PoP transaction envelope rejected: %w",decodeErr)
+\t}
+\tif _,applyErr:=app.PriviPoPKeeper.Apply(ctx,position);applyErr!=nil {
+\t\treturn fmt.Errorf("Privi PoP authenticated native transition denied: %w",applyErr)
+\t}
+\treturn nil
+}
+
+'''
+    app = replace_once(app,
+        "func (app *EVMD) setPostHandler() {",
+        evmPoPHook.replace("\\t","\t") + "func (app *EVMD) setPostHandler() {",
+        "mount EVM receipt verified native PoP execution hook")
+    # The custom EVM app has NO existing EVM hooks at this pinned tag.
+    # SetHooks panics on a second hook and deliberately fails closed on
+    # unexpected upstream changes; do not overwrite unrelated hook chains.
+    app = replace_once(app,
+        "\tapp.EVMKeeper.EnableVirtualFeeCollection()",
+        '''\tapp.EVMKeeper.EnableVirtualFeeCollection()
+\tif app.EVMKeeper.HasHooks() {panic("Privi PoP EVM hook conflict")}
+\tapp.EVMKeeper.SetHooks(app)'''.replace("\\t","\t"),
+        "require PoP EVM receipt hook at keeper initialization")
+    if app.count("app.EVMKeeper.SetHooks(app)") != 1 or app.count(
+            "app.PriviPoPKeeper.Apply(ctx,position)") != 1:
+        raise ValueError("native PoP receipt guard must register and apply exactly once")
+    if (app.count("app.checkPriviPoPRegistry(ctx)") != 3 or
+            app.count("app.PriviPoPKeeper.AssertPinnedGenesis(") != 1 or
+            app.count("prvipop.GenesisDigest(popGenesis.ChainID,popGenesis.Authorities)") != 1):
+        raise ValueError("external PoP digest guard must cover genesis, block edges and EVM receipt")
+    if (app.count('appOpts.Get("privi.pop.allow_unpinned_dev")') != 1 or
+            app.count("app.PriviPoPTrustedDigest = popPin") != 1 or
+            app.count("Privi PoP trusted registry digest REQUIRED outside explicit valueless CI") != 1 or
+            app.count("Privi PoP genesis: unpinned dev chain identity forbidden") != 1):
+        raise ValueError("missing fail-closed non-CI PoP signer pin policy")
+    if "app.ApplyPriviPoPFromFinalizedTx(" in app:
+        raise ValueError("obsolete SDK posthandler PoP credit path forbidden")
     # Fail closed if upstream source evolves to retain or overwrite a raw
     # bank keeper after restricted injection. This static check is intentionally
     # conservative and does NOT replace an audit of module aliases or SDK code.
@@ -305,18 +474,36 @@ func (app *EVMD) CheckPriviNativeERC20Invariant(ctx sdk.Context) error {
 // StoreKey is mounted by the custom app with sdk NewKVStoreKeys, never memstore.
 const StoreKey = "prvicap"
 '''
+    # Validate source before writes to the pinned disposable checkout.
+    pop_srcdir = source_repo / "production-network" / "mainnet" / "pop"
+    pop_files = {}
+    for name in ("position.go", "keeper.go", "wire.go"):
+        content = (pop_srcdir / name).read_text(encoding="utf-8")
+        if "package position" not in content:
+            raise ValueError("invalid native PoP source " + name)
+        pop_files[name] = content
+    if (upstream / "evmd" / "prvipop").exists():
+        raise ValueError("refusing to overwrite PoP consensus source")
+    if app.count("app.PriviPoPKeeper = popKeeper") != 1 or app.count(
+            "app.PriviPoPKeeper.InitGenesis(ctx,popGenesis.ChainID,popGenesis.Authorities)") != 1:
+        raise ValueError("PoP keeper must mount and initialize once")
     if (upstream / "evmd" / "prvicap").exists():
         raise ValueError("refusing to overwrite cap keeper source")
     dest = upstream / "evmd" / "prvicap"
     dest.mkdir()
     for name, content in files.items():
         (dest / name).write_text(content, encoding="utf-8")
+    pop_dest = upstream / "evmd" / "prvipop"
+    pop_dest.mkdir()
+    for name, content in pop_files.items():
+        (pop_dest / name).write_text(content, encoding="utf-8")
     app_path.write_text(app, encoding="utf-8")
     return {
         "status": "BUILD_ONLY_PRVI_CONSENSUS_CAP_APP_SOURCE_WIRED",
         "upstream": UPSTREAM_COMMIT,
         "app_sha256": hashlib.sha256(app.encode("utf-8")).hexdigest(),
         "cap_source_files": sorted(files),
+        "pop_source_files": sorted(pop_files),
         "financial_mainnet": "NOT_ACTIVE",
         "release_ready": False,
         "limitations": "Compiler proof only; no financial genesis, validators, production audits or real PRVI issued",

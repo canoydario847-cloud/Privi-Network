@@ -106,3 +106,37 @@ The [mainnet evidence verifier](../ops/verify_mainnet_evidence.py) requires exac
 7. Only after approval, coordinate the genesis time with independent operators; verify production `eth_chainId`, block commit voting power, wallets, RPC and explorer. Never equate a developer localnet success with financial activation.
 
 **Gate:** Mainnet remains **NO-GO** until the complete [MAINNET_LAUNCH_GATE.md](../ops/MAINNET_LAUNCH_GATE.md) evidence package is verifiable.
+
+
+### Experimental externally pinned PoP signer registry
+
+The custom PoP-enabled development app now accepts an optional app-options
+string key `privi.pop.trusted_registry_digest`, whose value must be an
+externally authenticated lowercase SHA-256 digest from
+`prvipop.GenesisDigest(chainID, authorities)`. When supplied, the app
+rejects mismatching signed-author genesis **before** SDK module writes,
+checks the committed registry at BeginBlock/EndBlock, and also checks it
+at the EVM PoP receipt hook to reject same-block substitution. The CI
+`wrong-pin` case proves rejection on a valid but differently pinned genesis.
+
+This option is **not authenticated by the program**. A real deployment must
+verify the operator-signed release manifest and independently deliver the
+trusted digest on every restart. If absent, the app falls back to basic
+registry/chain-ID checks for NONFINANCIAL research only. That fallback is
+not sufficient for a production financial mainnet. Neither this feature
+nor passing CI constitutes PoP BFT finality or release approval.
+
+
+### PoP default-deny startup restriction (development milestone)
+
+To prevent accidental startup with unpinned PoP signers, the custom
+application now requires `privi.pop.trusted_registry_digest` as 64 canonical
+lowercase hex characters before initializing the EVM chain or bank keepers.
+The only unpinned exception requires **both** an explicit
+`privi.pop.allow_unpinned_dev=true` app option and EVM chain ID `424242`;
+InitChain also restricts that exception to the two exact valueless fixture
+Cosmos chain identities `privi-ci-only-not-financial-1` and
+`privi-valueless-genesis-probe-1`. Any other EVM or Cosmos identity is
+rejected without an externally supplied pin. This does not authenticate
+the submitted digest or make the code ready for financial mainnet; a
+trusted owner-signed release is still mandatory.

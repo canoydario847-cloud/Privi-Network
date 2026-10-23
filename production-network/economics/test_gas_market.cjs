@@ -51,9 +51,8 @@ test("balanced caller-supplied fee allocations never prove treasury revenue",()=
     actualValidatorPaymentsWei:"0",actualTreasuryReceiptsWei:"10000",
     actualOtherDestinationsWei:"0"
   });
-  assert.equal(fabricated.reportedTreasuryAllocationWei,"10000");
   assert.equal(fabricated.treasuryRevenueWei,null,
-    "balanced fabricated allocations cannot create verified treasury revenue");
+    "an arithmetically balanced fabrication must not be labeled actual revenue");
   assert.throws(()=>reconcileActualFeeAllocation({
       observedChargedGasWei:"10000",actualBurnedWei:"4000",
       actualValidatorPaymentsWei:"2000",actualTreasuryReceiptsWei:"6000",
@@ -67,28 +66,36 @@ test("balanced caller-supplied fee allocations never prove treasury revenue",()=
 });
 test("advisory EIP-1559 quotes preserve a customer maximum rather than maximize a fee",()=>{
   const good=advisoryEip1559Quote({baseFeeWei:"10",priorityFeeWei:"2",
-    customerMaxFeePerGasWei:"15",estimatedGas:"21000",customerMaxTotalWei:"350000"});
+    customerMaxFeePerGasWei:"15",estimatedGas:"21000",signedGasLimit:"21000",customerMaxTotalWei:"315000"});
   assert.equal(good.quotedGasPriceWei,"12");
-  assert.equal(good.estimatedQuotedGasWei,"252000");
-  assert.equal(good.maxQuotedGasWei,"315000");
-  assert.equal(good.requiredGasLimit,"21000");
-  assert.equal(good.requiredMaxFeePerGasWei,"15");
+  assert.equal(good.maxQuotedGasWei,"252000");
+  assert.equal(good.maxAuthorizedGasWei,"315000");
+  assert.equal(good.signedGasLimit,"21000");
   assert.equal(good.includedTipWei,"2");
   const capped=advisoryEip1559Quote({baseFeeWei:"10",priorityFeeWei:"100",
-    customerMaxFeePerGasWei:"15",estimatedGas:"21000",customerMaxTotalWei:"400000"});
+    customerMaxFeePerGasWei:"15",estimatedGas:"21000",signedGasLimit:"21000",customerMaxTotalWei:"400000"});
   assert.equal(capped.quotedGasPriceWei,"15");
   assert.equal(capped.includedTipWei,"5");
-  // A low observed effective price must not conceal the signed max-fee risk.
+  assert.equal(capped.maxAuthorizedGasWei,"315000");
+  // Before this guard, the quote (252000) passed a 300000 budget even though
+  // the signed maxFeePerGas could charge 315000 after a base-fee increase.
   assert.throws(()=>advisoryEip1559Quote({baseFeeWei:"10",priorityFeeWei:"2",
-    customerMaxFeePerGasWei:"15",estimatedGas:"21000",customerMaxTotalWei:"252000"}),
-    /Worst-case fee quote exceeds customer's signed budget/);
-  const exact=advisoryEip1559Quote({baseFeeWei:"10",priorityFeeWei:"2",
-    customerMaxFeePerGasWei:"15",estimatedGas:"21000",customerMaxTotalWei:"315000"});
-  assert.equal(exact.maxQuotedGasWei,"315000");
+    customerMaxFeePerGasWei:"15",estimatedGas:"21000",signedGasLimit:"21000",customerMaxTotalWei:"300000"}),/Worst-case signed gas fee/);
+  // A transaction can consume its SIGNED 35000 gas even when estimated at 21000.
+  // A quote that tests only estimatedGas would incorrectly accept this budget.
+  assert.throws(()=>advisoryEip1559Quote({baseFeeWei:"10",priorityFeeWei:"2",
+    customerMaxFeePerGasWei:"15",estimatedGas:"21000",signedGasLimit:"35000",
+    customerMaxTotalWei:"400000"}),/Worst-case signed gas fee/);
+  assert.throws(()=>advisoryEip1559Quote({baseFeeWei:"10",priorityFeeWei:"2",
+    customerMaxFeePerGasWei:"15",estimatedGas:"21000",signedGasLimit:"20000",
+    customerMaxTotalWei:"400000"}),/Signed gas limit/);
+  assert.throws(()=>advisoryEip1559Quote({baseFeeWei:"10",priorityFeeWei:"2",
+    customerMaxFeePerGasWei:"15",estimatedGas:"21000",
+    customerMaxTotalWei:"400000"}),/signed gas limit/);
   assert.throws(()=>advisoryEip1559Quote({baseFeeWei:"20",priorityFeeWei:"1",
-    customerMaxFeePerGasWei:"15",estimatedGas:"21000",customerMaxTotalWei:"900000"}),/exceeds customer/);
+    customerMaxFeePerGasWei:"15",estimatedGas:"21000",signedGasLimit:"21000",customerMaxTotalWei:"900000"}),/exceeds customer/);
   assert.throws(()=>advisoryEip1559Quote({baseFeeWei:"10",priorityFeeWei:"5",
-    customerMaxFeePerGasWei:"20",estimatedGas:"21000",customerMaxTotalWei:"200000"}),/signed budget/);
+    customerMaxFeePerGasWei:"20",estimatedGas:"21000",signedGasLimit:"21000",customerMaxTotalWei:"200000"}),/signed budget/);
 });
 test("economic scenarios distinguish volume from expensive single transaction",()=>{
   const options=compareScenarios([

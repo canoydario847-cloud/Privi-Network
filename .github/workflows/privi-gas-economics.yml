@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - 'production-network/economics/**'
+      - 'production-network/testnet/evm_receipt_audit.py'
+      - 'production-network/testnet/test_evm_receipt_audit.py'
+      - 'production-network/testnet/evm_smoke.py'
       - '.github/workflows/privi-gas-economics.yml'
   workflow_dispatch:
 
@@ -21,7 +24,9 @@ jobs:
         with:
           node-version: '22'
       - name: Run gas charged vs treasury revenue accounting checks
-        run: node --test production-network/economics/test_gas_market.cjs
+        run: node --test production-network/economics/test_gas_market.cjs production-network/economics/test_receipt_crosscheck.cjs production-network/economics/test_agent_call_meter.cjs
+      - name: Verify type-aware signed gas limits in read-only dev receipt auditor
+        run: python3 -m unittest discover -s production-network/testnet -p 'test_evm_receipt_audit.py' -v
       - name: Explicitly prevent any financial launch in fee-policy tests
         run: |
           set -euo pipefail

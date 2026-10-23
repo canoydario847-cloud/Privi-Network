@@ -18,9 +18,13 @@ jobs:
   offline:
     name: Offline checks
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25.9'
+          cache: false
       - name: Validate local tools and tests
         run: bash production-network/testnet/run_offline_checks.sh
 
@@ -50,6 +54,7 @@ jobs:
           python3 production-network/mainnet/custom-app/patch_pinned_erc20_mutations.py \
             --upstream "$RUNNER_TEMP/.upstream-capbuild"
           gofmt -w "$RUNNER_TEMP/.upstream-capbuild/evmd/app.go" "$RUNNER_TEMP/.upstream-capbuild/evmd/prvicap/"*.go \
+            "$RUNNER_TEMP/.upstream-capbuild/evmd/prvipop/"*.go \
             "$RUNNER_TEMP/.upstream-capbuild/x/erc20/keeper/params.go" \
             "$RUNNER_TEMP/.upstream-capbuild/x/erc20/keeper/token_pairs.go"
           git -C "$RUNNER_TEMP/.upstream-capbuild" diff --check
@@ -57,8 +62,16 @@ jobs:
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/.upstream-capbuild/evmd"
-          GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^$' -timeout 20m . ./prvicap
-          # Compile an isolated pre-production command binary, never uploaded,
+          # Restrict native PRVI direct bank mutations using the identical
+          # patched SDK source shipped in merged security PR #47.
+          GOTOOLCHAIN=local go mod download github.com/cosmos/cosmos-sdk@v0.54.3
+          sdk_root="$(go env GOMODCACHE)/github.com/cosmos/cosmos-sdk@v0.54.3"
+          sdk_copy_dir="$RUNNER_TEMP/privi-patched-sdk-app-only"
+          python3 "$GITHUB_WORKSPACE/production-network/mainnet/custom-app/patch_sdk_bank_source.py" \
+            --sdk-root "$sdk_root" --output-dir "$sdk_copy_dir"
+          GOTOOLCHAIN=local go mod edit -replace="github.com/cosmos/cosmos-sdk=$sdk_copy_dir"
+          GOTOOLCHAIN=local go list -m -json github.com/cosmos/cosmos-sdk > "$RUNNER_TEMP/privi-sdk-module.json"
+          GOTOOLCHAIN=local go test -mod=mod -p 2 -run NoTestsMatchThisCompileProbe -timeout 20m . ./prvicap ./prvipop
           # executed as mainnet, issued, or distributed to operator hosts.
           GOTOOLCHAIN=local go build -mod=mod -p 2 -trimpath -buildvcs=false \
             -o "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY" ./cmd/evmd
@@ -70,7 +83,13 @@ jobs:
           test -s "$RUNNER_TEMP/privi-evmd-TWIN-BUILD-ONLY"
           cmp "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY" "$RUNNER_TEMP/privi-evmd-TWIN-BUILD-ONLY"
           sha256sum "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY" "$RUNNER_TEMP/privi-evmd-TWIN-BUILD-ONLY"
-          go version -m "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY"
+          GOTOOLCHAIN=local go version -m "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY" \
+            > "$RUNNER_TEMP/privi-sdk-build-info.txt"
+          python3 "$GITHUB_WORKSPACE/production-network/mainnet/custom-app/verify_privi_sdk_binary.py" \
+            --module-json "$RUNNER_TEMP/privi-sdk-module.json" \
+            --build-info "$RUNNER_TEMP/privi-sdk-build-info.txt" \
+            --sdk-dir "$sdk_copy_dir"
+          cat "$RUNNER_TEMP/privi-sdk-build-info.txt"
           # Not a signed or deployable artifact; neither binary leaves CI.
           # Compile proof only: no genesis, validators, keys or real financial PRVI.
       - name: Test actual custom Cosmos EVM InitChain refuses unsafe genesis (VALUELESS ONLY)
@@ -104,6 +123,18 @@ jobs:
             "$RUNNER_TEMP/privi-custom-InitChain-TEST-ONLY"
           PRIVI_ERC20_NEGATIVE_PROBE=native-pair \
             "$RUNNER_TEMP/privi-custom-InitChain-TEST-ONLY"
+          # Verify the actual application InitChain rejects hidden post-genesis
+          # PRVI inflation and preloaded mint provisions (fresh app per case).
+          PRIVI_MINT_NEGATIVE_PROBE=inflation \
+            "$RUNNER_TEMP/privi-custom-InitChain-TEST-ONLY"
+          PRIVI_MINT_NEGATIVE_PROBE=provisions \
+            "$RUNNER_TEMP/privi-custom-InitChain-TEST-ONLY"
+          # Native PoP author registry is mandatory and Cosmos-chain-bound,
+          # but these checks do not yet route position txs into FinalizeBlock.
+          for mode in missing wrong-chain invalid-author wrong-pin; do
+            PRIVI_POP_NEGATIVE_PROBE="$mode" \
+              "$RUNNER_TEMP/privi-custom-InitChain-TEST-ONLY"
+          done
           # Offline fixtures only: no issued PRVI, wallet or public network.
 
 

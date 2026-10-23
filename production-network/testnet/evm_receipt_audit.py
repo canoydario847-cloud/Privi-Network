@@ -34,6 +34,10 @@ def check(rpc, tx_hash, chain_id, sender, recipient, amount_wei, confirmations=1
     actual_chain=hexint(rpc.call("eth_chainId"),"eth_chainId")
     if actual_chain!=chain_id:
         raise ValueError("EVM chain ID mismatch: expected %d, observed %d"%(chain_id,actual_chain))
+    genesis=rpc.call("eth_getBlockByNumber",["0x0",False])
+    genesis_hash=genesis.get("hash") if isinstance(genesis,dict) else None
+    if not isinstance(genesis_hash,str) or not TXHASH.fullmatch(genesis_hash):
+        raise ValueError("missing valid developer genesis block hash")
     tx=rpc.call("eth_getTransactionByHash",[tx_hash])
     receipt=rpc.call("eth_getTransactionReceipt",[tx_hash])
     if not isinstance(tx,dict) or not isinstance(receipt,dict):
@@ -52,12 +56,16 @@ def check(rpc, tx_hash, chain_id, sender, recipient, amount_wei, confirmations=1
     if hexint(receipt.get("status"),"receipt status")!=1:
         raise ValueError("transaction failed or receipt status not successful")
     height=hexint(receipt.get("blockNumber"),"receipt blockNumber")
+    if hexint(tx.get("blockNumber"),"transaction blockNumber")!=height:
+        raise ValueError("transaction and receipt block height disagreement")
     latest=hexint(rpc.call("eth_blockNumber"),"latest block")
     if height<1 or height>latest or (latest-height+1)<confirmations:
         raise ValueError("insufficient confirmations")
     block=rpc.call("eth_getBlockByNumber",[hex(height),False])
     if not isinstance(block,dict):
         raise ValueError("receipt block missing")
+    if hexint(block.get("number"),"canonical block number")!=height:
+        raise ValueError("canonical block height disagrees with transaction receipt")
     blockhash=block.get("hash")
     if not isinstance(blockhash,str) or not TXHASH.fullmatch(blockhash):
         raise ValueError("invalid block hash")
@@ -70,14 +78,30 @@ def check(rpc, tx_hash, chain_id, sender, recipient, amount_wei, confirmations=1
     effective_price=hexint(receipt.get("effectiveGasPrice"),"receipt effectiveGasPrice")
     if gas_limit<=0 or gas_used<=0 or gas_used>gas_limit or effective_price<=0:
         raise ValueError("invalid EVM gas usage or effective price")
-    signed_price=hexint(tx.get("gasPrice"),"transaction gasPrice")
-    if signed_price<=0 or effective_price>signed_price:
-        raise ValueError("receipt effective price exceeds transaction gas price")
-    return {"ok":True,"evm_chain_id":actual_chain,"tx_hash":tx_hash,
+    # Fee authorization depends on the signed transaction type. The mined
+    # EIP-1559 gasPrice RPC field is not the signed maxFeePerGas ceiling.
+    tx_type=hexint(tx.get("type","0x0"),"transaction type")
+    if tx_type in (0,1):
+        signed_price=hexint(tx.get("gasPrice"),"transaction gasPrice")
+        if signed_price<=0 or effective_price>signed_price:
+            raise ValueError("receipt effective price exceeds transaction gas price")
+    elif tx_type==2:
+        signed_price=hexint(tx.get("maxFeePerGas"),"transaction maxFeePerGas")
+        priority_cap=hexint(tx.get("maxPriorityFeePerGas"),"transaction maxPriorityFeePerGas")
+        if signed_price<=0 or priority_cap>signed_price:
+            raise ValueError("invalid signed EIP-1559 fee caps")
+        if effective_price>signed_price:
+            raise ValueError("receipt effective price exceeds signed EIP-1559 maxFeePerGas")
+    else:
+        raise ValueError("unsupported transaction type for developer receipt audit")
+    return {"ok":True,"execution_succeeded":True,"evm_chain_id":actual_chain,"genesis_hash":genesis_hash,"tx_hash":tx_hash,
             "sender":sender,"recipient":recipient,"value_wei":str(amount_wei),
             "block_height":height,"block_hash":blockhash,"confirmations":latest-height+1,
             "gas_used":str(gas_used),"effective_gas_price_wei":str(effective_price),
             "gross_gas_paid_wei":str(gas_used*effective_price),
+            "transaction_type":str(tx_type),
+            "signed_max_fee_per_gas_wei":str(signed_price),
+            "max_authorized_gas_fee_wei":str(gas_limit*signed_price),
             "warning":"Only a disposable, valueless developer transaction is verified; does not certify production or prove balance changes"}
 
 def main():
