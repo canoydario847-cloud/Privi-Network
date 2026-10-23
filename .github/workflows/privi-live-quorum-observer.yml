@@ -1,0 +1,29 @@
+name: Privi read-only quorum observer regressions
+on:
+  pull_request:
+    paths:
+      - "production-network/ops/verify_live_consensus.py"
+      - "production-network/ops/test_verify_live_consensus.py"
+      - "production-network/ops/LIVE_CONSENSUS_PROBE.md"
+      - ".github/workflows/privi-live-quorum-observer.yml"
+  push:
+    paths:
+      - "production-network/ops/verify_live_consensus.py"
+      - "production-network/ops/test_verify_live_consensus.py"
+      - "production-network/ops/LIVE_CONSENSUS_PROBE.md"
+      - ".github/workflows/privi-live-quorum-observer.yml"
+permissions:
+  contents: read
+jobs:
+  offline-synthetic-quorum-tests:
+    name: Reject forged and stale consensus observations (NONFINANCIAL)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run offline mocked CometBFT and EVM quorum tests
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s production-network/ops -p test_verify_live_consensus.py -v
+          python3 -m py_compile production-network/ops/verify_live_consensus.py
+          # Never dial public/production RPC or start validators in CI.
