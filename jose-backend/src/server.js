@@ -166,7 +166,10 @@ const server = http.createServer(async (req, res) => {
         monitorRunning: true, realPrviIssued: false });
     }
     if (req.method === 'GET' && url.pathname === '/api/network/report-card') {
-      return sendJson(res, 200, monitor.report());
+      return sendJson(res, 200, {
+        ...monitor.report(),
+        participation: participation.activeSummary(),
+      });
     }
     if (req.method === 'GET' && url.pathname === '/api/rewards/policy') {
       return sendJson(res, 200, {
