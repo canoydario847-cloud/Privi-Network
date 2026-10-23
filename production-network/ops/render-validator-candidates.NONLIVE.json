@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "purpose": "RENDER_PRODUCTION_VALIDATOR_CANDIDATE_NOT_DEPLOYED",
+  "operator": "Privi World Corp",
+  "provider": "render",
+  "workspace_id": "UNASSIGNED",
+  "financial_launch_enabled": false,
+  "production_ready": false,
+  "release_sha256": "UNASSIGNED",
+  "genesis_sha256": "UNASSIGNED",
+  "cross_region_p2p_security_review": "UNASSIGNED",
+  "failure_domain_review": "UNASSIGNED",
+  "validators": [
+    {
+      "id": "privi-owner-val-01",
+      "service_name": "privi-pop-validator-01",
+      "service_id": "UNASSIGNED",
+      "region": "UNASSIGNED",
+      "fault_domain": "UNASSIGNED",
+      "consensus_pubkey_sha256": "UNASSIGNED",
+      "signer_security_review": "UNASSIGNED",
+      "disk_mount": "/data",
+      "minimum_disk_gb": 10,
+      "manual_deploy": true,
+      "instance_count": 1,
+      "expected_type": "private_service"
+    },
+    {
+      "id": "privi-owner-val-02",
+      "service_name": "privi-pop-validator-02",
+      "service_id": "UNASSIGNED",
+      "region": "UNASSIGNED",
+      "fault_domain": "UNASSIGNED",
+      "consensus_pubkey_sha256": "UNASSIGNED",
+      "signer_security_review": "UNASSIGNED",
+      "disk_mount": "/data",
+      "minimum_disk_gb": 10,
+      "manual_deploy": true,
+      "instance_count": 1,
+      "expected_type": "private_service"
+    },
+    {
+      "id": "privi-owner-val-03",
+      "service_name": "privi-pop-validator-03",
+      "service_id": "UNASSIGNED",
+      "region": "UNASSIGNED",
+      "fault_domain": "UNASSIGNED",
+      "consensus_pubkey_sha256": "UNASSIGNED",
+      "signer_security_review": "UNASSIGNED",
+      "disk_mount": "/data",
+      "minimum_disk_gb": 10,
+      "manual_deploy": true,
+      "instance_count": 1,
+      "expected_type": "private_service"
+    },
+    {
+      "id": "privi-owner-val-04",
+      "service_name": "privi-pop-validator-04",
+      "service_id": "UNASSIGNED",
+      "region": "UNASSIGNED",
+      "fault_domain": "UNASSIGNED",
+      "consensus_pubkey_sha256": "UNASSIGNED",
+      "signer_security_review": "UNASSIGNED",
+      "disk_mount": "/data",
+      "minimum_disk_gb": 10,
+      "manual_deploy": true,
+      "instance_count": 1,
+      "expected_type": "private_service"
+    }
+  ]
+}
