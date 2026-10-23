@@ -111,34 +111,6 @@ func (k BaseSendKeeper) UncheckedSetBalance(ctx context.Context, addr sdk.AccAdd
         "package keeper\n\nimport \"math/big\"\n",
         "pinned SDK genesis arbitrary-precision cap import",
     )
-    genesis = exact(
-        genesis,
-        "    if genState == nil { panic(\"PRVI SDK bank: nil genesis refused\") }\n",
-        """    if genState == nil { panic("PRVI SDK bank: nil genesis refused") }
-    // PRVI genesis hard cap and actual bank allocation conservation. Validate
-    // all native balance rows before SetParams, metadata or KV updates.
-    nativeCap := new(big.Int).Exp(big.NewInt(10), big.NewInt(27), nil)
-    nativeSupply := genState.Supply.AmountOf("aprvi").BigInt()
-    if nativeSupply.Sign() < 0 || nativeSupply.Cmp(nativeCap) > 0 {
-        panic("PRVI SDK bank: native genesis supply above hard cap")
-    }
-    nativeBalances := new(big.Int)
-    for _, account := range genState.Balances {
-        amount := account.Coins.AmountOf("aprvi").BigInt()
-        if amount.Sign() < 0 {
-            panic("PRVI SDK bank: negative native genesis balance")
-        }
-        nativeBalances.Add(nativeBalances, amount)
-        if nativeBalances.Cmp(nativeCap) > 0 {
-            panic("PRVI SDK bank: native genesis balances above hard cap")
-        }
-    }
-    if nativeBalances.Cmp(nativeSupply) != 0 {
-        panic("PRVI SDK bank: native genesis supply does not match balances")
-    }
-""",
-        "genesis cap and allocation reconciliation guard",
-    )
     # x/bank InitGenesis bypasses MintCoins and writes balances plus supply
     # directly. On the pinned bank schema, raw prefixes 0..5 are taken and
     # 0xff is reserved here for this preproduction one-shot guard. A distinct
@@ -166,6 +138,34 @@ func (k BaseSendKeeper) UncheckedSetBalance(ctx context.Context, addr sdk.AccAdd
     }
 """,
         "genesis early lifecycle guard",
+    )
+    genesis = exact(
+        genesis,
+        "    if genState == nil { panic(\"PRVI SDK bank: nil genesis refused\") }\n",
+        """    if genState == nil { panic("PRVI SDK bank: nil genesis refused") }
+    // PRVI genesis hard cap and actual bank allocation conservation. Validate
+    // all native balance rows before SetParams, metadata or KV updates.
+    nativeCap := new(big.Int).Exp(big.NewInt(10), big.NewInt(27), nil)
+    nativeSupply := genState.Supply.AmountOf("aprvi").BigInt()
+    if nativeSupply.Sign() < 0 || nativeSupply.Cmp(nativeCap) > 0 {
+        panic("PRVI SDK bank: native genesis supply above hard cap")
+    }
+    nativeBalances := new(big.Int)
+    for _, account := range genState.Balances {
+        amount := account.Coins.AmountOf("aprvi").BigInt()
+        if amount.Sign() < 0 {
+            panic("PRVI SDK bank: negative native genesis balance")
+        }
+        nativeBalances.Add(nativeBalances, amount)
+        if nativeBalances.Cmp(nativeCap) > 0 {
+            panic("PRVI SDK bank: native genesis balances above hard cap")
+        }
+    }
+    if nativeBalances.Cmp(nativeSupply) != 0 {
+        panic("PRVI SDK bank: native genesis supply does not match balances")
+    }
+""",
+        "genesis cap and allocation reconciliation guard",
     )
     genesis = exact(
         genesis,
