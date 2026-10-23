@@ -95,7 +95,8 @@ export const db = {
     // ONLY call after the server verifies an issuer HMAC and original evidence.
     state.participation ||= { receipts: {}, accounts: {} };
     const ledger = state.participation;
-    if (Object.prototype.hasOwnProperty.call(ledger.receipts, quote.proofId)) {
+    const receiptKey = 'work:' + quote.proofId; // Prefix protects object dictionaries from prototype keys.
+    if (Object.prototype.hasOwnProperty.call(ledger.receipts, receiptKey)) {
       return { duplicate: true, ...this.getParticipationBalance(quote.subjectId, nowMs) };
     }
     // Bound storage; never delete recent deduplication evidence.
@@ -120,7 +121,7 @@ export const db = {
     if (!Number.isSafeInteger(previous.totalPoints + granted)) {
       throw new Error('Participation point counter exceeded safe integer limit');
     }
-    ledger.receipts[quote.proofId] = { at: nowMs, subjectId: quote.subjectId };
+    ledger.receipts[receiptKey] = { at: nowMs, subjectId: quote.subjectId };
     ledger.accounts[quote.subjectId] = {
       totalPoints: previous.totalPoints + granted,
       day: today, dayPoints: usedToday + granted,
