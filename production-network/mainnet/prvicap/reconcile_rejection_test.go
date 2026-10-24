@@ -248,3 +248,37 @@ func TestPartialGenesisObservationCannotBeReinitialized(t *testing.T) {
         t.Fatal("corrupt partial genesis wrote issuance record")
     }
 }
+
+
+// A snapshot must never advertise healthy native issuance accounting when
+// the persisted burn watermark has disappeared or become corrupt. This is
+// fake consensus KV, not a Cosmos SDK transaction-rollback proof.
+func TestSnapshotAndMintRestrictionRejectCorruptBurnWatermark(t *testing.T) {
+    k, store, ctx := setup(t, whole(100))
+    original := append([]byte(nil), store.content[string(keyObservedSupply)]...)
+    for _, invalid := range []string{"", "-1", "00", "001", "abc", whole(101)} {
+        store.content[string(keyObservedSupply)] = []byte(invalid)
+        if _, err := k.Snapshot(ctx); !errors.Is(err, ErrStoreCorrupt) {
+            t.Fatalf("snapshot accepted invalid burn watermark %q: %v", invalid, err)
+        }
+        if err := k.MintRestriction(ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrStoreCorrupt) {
+            t.Fatalf("mint policy masked corrupt burn watermark %q: %v", invalid, err)
+        }
+    }
+    delete(store.content, string(keyObservedSupply))
+    if _, err := k.Snapshot(ctx); !errors.Is(err, ErrStoreCorrupt) {
+        t.Fatalf("snapshot accepted missing burn watermark: %v", err)
+    }
+    if err := k.MintRestriction(ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrStoreCorrupt) {
+        t.Fatalf("mint policy masked missing burn watermark: %v", err)
+    }
+    // A legitimate complete burn stores canonical zero and remains readable.
+    store.content[string(keyObservedSupply)] = []byte("0")
+    if _, err := k.Snapshot(ctx); err != nil {
+        t.Fatalf("valid zero outstanding supply rejected: %v", err)
+    }
+    store.content[string(keyObservedSupply)] = original
+    if _, err := k.Snapshot(ctx); err != nil {
+        t.Fatalf("restored burn watermark rejected: %v", err)
+    }
+}
