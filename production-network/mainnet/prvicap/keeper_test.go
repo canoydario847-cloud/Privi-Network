@@ -199,3 +199,42 @@ func TestReconcileRejectsUntrackedDirectBalanceMutations(t *testing.T) {
     t.Fatalf("normal native supply conservation was falsely rejected: %v",err)
   }
 }
+
+
+// Reconcile genesis against account balances, not only x/bank's supply index.
+// A raw balance setter could otherwise leave the declared supply unchanged.
+// Fake KV tests prove fail-closed validation, NOT SDK cache-context rollback.
+func TestGenesisRejectsForgedNativeBalancesWithoutWritingCapState(t *testing.T) {
+  declared := sdkmath.NewInt(1000)
+  cases := []struct {
+    name string
+    actual sdkmath.Int
+  }{
+    {"one extra base unit", sdkmath.NewInt(1001)},
+    {"one missing base unit", sdkmath.NewInt(999)},
+    {"all balances missing", sdkmath.ZeroInt()},
+  }
+  for _, tc := range cases {
+    t.Run(tc.name, func(t *testing.T) {
+      data := newFakeKV()
+      keeper, err := New(fakeService{data})
+      if err != nil { t.Fatal(err) }
+      ctx := context.Background()
+      err = keeper.InitGenesis(ctx, declared.String(), fakeBank{base: declared, actual: &tc.actual})
+      if !errors.Is(err, ErrBankSupplyMismatch) {
+        t.Fatalf("forged balances accepted: %v", err)
+      }
+      if len(data.content) != 0 {
+        t.Fatal("rejected genesis persisted cap state")
+      }
+      // The rejected attempt must not mark a fresh store initialized.
+      if err := keeper.InitGenesis(ctx, declared.String(), fakeBank{base: declared}); err != nil {
+        t.Fatalf("valid genesis after rejected preflight failed: %v", err)
+      }
+      state, err := keeper.Snapshot(ctx)
+      if err != nil || state.GenesisBase != declared.String() {
+        t.Fatalf("valid genesis not persisted correctly: %+v, %v", state, err)
+      }
+    })
+  }
+}
