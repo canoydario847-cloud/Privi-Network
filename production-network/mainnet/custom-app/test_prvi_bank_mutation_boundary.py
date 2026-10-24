@@ -27,10 +27,11 @@ class BankMutationBoundaryTests(unittest.TestCase):
         self.assertIn('nativeBalanceTotal.GT(initialPRVI)', source)
         self.assertIn('!nativeBalanceTotal.Equal(initialPRVI)', source)
         self.assertIn('amount.IsNegative()', source)
-        self.assertLess(source.index('nativeBalanceTotal := initialPRVI.Sub(initialPRVI)'),
-                        source.index('app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap())'))
-        self.assertLess(source.index('!nativeBalanceTotal.Equal(initialPRVI)'),
-                        source.index('app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)'))
+        chainer = source.split("new_chainer = '''", 1)[1].split("'''", 1)[0]
+        self.assertLess(chainer.index('nativeBalanceTotal := initialPRVI.Sub(initialPRVI)'),
+                        chainer.index('app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap())'))
+        self.assertLess(chainer.index('!nativeBalanceTotal.Equal(initialPRVI)'),
+                        chainer.index('app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)'))
 
     def test_prototype_cannot_substitute_for_consensus_rollback(self):
         source = (ROOT.parent / "mintguard" / "guard.go").read_text()
