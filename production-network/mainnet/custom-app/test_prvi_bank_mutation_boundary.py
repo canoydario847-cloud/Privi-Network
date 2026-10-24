@@ -33,6 +33,20 @@ class BankMutationBoundaryTests(unittest.TestCase):
         self.assertLess(chainer.index('!nativeBalanceTotal.Equal(initialPRVI)'),
                         chainer.index('app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)'))
 
+    def test_full_bank_genesis_validation_runs_before_any_module_writes(self):
+        source = (ROOT / "apply_prvi_cap.py").read_text()
+        chainer = source.split("new_chainer = '''", 1)[1].split("'''", 1)[0]
+        # The SDK's bank genesis validator also covers non-native balances,
+        # duplicate entries and malformed metadata. The native-only sum
+        # must not be the only preflight validation.
+        self.assertEqual(chainer.count("bankGenesis.Validate()"), 1)
+        self.assertLess(chainer.index("bankGenesis.Validate()"),
+                        chainer.index("initialPRVI := bankGenesis.Supply.AmountOf"))
+        self.assertLess(chainer.index("bankGenesis.Validate()"),
+                        chainer.index("app.UpgradeKeeper.SetModuleVersionMap"))
+        self.assertLess(chainer.index("bankGenesis.Validate()"),
+                        chainer.index("app.ModuleManager.InitGenesis"))
+
     def test_prototype_cannot_substitute_for_consensus_rollback(self):
         source = (ROOT.parent / "mintguard" / "guard.go").read_text()
         self.assertIn('OFF-CHAIN prototype', source)
