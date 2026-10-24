@@ -282,3 +282,27 @@ func TestSnapshotAndMintRestrictionRejectCorruptBurnWatermark(t *testing.T) {
         t.Fatalf("restored burn watermark rejected: %v", err)
     }
 }
+
+
+// A half-written genesis record or deleted immutable issuance key must not
+// look like a clean, uninitialized chain to consensus accounting callers.
+// Fake KV only; does not prove full SDK InitChain transactional rollback.
+func TestOrphanedSupplyObservationIsCorruption(t *testing.T) {
+    store := newFakeKV()
+    store.content[string(keyObservedSupply)] = []byte("1")
+    k, err := New(fakeService{store})
+    if err != nil { t.Fatal(err) }
+    ctx := context.Background()
+    if _, err := k.Snapshot(ctx); !errors.Is(err, ErrStoreCorrupt) {
+        t.Fatalf("orphaned supply watermark not flagged in snapshot: %v", err)
+    }
+    if err := k.MintRestriction(ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrStoreCorrupt) {
+        t.Fatalf("orphaned watermark not flagged by mint guard: %v", err)
+    }
+    if err := k.Reconcile(ctx, fakeBank{base: sdkmath.NewInt(1)}); !errors.Is(err, ErrStoreCorrupt) {
+        t.Fatalf("orphaned watermark not flagged by reconciliation: %v", err)
+    }
+    if _, exists := store.content[string(keyGenesis)]; exists {
+        t.Fatal("rejected orphan state wrote a new genesis issuance record")
+    }
+}
