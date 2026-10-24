@@ -28,10 +28,15 @@ func parse(s string) (*big.Int,error) {
  if !ok || n.Sign()<=0 {return nil,ErrInvalid}
  return n,nil
 }
+// A chain may begin with zero native issuance. Mint amounts must still be positive.
+func parseGenesis(s string) (*big.Int,error) {
+ if s=="0" {return big.NewInt(0),nil}
+ return parse(s)
+}
 func ceiling() *big.Int {n,_:=new(big.Int).SetString(MaximumBase,10);return n}
 // New creates a test-only guard. Caller names are not secure identities.
 func New(genesis string, routes []string) (*Guard,error) {
- n,e:=parse(genesis);if e!=nil||n.Cmp(ceiling())>0 {return nil,ErrGenesis}
+ n,e:=parseGenesis(genesis);if e!=nil||n.Cmp(ceiling())>0 {return nil,ErrGenesis}
  allowed:=make(map[string]struct{},len(routes))
  for _,route:=range routes {if route=="" {return nil,ErrUnauthorized};allowed[route]=struct{}{}}
  return &Guard{lifetime:n,allowed:allowed},nil
