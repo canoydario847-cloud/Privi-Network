@@ -126,6 +126,23 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \tif err := prvicap.ValidateGenesisBase(initialPRVI.String()); err != nil {
 \t\treturn nil, fmt.Errorf("PRVI pre-init genesis supply rejected: %w", err)
 \t}
+\t// Check native genesis allocations BEFORE any module InitGenesis writes.
+\t// SDK bank InitGenesis also checks conservation, but runs after other
+\t// modules may already have changed their state. This is a preflight only.
+\tnativeBalanceTotal := initialPRVI.Sub(initialPRVI)
+\tfor _, account := range bankGenesis.Balances {
+\t\tamount := account.Coins.AmountOf(prvicap.BaseDenom)
+\t\tif amount.IsNegative() {
+\t\t\treturn nil, fmt.Errorf("PRVI native genesis: negative aprvi account balance")
+\t\t}
+\t\tnativeBalanceTotal = nativeBalanceTotal.Add(amount)
+\t\tif nativeBalanceTotal.GT(initialPRVI) {
+\t\t\treturn nil, fmt.Errorf("PRVI native genesis: aprvi balances exceed supply")
+\t\t}
+\t}
+\tif !nativeBalanceTotal.Equal(initialPRVI) {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: aprvi account balances do not match supply")
+\t}
 \t// Native PRVI must actually be the EVM gas and staking denomination.
 \t// Do not allow a misleading genesis with capped aprvi but fees/stake in
 \t// upstream stake/atest. All checks precede consensus module writes.
