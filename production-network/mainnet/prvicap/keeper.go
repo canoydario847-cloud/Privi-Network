@@ -147,7 +147,16 @@ func (k Keeper) read(ctx context.Context) (*big.Int,*big.Int,error) {
     if err!=nil {return nil,nil,err}
     rawGenesis,err:=kv.Get(keyGenesis)
     if err!=nil {return nil,nil,err}
-    if rawGenesis==nil {return nil,nil,ErrNotInitialized}
+    if rawGenesis==nil {
+        // A supply watermark without an issuance record means genesis was
+        // partially initialized or the immutable record was deleted.
+        // Distinguish corruption from an untouched store; never recover by
+        // silently treating it as a fresh chain.
+        orphan,err:=kv.Get(keyObservedSupply)
+        if err!=nil {return nil,nil,err}
+        if orphan!=nil {return nil,nil,ErrStoreCorrupt}
+        return nil,nil,ErrNotInitialized
+    }
     genesis,err:=parseCanonical(string(rawGenesis))
     if err!=nil || genesis.Cmp(capValue())>0 {return nil,nil,ErrStoreCorrupt}
     // The burn watermark is part of the required consensus state, not
