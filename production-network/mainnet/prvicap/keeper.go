@@ -42,6 +42,7 @@ var (
 
 var (
     keyGenesis = []byte{0x01} // immutable cumulative issuance; all new native mints disabled
+    keyObservedSupply = []byte{0x02} // last validated outstanding native supply; must never rebound
 )
 
 // BankView has the pinned Cosmos SDK bank keeper's GetSupply signature.
@@ -176,8 +177,8 @@ func (k Keeper) MintRestriction(ctx context.Context, coins sdk.Coins) error {
     return ErrMintForbidden
 }
 
-// Reconcile rejects total bank native supply above the immutable genesis
-// allocation. Burns may decrease outstanding supply but never increase budget.
+// Reconcile rejects native supply above the immutable genesis allocation AND
+// any increase after a previously observed burn. Burns never restore mint budget.
 // An end-of-block scan detects untracked net balance changes but NOT
 // unauthorized mint+burn that cancels out inside one block. This O(accounts)
 // check is provisional; it requires scale benchmarks and alternative
@@ -193,8 +194,29 @@ func (k Keeper) Reconcile(ctx context.Context, bank BankView) error {
     if supply.Amount.BigInt().Cmp(lifetime)>0 || supply.Amount.BigInt().Cmp(capValue())>0 {
         return ErrUnexpectedSupply
     }
-    // Validate conservation after the immutable cap and bank supply checks.
-    return checkNativeBalances(ctx,bank,supply.Amount.BigInt())
+    // Track the last successfully validated outstanding supply in consensus KV.
+    // Without this, a burn in block N followed by a smaller unauthorized mint
+    // in block N+1 could stay below genesis and evade the absolute cap check.
+    kv,err:=k.kv(ctx)
+    if err!=nil {return err}
+    last:=lifetime // missing key means no previous observed burn
+    raw,err:=kv.Get(keyObservedSupply)
+    if err!=nil {return err}
+    if raw!=nil {
+        parsed,ok:=new(big.Int).SetString(string(raw),10)
+        if !ok || parsed.Sign()<0 || parsed.Cmp(lifetime)>0 || parsed.String()!=string(raw) {
+            return ErrStoreCorrupt
+        }
+        last=parsed
+    }
+    current:=supply.Amount.BigInt()
+    if current.Cmp(last)>0 {return ErrUnexpectedSupply}
+    // Validate account conservation before persisting any new observation.
+    if err:=checkNativeBalances(ctx,bank,current);err!=nil {return err}
+    if current.Cmp(last)<0 {
+        return kv.Set(keyObservedSupply,[]byte(current.String()))
+    }
+    return nil
 }
 
 // checkNativeBalances is shared by genesis preflight and block boundaries.
