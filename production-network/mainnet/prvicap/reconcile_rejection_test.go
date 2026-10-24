@@ -122,3 +122,33 @@ func TestFullBurnToZeroCannotResetNativeIssuance(t *testing.T) {
         t.Fatalf("repeated genesis after full burn was permitted: %v", err)
     }
 }
+
+
+// A zero bank supply after a complete burn must not mask an unauthorized
+// direct native balance write. The immutable issuance record is preserved.
+// Fake-bank test only; it does not prove SDK cache-context rollback.
+func TestZeroSupplyRejectsHiddenNativeBalanceAfterFullBurn(t *testing.T) {
+    k, store, ctx := setup(t, whole(100))
+    original, err := k.Snapshot(ctx)
+    if err != nil { t.Fatal(err) }
+    before := string(store.content[string(keyGenesis)])
+
+    // A legitimate complete burn has zero supply and zero account balances.
+    if err := k.Reconcile(ctx, fakeBank{base: sdkmath.ZeroInt()}); err != nil {
+        t.Fatalf("valid complete burn rejected: %v", err)
+    }
+    // Simulate an unchecked balance setter adding one aprvi without
+    // updating x/bank's declared zero supply.
+    hidden := sdkmath.NewInt(1)
+    err = k.Reconcile(ctx, fakeBank{base: sdkmath.ZeroInt(), actual: &hidden})
+    if !errors.Is(err, ErrUnexpectedSupply) {
+        t.Fatalf("hidden native balance after full burn accepted: %v", err)
+    }
+    if got := string(store.content[string(keyGenesis)]); got != before {
+        t.Fatal("rejected hidden balance changed immutable issuance state")
+    }
+    after, err := k.Snapshot(ctx)
+    if err != nil || after != original {
+        t.Fatalf("reconciliation changed immutable cap: %+v %v", after, err)
+    }
+}
