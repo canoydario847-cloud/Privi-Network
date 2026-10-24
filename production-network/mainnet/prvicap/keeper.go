@@ -150,6 +150,15 @@ func (k Keeper) read(ctx context.Context) (*big.Int,*big.Int,error) {
     if rawGenesis==nil {return nil,nil,ErrNotInitialized}
     genesis,err:=parseCanonical(string(rawGenesis))
     if err!=nil || genesis.Cmp(capValue())>0 {return nil,nil,ErrStoreCorrupt}
+    // The burn watermark is part of the required consensus state, not
+    // optional reporting metadata. A missing/corrupt observation must not
+    // produce a healthy snapshot or mint-policy result.
+    rawObserved,err:=kv.Get(keyObservedSupply)
+    if err!=nil {return nil,nil,err}
+    if rawObserved==nil {return nil,nil,ErrStoreCorrupt}
+    observed,ok:=new(big.Int).SetString(string(rawObserved),10)
+    if !ok || observed.Sign()<0 || observed.Cmp(genesis)>0 ||
+       observed.String()!=string(rawObserved) {return nil,nil,ErrStoreCorrupt}
     // All native PRVI minting is prohibited after genesis. Lifetime issued
     // remains exactly the genesis amount even when outstanding supply burns.
     return genesis,new(big.Int).Set(genesis),nil
