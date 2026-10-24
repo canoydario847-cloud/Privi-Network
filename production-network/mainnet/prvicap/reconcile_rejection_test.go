@@ -200,3 +200,51 @@ func TestCorruptObservedSupplyFailsClosed(t *testing.T) {
         }
     }
 }
+
+// A missing observed-supply record must never silently reset the burn
+// watermark to the genesis allocation. Fake KV only; SDK rollback and
+// recovery semantics still require integration testing.
+func TestObservedSupplyHistoryCannotBeDeletedToRestoreMintHeadroom(t *testing.T) {
+    k, store, ctx := setup(t, whole(100))
+    if got := string(store.content[string(keyObservedSupply)]); got != whole(100) {
+        t.Fatalf("genesis did not seed observed supply: %q", got)
+    }
+    if err := k.Reconcile(ctx, fakeBank{base: sdkmath.NewInt(90)}); err != nil {
+        t.Fatalf("valid burn rejected: %v", err)
+    }
+    if got := string(store.content[string(keyObservedSupply)]); got != "90" {
+        t.Fatalf("burn observation not persisted: %q", got)
+    }
+    delete(store.content, string(keyObservedSupply))
+    if err := k.Reconcile(ctx, fakeBank{base: sdkmath.NewInt(95)}); !errors.Is(err, ErrStoreCorrupt) {
+        t.Fatalf("missing burn history allowed supply rebound: %v", err)
+    }
+    if err := k.Reconcile(ctx, fakeBank{base: sdkmath.NewInt(90)}); !errors.Is(err, ErrStoreCorrupt) {
+        t.Fatalf("missing burn history allowed unchanged supply: %v", err)
+    }
+    // A new keeper sharing the same persisted store cannot bypass this.
+    reopened, err := New(fakeService{store})
+    if err != nil { t.Fatal(err) }
+    if err := reopened.Reconcile(ctx, fakeBank{base: sdkmath.NewInt(95)}); !errors.Is(err, ErrStoreCorrupt) {
+        t.Fatalf("reopened keeper accepted missing burn history: %v", err)
+    }
+}
+
+func TestPartialGenesisObservationCannotBeReinitialized(t *testing.T) {
+    store := newFakeKV()
+    store.content[string(keyObservedSupply)] = []byte(whole(100))
+    k, err := New(fakeService{store})
+    if err != nil { t.Fatal(err) }
+    err = k.InitGenesis(context.Background(), whole(100), fakeBank{
+        base: sdkmath.NewIntFromBigInt(func() *big.Int {
+            v, _ := new(big.Int).SetString(whole(100), 10)
+            return v
+        }()),
+    })
+    if !errors.Is(err, ErrStoreCorrupt) {
+        t.Fatalf("orphaned supply observation allowed genesis reinitialization: %v", err)
+    }
+    if _, ok := store.content[string(keyGenesis)]; ok {
+        t.Fatal("corrupt partial genesis wrote issuance record")
+    }
+}
