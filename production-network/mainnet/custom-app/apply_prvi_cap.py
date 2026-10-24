@@ -122,9 +122,32 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \tif err := app.appCodec.UnmarshalJSON(bankJSON, &bankGenesis); err != nil {
 \t\treturn nil, fmt.Errorf("PRVI cap: invalid bank genesis: %w", err)
 \t}
+\t// Validate the complete bank genesis before any module writes. This
+\t// rejects malformed balances, duplicate entries and other denom errors
+\t// rather than checking only the aprvi allocation sum below.
+\tif err := bankGenesis.Validate(); err != nil {
+\t\treturn nil, fmt.Errorf("PRVI pre-init bank genesis rejected: %w", err)
+\t}
 \tinitialPRVI := bankGenesis.Supply.AmountOf(prvicap.BaseDenom)
 \tif err := prvicap.ValidateGenesisBase(initialPRVI.String()); err != nil {
 \t\treturn nil, fmt.Errorf("PRVI pre-init genesis supply rejected: %w", err)
+\t}
+\t// Check native genesis allocations BEFORE any module InitGenesis writes.
+\t// SDK bank InitGenesis also checks conservation, but runs after other
+\t// modules may already have changed their state. This is a preflight only.
+\tnativeBalanceTotal := initialPRVI.Sub(initialPRVI)
+\tfor _, account := range bankGenesis.Balances {
+\t\tamount := account.Coins.AmountOf(prvicap.BaseDenom)
+\t\tif amount.IsNegative() {
+\t\t\treturn nil, fmt.Errorf("PRVI native genesis: negative aprvi account balance")
+\t\t}
+\t\tnativeBalanceTotal = nativeBalanceTotal.Add(amount)
+\t\tif nativeBalanceTotal.GT(initialPRVI) {
+\t\t\treturn nil, fmt.Errorf("PRVI native genesis: aprvi balances exceed supply")
+\t\t}
+\t}
+\tif !nativeBalanceTotal.Equal(initialPRVI) {
+\t\treturn nil, fmt.Errorf("PRVI native genesis: aprvi account balances do not match supply")
 \t}
 \t// Native PRVI must actually be the EVM gas and staking denomination.
 \t// Do not allow a misleading genesis with capped aprvi but fees/stake in
