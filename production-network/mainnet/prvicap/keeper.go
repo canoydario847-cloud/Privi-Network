@@ -118,6 +118,11 @@ func (k Keeper) InitGenesis(ctx context.Context, genesisBase string, bank BankVi
     got,err:=kv.Get(keyGenesis)
     if err!=nil {return err}
     if got!=nil {return ErrAlreadyInitialized}
+    // A missing genesis record with an existing observation indicates
+    // interrupted/corrupt initialization. Never overwrite issuance history.
+    observed,err:=kv.Get(keyObservedSupply)
+    if err!=nil {return err}
+    if observed!=nil {return ErrStoreCorrupt}
     bankCoins:=bank.GetSupply(ctx,BaseDenom)
     if bankCoins.Denom!=BaseDenom || !bankCoins.Amount.IsPositive() ||
        bankCoins.Amount.String()!=value.String() {return ErrBankSupplyMismatch}
@@ -127,8 +132,13 @@ func (k Keeper) InitGenesis(ctx context.Context, genesisBase string, bank BankVi
     if err:=checkNativeBalances(ctx,bank,value);err!=nil {
         return fmt.Errorf("%w: %v",ErrBankSupplyMismatch,err)
     }
-    // This is for a newly initialized genesis state in an uncommitted cached
-    // SDK context: a store write error MUST abort app initialization.
+    // Seed the observed outstanding supply at genesis. A later missing
+    // observation must fail closed: otherwise deleting that key after a burn
+    // would silently restore the original issuance ceiling.
+    // These two writes MUST occur in an uncommitted SDK cache context; any
+    // error must abort/rollback the entire app InitChain, not commit a partial
+    // genesis record. Full SDK rollback proof is still a launch blocker.
+    if err:=kv.Set(keyObservedSupply,[]byte(value.String()));err!=nil {return err}
     return kv.Set(keyGenesis,[]byte(value.String()))
 }
 
@@ -199,15 +209,12 @@ func (k Keeper) Reconcile(ctx context.Context, bank BankView) error {
     // in block N+1 could stay below genesis and evade the absolute cap check.
     kv,err:=k.kv(ctx)
     if err!=nil {return err}
-    last:=lifetime // missing key means no previous observed burn
     raw,err:=kv.Get(keyObservedSupply)
     if err!=nil {return err}
-    if raw!=nil {
-        parsed,ok:=new(big.Int).SetString(string(raw),10)
-        if !ok || parsed.Sign()<0 || parsed.Cmp(lifetime)>0 || parsed.String()!=string(raw) {
-            return ErrStoreCorrupt
-        }
-        last=parsed
+    if raw==nil {return ErrStoreCorrupt}
+    last,ok:=new(big.Int).SetString(string(raw),10)
+    if !ok || last.Sign()<0 || last.Cmp(lifetime)>0 || last.String()!=string(raw) {
+        return ErrStoreCorrupt
     }
     current:=supply.Amount.BigInt()
     if current.Cmp(last)>0 {return ErrUnexpectedSupply}
