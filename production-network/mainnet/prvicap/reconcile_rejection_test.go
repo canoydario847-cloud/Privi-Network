@@ -99,3 +99,26 @@ func TestNativeSupplyMatchesSumAcrossAccounts(t *testing.T) {
         })
     }
 }
+
+// A full native burn must not erase the immutable genesis issuance record.
+// This is a fake-bank/KV regression, not an SDK cache-context integration test.
+func TestFullBurnToZeroCannotResetNativeIssuance(t *testing.T) {
+    initial := whole(100)
+    keeper, store, ctx := setup(t, initial)
+    burned := fakeBank{base: sdkmath.ZeroInt()}
+    if err := keeper.Reconcile(ctx, burned); err != nil {
+        t.Fatalf("full native burn rejected: %v", err)
+    }
+    reopened, err := New(fakeService{store})
+    if err != nil { t.Fatal(err) }
+    state, err := reopened.Snapshot(ctx)
+    if err != nil || state.LifetimeIssuedBase != initial {
+        t.Fatalf("burn erased immutable issuance history: %+v, %v", state, err)
+    }
+    if err := reopened.MintRestriction(ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
+        t.Fatalf("native remint after complete burn was permitted: %v", err)
+    }
+    if err := reopened.InitGenesis(ctx, whole(1), fakeBank{base: sdkmath.NewIntFromBigInt(big.NewInt(1_000_000_000_000_000_000))}); !errors.Is(err, ErrAlreadyInitialized) {
+        t.Fatalf("repeated genesis after full burn was permitted: %v", err)
+    }
+}
