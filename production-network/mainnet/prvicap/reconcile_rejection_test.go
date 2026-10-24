@@ -152,3 +152,51 @@ func TestZeroSupplyRejectsHiddenNativeBalanceAfterFullBurn(t *testing.T) {
         t.Fatalf("reconciliation changed immutable cap: %+v %v", after, err)
     }
 }
+
+
+// This is a fake-KV/SDK-typed keeper regression, NOT proof of production
+// consensus transaction rollback or protection against same-block mint+burn.
+func TestNativeSupplyCannotReboundAfterObservedBurn(t *testing.T) {
+    k, store, ctx := setup(t, whole(100))
+    bank := func(n int64) fakeBank {
+        amount, ok := new(big.Int).SetString(whole(n), 10)
+        if !ok { t.Fatal("invalid test amount") }
+        return fakeBank{base: sdkmath.NewIntFromBigInt(amount)}
+    }
+    if err := k.Reconcile(ctx, bank(90)); err != nil {
+        t.Fatalf("valid native burn rejected: %v", err)
+    }
+    observed := string(store.content[string(keyObservedSupply)])
+    if observed != whole(90) { t.Fatalf("burn observation missing: %q", observed) }
+    // Rebound is below genesis (100) but above the last validated 90.
+    if err := k.Reconcile(ctx, bank(91)); !errors.Is(err, ErrUnexpectedSupply) {
+        t.Fatalf("cross-block native supply rebound accepted: %v", err)
+    }
+    if got := string(store.content[string(keyObservedSupply)]); got != observed {
+        t.Fatal("rejected rebound modified last observed supply")
+    }
+    if err := k.Reconcile(ctx, bank(90)); err != nil {
+        t.Fatalf("unchanged native supply rejected: %v", err)
+    }
+    if err := k.Reconcile(ctx, bank(89)); err != nil {
+        t.Fatalf("second valid burn rejected: %v", err)
+    }
+    if err := k.Reconcile(ctx, bank(90)); !errors.Is(err, ErrUnexpectedSupply) {
+        t.Fatalf("rebound after second burn accepted: %v", err)
+    }
+    reopened, err := New(fakeService{store})
+    if err != nil { t.Fatal(err) }
+    if err := reopened.Reconcile(ctx, bank(90)); !errors.Is(err, ErrUnexpectedSupply) {
+        t.Fatalf("reopened keeper forgot observed burn: %v", err)
+    }
+}
+
+func TestCorruptObservedSupplyFailsClosed(t *testing.T) {
+    k, store, ctx := setup(t, whole(100))
+    for _, invalid := range []string{"", "-1", "00", "001", "abc", whole(101)} {
+        store.content[string(keyObservedSupply)] = []byte(invalid)
+        if err := k.Reconcile(ctx, fakeBank{base: sdkmath.ZeroInt()}); !errors.Is(err, ErrStoreCorrupt) {
+            t.Fatalf("corrupt observed supply %q accepted: %v", invalid, err)
+        }
+    }
+}
