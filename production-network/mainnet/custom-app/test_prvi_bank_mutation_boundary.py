@@ -20,6 +20,18 @@ class BankMutationBoundaryTests(unittest.TestCase):
         self.assertIn('PRVI end-block supply check', source)
         self.assertIn('app.PriviCapKeeper.InitGenesis', source)
 
+    def test_genesis_native_balance_preflight_precedes_module_writes(self):
+        source = (ROOT / "apply_prvi_cap.py").read_text()
+        # Both a surplus and a deficit of aprvi account allocations must
+        # fail before module initialization can mutate consensus state.
+        self.assertIn('nativeBalanceTotal.GT(initialPRVI)', source)
+        self.assertIn('!nativeBalanceTotal.Equal(initialPRVI)', source)
+        self.assertIn('amount.IsNegative()', source)
+        self.assertLess(source.index('nativeBalanceTotal := initialPRVI.Sub(initialPRVI)'),
+                        source.index('app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap())'))
+        self.assertLess(source.index('!nativeBalanceTotal.Equal(initialPRVI)'),
+                        source.index('app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)'))
+
     def test_prototype_cannot_substitute_for_consensus_rollback(self):
         source = (ROOT.parent / "mintguard" / "guard.go").read_text()
         self.assertIn('OFF-CHAIN prototype', source)
