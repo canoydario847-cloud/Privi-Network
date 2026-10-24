@@ -122,6 +122,12 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \tif err := app.appCodec.UnmarshalJSON(bankJSON, &bankGenesis); err != nil {
 \t\treturn nil, fmt.Errorf("PRVI cap: invalid bank genesis: %w", err)
 \t}
+\t// Validate the complete bank genesis before any module writes. This
+\t// rejects malformed balances, duplicate entries and other denom errors
+\t// rather than checking only the aprvi allocation sum below.
+\tif err := bankGenesis.Validate(); err != nil {
+\t\treturn nil, fmt.Errorf("PRVI pre-init bank genesis rejected: %w", err)
+\t}
 \tinitialPRVI := bankGenesis.Supply.AmountOf(prvicap.BaseDenom)
 \tif err := prvicap.ValidateGenesisBase(initialPRVI.String()); err != nil {
 \t\treturn nil, fmt.Errorf("PRVI pre-init genesis supply rejected: %w", err)
