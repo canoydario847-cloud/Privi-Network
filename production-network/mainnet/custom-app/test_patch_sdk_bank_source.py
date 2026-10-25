@@ -80,6 +80,11 @@ class BankSDKOverlayTests(unittest.TestCase):
         self.assertIn('repeated InitGenesis forbidden',changed_genesis)
         self.assertIn('new(big.Int).Exp(big.NewInt(10), big.NewInt(27), nil)',changed_genesis)
         self.assertIn('native genesis supply above hard cap',changed_genesis)
+        self.assertIn('genState.Validate()', changed_genesis)
+        self.assertLess(changed_genesis.index('genState.Validate()'),
+                        changed_genesis.index('nativeSupply := genState.Supply'))
+        self.assertLess(changed_genesis.index('genState.Validate()'),
+                        changed_genesis.index('rawKV := k.storeService.OpenKVStore'))
         self.assertIn('native genesis balances above hard cap',changed_genesis)
         self.assertIn('native genesis supply does not match balances',changed_genesis)
         self.assertLess(changed_genesis.index('native genesis supply above hard cap'),
