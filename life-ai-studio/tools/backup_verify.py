@@ -80,8 +80,18 @@ def backup_and_verify(source: Path, destination: Path):
             for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                 digest.update(chunk)
         os.chmod(tmp_path, 0o600)
+        # A successful SQLite restore drill does not imply crash durability.
+        # Sync the completed snapshot before publishing its name, then sync
+        # the parent directory so the new hard link survives a host restart.
+        with tmp_path.open("rb") as snapshot_file:
+            os.fsync(snapshot_file.fileno())
         # Atomic, no-overwrite publication on the same volume.
         os.link(tmp_path, destination)
+        parent_fd = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(parent_fd)
+        finally:
+            os.close(parent_fd)
         return {"backup": str(destination), "sha256": digest.hexdigest(),
                 "bytes": destination.stat().st_size, "tables_verified": tables,
                 "restore_drill": "passed", "encrypted_off_host_copy": "NOT_VERIFIED"}
