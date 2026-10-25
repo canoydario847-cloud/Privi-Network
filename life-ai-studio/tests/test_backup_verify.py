@@ -648,3 +648,41 @@ def test_backup_rejects_broken_cogvative_provenance_ownership(tmp_path, scenario
         with pytest.raises(ValueError, match=expected):
             backup.backup_and_verify(source, destination)
         assert not destination.exists(), "Broken provenance must not publish a backup"
+
+
+@pytest.mark.parametrize("scenario,expected", [
+    ("valid", None),
+    ("orphan_quote", "orphaned BNB quotes"),
+    ("orphan_redemption", "orphaned BNB redemptions"),
+    ("wrong_member", "BNB redemption member mismatch"),
+    ("missing_quotes", "BNB redemptions present without quotes"),
+])
+def test_restored_bnb_redemption_ownership(tmp_path, scenario, expected):
+    """Payment audit receipts must never be restored under the wrong account."""
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute("INSERT INTO users VALUES ('u1','one@example.test','hash',NULL,1,0)")
+        db.execute("INSERT INTO users VALUES ('u2','two@example.test','hash',NULL,1,0)")
+        if scenario != "missing_quotes":
+            db.execute("CREATE TABLE bnb_priv_quotes (id TEXT PRIMARY KEY, user_id TEXT NOT NULL)")
+            db.execute(
+                "INSERT INTO bnb_priv_quotes VALUES ('q1',?)",
+                ("missing" if scenario == "orphan_quote" else "u1",),
+            )
+        db.execute(
+            "CREATE TABLE bnb_priv_redemptions "
+            "(quote_id TEXT NOT NULL, user_id TEXT NOT NULL)"
+        )
+        db.execute(
+            "INSERT INTO bnb_priv_redemptions VALUES (?,?)",
+            ("missing" if scenario == "orphan_redemption" else "q1",
+             "u2" if scenario == "wrong_member" else "u1"),
+        )
+    destination = tmp_path / "vault" / "bnb-audit-copy.sqlite3"
+    if expected is None:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        with pytest.raises(ValueError, match=expected):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Broken payment history must not publish a backup"
