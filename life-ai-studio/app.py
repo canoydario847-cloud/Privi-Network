@@ -165,6 +165,30 @@ def stylesheet():
 def health():
     return {"status": "ok", "service": "privi-life-ai-studio", "staging": STAGING_MODE, "prvi_settlement_enabled": payment_ready(), "bnb_priv_payment_configured": bnb_priv.configured(STAGING_MODE, COOKIE_SECURE) is not None}
 
+
+@app.get("/api/production-readiness")
+def production_readiness():
+    """Public, non-secret release checklist. /health remains the liveness probe."""
+    try:
+        signing_available = cogvative.signing_key() is not None
+    except (ValueError, RuntimeError):
+        signing_available = False
+    checks = {
+        "demo_mode_disabled": not STAGING_MODE,
+        "https_public_origin": ORIGIN.startswith("https://"),
+        "secure_session_cookie": COOKIE_SECURE,
+        "signed_code_provenance": signing_available,
+        "persistent_multi_instance_database_and_restore_test": False,  # SQLite MVP
+        "verified_accounts_recovery_and_mfa": False,
+        "independent_security_and_privacy_review": False,
+    }
+    return {
+        "ready": all(checks.values()),
+        "mode": "staging" if STAGING_MODE else "development",
+        "checks": checks,
+        "note": "Readiness is a conservative launch checklist, not a substitute for a live health probe or external audit.",
+    }
+
 @app.get("/api/public-config")
 def public_config():
     return {"staging": STAGING_MODE, "real_money_enabled": payment_ready()}
