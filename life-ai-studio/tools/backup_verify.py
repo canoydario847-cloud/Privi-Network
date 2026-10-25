@@ -111,6 +111,30 @@ def validate_database(conn):
             break
     if not has_idempotency_guard:
         raise ValueError("Not a LIFE database; ledger idempotency UNIQUE constraint missing")
+    # Wallet-link challenges are authentication state. Older snapshots may not
+    # have this table, but a present table must preserve one-time nonce identity
+    # and account ownership. The current LIFE schema has no foreign key here.
+    if "challenges" in tables:
+        info = conn.execute('PRAGMA table_info("challenges")').fetchall()
+        auth_columns = {row[1]: row for row in info}
+        required = {"nonce_hash", "user_id", "wallet", "message", "expires"}
+        if required - auth_columns.keys():
+            raise ValueError("Not a LIFE database; wallet challenge columns missing")
+        primary_key = tuple(
+            row[1] for row in sorted(info, key=lambda row: row[5]) if row[5] > 0
+        )
+        if primary_key != ("nonce_hash",):
+            raise ValueError("Not a LIFE database; wallet challenge nonce primary key missing")
+        if not all(auth_columns[name][3] for name in
+                   ("user_id", "wallet", "message", "expires")):
+            raise ValueError("Not a LIFE database; wallet challenge required fields nullable")
+        orphan = conn.execute(
+            'SELECT 1 FROM "challenges" c LEFT JOIN "users" u '
+            'ON c.user_id = u.id WHERE u.id IS NULL OR c.nonce_hash IS NULL LIMIT 1'
+        ).fetchone()
+        if orphan is not None:
+            # Never expose a member ID, wallet, signed challenge or nonce.
+            raise ValueError("Not a LIFE database; invalid wallet challenge ownership")
     # Optional AI collaboration tables exist in current LIFE deployments but
     # may be absent from earlier, core-only snapshots. When present, their
     # ownership links must survive restore even without declared foreign keys.
