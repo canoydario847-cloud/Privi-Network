@@ -145,6 +145,18 @@ def test_spoofed_life_table_names_are_rejected(tmp_path):
     assert not destination.exists()
 
 
+def test_matching_columns_without_session_primary_key_are_rejected(tmp_path):
+    source = tmp_path / "missing-session-key.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute("DROP TABLE sessions")
+        db.execute("CREATE TABLE sessions (token_hash TEXT, user_id TEXT, expires INTEGER)")
+    destination = tmp_path / "vault" / "unsafe-copy.sqlite3"
+    with pytest.raises(ValueError, match="sessions primary key mismatch"):
+        backup.backup_and_verify(source, destination)
+    assert not destination.exists()
+
+
 def test_missing_project_files_table_is_rejected(tmp_path):
     source = tmp_path / "no-files.sqlite3"
     make_database(source)
