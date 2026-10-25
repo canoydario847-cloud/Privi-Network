@@ -100,8 +100,6 @@ def backup_and_verify(source: Path, destination: Path):
     destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     # Reject symlinks anywhere in the directory chain, not only the vault
     # itself. An intermediate alias can otherwise bypass the parent lstat.
-    if any(part.is_symlink() for part in (destination.parent, *destination.parent.parents)):
-        raise ValueError("Backup directory path cannot traverse symlinks")
     # An existing directory is not made private by mkdir(mode=0700).
     # Refuse a symlink or group/world-accessible parent rather than exposing
     # backup names or allowing another local user to replace the output.
@@ -110,6 +108,8 @@ def backup_and_verify(source: Path, destination: Path):
         raise ValueError("Backup directory must be a real private directory, not a symlink")
     if parent_info.st_mode & 0o077:
         raise ValueError("Backup directory must have mode 0700; chmod 700 the vault first")
+    if any(part.is_symlink() for part in destination.parent.parents):
+        raise ValueError("Backup directory path cannot traverse symlinks")
     tmp_path = None
     try:
         fd, raw_path = tempfile.mkstemp(prefix=".life-backup-", suffix=".sqlite3", dir=destination.parent)
@@ -170,13 +170,13 @@ def verify_existing_copy(snapshot: Path, expected_sha256: str):
     # in a shared directory still exposes its name and enables path swapping.
     # Require the same private, non-symlinked vault as backup creation.
     parent = snapshot.parent
-    if any(part.is_symlink() for part in (parent, *parent.parents)):
-        raise ValueError("Restore directory path cannot traverse symlinks")
     parent_metadata = parent.lstat()
     if not stat.S_ISDIR(parent_metadata.st_mode):
         raise ValueError("Restore directory must be a real private directory, not a symlink")
     if parent_metadata.st_mode & 0o077:
         raise ValueError("Restore directory must have mode 0700; chmod 700 the vault first")
+    if any(part.is_symlink() for part in parent.parents):
+        raise ValueError("Restore directory path cannot traverse symlinks")
     if "public" in snapshot.parts or "public" in parent.resolve().parts:
         raise ValueError("Refusing to verify a backup within a public web directory")
     metadata = snapshot.lstat()
