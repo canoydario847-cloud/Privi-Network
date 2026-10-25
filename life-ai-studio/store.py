@@ -5,7 +5,7 @@ import secrets
 import sqlite3
 import time
 import uuid
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 
 DB = os.getenv("LIFE_DB_PATH", "./data/life-studio.sqlite3")
@@ -27,7 +27,7 @@ def database_readable():
         if not location.is_file():
             return False
         uri = location.as_uri() + "?mode=ro"
-        with sqlite3.connect(uri, uri=True, timeout=2) as conn:
+        with closing(sqlite3.connect(uri, uri=True, timeout=2)) as conn:
             conn.execute("SELECT 1 FROM users LIMIT 1").fetchone()
         return True
     except (OSError, sqlite3.Error):
