@@ -139,6 +139,10 @@ def verify_existing_copy(snapshot: Path, expected_sha256: str):
         raise ValueError("Backup copy must be a regular file, not a symlink")
     if metadata.st_mode & 0o077:
         raise ValueError("Backup copy is accessible to group/others; chmod 600 first")
+    # A second hard-link name can grant access to the same mutable inode even
+    # though this path is private and not a symlink. Require a standalone copy.
+    if metadata.st_nlink != 1:
+        raise ValueError("Backup copy has multiple hard links; restore to a standalone private file")
     # Pin the source inode using O_NOFOLLOW. Do not hash one path and later
     # reopen that path for the restore drill: a replaced/modified copy could
     # otherwise be accepted after its original bytes passed the digest check.
@@ -149,6 +153,10 @@ def verify_existing_copy(snapshot: Path, expected_sha256: str):
             raise ValueError("Backup copy must be a regular file, not a symlink")
         if opened.st_mode & 0o077:
             raise ValueError("Backup copy is accessible to group/others; chmod 600 first")
+        # Recheck the opened inode, not just the pathname metadata, to catch
+        # a path swap between lstat() and open().
+        if opened.st_nlink != 1:
+            raise ValueError("Backup copy has multiple hard links; restore to a standalone private file")
         with tempfile.TemporaryDirectory(prefix="life-verify-copy-") as temp_dir:
             # Both digest and restore validation use this private, pinned copy,
             # not a potentially mutable operator-controlled restore path.
