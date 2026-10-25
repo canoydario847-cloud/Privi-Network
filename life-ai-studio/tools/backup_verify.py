@@ -115,11 +115,17 @@ def backup_and_verify(source: Path, destination: Path):
             os.fsync(snapshot_file.fileno())
         # Atomic, no-overwrite publication on the same volume.
         os.link(tmp_path, destination)
-        parent_fd = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY)
         try:
-            os.fsync(parent_fd)
-        finally:
-            os.close(parent_fd)
+            parent_fd = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(parent_fd)
+            finally:
+                os.close(parent_fd)
+        except BaseException:
+            # Do not leave an unconfirmed snapshot at its final backup path.
+            # A failed directory sync must allow a clean, no-overwrite retry.
+            destination.unlink(missing_ok=True)
+            raise
         return {"backup": str(destination), "sha256": digest.hexdigest(),
                 "bytes": destination.stat().st_size, "tables_verified": tables,
                 "restore_drill": "passed", "encrypted_off_host_copy": "NOT_VERIFIED"}
