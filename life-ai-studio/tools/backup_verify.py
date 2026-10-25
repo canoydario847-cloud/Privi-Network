@@ -54,6 +54,20 @@ def validate_database(conn):
                 f"Not a LIFE database; table {table} missing columns: "
                 + ", ".join(sorted(absent))
             )
+    # A lookalike schema with matching column names but no identity constraints
+    # is not a safe account/session recovery target. Verify the core primary
+    # keys that the live LIFE store depends on for unique identity.
+    required_primary_keys = {
+        "users": ("id",),
+        "sessions": ("token_hash",),
+        "projects": ("id",),
+        "ledger": ("id",),
+    }
+    for table, expected in required_primary_keys.items():
+        columns = conn.execute(f'PRAGMA table_info("{table}")').fetchall()
+        actual = tuple(row[1] for row in sorted(columns, key=lambda row: row[5]) if row[5] > 0)
+        if actual != expected:
+            raise ValueError(f"Not a LIFE database; table {table} primary key mismatch")
     return len(tables)
 
 
