@@ -12,7 +12,7 @@ import json
 import sys
 from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 PAID_APIS = {
     "privi-ledger": "https://privi-ledger.onrender.com/health",
@@ -43,21 +43,53 @@ STATIC_SITES = {
 }
 
 
+class NoRedirect(HTTPRedirectHandler):
+    """Never mistake a redirect to another path/application for healthy."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _open(req: Request, timeout: float):
+    """Create a short-lived opener that disallows HTTP redirects."""
+    return build_opener(NoRedirect).open(req, timeout=timeout)
+
+
+HEALTH_APIS = set(PAID_APIS) | {"privi-discovery", "jose-backend"}
+
+
 def check(name: str, url: str, timeout: float) -> dict:
-    """Issue one GET and report the observable HTTP outcome."""
-    req = Request(url, headers={"User-Agent": "PriviReadOnlyHealthAudit/1.0", "Accept": "*/*"})
+    """Issue one GET. Verify exact service identity for API health routes."""
+    is_health = name in HEALTH_APIS
+    req = Request(url, headers={
+        "User-Agent": "PriviReadOnlyHealthAudit/1.1",
+        "Accept": "application/json" if is_health else "*/*",
+    })
     try:
-        with urlopen(req, timeout=timeout) as response:
+        with _open(req, timeout=timeout) as response:
             status = response.status
-            response.read(128)  # Don't capture body contents or secrets.
-        return {"name": name, "url": url, "status": status, "ok": 200 <= status < 400}
+            # The five native services, Discovery and Jose all expose
+            # {ok: true, service: "<exact-service-name>"} on /health.
+            # Bounded read: never store or print response bodies or secrets.
+            body = response.read(4097) if is_health else b""
+        result = {"name": name, "url": url, "status": status, "ok": status == 200}
+        if is_health and status == 200:
+            if len(body) > 4096:
+                result.update(ok=False, error="HealthBodyTooLarge")
+                return result
+            try:
+                parsed = json.loads(body.decode("utf-8"))
+            except (UnicodeError, ValueError):
+                result.update(ok=False, error="InvalidHealthJson")
+                return result
+            if not isinstance(parsed, dict) or parsed.get("ok") is not True or parsed.get("service") != name:
+                result.update(ok=False, error="HealthServiceMismatch")
+        return result
     except HTTPError as exc:
         exc.close()
         return {"name": name, "url": url, "status": exc.code, "ok": False}
     except (URLError, TimeoutError, OSError) as exc:
         return {"name": name, "url": url, "status": None, "ok": False,
                 "error": type(exc).__name__}
-
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
