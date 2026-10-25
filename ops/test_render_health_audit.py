@@ -1,7 +1,8 @@
 """Offline tests for the read-only Privi Render health audit.
 
-Run: python3 -m unittest discover -s ops -p 'test_render_health_audit.py'
-No test sends an HTTP request to a live service.
+Run from the repository root:
+    python3 -m unittest discover -s ops -p 'test_render_health_audit.py'
+All HTTP requests are mocked. No live production requests are sent.
 """
 from __future__ import annotations
 
@@ -16,7 +17,10 @@ from ops import render_health_audit as audit
 
 
 class FakeResponse:
-    status = 200
+    def __init__(self, status=200, body=b'{"ok":true,"service":"privi-ledger"}'):
+        self.status = status
+        self.body = body
+        self.read_size = None
 
     def __enter__(self):
         return self
@@ -25,29 +29,73 @@ class FakeResponse:
         return False
 
     def read(self, n):
-        assert n == 128
-        return b"ok"
+        self.read_size = n
+        return self.body[:n]
 
 
 class HealthAuditTests(unittest.TestCase):
-    def test_get_success_reads_at_most_128_bytes(self):
-        with patch.object(audit, "urlopen", return_value=FakeResponse()) as request:
+    def test_get_success_validates_identity_and_bounds_body(self):
+        response = FakeResponse()
+        with patch.object(audit, "_open", return_value=response) as request:
             result = audit.check("privi-ledger", audit.PAID_APIS["privi-ledger"], 4.5)
         self.assertTrue(result["ok"])
         self.assertEqual(result["status"], 200)
+        self.assertEqual(response.read_size, 4097)
         args, kwargs = request.call_args
         self.assertEqual(kwargs["timeout"], 4.5)
         self.assertEqual(args[0].get_method(), "GET")
+        self.assertEqual(args[0].get_header("Accept"), "application/json")
+
+    def test_mismatched_service_is_down_even_on_http_200(self):
+        response = FakeResponse(body=b'{"ok":true,"service":"not-ledger"}')
+        with patch.object(audit, "_open", return_value=response):
+            result = audit.check("privi-ledger", audit.PAID_APIS["privi-ledger"], 2)
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["status"], 200)
+        self.assertEqual(result["error"], "HealthServiceMismatch")
+
+    def test_unhealthy_flag_is_down_even_on_http_200(self):
+        response = FakeResponse(body=b'{"ok":false,"service":"privi-ledger"}')
+        with patch.object(audit, "_open", return_value=response):
+            result = audit.check("privi-ledger", audit.PAID_APIS["privi-ledger"], 2)
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error"], "HealthServiceMismatch")
+
+    def test_html_is_not_a_valid_api_health_payload(self):
+        response = FakeResponse(body=b"<html>login</html>")
+        with patch.object(audit, "_open", return_value=response):
+            result = audit.check("privi-ledger", audit.PAID_APIS["privi-ledger"], 2)
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error"], "InvalidHealthJson")
+
+    def test_large_health_response_is_rejected(self):
+        response = FakeResponse(body=b"x" * 4100)
+        with patch.object(audit, "_open", return_value=response):
+            result = audit.check("privi-ledger", audit.PAID_APIS["privi-ledger"], 2)
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error"], "HealthBodyTooLarge")
+
+    def test_static_site_is_checked_for_http_200_only(self):
+        response = FakeResponse(body=b"<html>ok</html>")
+        with patch.object(audit, "_open", return_value=response):
+            result = audit.check("privi-world", audit.STATIC_SITES["privi-world"], 2)
+        self.assertTrue(result["ok"])
+        self.assertIsNone(response.read_size)
 
     def test_get_http_502_is_reported(self):
         failure = HTTPError("https://example.invalid/health", 502, "Bad Gateway", {}, None)
-        with patch.object(audit, "urlopen", side_effect=failure):
+        with patch.object(audit, "_open", side_effect=failure):
             result = audit.check("privi-ledger", audit.PAID_APIS["privi-ledger"], 2)
         self.assertFalse(result["ok"])
         self.assertEqual(result["status"], 502)
 
+    def test_http_redirect_is_rejected_by_handler(self):
+        self.assertIsNone(
+            audit.NoRedirect().redirect_request(None, None, 302, "Found", {}, "https://other.invalid/")
+        )
+
     def test_network_errors_are_failures_without_secrets(self):
-        with patch.object(audit, "urlopen", side_effect=URLError("test-network-failure")):
+        with patch.object(audit, "_open", side_effect=URLError("test-network-failure")):
             result = audit.check("privi-ledger", audit.PAID_APIS["privi-ledger"], 2)
         self.assertFalse(result["ok"])
         self.assertIsNone(result["status"])
@@ -65,8 +113,7 @@ class HealthAuditTests(unittest.TestCase):
         self.assertEqual(status, 0)
         self.assertEqual(checker.call_count, len(audit.PAID_APIS))
         self.assertEqual(report["failures"], 0)
-        self.assertEqual({call.args[0] for call in checker.call_args_list},
-                         set(audit.PAID_APIS))
+        self.assertEqual({call.args[0] for call in checker.call_args_list}, set(audit.PAID_APIS))
 
     def test_free_services_are_explicit_opt_in(self):
         _, _, checker = self.run_cli(["--include-free"])
