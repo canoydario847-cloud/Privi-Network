@@ -19,8 +19,8 @@ SPEC.loader.exec_module(backup)
 def make_database(path):
     with sqlite3.connect(str(path)) as db:
         db.executescript(
-            "CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT, pwdhash TEXT,"
-            " wallet TEXT, member_since INTEGER, credits INTEGER);"
+            "CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, pwdhash TEXT,"
+            " wallet TEXT UNIQUE, member_since INTEGER, credits INTEGER);"
             "CREATE TABLE sessions (token_hash TEXT PRIMARY KEY, user_id TEXT, expires INTEGER);"
             "CREATE TABLE projects (id TEXT PRIMARY KEY, owner_id TEXT, title TEXT,"
             " kind TEXT, created INTEGER);"
@@ -181,6 +181,54 @@ def test_matching_file_columns_without_composite_key_are_rejected(tmp_path):
         db.execute("CREATE TABLE files (project_id TEXT, path TEXT, content TEXT, version INTEGER)")
     destination = tmp_path / "vault" / "unsafe-files-copy.sqlite3"
     with pytest.raises(ValueError, match="files primary key mismatch"):
+        backup.backup_and_verify(source, destination)
+    assert not destination.exists()
+
+
+@pytest.mark.parametrize(
+    "email_column,wallet_column,expected_message",
+    [
+        ("email TEXT NOT NULL", "wallet TEXT UNIQUE", "users UNIQUE constraint missing: email"),
+        ("email TEXT UNIQUE NOT NULL", "wallet TEXT", "users UNIQUE constraint missing: wallet"),
+        ("email TEXT UNIQUE", "wallet TEXT UNIQUE", "users email must be NOT NULL"),
+    ],
+)
+def test_backup_rejects_missing_account_identity_constraints(
+    tmp_path, email_column, wallet_column, expected_message
+):
+    source = tmp_path / "broken-accounts.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute("DROP TABLE users")
+        db.execute(
+            "CREATE TABLE users (id TEXT PRIMARY KEY, "
+            + email_column
+            + ", pwdhash TEXT, "
+            + wallet_column
+            + ", member_since INTEGER, credits INTEGER)"
+        )
+    destination = tmp_path / "vault" / "unsafe-accounts.sqlite3"
+    with pytest.raises(ValueError, match=expected_message):
+        backup.backup_and_verify(source, destination)
+    assert not destination.exists()
+
+
+def test_partial_account_unique_indexes_do_not_pass_restore_checks(tmp_path):
+    source = tmp_path / "partial-account-unique.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute("DROP TABLE users")
+        db.execute(
+            "CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT NOT NULL,"
+            " pwdhash TEXT, wallet TEXT, member_since INTEGER, credits INTEGER)"
+        )
+        db.execute(
+            "CREATE UNIQUE INDEX email_partial ON users(email)"
+            " WHERE member_since > 0"
+        )
+        db.execute("CREATE UNIQUE INDEX wallet_unique ON users(wallet)")
+    destination = tmp_path / "vault" / "unsafe-accounts.sqlite3"
+    with pytest.raises(ValueError, match="users UNIQUE constraint missing: email"):
         backup.backup_and_verify(source, destination)
     assert not destination.exists()
 
