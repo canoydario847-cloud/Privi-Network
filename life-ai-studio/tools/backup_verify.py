@@ -49,6 +49,11 @@ def backup_and_verify(source: Path, destination: Path):
         raise FileExistsError("Refusing to replace an existing backup")
     if "public" in destination.parts:
         raise ValueError("Refusing to write a backup within a public web directory")
+    # A symlinked parent may disguise a web-served directory (e.g. vault -> public).
+    # Check the resolved destination directory as well as the user-supplied path.
+    resolved_parent = destination.parent.resolve()
+    if "public" in resolved_parent.parts:
+        raise ValueError("Refusing to write a backup within a public web directory")
     destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     tmp_path = None
     try:
