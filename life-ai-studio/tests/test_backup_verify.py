@@ -246,3 +246,24 @@ def test_verify_copy_rejects_symlink_even_to_private_backup(tmp_path):
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
     with pytest.raises(ValueError, match="not a symlink"):
         backup.verify_existing_copy(alias, digest)
+
+
+def test_verify_copy_restores_the_exact_bytes_that_passed_checksum(tmp_path, monkeypatch):
+    source = tmp_path / "restored.sqlite3"
+    make_database(source)
+    os.chmod(source, 0o600)
+    expected = hashlib.sha256(source.read_bytes()).hexdigest()
+    original_drill = backup.verify_restore_drill
+
+    def mutate_original_before_restore(frozen_copy):
+        # Simulate a changed/replaced operator restore file after checksum.
+        # The restore must read only the private, checksum-pinned copy.
+        assert Path(frozen_copy) != source
+        source.write_bytes(b"replaced after checksum")
+        return original_drill(frozen_copy)
+
+    monkeypatch.setattr(backup, "verify_restore_drill", mutate_original_before_restore)
+    result = backup.verify_existing_copy(source, expected)
+    assert result["sha256"] == expected
+    assert result["restore_drill"] == "passed"
+    assert source.read_bytes() == b"replaced after checksum"
