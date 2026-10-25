@@ -13,8 +13,14 @@ SPEC.loader.exec_module(backup)
 
 def make_database(path):
     with sqlite3.connect(str(path)) as db:
-        db.executescript("CREATE TABLE settings (name TEXT PRIMARY KEY, value TEXT NOT NULL);"
-                         "INSERT INTO settings VALUES ('device-theme', 'cosmic');")
+        db.executescript(
+            "CREATE TABLE users (id TEXT PRIMARY KEY);"
+            "CREATE TABLE sessions (token_hash TEXT PRIMARY KEY);"
+            "CREATE TABLE projects (id TEXT PRIMARY KEY);"
+            "CREATE TABLE ledger (id TEXT PRIMARY KEY);"
+            "CREATE TABLE settings (name TEXT PRIMARY KEY, value TEXT NOT NULL);"
+            "INSERT INTO settings VALUES ('device-theme', 'cosmic');"
+        )
 
 
 def test_creates_private_consistent_snapshot_and_restores(tmp_path):
@@ -75,3 +81,23 @@ def test_symlinked_backup_parent_into_public_is_rejected(tmp_path):
     with pytest.raises(ValueError, match="public"):
         backup.backup_and_verify(source, alias / "life-copy.sqlite3")
     assert not (web_root / "life-copy.sqlite3").exists()
+
+
+def test_unrelated_valid_sqlite_is_not_accepted_as_life_backup(tmp_path):
+    source = tmp_path / "unrelated.sqlite3"
+    with sqlite3.connect(str(source)) as db:
+        db.execute("CREATE TABLE unrelated (id INTEGER PRIMARY KEY)")
+    dest = tmp_path / "vault" / "invalid-life-copy.sqlite3"
+    with pytest.raises(ValueError, match="missing core tables"):
+        backup.backup_and_verify(source, dest)
+    assert not dest.exists()
+
+
+def test_empty_sqlite_is_not_accepted_as_life_backup(tmp_path):
+    source = tmp_path / "empty.sqlite3"
+    with sqlite3.connect(str(source)) as db:
+        db.execute("PRAGMA user_version=1")
+    dest = tmp_path / "vault" / "empty-copy.sqlite3"
+    with pytest.raises(ValueError, match="missing core tables"):
+        backup.backup_and_verify(source, dest)
+    assert not dest.exists()
