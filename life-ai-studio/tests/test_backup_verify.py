@@ -686,3 +686,52 @@ def test_restored_bnb_redemption_ownership(tmp_path, scenario, expected):
         with pytest.raises(ValueError, match=expected):
             backup.backup_and_verify(source, destination)
         assert not destination.exists(), "Broken payment history must not publish a backup"
+
+
+@pytest.mark.parametrize("scenario,expected", [
+    ("valid", None),
+    ("orphan_quote", "orphaned PRVI quotes"),
+    ("orphan_redemption", "orphaned PRVI redemptions"),
+    ("wrong_member", "PRVI redemption member mismatch"),
+    ("missing_quotes", "PRVI redemptions present without quotes"),
+    ("missing_quote_owner_column", "PRVI quote ownership columns missing"),
+    ("missing_redemption_owner_column", "PRVI redemption ownership columns missing"),
+])
+def test_restored_native_prvi_redemption_ownership(tmp_path, scenario, expected):
+    """Staging-disabled native payment history must restore to the right member."""
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute("INSERT INTO users VALUES ('u1','one@example.test','hash',NULL,1,0)")
+        db.execute("INSERT INTO users VALUES ('u2','two@example.test','hash',NULL,1,0)")
+        if scenario != "missing_quotes":
+            quote_columns = (
+                "id TEXT PRIMARY KEY, user_id TEXT NOT NULL"
+                if scenario != "missing_quote_owner_column"
+                else "id TEXT PRIMARY KEY"
+            )
+            db.execute("CREATE TABLE quotes (" + quote_columns + ")")
+            if scenario != "missing_quote_owner_column":
+                db.execute(
+                    "INSERT INTO quotes VALUES ('q1',?)",
+                    ("absent" if scenario == "orphan_quote" else "u1",),
+                )
+        redemption_columns = (
+            "quote_id TEXT NOT NULL, user_id TEXT NOT NULL"
+            if scenario != "missing_redemption_owner_column"
+            else "quote_id TEXT NOT NULL"
+        )
+        db.execute("CREATE TABLE redemptions (" + redemption_columns + ")")
+        if scenario not in ("missing_quote_owner_column", "missing_redemption_owner_column"):
+            db.execute(
+                "INSERT INTO redemptions VALUES (?,?)",
+                ("absent" if scenario == "orphan_redemption" else "q1",
+                 "u2" if scenario == "wrong_member" else "u1"),
+            )
+    destination = tmp_path / "vault" / "prvi-audit-copy.sqlite3"
+    if expected is None:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        with pytest.raises(ValueError, match=expected):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Broken native payment history must not publish a backup"
