@@ -38,6 +38,8 @@ def gate(manifest: dict, *, financial_mainnet: bool = True) -> dict:
         blockers.append("Point of Position must be explicitly named")
     if manifest.get("consensus_kind") in ("pos", "posa", "proof-of-stake", "proof-of-staked-authority"):
         blockers.append("PoS or PoSA cannot be represented as Point of Position")
+    elif manifest.get("consensus_kind") != "pop-not-yet-implemented":
+        blockers.append("Unknown or missing PoP consensus implementation state")
     if manifest.get("iot_settlement") != "privi-only":
         blockers.append("IoT commitments must settle on Privi only")
     if manifest.get("external_bridges") is not False or manifest.get("external_pairings") is not False:
