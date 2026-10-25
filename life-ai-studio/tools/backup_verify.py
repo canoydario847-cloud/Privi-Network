@@ -111,6 +111,25 @@ def validate_database(conn):
             break
     if not has_idempotency_guard:
         raise ValueError("Not a LIFE database; ledger idempotency UNIQUE constraint missing")
+    # The current LIFE schema does not declare foreign keys for these
+    # relationships, so PRAGMA foreign_key_check alone misses orphaned
+    # sessions, projects, project files and credit history. Reject a snapshot
+    # that cannot reliably reconnect private records to their owners.
+    ownership_checks = (
+        ("sessions", "users", "user_id", "id"),
+        ("projects", "users", "owner_id", "id"),
+        ("files", "projects", "project_id", "id"),
+        ("ledger", "users", "user_id", "id"),
+    )
+    for child, parent, foreign_id, primary_id in ownership_checks:
+        orphan = conn.execute(
+            f'SELECT 1 FROM "{child}" AS c '
+            f'LEFT JOIN "{parent}" AS p ON c."{foreign_id}" = p."{primary_id}" '
+            f'WHERE p."{primary_id}" IS NULL LIMIT 1'
+        ).fetchone()
+        if orphan is not None:
+            # Never print account IDs, file paths, session tokens or emails.
+            raise ValueError(f"Not a LIFE database; orphaned {child} owner references")
     return len(tables)
 
 
