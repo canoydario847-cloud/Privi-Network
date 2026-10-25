@@ -32,7 +32,11 @@ def make_responses():
         if "/validators?" in url:
             return {"result":{"total":str(len(validators)),"validators":validators}}
         if "/commit?" in url:
-            return {"result":{"signed_header":{"header":{"height":"100","chain_id":CHAIN},"commit":{"signatures":signatures}}}}
+            return {"result":{"signed_header":{"header":{"height":"100","chain_id":CHAIN},
+                "commit":{"height":"100","block_id":{"hash":"AB"*32},"signatures":signatures}}}}
+        if "/block?" in url:
+            return {"result":{"block_id":{"hash":"AB"*32},
+                "block":{"header":{"height":"100","chain_id":CHAIN}}}}
         raise AssertionError("unexpected Comet RPC URL: "+url)
     return fakepost,fakeget,validators,signatures
 
@@ -103,6 +107,50 @@ class MainnetQuorumMonitor(unittest.TestCase):
             return answer
         with mock.patch.object(m,"post",p),mock.patch.object(m,"get",corrupt):
             with self.assertRaisesRegex(RuntimeError,"commit header chain ID mismatch"):
+                m.check(EVM,COMET,CHAIN,EVM_ID,now=1000)
+
+    def test_mismatched_commit_vote_height_denied(self):
+        p,g,_,_=make_responses()
+        def corrupt(url):
+            answer=g(url)
+            if "/commit?" in url:
+                answer["result"]["signed_header"]["commit"]["height"]="99"
+            return answer
+        with mock.patch.object(m,"post",p),mock.patch.object(m,"get",corrupt):
+            with self.assertRaisesRegex(RuntimeError,"commit vote height mismatch"):
+                m.check(EVM,COMET,CHAIN,EVM_ID,now=1000)
+
+    def test_mismatched_commit_block_hash_denied(self):
+        p,g,_,_=make_responses()
+        def corrupt(url):
+            answer=g(url)
+            if "/block?" in url:
+                answer["result"]["block_id"]["hash"]="DE"*32
+            return answer
+        with mock.patch.object(m,"post",p),mock.patch.object(m,"get",corrupt):
+            with self.assertRaisesRegex(RuntimeError,"block hash differs"):
+                m.check(EVM,COMET,CHAIN,EVM_ID,now=1000)
+
+    def test_invalid_commit_block_hash_denied(self):
+        p,g,_,_=make_responses()
+        def corrupt(url):
+            answer=g(url)
+            if "/commit?" in url:
+                answer["result"]["signed_header"]["commit"]["block_id"]["hash"]="XX"
+            return answer
+        with mock.patch.object(m,"post",p),mock.patch.object(m,"get",corrupt):
+            with self.assertRaisesRegex(RuntimeError,"commit block hash invalid"):
+                m.check(EVM,COMET,CHAIN,EVM_ID,now=1000)
+
+    def test_inconsistent_fetched_block_header_denied(self):
+        p,g,_,_=make_responses()
+        def corrupt(url):
+            answer=g(url)
+            if "/block?" in url:
+                answer["result"]["block"]["header"]["chain_id"]="privi-other"
+            return answer
+        with mock.patch.object(m,"post",p),mock.patch.object(m,"get",corrupt):
+            with self.assertRaisesRegex(RuntimeError,"fetched block header mismatch"):
                 m.check(EVM,COMET,CHAIN,EVM_ID,now=1000)
 
     def test_duplicate_voting_address_denied(self):
