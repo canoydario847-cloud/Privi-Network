@@ -218,13 +218,19 @@ def signup(data: AuthInput, response: Response):
     return store.get_user(user_id)
 
 @app.post("/api/auth/login")
-def login(data: AuthInput, response: Response):
+def login(data: AuthInput, response: Response, request: Request):
     if STAGING_MODE:
         fail(403, "Public login disabled in disposable sandbox")
+    email = data.email.strip().lower()
+    client_host = request.client.host if request.client else ""
+    if store.login_blocked(email, client_host):
+        fail(429, "Too many sign-in attempts; try again in 15 minutes")
     with store.transaction() as db:
-        row = db.execute("SELECT * FROM users WHERE email=?", (data.email.strip().lower(),)).fetchone()
+        row = db.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
     if not row or not valid_password(data.password, row["pwdhash"]):
+        store.login_failed(email, client_host)
         fail(401, "Invalid credentials")
+    store.login_succeeded(email, client_host)
     session_response(response, row["id"])
     return store.get_user(row["id"])
 
