@@ -41,6 +41,19 @@ class TestPoPMainnetGate(unittest.TestCase):
             self.assertTrue(any("PoS or PoSA" in x
                                 for x in gate_module.gate(payload)["blockers"]))
 
+    def test_unknown_or_missing_consensus_state_fails_closed(self):
+        for kind in (None, "", "pop", "custom", "proof-of-participation"):
+            with self.subTest(kind=kind):
+                payload = baseline()
+                if kind is None:
+                    del payload["consensus_kind"]
+                else:
+                    payload["consensus_kind"] = kind
+                result = gate_module.gate(payload, financial_mainnet=False)
+                self.assertEqual(result["status"], "NO_GO")
+                self.assertTrue(any("consensus implementation state" in x
+                                    for x in result["blockers"]))
+
     def test_missing_hardened_iot_controls_fail_closed(self):
         for control in gate_module.REQUIRED_IOT_CONTROLS:
             with self.subTest(control=control):
