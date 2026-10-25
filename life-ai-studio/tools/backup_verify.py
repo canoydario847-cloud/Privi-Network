@@ -30,10 +30,27 @@ def validate_database(conn):
     tables = {row[0] for row in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'"
     )}
-    required = {"users", "sessions", "projects", "ledger"}
-    missing = required - tables
+    # Table names alone can be spoofed by an unrelated database. Verify the
+    # minimum columns required to restore accounts, sessions, project files and
+    # idempotent credit records. Extra columns are allowed for future migrations.
+    required_columns = {
+        "users": {"id", "email", "pwdhash", "wallet", "member_since", "credits"},
+        "sessions": {"token_hash", "user_id", "expires"},
+        "projects": {"id", "owner_id", "title", "kind", "created"},
+        "files": {"project_id", "path", "content", "version"},
+        "ledger": {"id", "user_id", "kind", "service", "amount", "idempotency", "created"},
+    }
+    missing = required_columns.keys() - tables
     if missing:
         raise ValueError("Not a LIFE database; missing core tables: " + ", ".join(sorted(missing)))
+    for table, columns in required_columns.items():
+        present = {row[1] for row in conn.execute(f'PRAGMA table_info("{table}")')}
+        absent = columns - present
+        if absent:
+            raise ValueError(
+                f"Not a LIFE database; table {table} missing columns: "
+                + ", ".join(sorted(absent))
+            )
     return len(tables)
 
 
