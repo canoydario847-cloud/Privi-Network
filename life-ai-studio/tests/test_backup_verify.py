@@ -608,3 +608,43 @@ def test_verify_copy_rejects_symlinked_restore_directory(tmp_path):
     with pytest.raises(ValueError, match="not a symlink"):
         backup.verify_existing_copy(alias / "life.sqlite3", digest)
     assert backup.verify_existing_copy(restored, digest)["restore_drill"] == "passed"
+
+
+@pytest.mark.parametrize("scenario,expected", [
+    ("valid", None),
+    ("orphan_event", "orphaned Cogvative events"),
+    ("wrong_owner", "Cogvative event owner mismatch"),
+    ("orphan_line", "orphaned Cogvative lines"),
+    ("missing_events", "Cogvative lines present without events"),
+])
+def test_backup_rejects_broken_cogvative_provenance_ownership(tmp_path, scenario, expected):
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute("INSERT INTO users VALUES ('u1','owner@example.test','hash',NULL,1,0)")
+        db.execute("INSERT INTO users VALUES ('u2','other@example.test','hash',NULL,1,0)")
+        db.execute("INSERT INTO projects VALUES ('p1','u1','Test','code',1)")
+        if scenario != "missing_events":
+            db.execute(
+                "CREATE TABLE cog_events (id TEXT PRIMARY KEY, "
+                "owner_id TEXT NOT NULL, project_id TEXT NOT NULL)"
+            )
+            db.execute(
+                "INSERT INTO cog_events VALUES (?,?,?)",
+                ("e1", "u2" if scenario == "wrong_owner" else "u1",
+                 "absent" if scenario == "orphan_event" else "p1"),
+            )
+        db.execute(
+            "CREATE TABLE cog_lines (event_id TEXT NOT NULL, line_no INTEGER NOT NULL)"
+        )
+        db.execute(
+            "INSERT INTO cog_lines VALUES (?,1)",
+            ("absent" if scenario == "orphan_line" else "e1",),
+        )
+    destination = tmp_path / "vault" / "cogvative-backup.sqlite3"
+    if expected is None:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        with pytest.raises(ValueError, match=expected):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Broken provenance must not publish a backup"
