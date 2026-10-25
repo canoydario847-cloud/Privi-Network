@@ -309,3 +309,31 @@ def test_verify_copy_restores_the_exact_bytes_that_passed_checksum(tmp_path, mon
     assert result["sha256"] == expected
     assert result["restore_drill"] == "passed"
     assert source.read_bytes() == b"replaced after checksum"
+
+
+def test_verify_copy_rejects_group_accessible_restore_directory(tmp_path):
+    vault = tmp_path / "shared-restore"
+    vault.mkdir(mode=0o700)
+    restored = vault / "life.sqlite3"
+    make_database(restored)
+    os.chmod(restored, 0o600)
+    digest = hashlib.sha256(restored.read_bytes()).hexdigest()
+    os.chmod(vault, 0o750)
+    with pytest.raises(ValueError, match="mode 0700"):
+        backup.verify_existing_copy(restored, digest)
+    os.chmod(vault, 0o700)
+    assert backup.verify_existing_copy(restored, digest)["restore_drill"] == "passed"
+
+
+def test_verify_copy_rejects_symlinked_restore_directory(tmp_path):
+    vault = tmp_path / "private-restore"
+    vault.mkdir(mode=0o700)
+    restored = vault / "life.sqlite3"
+    make_database(restored)
+    os.chmod(restored, 0o600)
+    digest = hashlib.sha256(restored.read_bytes()).hexdigest()
+    alias = tmp_path / "restore-alias"
+    alias.symlink_to(vault, target_is_directory=True)
+    with pytest.raises(ValueError, match="not a symlink"):
+        backup.verify_existing_copy(alias / "life.sqlite3", digest)
+    assert backup.verify_existing_copy(restored, digest)["restore_drill"] == "passed"
