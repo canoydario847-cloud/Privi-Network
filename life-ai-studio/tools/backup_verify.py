@@ -84,6 +84,14 @@ def backup_and_verify(source: Path, destination: Path):
     if "public" in resolved_parent.parts:
         raise ValueError("Refusing to write a backup within a public web directory")
     destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    # An existing directory is not made private by mkdir(mode=0700).
+    # Refuse a symlink or group/world-accessible parent rather than exposing
+    # backup names or allowing another local user to replace the output.
+    parent_info = destination.parent.lstat()
+    if not stat.S_ISDIR(parent_info.st_mode):
+        raise ValueError("Backup directory must be a real private directory, not a symlink")
+    if parent_info.st_mode & 0o077:
+        raise ValueError("Backup directory must have mode 0700; chmod 700 the vault first")
     tmp_path = None
     try:
         fd, raw_path = tempfile.mkstemp(prefix=".life-backup-", suffix=".sqlite3", dir=destination.parent)
