@@ -26,8 +26,9 @@ def make_database(path):
             " kind TEXT, created INTEGER);"
             "CREATE TABLE files (project_id TEXT, path TEXT, content TEXT, version INTEGER,"
             " PRIMARY KEY(project_id,path));"
-            "CREATE TABLE ledger (id TEXT PRIMARY KEY, user_id TEXT, kind TEXT,"
-            " service TEXT, amount INTEGER, idempotency TEXT, created INTEGER);"
+            "CREATE TABLE ledger (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, kind TEXT,"
+            " service TEXT, amount INTEGER, idempotency TEXT NOT NULL, created INTEGER,"
+            " UNIQUE(user_id,idempotency));"
             "CREATE TABLE settings (name TEXT PRIMARY KEY, value TEXT NOT NULL);"
             "INSERT INTO settings VALUES ('device-theme', 'cosmic');"
         )
@@ -180,6 +181,42 @@ def test_matching_file_columns_without_composite_key_are_rejected(tmp_path):
         db.execute("CREATE TABLE files (project_id TEXT, path TEXT, content TEXT, version INTEGER)")
     destination = tmp_path / "vault" / "unsafe-files-copy.sqlite3"
     with pytest.raises(ValueError, match="files primary key mismatch"):
+        backup.backup_and_verify(source, destination)
+    assert not destination.exists()
+
+
+def test_matching_ledger_columns_without_unique_idempotency_are_rejected(tmp_path):
+    source = tmp_path / "missing-ledger-unique.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute("DROP TABLE ledger")
+        db.execute(
+            "CREATE TABLE ledger (id TEXT PRIMARY KEY, user_id TEXT NOT NULL,"
+            " kind TEXT, service TEXT, amount INTEGER, idempotency TEXT NOT NULL,"
+            " created INTEGER)"
+        )
+    destination = tmp_path / "vault" / "unsafe-ledger-copy.sqlite3"
+    with pytest.raises(ValueError, match="ledger idempotency UNIQUE constraint missing"):
+        backup.backup_and_verify(source, destination)
+    assert not destination.exists()
+
+
+def test_partial_unique_ledger_index_does_not_satisfy_restore_guard(tmp_path):
+    source = tmp_path / "partial-ledger-unique.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute("DROP TABLE ledger")
+        db.execute(
+            "CREATE TABLE ledger (id TEXT PRIMARY KEY, user_id TEXT NOT NULL,"
+            " kind TEXT, service TEXT, amount INTEGER, idempotency TEXT NOT NULL,"
+            " created INTEGER)"
+        )
+        db.execute(
+            "CREATE UNIQUE INDEX ledger_partial ON ledger(user_id,idempotency)"
+            " WHERE kind='charge'"
+        )
+    destination = tmp_path / "vault" / "partial-index-copy.sqlite3"
+    with pytest.raises(ValueError, match="ledger idempotency UNIQUE constraint missing"):
         backup.backup_and_verify(source, destination)
     assert not destination.exists()
 
