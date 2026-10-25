@@ -61,6 +61,7 @@ def validate_database(conn):
         "users": ("id",),
         "sessions": ("token_hash",),
         "projects": ("id",),
+        "files": ("project_id", "path"),
         "ledger": ("id",),
     }
     for table, expected in required_primary_keys.items():
