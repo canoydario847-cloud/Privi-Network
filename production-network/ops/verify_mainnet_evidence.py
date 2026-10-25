@@ -40,15 +40,24 @@ def assess(manifest, genesis_path):
     require(isinstance(sha, str) and HEX64.fullmatch(sha) is not None, "genesis_sha256 required")
     require(genesis_path.is_file(), "genesis file missing")
     if genesis_path.is_file():
-        actual = hashlib.sha256(genesis_path.read_bytes()).hexdigest()
-        require(isinstance(sha, str) and actual.lower() == sha.lower(), "genesis SHA-256 mismatch")
         try:
-            genesis = json.loads(genesis_path.read_text())
-            require(isinstance(genesis, dict) and genesis.get("chain_id") == chain_id, "genesis chain_id mismatch")
-            # Confirm only INITIAL supply: ongoing mint/issuance cap enforcement
-            # still needs audited custom chain logic and external sign-off.
+            # Hash the EXACT bounded bytes that will be parsed and audited.
+            # A stat-only size check can be bypassed by replacing the file.
+            from genesis_supply_audit import (
+                MAX_GENESIS_FILE_BYTES, parse_strict_json_bytes,
+                audit as audit_genesis_bank,
+            )
+            with genesis_path.open("rb") as stream:
+                raw = stream.read(MAX_GENESIS_FILE_BYTES + 1)
+            genesis = parse_strict_json_bytes(raw)
+            actual = hashlib.sha256(raw).hexdigest()
+            require(isinstance(sha, str) and actual.lower() == sha.lower(),
+                    "genesis SHA-256 mismatch")
+            require(isinstance(genesis, dict) and genesis.get("chain_id") == chain_id,
+                    "genesis chain_id mismatch")
+            # Confirm INITIAL supply across all bank denominations. Full
+            # runtime mint/upgrade authority remains externally unverified.
             if isinstance(chain_id, str) and isinstance(denom, str):
-                from genesis_supply_audit import audit as audit_genesis_bank
                 try:
                     audit_genesis_bank(genesis, denom, chain_id)
                 except (ValueError, AttributeError, TypeError) as exc:
@@ -56,8 +65,8 @@ def assess(manifest, genesis_path):
             else:
                 errors.append("initial PRVI bank supply cannot be audited without a valid chain ID and denomination")
             errors.append("ongoing issuance cap, staking and vesting require independent audited chain-specific verification")
-        except (ValueError, UnicodeError):
-            errors.append("genesis must be valid UTF-8 JSON")
+        except (OSError, ValueError, UnicodeError) as exc:
+            errors.append("genesis invalid or ambiguous JSON: " + str(exc))
     for key in ("binary_sha256", "security_audit_url", "public_testnet_evidence_url", "incident_runbook_url", "signoff_record_url"):
         require(bool(manifest.get(key)), key + " evidence missing")
     # Offline declarations cannot demonstrate network health or cryptographic signatures.
@@ -70,7 +79,8 @@ def main():
     p.add_argument("--genesis", required=True, type=Path, help="candidate unsigned/signed genesis JSON")
     args = p.parse_args()
     try:
-        manifest = json.loads(args.manifest.read_text())
+        from genesis_supply_audit import load_strict_genesis
+        manifest = load_strict_genesis(args.manifest)
         if not isinstance(manifest, dict):
             raise ValueError("manifest must be a JSON object")
         failures = assess(manifest, args.genesis)
