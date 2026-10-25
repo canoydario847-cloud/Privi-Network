@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Privi walkthrough</title>
+<style>
+:root{--paper:#0D1626;--surface:#122036;--ink:#E7ECF4;--steel:#93A3BB;--seal:#7FA2FF;--verified:#3CCB94;--rule:#22314A;--code:#0A1220;--warn:#F2B04A;--bad:#FF7A70}
+*{box-sizing:border-box}html,body{margin:0;width:1280px;height:720px;overflow:hidden;background:var(--paper);color:var(--ink);font:18px/1.5 "IBM Plex Sans",system-ui,sans-serif}
+.frame{display:grid;grid-template-columns:420px 1fr;height:720px}
+.left{padding:44px 36px;border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:18px}
+.brand{font:600 15px "IBM Plex Mono",monospace;color:var(--seal);letter-spacing:.08em;text-transform:uppercase}
+h1{font:600 30px/1.15 "IBM Plex Sans Condensed","IBM Plex Sans",sans-serif;margin:0}
+.server{font:13px "IBM Plex Mono",monospace;color:var(--steel);word-break:break-all}
+ol{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:14px}
+li{color:var(--steel);font-size:16px;line-height:1.45;padding-left:14px;border-left:3px solid transparent;transition:all .3s}
+li.on{color:var(--ink);border-left-color:var(--seal)}li.done{color:var(--steel);border-left-color:var(--verified)}
+.foot{margin-top:auto;font-size:13px;color:var(--steel)}
+.right{padding:36px 40px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.label{font:600 12px "IBM Plex Mono",monospace;color:var(--steel);letter-spacing:.1em;text-transform:uppercase}
+pre{margin:0;background:var(--code);border:1px solid var(--rule);border-radius:10px;padding:16px 18px;font:14.5px/1.55 "IBM Plex Mono",monospace;white-space:pre-wrap;word-break:break-word;color:var(--ink);overflow:hidden}
+#req{min-height:110px;max-height:190px}#res{flex:1;min-height:0}
+.k{color:var(--seal)}.s{color:#C9D7F2}.n{color:var(--warn)}.t{color:var(--verified);font-weight:600}.f{color:var(--bad);font-weight:600}
+.status{font:14px "IBM Plex Mono",monospace;color:var(--steel);height:20px}
+.cursor{display:inline-block;width:9px;height:17px;background:var(--seal);vertical-align:-3px;animation:b 1s steps(1) infinite}@keyframes b{50%{opacity:0}}
+.card{position:fixed;inset:0;background:var(--paper);display:flex;flex-direction:column;justify-content:center;padding:0 120px;gap:18px;transition:opacity .6s}
+.card h2{font:600 52px/1.05 "IBM Plex Sans Condensed","IBM Plex Sans",sans-serif;margin:0;max-width:16ch}
+.card p{font-size:22px;color:var(--steel);margin:0;max-width:40em}
+.hidden{opacity:0;pointer-events:none}
+</style></head><body>
+<div class="frame">
+ <div class="left"><div class="brand">Privi · live walkthrough</div><h1 id="title"></h1><div class="server" id="server"></div><ol id="steps"></ol>
+  <div class="foot" id="foot"></div></div>
+ <div class="right"><div class="label">Agent sends (MCP tools/call)</div><pre id="req"></pre>
+  <div class="status" id="status"></div><div class="label">Privi answers</div><pre id="res"></pre></div>
+</div>
+<div class="card" id="intro"><div class="brand">Privi World Co</div><h2 id="introTitle"></h2><p id="introSub"></p></div>
+<div class="card hidden" id="outro"><div class="brand">Try it yourself</div><h2>Connect any MCP client</h2><p id="outroSub"></p></div>
+<script>
+const P=new URLSearchParams(location.search), FLOW=P.get('flow');
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function hl(json){return json.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))
+ .replace(/("(?:[^"\\]|\\.)*")(\s*:)?/g,(m,s,c)=>c?`<span class="k">${s}</span>${c}`:`<span class="s">${s}</span>`)
+ .replace(/\b(true)\b/g,'<span class="t">$1</span>').replace(/\b(false|null)\b/g,'<span class="f">$1</span>')
+ .replace(/(?<![\w"])(-?\d+(?:\.\d+)?)(?![\w"])/g,'<span class="n">$1</span>')}
+async function typeInto(el,text,cps){el.innerHTML='';let out='';for(let i=0;i<text.length;i+=3){out=text.slice(0,i+3);el.innerHTML=hl(out)+'<span class="cursor"></span>';await sleep(1000/cps*3)}el.innerHTML=hl(text)}
+async function reveal(el,text){const lines=text.split('\n');el.innerHTML='';for(let i=0;i<lines.length;i++){el.innerHTML=hl(lines.slice(0,i+1).join('\n'));await sleep(Math.max(40,1400/lines.length))}}
+(async()=>{
+ const d=await (await fetch('flows.json')).json(); const f=d.flows[FLOW];
+ document.getElementById('title').textContent=f.title; document.getElementById('server').textContent=f.server;
+ document.getElementById('introTitle').textContent=f.title; document.getElementById('introSub').textContent='Real responses captured '+d.captured+'.';
+ document.getElementById('foot').textContent='Responses shown are real, captured '+d.captured+'. Keys are hidden.';
+ document.getElementById('outroSub').textContent='Add '+f.server+' to your MCP client and call the same tools. Free tiers on every service.';
+ const ol=document.getElementById('steps'); f.steps.forEach(s=>{const li=document.createElement('li');li.textContent=s.say;ol.appendChild(li)});
+ await sleep(2600); document.getElementById('intro').classList.add('hidden'); await sleep(500);
+ const req=document.getElementById('req'), res=document.getElementById('res'), st=document.getElementById('status');
+ for(let i=0;i<f.steps.length;i++){const s=f.steps[i], li=ol.children[i]; li.className='on'; res.innerHTML=''; st.textContent='';
+  const body=s.tool==='(receipt)'?'// same response, receipt section':JSON.stringify({name:s.tool,arguments:s.args},null,2);
+  await sleep(700); await typeInto(req,body,90); st.textContent='→ calling '+(s.tool==='(receipt)'?'':s.tool)+' …'; await sleep(900);
+  st.textContent='← answered'; await reveal(res,JSON.stringify(s.res,null,2)); await sleep(3200); li.className='done'}
+ await sleep(800); document.getElementById('outro').classList.remove('hidden'); await sleep(3200); window.__done=true;
+})();
+</script></body></html>

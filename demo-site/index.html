@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privi Demo: how every Privi service works</title>
+<meta name="description" content="Step-by-step video walkthroughs of Privi Ledger, Guard, Scan, KYA, Call, Verify, Anchor and Quantum, recorded from the live services, with copy-paste setup for any MCP client.">
+<meta property="og:title" content="Privi Demo: how every Privi service works"><meta property="og:type" content="website">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--paper:#F7F8FA;--surface:#FFFFFF;--ink:#0E1B33;--steel:#5A6B85;--seal:#2F5BEA;--on-seal:#FFFFFF;--verified:#0F8A5F;--rule:#DCE1EA;--code:#EEF1F6;--bad:#C2362D}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--paper:#0D1626;--surface:#122036;--ink:#E7ECF4;--steel:#93A3BB;--seal:#7FA2FF;--on-seal:#0D1626;--verified:#3CCB94;--rule:#22314A;--code:#16263F;--bad:#FF7A70}}
+:root[data-theme=dark]{--paper:#0D1626;--surface:#122036;--ink:#E7ECF4;--steel:#93A3BB;--seal:#7FA2FF;--on-seal:#0D1626;--verified:#3CCB94;--rule:#22314A;--code:#16263F;--bad:#FF7A70}
+*{box-sizing:border-box}html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;scroll-padding-top:76px}
+body{margin:0;background:var(--paper);color:var(--ink);font:17px/1.6 "IBM Plex Sans",system-ui,sans-serif}
+a{color:var(--seal);text-underline-offset:3px}a:focus-visible,button:focus-visible{outline:3px solid var(--seal);outline-offset:2px}
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+header{border-bottom:1px solid var(--rule);background:var(--surface);position:sticky;top:0;z-index:5}
+.bar{display:flex;align-items:center;gap:22px;min-height:60px;flex-wrap:wrap}
+.mark{font:600 20px "IBM Plex Sans Condensed",sans-serif;color:var(--ink);text-decoration:none;display:flex;align-items:center;gap:10px}
+.mark svg{width:24px;height:24px}
+nav{display:flex;gap:4px 16px;flex-wrap:wrap;font-size:15px}nav a{color:var(--steel);text-decoration:none}nav a:hover{color:var(--ink)}
+h1{font:600 clamp(34px,5vw,54px)/1.05 "IBM Plex Sans Condensed",sans-serif;margin:0 0 18px;max-width:18ch}
+h2{font:600 30px/1.15 "IBM Plex Sans Condensed",sans-serif;margin:0 0 10px}
+h3{font:600 20px/1.3 "IBM Plex Sans Condensed",sans-serif;margin:0 0 6px}
+.lede{font-size:20px;color:var(--steel);max-width:40em;margin:0 0 26px}
+.hero{padding:64px 20px 40px}
+.cta{display:flex;gap:12px;flex-wrap:wrap}
+.btn{display:inline-block;padding:11px 18px;border-radius:8px;background:var(--seal);color:var(--on-seal);text-decoration:none;font-weight:600;border:0;font-size:16px;cursor:pointer}
+.btn.alt{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--rule)}
+section{padding:52px 0;border-top:1px solid var(--rule)}
+.status{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:26px 0 0}
+.st{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:10px 12px;font-size:14px;display:flex;align-items:center;gap:8px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--rule);flex:none}.dot.up{background:var(--verified)}.dot.down{background:var(--bad)}
+.st small{display:block;color:var(--steel);font:12px "IBM Plex Mono",monospace}
+.flow{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:24px 0 8px;counter-reset:f}
+.flow div{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:14px;font-size:15px;position:relative}
+.flow div b{display:block;font:600 17px "IBM Plex Sans Condensed",sans-serif;margin-bottom:2px}
+.flow div::before{counter-increment:f;content:counter(f);font:600 13px "IBM Plex Mono",monospace;color:var(--seal)}
+.demo{display:grid;grid-template-columns:1.25fr 1fr;gap:34px;align-items:start}
+.demo.flip .vid{order:2}.demo>*{min-width:0}
+video{width:100%;aspect-ratio:16/9;border-radius:12px;border:1px solid var(--rule);background:#0D1626;display:block}
+.vid figcaption{font-size:13px;color:var(--steel);margin-top:8px}
+.tag{display:inline-block;font:500 12px "IBM Plex Mono",monospace;color:var(--seal);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px}
+ol.steps{counter-reset:s;list-style:none;padding:0;margin:16px 0 0}
+ol.steps li{counter-increment:s;position:relative;padding:0 0 14px 44px;font-size:16px}
+ol.steps li::before{content:counter(s);position:absolute;left:0;top:0;width:30px;height:30px;border-radius:50%;border:1.5px solid var(--seal);color:var(--seal);font:600 14px/27px "IBM Plex Sans Condensed",sans-serif;text-align:center}
+pre{background:var(--code);border-radius:10px;padding:14px 16px;overflow-x:auto;font:13.5px/1.55 "IBM Plex Mono",monospace;margin:12px 0 0}
+code{font-family:"IBM Plex Mono",monospace;font-size:.9em}
+.note{font-size:15px;color:var(--steel);max-width:46em}
+.links{font-size:15px;margin-top:12px}
+.start{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:18px}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:18px}
+.card p{margin:6px 0 0;color:var(--steel);font-size:15px}
+footer{border-top:1px solid var(--rule);padding:32px 0 44px;color:var(--steel);font-size:15px}
+footer .cols{display:flex;gap:30px;flex-wrap:wrap;justify-content:space-between}
+@media (max-width:860px){.demo{grid-template-columns:1fr}.demo.flip .vid{order:0}.flow{grid-template-columns:1fr 1fr}.start{grid-template-columns:1fr}}
+@media (max-width:480px){.flow{grid-template-columns:1fr}}
+</style></head><body>
+<header><div class="wrap bar">
+ <a class="mark" href="#top"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="7" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M11 22V10h6a4 4 0 0 1 0 8h-6" fill="none" stroke="currentColor" stroke-width="2.5"/></svg>Privi Demo</a>
+ <nav aria-label="Walkthroughs"><a href="#ledger">Ledger</a><a href="#guard">Guard</a><a href="#scan">Scan + KYA</a><a href="#call">Call</a><a href="#verify">Verify</a><a href="#anchor">Anchor</a><a href="#quantum">Quantum</a><a href="#start">Get started</a></nav>
+</div></header>
+<main id="top">
+<div class="wrap hero">
+ <span class="tag">Privi World Co · Port Huron, Michigan</span>
+ <h1>See how every Privi service works, step by step.</h1>
+ <p class="lede">Privi gives AI agents proof: what they did, who they are, what they were allowed to spend. Each video below replays real calls made to the live Privi services on October 25, 2026. Watch one, then copy the setup and run the same calls from your own agent.</p>
+ <div class="cta"><a class="btn" href="#ledger">Watch the first walkthrough</a><a class="btn alt" href="#start">Connect your agent</a></div>
+ <div class="status" id="status" aria-live="polite"></div>
+</div>
+
+<section><div class="wrap">
+ <h2>How the pieces fit</h2>
+ <p class="note">A typical agent uses several Privi services in one task. Each is a remote MCP server: any MCP client can call it, and paid tools take USDC on Base through x402.</p>
+ <div class="flow">
+  <div><b>Check</b>Guard screens what the agent reads. Scan grades the servers it connects to.</div>
+  <div><b>Trust</b>Passport and KYA say who an agent or wallet belongs to. Mandates cap what it may spend.</div>
+  <div><b>Act</b>Call reaches other agents by number. Verify and Quantum answer factory questions.</div>
+  <div><b>Record</b>Ledger keeps a hash-chained, post-quantum-signed log of every action.</div>
+  <div><b>Prove</b>Anchor seals fingerprints on Base, so anyone can verify them later.</div>
+ </div>
+</div></section>
+
+<section id="ledger"><div class="wrap demo">
+ <figure class="vid" style="margin:0"><video controls preload="none" poster="videos/ledger.jpg" src="videos/ledger.webm"></video><figcaption>Real responses from privi-ledger.onrender.com, captured Oct 25, 2026. The API key is hidden.</figcaption></figure>
+ <div><span class="tag">Privi Ledger</span><h2>A tamper-evident record of what your agent did</h2>
+  <ol class="steps"><li>Call <code>ledger_signup</code> with your organization name. You get a free key (500 entries a month).</li>
+   <li>After each agent action, call <code>ledger_record_action</code> with the actor, the action type and a one-line summary. Send the key as <code>Authorization: Bearer</code>.</li>
+   <li>Read it back with <code>ledger_read_stream</code>. Privi re-checks the hash chain and reports whether it is intact.</li>
+   <li>Share the <code>entry_hash</code>. Anyone can confirm the record with <code>ledger_check_receipt</code>, no key needed. Checkpoints are anchored on Base every few minutes.</li></ol>
+  <pre>{"name":"ledger_record_action","arguments":{
+  "stream_id":"billing-agent","actor":"billing-agent",
+  "action_type":"payment","summary":"Paid invoice INV-1042"}}</pre>
+  <p class="links"><a href="https://privi-ledger.onrender.com/log/sth">Live signed tree head</a> · <a href="https://privi-ledger.onrender.com/stats">Usage</a></p></div>
+</div></section>
+
+<section id="guard"><div class="wrap demo flip">
+ <figure class="vid" style="margin:0"><video controls preload="none" poster="videos/guard.jpg" src="videos/guard.webm"></video><figcaption>Real response from Privi Guard, captured Oct 25, 2026.</figcaption></figure>
+ <div><span class="tag">Privi Guard</span><h2>Check what your agent reads before it acts</h2>
+  <ol class="steps"><li>When your agent fetches a page, email or tool result, send the text to <code>guard_check</code> before acting on it.</li>
+   <li>Guard answers <b>allow</b>, <b>warn</b> or <b>block</b>, with the reason. In the video it blocks a hidden instruction to send an SSH key to an attacker.</li>
+   <li>Keep the signed receipt. It proves the check happened and what it found.</li>
+   <li>Also check outbound text (<code>direction: "outbound"</code>) to stop keys, card numbers and personal data from leaking.</li></ol>
+  <p class="note">1,000 checks a month free per organization, then one cent per check.</p>
+  <p class="links"><a href="https://privi-guard-814f.onrender.com">Try Guard in your browser</a></p></div>
+</div></section>
+
+<section id="scan"><div class="wrap demo">
+ <figure class="vid" style="margin:0"><video controls preload="none" poster="videos/scan.jpg" src="videos/scan.webm"></video><figcaption>Real responses from Privi Scan and KYA, captured Oct 25, 2026.</figcaption></figure>
+ <div><span class="tag">Privi Scan + KYA</span><h2>Check a server or a wallet before you trust it</h2>
+  <ol class="steps"><li>Before connecting to an unknown MCP server, call <code>mcp_server_check</code> with its URL. Free.</li>
+   <li>You get a grade, the findings and a <code>tools_hash</code>. Save the hash: if the server quietly changes its tools later, Scan tells you.</li>
+   <li>Before paying or receiving from a wallet, call <code>kya_check</code> with the address. Free.</li>
+   <li>KYA says whether the wallet is bound to an accountable organization, how that was proven, and its current Passport score, in a signed attestation.</li></ol>
+  <p class="links"><a href="https://privi-ledger.onrender.com/scan">Browse 20,000+ graded MCP servers</a></p></div>
+</div></section>
+
+<section id="call"><div class="wrap demo flip">
+ <figure class="vid" style="margin:0"><video controls preload="none" poster="videos/call.jpg" src="videos/call.webm"></video><figcaption>Real responses from privi-call.onrender.com, captured Oct 25, 2026.</figcaption></figure>
+ <div><span class="tag">Privi Call</span><h2>One number reaches any AI agent</h2>
+  <ol class="steps"><li>Call <code>call_directory</code> to see who is on the network. Privi's own agents are 100 to 103.</li>
+   <li>Call <code>call_agent</code> with a number, a tool and its arguments. Privi routes the call and returns the answer with a call record.</li>
+   <li>Check the public log with <code>call_verify_log</code>. Every call is hash-chained and checkpointed on Base; arguments and results appear only as hashes.</li>
+   <li>Put your own agent on the network for free with <code>call_register_agent</code>.</li></ol>
+  <p class="note">Calls to Privi agents are free. Others: 50 free a day, then $0.001 a call.</p>
+  <p class="links"><a href="https://privi-call.onrender.com">Live call log</a></p></div>
+</div></section>
+
+<section id="verify"><div class="wrap demo">
+ <figure class="vid" style="margin:0"><video controls preload="none" poster="videos/verify.jpg" src="videos/verify.webm"></video><figcaption>Real payment request from privi-verify.onrender.com, captured Oct 25, 2026. No payment was made in this recording.</figcaption></figure>
+ <div><span class="tag">Privi Verify</span><h2>Lot provenance for manufacturers, paid per call</h2>
+  <ol class="steps"><li>A buyer's agent calls <code>privi_verify_lot</code> with a lot code.</li>
+   <li>Verify replies with an x402 payment request: one cent in USDC on Base, paid to Privi.</li>
+   <li>The agent signs the payment and calls again. No account, card or invoice.</li>
+   <li>Manufacturers record each step of a lot with <code>privi_record_event</code>; buyers see the chain of custody with <code>privi_chain_of_custody</code>.</li></ol>
+  <p class="links"><a href="https://privi-chainflow.onrender.com">Privi ChainFlow for manufacturers</a></p></div>
+</div></section>
+
+<section id="anchor"><div class="wrap demo flip">
+ <figure class="vid" style="margin:0"><video controls preload="none" poster="videos/anchor.jpg" src="videos/anchor.webm"></video><figcaption>Real responses from privi-anchor.onrender.com, captured Oct 25, 2026.</figcaption></figure>
+ <div><span class="tag">Privi Anchor</span><h2>Proof that a record existed at a point in time</h2>
+  <ol class="steps"><li>Fingerprint any document with <code>anchor_hash_text</code>, or hash it yourself. Only the hash is used.</li>
+   <li>Anchor up to 100 hashes in one call with <code>anchor_hashes</code> (free with an API key). They are combined into a Merkle root and written to Base.</li>
+   <li>Anyone can call <code>anchor_verify</code> with the hash and get the transaction, block and time, with a Basescan link.</li></ol>
+  <p class="links"><a href="https://privi-anchor.onrender.com/status">Anchor status</a> · <a href="https://basescan.org/tx/0x3a897c2a0f1aa6ffb8916fa0d815fd10279be63d35515ebedc385d09ae588975">The anchor in the video on Basescan</a></p></div>
+</div></section>
+
+<section id="quantum"><div class="wrap demo">
+ <figure class="vid" style="margin:0"><video controls preload="none" poster="videos/quantum.jpg" src="videos/quantum.webm"></video><figcaption>Real responses from privi-quantum.onrender.com, captured Oct 25, 2026.</figcaption></figure>
+ <div><span class="tag">Privi Quantum</span><h2>Optimize a factory decision, signed for the quantum era</h2>
+  <ol class="steps"><li>Call <code>quantum_optimize</code> with a ready-made problem, such as balancing jobs across two lines.</li>
+   <li>Privi runs a quantum optimization algorithm (CVaR-QAOA) on a simulator and checks the answer against the proven best one.</li>
+   <li>Every result is signed with Ed25519 and ML-DSA-87. Check it with <code>quantum_verify</code>.</li>
+   <li>Run <code>pqc_scan_code</code> on your code to find cryptography a quantum computer could break, with the fix for each.</li></ol>
+  <p class="note">Honest limits: problems up to 16 qubits run on a simulator, where a classical computer can also solve them. This is a working path to quantum hardware, not a claim of quantum advantage today.</p></div>
+</div></section>
+
+<section id="start"><div class="wrap">
+ <h2>Get started in three steps</h2>
+ <div class="start">
+  <div class="card"><h3>1. Add the servers</h3><p>Paste this into your MCP client's settings (Claude, Cursor, or any client that supports remote MCP).</p></div>
+  <div class="card"><h3>2. Get a free key</h3><p>Ask your agent to call <code>ledger_signup</code>. Free tools like <code>kya_check</code>, <code>mcp_server_check</code> and <code>call_directory</code> need no key.</p></div>
+  <div class="card"><h3>3. Run the same calls</h3><p>Follow any walkthrough above. Paid tools reply with an x402 request your agent can pay in USDC on Base.</p></div>
+ </div>
+ <pre>{ "mcpServers": {
+  "privi-ledger":  { "url": "https://privi-ledger.onrender.com/mcp" },
+  "privi-call":    { "url": "https://privi-call.onrender.com/mcp" },
+  "privi-verify":  { "url": "https://privi-verify.onrender.com/mcp" },
+  "privi-anchor":  { "url": "https://privi-anchor.onrender.com/mcp" },
+  "privi-quantum": { "url": "https://privi-quantum.onrender.com/mcp" } } }</pre>
+ <p class="note" style="margin-top:16px">Want help setting it up, or a free 90-day pilot for your team? Email <a href="mailto:dariocanoy@priviflow.us">dariocanoy@priviflow.us</a>.</p>
+</div></section>
+</main>
+<footer><div class="wrap cols">
+ <div>Privi World Co · Port Huron, Michigan<br>Copyright © 2026 Privi World Co. All rights reserved.</div>
+ <div><a href="https://privi-hub.onrender.com">Live status of every service</a><br><a href="https://github.com/canoydario847-cloud/Privi-Network">Source on GitHub</a><br><a href="https://privi-discovery.onrender.com/llms.txt">For AI agents: llms.txt</a></div>
+</div></footer>
+<script>
+const SVC=[["Ledger","https://privi-ledger.onrender.com/health"],["Verify","https://privi-verify.onrender.com/health"],["Anchor","https://privi-anchor.onrender.com/health"],["Call","https://privi-call.onrender.com/health"],["Quantum","https://privi-quantum.onrender.com/health"],["Discovery","https://privi-discovery.onrender.com/health"]];
+const box=document.getElementById("status");
+SVC.forEach(([name,url])=>{const el=document.createElement("div");el.className="st";el.innerHTML=`<span class="dot"></span><div>${name}<small>checking…</small></div>`;box.appendChild(el);
+ const ctl=new AbortController();const timer=setTimeout(()=>ctl.abort(),60000);const t0=performance.now();
+ fetch(url,{cache:"no-store",signal:ctl.signal}).then(r=>r.json()).then(j=>{clearTimeout(timer);el.querySelector(".dot").classList.add(j.ok?"up":"down");el.querySelector("small").textContent=j.ok?`live · ${Math.round(performance.now()-t0)} ms`:"not ok"})
+ .catch(()=>{el.querySelector(".dot").classList.add("down");el.querySelector("small").textContent="no answer"})});
+</script>
+</body></html>
