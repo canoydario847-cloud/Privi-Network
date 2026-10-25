@@ -131,6 +131,70 @@ test("corrupt lock state must fail closed and remain present for audit",()=>{
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });
 
+test("existing lock replay re-syncs file and directory before signing",()=>{
+  const f=fixture(),dir=tempRoot();
+  const p=f.proposal(),v=f.committee.validators[0];
+  const input={lockDirectory:dir,committee:f.committee,proposal:p,
+               privateKey:f.keysById.get(v.id)};
+  const originalSync=fs.fsyncSync;
+  try {
+    const first=signCommitWithResearchLock(input);
+    const observed=[];
+    fs.fsyncSync=function(fd){
+      observed.push(fs.fstatSync(fd).isDirectory()?"directory":"file");
+      return originalSync(fd);
+    };
+    const repeated=signCommitWithResearchLock(input);
+    assert.equal(repeated.signature,first.signature);
+    assert.deepEqual(observed,["file","directory"],
+      "existing height lock must be durable before replayed signature");
+  } finally {
+    fs.fsyncSync=originalSync;
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
+});
+
+test("failed existing-lock directory sync refuses a signature, then permits retry",()=>{
+  const f=fixture(),dir=tempRoot();
+  const p=f.proposal(),v=f.committee.validators[0];
+  const input={lockDirectory:dir,committee:f.committee,proposal:p,
+               privateKey:f.keysById.get(v.id)};
+  const originalSync=fs.fsyncSync;
+  try {
+    const signed=signCommitWithResearchLock(input);
+    const file=path.join(dir,lockedFileName(recordFor(f.committee,p.height,v.id,p.blockHash)));
+    fs.fsyncSync=function(fd){
+      if (fs.fstatSync(fd).isDirectory()) throw Error("simulated directory sync failure");
+      return originalSync(fd);
+    };
+    assert.throws(()=>signCommitWithResearchLock(input),/directory sync failure/);
+    assert.ok(fs.existsSync(file),"failed sync must retain lock for operator recovery");
+    fs.fsyncSync=originalSync;
+    assert.equal(signCommitWithResearchLock(input).signature,signed.signature);
+  } finally {
+    fs.fsyncSync=originalSync;
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
+});
+
+test("hard-linked existing lock must fail closed",()=>{
+  const f=fixture(),dir=tempRoot();
+  try {
+    const p=f.proposal(),v=f.committee.validators[0];
+    const input={lockDirectory:dir,committee:f.committee,proposal:p,
+                 privateKey:f.keysById.get(v.id)};
+    const signed=signCommitWithResearchLock(input);
+    const file=path.join(dir,lockedFileName(recordFor(f.committee,p.height,v.id,p.blockHash)));
+    const alias=path.join(dir,"linked-lock.json");
+    fs.linkSync(file,alias);
+    assert.equal(fs.statSync(file).nlink,2);
+    assert.throws(()=>signCommitWithResearchLock(input),/hard-linked/);
+    assert.ok(fs.existsSync(file));
+    fs.unlinkSync(alias);
+    assert.equal(signCommitWithResearchLock(input).signature,signed.signature);
+  } finally {fs.rmSync(dir,{recursive:true,force:true});}
+});
+
 test("insecure path and symlinked root are forbidden",()=>{
   const f=fixture(),dir=tempRoot();
   const tmp=path.join(os.tmpdir(),"privi-pop-link-"+crypto.randomBytes(8).toString("hex"));
