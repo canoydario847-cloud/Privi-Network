@@ -119,6 +119,20 @@ def test_backup_refuses_symlink_to_private_vault(tmp_path):
     assert not (vault / "backup.sqlite3").exists()
 
 
+def test_backup_rejects_symlinked_intermediate_directory(tmp_path):
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    vault = tmp_path / "private-vault"
+    nested = vault / "snapshots"
+    nested.mkdir(parents=True, mode=0o700)
+    alias = tmp_path / "vault-alias"
+    alias.symlink_to(vault, target_is_directory=True)
+    destination = alias / "snapshots" / "backup.sqlite3"
+    with pytest.raises(ValueError, match="cannot traverse symlinks"):
+        backup.backup_and_verify(source, destination)
+    assert not (nested / "backup.sqlite3").exists()
+
+
 def test_unrelated_valid_sqlite_is_not_accepted_as_life_backup(tmp_path):
     source = tmp_path / "unrelated.sqlite3"
     with sqlite3.connect(str(source)) as db:
@@ -336,6 +350,21 @@ def test_verify_copy_rejects_group_accessible_restore_directory(tmp_path):
     with pytest.raises(ValueError, match="mode 0700"):
         backup.verify_existing_copy(restored, digest)
     os.chmod(vault, 0o700)
+    assert backup.verify_existing_copy(restored, digest)["restore_drill"] == "passed"
+
+
+def test_verify_copy_rejects_symlinked_intermediate_directory(tmp_path):
+    vault = tmp_path / "private-vault"
+    nested = vault / "restored"
+    nested.mkdir(parents=True, mode=0o700)
+    restored = nested / "life.sqlite3"
+    make_database(restored)
+    os.chmod(restored, 0o600)
+    digest = hashlib.sha256(restored.read_bytes()).hexdigest()
+    alias = tmp_path / "vault-alias"
+    alias.symlink_to(vault, target_is_directory=True)
+    with pytest.raises(ValueError, match="cannot traverse symlinks"):
+        backup.verify_existing_copy(alias / "restored" / "life.sqlite3", digest)
     assert backup.verify_existing_copy(restored, digest)["restore_drill"] == "passed"
 
 
