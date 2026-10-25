@@ -1,4 +1,5 @@
 import unittest
+import tempfile
 import sys
 from pathlib import Path
 
@@ -84,6 +85,45 @@ class PreflightTests(unittest.TestCase):
 
     def test_missing_balances(self):
         self.assertTrue(check({"app_state": {"bank": {"balances": [], "supply": [{"denom": "aprvi", "amount": "0"}]}}})[0])
+
+    def test_extremely_large_amount_rejected_without_int_conversion(self):
+        # Python 3.11+ limits decimal-to-int conversion; a malicious genesis
+        # must yield a validation error rather than an uncaught ValueError.
+        errors, _ = check(genesis("9" * 10000))
+        self.assertIn("noncanonical native amount", errors)
+        self.assertIn("noncanonical supply amount", errors)
+
+    def test_extremely_large_other_denom_rejected(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["balances"][0]["coins"].append(
+            {"denom": "uatom", "amount": "7" * 5000})
+        g["app_state"]["bank"]["supply"].append(
+            {"denom": "uatom", "amount": "7" * 5000})
+        errors, _ = check(g)
+        self.assertIn("noncanonical coin amount", errors)
+        self.assertIn("noncanonical supply amount", errors)
+
+    def test_duplicate_json_keys_rejected_at_input(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "genesis.json"
+            path.write_text('{"app_state":{"bank":{},"bank":{}}}', encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "duplicate genesis JSON key"):
+                preflight.load_genesis(path)
+
+    def test_non_json_nan_is_rejected_at_input(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "genesis.json"
+            path.write_text('{"app_state": NaN}', encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "non-JSON numeric constant"):
+                preflight.load_genesis(path)
+
+    def test_oversized_genesis_input_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "genesis.json"
+            with path.open("wb") as stream:
+                stream.truncate(preflight.MAX_GENESIS_FILE_BYTES + 1)
+            with self.assertRaisesRegex(ValueError, "safety limit"):
+                preflight.load_genesis(path)
 
 if __name__ == "__main__":
     unittest.main()
