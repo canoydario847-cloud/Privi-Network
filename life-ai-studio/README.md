@@ -53,9 +53,17 @@ The server verifies service identity, LIFE member, wallet binding, available cre
 
 
 ### Working toward production (separate from disposable staging)
-`GET /health` remains a lightweight **liveness** endpoint. `GET /api/production-readiness`
-is a public, non-secret **release-gate checklist** and deliberately reports `ready:false`
-until each gate is demonstrated. Never configure this readiness checklist as the
+`GET /health` remains a lightweight **liveness** endpoint. `GET /readyz` is a
+separate **operational database-readability probe**: it uses a non-mutating,
+read-only SQLite query against the accounts table and returns HTTP 503 when the
+database is missing or cannot be read, without exposing paths or private data.
+It does **not** verify backup durability, writable storage, customer auth,
+provider access, uptime SLA or financial launch authorization. Keep `/health`
+as the existing Render liveness probe; monitor `/readyz` separately so a
+transient database issue can be investigated without confusing it with full
+process liveness. `GET /api/production-readiness` is a public, non-secret
+**release-gate checklist** and deliberately reports `ready:false` until each
+gate is demonstrated. Never configure this readiness checklist as the
 Render HTTP health path while LIFE is still in staging; that would turn known
 launch blockers into unnecessary service outages.
 
