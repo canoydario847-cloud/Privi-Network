@@ -24,6 +24,9 @@ const DOMAIN = /^[a-z0-9][a-z0-9._-]{1,63}$/;
 const CHAIN = /^privi-pop-research-[a-z0-9-]{1,48}$/;
 const PREFIX = "Privi/PoP/Research/2026/v1";
 const TRUSTED_MODE = "attested-position-research-not-live-consensus";
+// Proof objects must originate from validated governance admissions, not a
+// caller-supplied object with an arbitrary reduced signature threshold.
+const validatedCommittees = new WeakSet();
 function check(ok, why) { if (!ok) throw Error(why); }
 function hash(data) {
   return "0x" + crypto.createHash("sha256").update(data).digest("hex");
@@ -114,8 +117,15 @@ function parseRegistry(registry, governanceKey) {
   // No PRVI staking power, token holdings or IoT event count affects
   // committee weight. This is *proposed* equal-one-vote research admission.
   const quorum=Math.floor(2*validated.length/3)+1;
+  // Freeze identity metadata used in quorum decisions. Map contents remain
+  // externally accessible for lookup, so certificate verification rechecks
+  // every map entry against these pinned validator records.
+  validated.forEach(Object.freeze);
+  Object.freeze(validated);
   const byId=new Map(validated.map(v=>[v.id,v]));
-  return {chainId,genesisHash,epoch,mode,quorum,validators:validated,byId};
+  const committee=Object.freeze({chainId,genesisHash,epoch,mode,quorum,validators:validated,byId});
+  validatedCommittees.add(committee);
+  return committee;
 }
 function proposer(committee,height,round) {
   requireNumber(height,"height");requireNumber(round,"round",true);
@@ -150,6 +160,16 @@ function voteFields(proposalFields, validatorId) {
   return [...proposalFields,validatorId];
 }
 function verifyCertificate(committee, proposal, votes) {
+  check(committee && validatedCommittees.has(committee),
+        "Unverified PoP committee: parse signed governance admission first");
+  const count=committee.validators.length;
+  check(count>=4 && count<=31 && committee.quorum===Math.floor(2*count/3)+1 &&
+        committee.byId instanceof Map && committee.byId.size===count,
+        "PoP committee quorum or membership metadata inconsistent");
+  for(const validator of committee.validators){
+    check(committee.byId.get(validator.id)===validator,
+          "PoP committee membership changed after admission");
+  }
   const fields=verifyProposal(committee,proposal);
   check(Array.isArray(votes) && votes.length <= committee.validators.length,
         "Malformed PoP vote certificate");
