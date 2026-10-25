@@ -78,6 +78,7 @@ def main():
         result = gate(data, financial_mainnet=not args.development)
     except (OSError, ValueError) as exc:
         result = {"status": "NO_GO", "production_mainnet_activated": False,
+                  "financial_prvi_issued": False,
                   "blockers": ["Manifest not available or invalid: " + type(exc).__name__]}
     print(json.dumps(result, indent=2))
     # A nonfinancial development check may pass offline, but mainnet NEVER
