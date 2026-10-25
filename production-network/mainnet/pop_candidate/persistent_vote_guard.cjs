@@ -31,6 +31,13 @@ function safeInt(x, label) {
 }
 function strictLocalDirectory(dir) {
   must(typeof dir==="string" && path.isAbsolute(dir), "Absolute local research lock path required");
+  // Refuse symlinked ancestors: checking only the final directory is insufficient.
+  let ancestor=path.parse(dir).root;
+  for (const component of path.relative(ancestor,dir).split(path.sep).filter(Boolean)) {
+    ancestor=path.join(ancestor,component);
+    must(!fs.lstatSync(ancestor).isSymbolicLink(),
+         "Local lock directory path must not contain symlinks");
+  }
   const stat = fs.lstatSync(dir);
   must(stat.isDirectory() && !stat.isSymbolicLink(), "Local lock directory must not be symlink");
   must((stat.mode & 0o077) === 0, "Local lock directory must be owner-only (0700)");
