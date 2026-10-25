@@ -23,7 +23,7 @@ class Tests(unittest.TestCase):
         validators=[{'address':str(i).zfill(40),'voting_power':'1'} for i in range(4)]
         def fake(url,path):
             if path.startswith('/status'):
-                return {'node_info':{'id':url,'network':'local-4221'},'sync_info':{'latest_block_height':'42','catching_up':False}}
+                return {'node_info':{'id':url,'network':'local-4221'},'sync_info':{'latest_block_height':'42','catching_up':False},'validator_info':{'address':validators['abcd'.index(url)]['address'],'voting_power':'1'}}
             if path.startswith('/block?'):return {'block_id':{'hash':'abc'}}
             if path.startswith('/validators?'):return {'validators':validators,'total':'4'}
             if path.startswith('/commit?'):return {'signed_header':{'commit':{
