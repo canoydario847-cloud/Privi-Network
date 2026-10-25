@@ -170,6 +170,41 @@ def validate_database(conn):
         ).fetchone()
         if mismatched_project is not None:
             raise ValueError("Not a LIFE database; AI proposal project mismatch")
+    # BNB PRIV redemption receipts are financial audit history. The current
+    # SQLite schema has no foreign keys for quote/member links; restoring a
+    # receipt against another member's quote would make reconciliation unsafe.
+    # Older LIFE snapshots may omit these optional, disabled-payment tables.
+    if "bnb_priv_redemptions" in tables and "bnb_priv_quotes" not in tables:
+        raise ValueError("Not a LIFE database; BNB redemptions present without quotes")
+    if "bnb_priv_quotes" in tables:
+        columns = {row[1] for row in conn.execute('PRAGMA table_info("bnb_priv_quotes")')}
+        if {"id", "user_id"} - columns:
+            raise ValueError("Not a LIFE database; BNB quote ownership columns missing")
+        orphan = conn.execute(
+            'SELECT 1 FROM "bnb_priv_quotes" q LEFT JOIN "users" u '
+            'ON q.user_id = u.id WHERE u.id IS NULL LIMIT 1'
+        ).fetchone()
+        if orphan is not None:
+            raise ValueError("Not a LIFE database; orphaned BNB quotes")
+    if "bnb_priv_redemptions" in tables:
+        columns = {row[1] for row in conn.execute('PRAGMA table_info("bnb_priv_redemptions")')}
+        if {"quote_id", "user_id"} - columns:
+            raise ValueError("Not a LIFE database; BNB redemption ownership columns missing")
+        invalid = conn.execute(
+            'SELECT 1 FROM "bnb_priv_redemptions" r '
+            'LEFT JOIN "bnb_priv_quotes" q ON r.quote_id = q.id '
+            'LEFT JOIN "users" u ON r.user_id = u.id '
+            'WHERE q.id IS NULL OR u.id IS NULL LIMIT 1'
+        ).fetchone()
+        if invalid is not None:
+            raise ValueError("Not a LIFE database; orphaned BNB redemptions")
+        mismatch = conn.execute(
+            'SELECT 1 FROM "bnb_priv_redemptions" r '
+            'JOIN "bnb_priv_quotes" q ON r.quote_id = q.id '
+            'WHERE r.user_id != q.user_id LIMIT 1'
+        ).fetchone()
+        if mismatch is not None:
+            raise ValueError("Not a LIFE database; BNB redemption member mismatch")
     # Cogvative provenance is private, owner-scoped project history. SQLite's
     # current schema does not declare foreign keys for these tables, so a
     # mechanically valid backup can otherwise restore unattached attestations.
