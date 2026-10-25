@@ -42,6 +42,23 @@ def audit(urls,expected='local-4221'):
     if any(v!=sets[0] for v in sets[1:]):raise ValueError('Validator sets disagree')
     voters={k:v for k,v in sets[0].items() if v>0}
     if len(voters)<4:raise ValueError('Fewer than four voting validators')
+    # Four RPC peers do not prove four validator signing identities: sentry
+    # nodes can serve the same validator set without signing any blocks.
+    local_signers=[]
+    for status in statuses:
+        info=status.get('validator_info') or {}
+        address=str(info.get('address') or '').upper()
+        try:
+            power=int(info.get('voting_power', 0))
+        except (TypeError, ValueError) as exc:
+            raise ValueError('Invalid local validator voting power') from exc
+        if not address or address not in voters or power<=0:
+            raise ValueError('RPC endpoint is not a voting validator signer')
+        if power!=voters[address]:
+            raise ValueError('Local validator voting power disagrees with validator set')
+        local_signers.append(address)
+    if len(set(local_signers))!=len(local_signers):
+        raise ValueError('Duplicate validator signing identities across RPC endpoints')
     commit=get(urls[0],'/commit?height='+str(height))['signed_header']['commit']
     if commit['block_id']['hash']!=hashes[0]:raise ValueError('Commit hash mismatch')
     signed={s.get('validator_address','').upper() for s in commit['signatures']
