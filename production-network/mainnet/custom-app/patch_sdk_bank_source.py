@@ -143,6 +143,11 @@ func (k BaseSendKeeper) UncheckedSetBalance(ctx context.Context, addr sdk.AccAdd
         genesis,
         "    if genState == nil { panic(\"PRVI SDK bank: nil genesis refused\") }\n",
         """    if genState == nil { panic("PRVI SDK bank: nil genesis refused") }
+    // Reject malformed or duplicate bank-genesis entries before any SDK KV
+    // writes, even if a caller bypasses the custom-app InitChain preflight.
+    if err := genState.Validate(); err != nil {
+        panic(fmt.Errorf("PRVI SDK bank: invalid bank genesis: %w", err))
+    }
     // PRVI genesis hard cap and actual bank allocation conservation. Validate
     // all native balance rows before SetParams, metadata or KV updates.
     nativeCap := new(big.Int).Exp(big.NewInt(10), big.NewInt(27), nil)
