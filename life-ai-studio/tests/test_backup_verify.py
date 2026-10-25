@@ -63,3 +63,15 @@ def test_corrupt_database_restore_drill_fails(tmp_path):
     with pytest.raises((ValueError, sqlite3.DatabaseError)):
         backup.backup_and_verify(corrupted, tmp_path / "vault" / "out.sqlite3")
     assert not (tmp_path / "vault" / "out.sqlite3").exists()
+
+
+def test_symlinked_backup_parent_into_public_is_rejected(tmp_path):
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    web_root = tmp_path / "public"
+    web_root.mkdir()
+    alias = tmp_path / "private-looking-vault"
+    alias.symlink_to(web_root, target_is_directory=True)
+    with pytest.raises(ValueError, match="public"):
+        backup.backup_and_verify(source, alias / "life-copy.sqlite3")
+    assert not (web_root / "life-copy.sqlite3").exists()
