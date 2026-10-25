@@ -34,6 +34,46 @@ def member():
     assert linked.status_code == 200, linked.text
     return linked.json()
 
+
+def test_login_throttle_is_persistent_and_temporarily_blocks_signins(monkeypatch):
+    import store
+    from fastapi.testclient import TestClient
+
+    email = os.urandom(7).hex() + "@example.com"
+    password = "a-strong-password-for-life"
+    with TestClient(app.app) as browser:
+        assert browser.post("/api/auth/signup", json={"email": email, "password": password}).status_code == 200
+        assert browser.post("/api/auth/logout").status_code == 200
+        for _ in range(store.LOGIN_MAX_FAILURES):
+            attempt = browser.post("/api/auth/login", json={"email": email, "password": "invalid-password-123"})
+            assert attempt.status_code == 401
+        assert browser.post("/api/auth/login", json={"email": email, "password": password}).status_code == 429
+
+    # A second client still sees the persistent lockout, even if the first session closed.
+    with TestClient(app.app) as browser:
+        assert browser.post("/api/auth/login", json={"email": email, "password": password}).status_code == 429
+
+    clock = store.now()
+    monkeypatch.setattr(store, "now", lambda: clock + store.LOGIN_WINDOW_SECONDS + 1)
+    with TestClient(app.app) as browser:
+        assert browser.post("/api/auth/login", json={"email": email, "password": password}).status_code == 200
+    with store.transaction() as db:
+        assert db.execute("SELECT 1 FROM login_throttle WHERE key_hash=?",
+            (store._login_key(email, "testclient"),)).fetchone() is None
+
+
+def test_production_readiness_is_truthful_and_separate_from_health():
+    health = client.get("/health")
+    readiness = client.get("/api/production-readiness")
+    assert health.status_code == 200
+    assert readiness.status_code == 200
+    data = readiness.json()
+    assert data["ready"] is False
+    assert data["checks"]["persistent_multi_instance_database_and_restore_test"] is False
+    assert data["checks"]["verified_accounts_recovery_and_mfa"] is False
+    assert data["checks"]["independent_security_and_privacy_review"] is False
+    assert "signing_key" not in str(data).lower()
+
 def test_membership_wallet_and_separate_projects():
     u=member()
     assert u["wallet"].startswith("0x")
