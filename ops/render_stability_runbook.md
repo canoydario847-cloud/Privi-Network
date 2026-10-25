@@ -35,6 +35,19 @@ Use Python 3, from the repository root:
 
 This tool performs GET only. By default it checks the five paid APIs and does not wake free-tier services. Optional flags check Discovery, Jose, Life staging, and the twelve static sites. It uses no secrets, and it must not be mistaken for a complete assessment of restarts, resource metrics, deploy status, or PostgreSQL availability.
 
+## Optional one-time Render CLI health-check commands
+
+These commands change the **two existing service settings**, not application code or pricing. Render's documented service-update API does not automatically trigger a deploy; verify live Events before any separately approved deployment. Render CLI login/authentication must already be configured in the operator's terminal; never put Render API keys into this repo, pull request, or chat.
+
+```sh
+render services update srv-dbbsp2d9fdbs73a4phvg --health-check-path /health --output json
+render services update srv-db8mrgu7bikc73empuu0 --health-check-path /health --output json
+```
+
+Perform this only from an authorized Render CLI session, after re-checking that these two service IDs still match Discovery and Jose. Follow the service settings response and check subsequent Events. Free-tier idle sleep still applies; Render HTTP probes do not turn a Free service into always-on infrastructure. According to Render's documentation, prolonged failed health checks can cause the platform to restart a service, so verify the current `GET /health` implementation before enabling the probes.
+
+Render official reference: https://render.com/docs/cli-reference and https://api-docs.render.com/reference/update-service
+
 ## Plan to eliminate downtime safely (not executed)
 
 1. Inventory SQLite writers and actual database paths for Ledger (/data/ledger.db), Verify (/data/privi.db), Call (/data/call.db), and optionally Anchor (/data/anchor.db) and Quantum (/data/quantum.db). Verify each path against the production environment first.
