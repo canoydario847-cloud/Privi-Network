@@ -164,6 +164,45 @@ def init():
 def sha(token):
     return hashlib.sha256(token.encode()).hexdigest()
 
+
+# A persistent throttle shared by all requests to the single-instance LIFE SQLite DB.
+# Keys are hashed before storage; no email addresses or IP strings are logged here.
+LOGIN_WINDOW_SECONDS = 900
+LOGIN_MAX_FAILURES = 5
+
+def _login_key(email, client_host):
+    if not isinstance(client_host, str):
+        client_host = ""
+    return sha("life-login-v1:" + email.strip().lower() + "\\0" + client_host)
+
+def login_blocked(email, client_host):
+    with transaction() as db:
+        row = db.execute("SELECT blocked_until FROM login_throttle WHERE key_hash=?",
+                         (_login_key(email, client_host),)).fetchone()
+        return bool(row and row["blocked_until"] > now())
+
+def login_failed(email, client_host):
+    key = _login_key(email, client_host)
+    stamp = now()
+    with transaction() as db:
+        row = db.execute("SELECT failures,window_started,blocked_until FROM login_throttle "
+                         "WHERE key_hash=?", (key,)).fetchone()
+        if row and (stamp - row["window_started"]) < LOGIN_WINDOW_SECONDS:
+            failures, started = row["failures"] + 1, row["window_started"]
+        else:
+            failures, started = 1, stamp
+        blocked_until = stamp + LOGIN_WINDOW_SECONDS if failures >= LOGIN_MAX_FAILURES else 0
+        db.execute("INSERT INTO login_throttle(key_hash,failures,window_started,blocked_until) "
+                   "VALUES(?,?,?,?) ON CONFLICT(key_hash) DO UPDATE SET "
+                   "failures=excluded.failures,window_started=excluded.window_started,"
+                   "blocked_until=excluded.blocked_until",
+                   (key, failures, started, blocked_until))
+
+def login_succeeded(email, client_host):
+    with transaction() as db:
+        db.execute("DELETE FROM login_throttle WHERE key_hash=?",
+                   (_login_key(email, client_host),))
+
 def get_user(user_id):
     with transaction() as db:
         return obj(db.execute("SELECT id,email,wallet,member_since,credits FROM users WHERE id=?",
