@@ -98,6 +98,10 @@ def backup_and_verify(source: Path, destination: Path):
     if "public" in resolved_parent.parts:
         raise ValueError("Refusing to write a backup within a public web directory")
     destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    # Reject symlinks anywhere in the directory chain, not only the vault
+    # itself. An intermediate alias can otherwise bypass the parent lstat.
+    if any(part.is_symlink() for part in (destination.parent, *destination.parent.parents)):
+        raise ValueError("Backup directory path cannot traverse symlinks")
     # An existing directory is not made private by mkdir(mode=0700).
     # Refuse a symlink or group/world-accessible parent rather than exposing
     # backup names or allowing another local user to replace the output.
@@ -166,6 +170,8 @@ def verify_existing_copy(snapshot: Path, expected_sha256: str):
     # in a shared directory still exposes its name and enables path swapping.
     # Require the same private, non-symlinked vault as backup creation.
     parent = snapshot.parent
+    if any(part.is_symlink() for part in (parent, *parent.parents)):
+        raise ValueError("Restore directory path cannot traverse symlinks")
     parent_metadata = parent.lstat()
     if not stat.S_ISDIR(parent_metadata.st_mode):
         raise ValueError("Restore directory must be a real private directory, not a symlink")
