@@ -243,8 +243,8 @@ machine**, compare it to the SHA-256 value saved separately from the original
 backup report, then perform a fresh SQLite restore drill:
 
 ```bash
-python tools/backup_verify.py \\
-  --verify-copy /private/restored/life-copy.sqlite3 \\
+python tools/backup_verify.py \
+  --verify-copy /private/restored/life-copy.sqlite3 \
   --expected-sha256 '<trusted 64-character SHA-256 from original backup report>'
 ```
 
