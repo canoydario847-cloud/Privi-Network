@@ -149,6 +149,24 @@ test("insecure path and symlinked root are forbidden",()=>{
   }
 });
 
+test("symlinked ancestor of research vote lock is rejected",()=>{
+  const f=fixture(),root=tempRoot();
+  try {
+    const actual=path.join(root,"actual");
+    fs.mkdirSync(actual,{mode:0o700});
+    const alias=path.join(root,"alias");
+    fs.symlinkSync(actual,alias,"dir");
+    const nested=path.join(alias,"locks");
+    fs.mkdirSync(nested,{mode:0o700});
+    const v=f.committee.validators[0],p=f.proposal();
+    assert.throws(()=>signCommitWithResearchLock({
+      lockDirectory:nested,committee:f.committee,proposal:p,
+      privateKey:f.keysById.get(v.id)
+    }),/symlink/);
+    assert.deepEqual(fs.readdirSync(path.join(actual,"locks")),[]);
+  } finally {fs.rmSync(root,{recursive:true,force:true});}
+});
+
 test("unauthorized key or malformed proposal cannot obtain a lock",()=>{
   const f=fixture(),dir=tempRoot();
   try {
