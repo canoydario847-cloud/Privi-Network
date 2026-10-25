@@ -24,6 +24,7 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python -m compileall -q .
       - run: node --check public/app.js
+      - run: node --test tests/test_agent_ui.cjs
       - run: pytest -q
       - name: Package standalone repo source
         run: cd .. && zip -qr life-ai-studio-source.zip life-ai-studio -x 'life-ai-studio/data/*' 'life-ai-studio/**/__pycache__/*'
