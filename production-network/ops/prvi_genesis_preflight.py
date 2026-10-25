@@ -3,6 +3,33 @@
 import argparse
 import json
 import sys
+from pathlib import Path
+
+MAX_GENESIS_FILE_BYTES = 8_000_000
+# Cosmos bank integer amounts are bounded; never feed attacker-sized decimal
+# strings into Python int(), which may raise or exhaust resources.
+MAX_COIN_AMOUNT_DIGITS = 78
+
+def unique_json_object(pairs):
+    obj = {}
+    for key, value in pairs:
+        if key in obj:
+            raise ValueError(f"duplicate genesis JSON key: {key}")
+        obj[key] = value
+    return obj
+
+def load_genesis(path):
+    candidate = Path(path)
+    if candidate.stat().st_size > MAX_GENESIS_FILE_BYTES:
+        raise ValueError("genesis JSON exceeds 8 MB safety limit")
+    with candidate.open(encoding="utf-8") as stream:
+        return json.load(
+            stream,
+            object_pairs_hook=unique_json_object,
+            parse_constant=lambda value: (_ for _ in ()).throw(
+                ValueError(f"non-JSON numeric constant: {value}")
+            ),
+        )
 
 MAX_PRVI = 1_000_000_000
 DECIMALS = 18
@@ -45,7 +72,7 @@ def check(genesis):
                 errors.append("duplicate coin denom in account")
             seen_denoms.add(denom)
             amount_any = coin.get("amount")
-            if not isinstance(amount_any, str) or not amount_any.isascii() or not amount_any.isdecimal() or (len(amount_any) > 1 and amount_any.startswith("0")):
+            if not isinstance(amount_any, str) or not amount_any.isascii() or not amount_any.isdecimal() or len(amount_any) > MAX_COIN_AMOUNT_DIGITS or (len(amount_any) > 1 and amount_any.startswith("0")):
                 errors.append("noncanonical native amount" if denom == DENOM else "noncanonical coin amount")
                 continue
             value = int(amount_any)
@@ -56,7 +83,7 @@ def check(genesis):
                 continue
             seen_native = True
             amount = coin.get("amount")
-            if not isinstance(amount, str) or not amount.isascii() or not amount.isdecimal() or (len(amount) > 1 and amount.startswith("0")):
+            if not isinstance(amount, str) or not amount.isascii() or not amount.isdecimal() or len(amount) > MAX_COIN_AMOUNT_DIGITS or (len(amount) > 1 and amount.startswith("0")):
                 errors.append("noncanonical native amount")
                 continue
             n = int(amount)
@@ -77,14 +104,14 @@ def check(genesis):
             errors.append("duplicate supply denom")
         supply_denoms.add(denom)
         amount = coin.get("amount")
-        if not isinstance(amount, str) or not amount.isascii() or not amount.isdecimal() or (len(amount) > 1 and amount.startswith("0")):
+        if not isinstance(amount, str) or not amount.isascii() or not amount.isdecimal() or len(amount) > MAX_COIN_AMOUNT_DIGITS or (len(amount) > 1 and amount.startswith("0")):
             errors.append("noncanonical supply amount")
         else:
             supply_totals[denom] = int(amount)
     if balance_totals != supply_totals:
         errors.append("bank supply differs from balances across denominations")
     declared = [c.get("amount") for c in supply if c.get("denom") == DENOM]
-    if len(declared) != 1 or not isinstance(declared[0], str) or not declared[0].isascii() or not declared[0].isdecimal() or (len(declared[0]) > 1 and declared[0].startswith("0")):
+    if len(declared) != 1 or not isinstance(declared[0], str) or not declared[0].isascii() or not declared[0].isdecimal() or len(declared[0]) > MAX_COIN_AMOUNT_DIGITS or (len(declared[0]) > 1 and declared[0].startswith("0")):
         errors.append("missing or malformed declared native supply")
     elif int(declared[0]) != total:
         errors.append("bank native supply differs from balances")
@@ -102,9 +129,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("genesis")
     args = parser.parse_args()
-    with open(args.genesis, encoding="utf-8") as f:
-        genesis = json.load(f)
-    errors, total = check(genesis)
+    try:
+        genesis = load_genesis(args.genesis)
+        errors, total = check(genesis)
+    except (OSError, UnicodeError, ValueError) as exc:
+        errors, total = [f"genesis input rejected: {exc}"], 0
     print(json.dumps({"denom": DENOM, "genesis_native_base_units": str(total), "cap_base_units": str(CAP), "errors": errors, "financial_mainnet_verdict": "NO_GO"}, indent=2))
     return 1 if errors else 0
 
