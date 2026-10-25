@@ -25,7 +25,16 @@ def validate_database(conn):
         raise ValueError("SQLite integrity_check failed")
     if conn.execute("PRAGMA foreign_key_check").fetchone() is not None:
         raise ValueError("SQLite foreign_key_check failed")
-    return conn.execute("SELECT count(*) FROM sqlite_master WHERE type='table'").fetchone()[0]
+    # Integrity alone is insufficient: an empty or unrelated SQLite file also
+    # passes integrity_check and could be mistaken for a recoverable LIFE backup.
+    tables = {row[0] for row in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    )}
+    required = {"users", "sessions", "projects", "ledger"}
+    missing = required - tables
+    if missing:
+        raise ValueError("Not a LIFE database; missing core tables: " + ", ".join(sorted(missing)))
+    return len(tables)
 
 
 def verify_restore_drill(snapshot: Path):
