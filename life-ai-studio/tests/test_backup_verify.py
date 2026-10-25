@@ -233,6 +233,43 @@ def test_partial_account_unique_indexes_do_not_pass_restore_checks(tmp_path):
     assert not destination.exists()
 
 
+@pytest.mark.parametrize(
+    "table,statement",
+    [
+        ("sessions", "INSERT INTO sessions VALUES ('token-hash', 'missing-user', 100)"),
+        ("projects", "INSERT INTO projects VALUES ('p1', 'missing-user', 'title', 'code', 100)"),
+        ("files", "INSERT INTO files VALUES ('missing-project', 'file.txt', 'private', 1)"),
+        ("ledger", "INSERT INTO ledger VALUES ('l1', 'missing-user', 'charge', 'agent', 1, 'idem1', 100)"),
+    ],
+)
+def test_backup_rejects_orphaned_private_ownership(tmp_path, table, statement):
+    source = tmp_path / "orphaned.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute(statement)
+    destination = tmp_path / "vault" / "orphaned-copy.sqlite3"
+    with pytest.raises(ValueError, match=f"orphaned {table} owner references"):
+        backup.backup_and_verify(source, destination)
+    assert not destination.exists()
+
+
+def test_backup_accepts_consistent_account_project_and_ledger_ownership(tmp_path):
+    source = tmp_path / "owned.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute(
+            "INSERT INTO users VALUES ('u1', 'u@example.test', 'test-hash', NULL, 1, 5)"
+        )
+        db.execute("INSERT INTO sessions VALUES ('token-hash', 'u1', 100)")
+        db.execute("INSERT INTO projects VALUES ('p1', 'u1', 'title', 'code', 100)")
+        db.execute("INSERT INTO files VALUES ('p1', 'file.txt', 'private', 1)")
+        db.execute(
+            "INSERT INTO ledger VALUES ('l1', 'u1', 'charge', 'agent', 1, 'idem1', 100)"
+        )
+    destination = tmp_path / "vault" / "owned-copy.sqlite3"
+    assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+
+
 def test_matching_ledger_columns_without_unique_idempotency_are_rejected(tmp_path):
     source = tmp_path / "missing-ledger-unique.sqlite3"
     make_database(source)
