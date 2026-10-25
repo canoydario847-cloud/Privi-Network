@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privi Apps · Privi World</title>
+<meta name="description" content="Explore the Privi World app directory: web apps, developer tools, AI, and experimental LIFE studio.">
+<meta name="theme-color" content="#070d22">
+<style>
+:root{color-scheme:dark;--bg:#070d22;--ink:#f0f6ff;--muted:#becde5;--line:#42618a;--cyan:#83e9fb;--panel:#122143;--lav:#b6a6fb}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;min-height:100vh;font:16px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:radial-gradient(ellipse 45% 42% at 84% 3%,#3a277d91,transparent),radial-gradient(ellipse 65% 44% at 4% 63%,#06466c85,transparent),#070d22}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;background-image:radial-gradient(circle,#c9e8ffaf .85px,transparent 1.5px),radial-gradient(circle,#c6b7ff98 1px,transparent 1.4px);background-size:155px 193px,251px 283px;opacity:.46}
+a{color:var(--cyan)}button,input{font:inherit}a:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid var(--cyan);outline-offset:3px}
+.container{position:relative;width:min(100% - 42px,1600px);margin:auto}
+header{border-bottom:1px solid #5b84b447;background:#06132a9e;backdrop-filter:blur(15px)}
+nav{min-height:78px;display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+.brand{font-size:22px;font-weight:850;letter-spacing:2px;color:white;text-decoration:none}.brand span{color:var(--cyan)}nav .links{margin-left:auto;display:flex;gap:20px;flex-wrap:wrap}
+nav .links a{text-decoration:none;color:var(--muted)}nav .links a:hover{color:white}
+.hero{padding:65px 0 45px;display:grid;grid-template-columns:minmax(0,1fr) minmax(190px,.3fr);gap:25px;align-items:center}
+.eyebrow{text-transform:uppercase;font-size:12px;font-weight:760;letter-spacing:2.8px;color:var(--cyan)}
+h1{font-size:clamp(38px,6.5vw,85px);line-height:1.04;letter-spacing:-.055em;margin:12px 0 18px}h1 em{font-style:normal;color:var(--cyan)}
+.lede{font-size:clamp(17px,1.5vw,21px);color:var(--muted);max-width:780px;margin:0}
+.orb{justify-self:end;width:clamp(130px,22vw,280px);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 27% 26%,#fffefa,#a8ddff 14%,#6f9aec 40%,#43307d 74%,#0a1250 100%);box-shadow:0 0 100px #6470ff8c,0 0 0 35px #668af20b,0 0 0 73px #668af208;position:relative}
+.orb::after{content:"";position:absolute;inset:-14%;border-radius:50%;border:1px solid #87bcff62;transform:rotate(-27deg) scaleY(.39)}
+.notice{border:1px solid #456a9b;background:#111f43be;border-radius:14px;padding:16px 18px;color:#d8e8ff;margin:8px 0 25px}
+.controls{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:15px;padding:20px 0}
+label[for=search]{font-size:13px;font-weight:700;color:var(--cyan);display:block;margin-bottom:7px}
+#search{width:min(100%,430px);background:#0b1630;color:white;padding:14px 17px;border:1px solid #6685b0;border-radius:12px}
+.filters{display:flex;flex-wrap:wrap;gap:8px}
+.filters button{padding:11px 16px;color:#e1eaff;background:#192b50;border:1px solid #506f9c;border-radius:100px;cursor:pointer}
+.filters button[aria-pressed=true]{color:#09152d;background:linear-gradient(110deg,#93f5ff,#aeafff);border-color:transparent;font-weight:750}
+.results{font-size:14px;color:var(--muted);margin:4px 0 15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr));gap:17px;padding-bottom:75px}
+.card{border:1px solid #405c898f;border-radius:20px;background:linear-gradient(150deg,#1d3157eb,#0c1934f5);padding:23px;min-height:240px;display:flex;flex-direction:column;box-shadow:0 16px 44px #02071750;transition:transform .2s,border-color .2s}
+.card:hover{border-color:var(--cyan);transform:translateY(-2px)}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:18px}
+.symbol{font-size:27px;color:var(--cyan)}.tag{font-size:11px;letter-spacing:.05em;text-transform:uppercase;font-weight:800;border:1px solid #628bc3;border-radius:100px;padding:5px 10px;color:#cde8ff}
+.tag.sandbox{border-color:#b5a372;color:#ffde9b}
+.card h2{font-size:22px;line-height:1.2;letter-spacing:-.025em;margin:0 0 10px}
+.card p{margin:0 0 20px;color:var(--muted);font-size:14px}
+.card a{margin-top:auto;align-self:flex-start;text-decoration:none;font-weight:800;word-break:break-word}
+.card a:hover{text-decoration:underline}
+.empty{padding:28px 0 80px;color:var(--muted)}
+footer{border-top:1px solid #45618680;background:#071029b0;color:var(--muted);padding:30px 0 50px;font-size:14px}
+footer p{max-width:900px;margin:0 0 9px}
+@media(max-width:730px){.hero{grid-template-columns:1fr;padding-top:40px}.orb{display:none}.controls{align-items:stretch}.filters{order:2}nav .links{margin-left:0}.container{width:min(100% - 30px,1600px)}}
+@media(prefers-reduced-motion:reduce){.card{transition:none}.card:hover{transform:none}}
+</style></head>
+<body>
+<header><div class="container"><nav aria-label="Primary navigation"><a class="brand" href="./">◈ PRIVI <span>WORLD</span></a><div class="links"><a href="./">Network Hub</a><a href="https://privi-world.onrender.com/">Privi World</a><a href="https://github.com/canoydario847-cloud/Privi-Network">Source</a></div></nav></div></header>
+<main class="container">
+<section class="hero" aria-labelledby="page-title"><div><div class="eyebrow">Privi · Connected universe</div><h1 id="page-title">One network.<br><em>Every app.</em></h1><p class="lede">Find your Privi workspace, explore developer services, and navigate AI tools from one spacious directory. Links below reflect configured deployments; a listing alone does not prove uptime.</p></div><div class="orb" aria-hidden="true"></div></section>
+<div class="notice"><strong>Safety boundary:</strong> LIFE is a staging sandbox, not a customer-data service. Native PRVI mainnet is not launched. This directory does not connect wallets, process payments, expose private Google Drive files, or activate financial services.</div>
+<section aria-labelledby="apps-heading"><h2 id="apps-heading">App constellation</h2>
+<div class="controls"><div><label for="search">Search Privi</label><input id="search" type="search" autocomplete="off" placeholder="Search apps, agents, developer services…"></div>
+<div class="filters" role="group" aria-label="Filter services">
+<button type="button" data-filter="all" aria-pressed="true">All</button>
+<button type="button" data-filter="app" aria-pressed="false">Apps</button>
+<button type="button" data-filter="api" aria-pressed="false">APIs</button>
+<button type="button" data-filter="ai" aria-pressed="false">AI</button>
+<button type="button" data-filter="sandbox" aria-pressed="false">Sandbox</button>
+</div></div>
+<p id="count" class="results" role="status" aria-live="polite"></p>
+<div id="grid" class="grid"></div><p id="empty" class="empty" hidden>No matching Privi services. Try another search or filter.</p>
+</section>
+</main><footer><div class="container"><p>© 2026 Privi World Co. Public app directory; not a financial-mainnet release announcement.</p><p>Source code is maintained in GitHub. Business documents and operational inventories belong in private Google Drive folders. Live databases, secrets, and validator signing keys must remain on separately secured infrastructure.</p></div></footer>
+<script>
+"use strict";
+const services=[
+["Privi World","app","Company website","https://privi-world.onrender.com"],
+["Privi Hub","app","Network service directory","https://privi-hub.onrender.com"],
+["Privi Live","app","Network information website","https://privi-live.onrender.com"],
+["Privi Developers","app","Developer resources website","https://privi-developers.onrender.com"],
+["Privi Governance","app","Governance portal website","https://privi-gov.onrender.com"],
+["Privi Chainflow","app","Chainflow website","https://privi-chainflow.onrender.com"],
+["Privi Guard","app","Guard website","https://privi-guard-814f.onrender.com"],
+["Privi Mandates","app","Mandates website","https://privi-mandates.onrender.com"],
+["Privi KYA","app","KYA website","https://privi-kya.onrender.com"],
+["Privi Passport","app","Passport website","https://privi-passport.onrender.com"],
+["Privi Fortress","app","Fortress website","https://privi-fortress.onrender.com"],
+["Hey Jose","ai","AI assistant website","https://jose-site.onrender.com"],
+["Hey Jose Backend","ai","AI assistant backend service","https://jose-backend-vbuu.onrender.com"],
+["LIFE AI Studio","sandbox","Multi-agent staging preview only","https://privi-life-ai-staging.onrender.com"],
+["Privi Call","api","Call backend service","https://privi-call.onrender.com"],
+["Privi Quantum","api","Research-branded API; no quantum speed guarantee","https://privi-quantum.onrender.com"],
+["Privi Verify","api","Verification API service","https://privi-verify.onrender.com"],
+["Privi Ledger","api","Ledger API service","https://privi-ledger.onrender.com"],
+["Privi Anchor","api","Anchor API service","https://privi-anchor.onrender.com"],
+["Privi Discovery","api","Discovery API service","https://privi-discovery.onrender.com"]
+];
+const grid=document.getElementById("grid"),search=document.getElementById("search"),count=document.getElementById("count"),empty=document.getElementById("empty");
+const buttons=[...document.querySelectorAll("[data-filter]")];let filter="all";
+function render(){
+ const query=search.value.trim().toLocaleLowerCase();
+ const shown=services.filter(([name,type,desc])=>(filter==="all"||type===filter)
+  &&(name+" "+type+" "+desc).toLocaleLowerCase().includes(query));
+ grid.replaceChildren();
+ const fragment=document.createDocumentFragment();
+ for(const [name,type,description,url] of shown){
+  const card=document.createElement("article");card.className="card";
+  const top=document.createElement("div");top.className="top";
+  const symbol=document.createElement("span");symbol.className="symbol";symbol.setAttribute("aria-hidden","true");symbol.textContent=type==="ai"?"✧":type==="api"?"⌘":type==="sandbox"?"♢":"◈";
+  const tag=document.createElement("span");tag.className="tag"+(type==="sandbox"?" sandbox":"");tag.textContent=type==="sandbox"?"Staging only":type==="app"?"Web app":type==="api"?"Server/API":"AI";top.append(symbol,tag);
+  const heading=document.createElement("h2");heading.textContent=name;
+  const text=document.createElement("p");text.textContent=description;
+  const link=document.createElement("a");link.href=url;link.target="_blank";link.rel="noopener noreferrer";link.textContent="Open "+name+" ↗";link.setAttribute("aria-label","Open "+name+" in a new tab");
+  card.append(top,heading,text,link);fragment.append(card);
+ }
+ grid.append(fragment);count.textContent=shown.length+" of "+services.length+" configured services";empty.hidden=shown.length!==0;
+}
+buttons.forEach(button=>button.addEventListener("click",()=>{filter=button.dataset.filter;for(const btn of buttons)btn.setAttribute("aria-pressed",String(btn===button));render();}));
+search.addEventListener("input",render);render();
+</script>
+</body></html>
