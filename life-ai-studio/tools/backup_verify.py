@@ -170,6 +170,38 @@ def validate_database(conn):
         ).fetchone()
         if mismatched_project is not None:
             raise ValueError("Not a LIFE database; AI proposal project mismatch")
+    # Cogvative provenance is private, owner-scoped project history. SQLite's
+    # current schema does not declare foreign keys for these tables, so a
+    # mechanically valid backup can otherwise restore unattached attestations.
+    if "cog_lines" in tables and "cog_events" not in tables:
+        raise ValueError("Not a LIFE database; Cogvative lines present without events")
+    if "cog_events" in tables:
+        columns = {row[1] for row in conn.execute('PRAGMA table_info("cog_events")')}
+        if {"id", "owner_id", "project_id"} - columns:
+            raise ValueError("Not a LIFE database; Cogvative event ownership columns missing")
+        orphan = conn.execute(
+            'SELECT 1 FROM "cog_events" e LEFT JOIN "projects" p '
+            'ON e.project_id = p.id LEFT JOIN "users" u ON e.owner_id = u.id '
+            'WHERE p.id IS NULL OR u.id IS NULL LIMIT 1'
+        ).fetchone()
+        if orphan is not None:
+            raise ValueError("Not a LIFE database; orphaned Cogvative events")
+        mismatch = conn.execute(
+            'SELECT 1 FROM "cog_events" e JOIN "projects" p '
+            'ON e.project_id = p.id WHERE e.owner_id != p.owner_id LIMIT 1'
+        ).fetchone()
+        if mismatch is not None:
+            raise ValueError("Not a LIFE database; Cogvative event owner mismatch")
+    if "cog_lines" in tables:
+        columns = {row[1] for row in conn.execute('PRAGMA table_info("cog_lines")')}
+        if "event_id" not in columns:
+            raise ValueError("Not a LIFE database; Cogvative line event reference missing")
+        orphan = conn.execute(
+            'SELECT 1 FROM "cog_lines" l LEFT JOIN "cog_events" e '
+            'ON l.event_id = e.id WHERE e.id IS NULL LIMIT 1'
+        ).fetchone()
+        if orphan is not None:
+            raise ValueError("Not a LIFE database; orphaned Cogvative lines")
     # The current LIFE schema does not declare foreign keys for these
     # relationships, so PRAGMA foreign_key_check alone misses orphaned
     # sessions, projects, project files and credit history. Reject a snapshot
