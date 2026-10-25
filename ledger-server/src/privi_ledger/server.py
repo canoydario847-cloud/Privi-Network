@@ -133,7 +133,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     paywall = Paywall(settings, facilitator, service={
         "url": f"{_pub}/mcp", "serviceName": "Privi Ledger",
         "tags": ["audit", "compliance", "ai-agents", "trust", "post-quantum"],
-        "iconUrl": "https://privi-discovery.onrender.com/icon.svg"},
+        "iconUrl": "https://raw.githubusercontent.com/canoydario847-cloud/Privi-Network/main/assets/logo-400.png"},
         discovery={"guard_check": {
             "inputSchema": {"type": "object", "properties": {
                 "text": {"type": "string", "description": "Content to check before acting on it or sending it"},

@@ -1,0 +1,20 @@
+name: privi-ledger
+type: remote
+dynamic:
+  tools: true
+meta:
+  category: security
+  tags:
+    - security
+    - ai-agents
+    - audit
+    - compliance
+    - x402
+    - remote
+about:
+  title: Privi Ledger
+  description: Trust and safety tools for AI agents. Check untrusted text for prompt injection before acting on it, keep tamper-evident audit logs of what an agent did, and issue or verify signed trust passports for agents and their wallets. Most tools are free with no key; paid calls settle in USDC on Base through x402.
+  icon: https://raw.githubusercontent.com/canoydario847-cloud/Privi-Network/main/assets/logo-400.png
+remote:
+  transport_type: streamable-http
+  url: https://privi-ledger.onrender.com/mcp

@@ -74,7 +74,7 @@ def build_server(
     paywall = Paywall(settings, facilitator, service={
         "url": f"{_pub}/mcp", "serviceName": "Privi Verify",
         "tags": ["supply-chain", "provenance", "manufacturing", "traceability", "verification"],
-        "iconUrl": "https://privi-discovery.onrender.com/icon.svg"},
+        "iconUrl": "https://raw.githubusercontent.com/canoydario847-cloud/Privi-Network/main/assets/logo-400.png"},
         discovery={
             "privi_verify_lot": {"inputSchema": {"type": "object", "properties": {"lot_code": {"type": "string", "description": "Lot or batch code"}},
                           "required": ["lot_code"]}, "example": {"lot_code": "DEMO-STEEL-0001"},

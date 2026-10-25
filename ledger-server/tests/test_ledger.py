@@ -887,6 +887,8 @@ def test_bazaar_declaration_and_settle_payload(ledger, monkeypatch):
             r = await c.call_tool("ledger_audit_stream", {"org_id": acme["org_id"], "stream_id": "agent-a"})
             pr = r.structured_content
             assert r.is_error and pr["resource"]["url"].endswith("/mcp") and pr["resource"]["serviceName"] == "Privi Ledger"
+            # x402 Bazaar accepts JPG/PNG/WebP/GIF icons only, not SVG
+            assert pr["resource"]["iconUrl"].endswith((".png", ".jpg", ".jpeg", ".webp", ".gif"))
             bz = pr["extensions"]["bazaar"]
             jsonschema.validate(bz["info"], bz["schema"])
             assert bz["info"]["input"]["toolName"] == "ledger_audit_stream"
