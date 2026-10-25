@@ -193,33 +193,56 @@ def _login_key(email, client_host):
         client_host = ""
     return sha("life-login-v1:" + email.strip().lower() + "\\0" + client_host)
 
+def _login_email_key(email):
+    # An account-wide throttle closes the distributed-client bypass while
+    # retaining the existing client-specific throttle for noisy origins.
+    return sha("life-login-email-v1:" + email.strip().lower())
+
+
+def _login_throttle_keys(email, client_host):
+    return (_login_key(email, client_host), _login_email_key(email))
+
+
 def login_blocked(email, client_host):
+    client_key, email_key = _login_throttle_keys(email, client_host)
     with transaction() as db:
-        row = db.execute("SELECT blocked_until FROM login_throttle WHERE key_hash=?",
-                         (_login_key(email, client_host),)).fetchone()
-        return bool(row and row["blocked_until"] > now())
+        row = db.execute(
+            "SELECT 1 FROM login_throttle WHERE key_hash IN (?,?) AND blocked_until>? LIMIT 1",
+            (client_key, email_key, now())
+        ).fetchone()
+        return row is not None
+
 
 def login_failed(email, client_host):
-    key = _login_key(email, client_host)
+    keys = _login_throttle_keys(email, client_host)
     stamp = now()
+    # Update both scopes atomically: rotating IPs must not evade the
+    # account-wide limit. Only opaque hashes are stored.
     with transaction() as db:
-        row = db.execute("SELECT failures,window_started,blocked_until FROM login_throttle "
-                         "WHERE key_hash=?", (key,)).fetchone()
-        if row and (stamp - row["window_started"]) < LOGIN_WINDOW_SECONDS:
-            failures, started = row["failures"] + 1, row["window_started"]
-        else:
-            failures, started = 1, stamp
-        blocked_until = stamp + LOGIN_WINDOW_SECONDS if failures >= LOGIN_MAX_FAILURES else 0
-        db.execute("INSERT INTO login_throttle(key_hash,failures,window_started,blocked_until) "
-                   "VALUES(?,?,?,?) ON CONFLICT(key_hash) DO UPDATE SET "
-                   "failures=excluded.failures,window_started=excluded.window_started,"
-                   "blocked_until=excluded.blocked_until",
-                   (key, failures, started, blocked_until))
+        for key in keys:
+            row = db.execute(
+                "SELECT failures,window_started FROM login_throttle WHERE key_hash=?",
+                (key,)
+            ).fetchone()
+            if row and (stamp - row["window_started"]) < LOGIN_WINDOW_SECONDS:
+                failures, started = row["failures"] + 1, row["window_started"]
+            else:
+                failures, started = 1, stamp
+            blocked_until = stamp + LOGIN_WINDOW_SECONDS if failures >= LOGIN_MAX_FAILURES else 0
+            db.execute(
+                "INSERT INTO login_throttle(key_hash,failures,window_started,blocked_until) "
+                "VALUES(?,?,?,?) ON CONFLICT(key_hash) DO UPDATE SET "
+                "failures=excluded.failures,window_started=excluded.window_started,"
+                "blocked_until=excluded.blocked_until",
+                (key, failures, started, blocked_until)
+            )
+
 
 def login_succeeded(email, client_host):
+    # A successful login resets both account and client-specific counters.
     with transaction() as db:
-        db.execute("DELETE FROM login_throttle WHERE key_hash=?",
-                   (_login_key(email, client_host),))
+        db.execute("DELETE FROM login_throttle WHERE key_hash IN (?,?)",
+                   _login_throttle_keys(email, client_host))
 
 def get_user(user_id):
     with transaction() as db:
