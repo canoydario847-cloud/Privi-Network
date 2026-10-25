@@ -102,6 +102,12 @@ class PatcherTests(unittest.TestCase):
         self.assertIn("prvicap.StoreKey", app)
         self.assertIn("prvicap.New(runtime.NewKVStoreService", app)
         self.assertIn("bankGenesis.Supply.AmountOf(prvicap.BaseDenom)", app)
+        # Full SDK bank-genesis validation must run before cap initialization or module writes.
+        self.assertIn("bankGenesis.Validate()", app)
+        self.assertLess(app.index("bankGenesis.Validate()"),
+                        app.index("bankGenesis.Supply.AmountOf(prvicap.BaseDenom)"))
+        self.assertLess(app.index("bankGenesis.Validate()"),
+                        app.index("app.UpgradeKeeper.SetModuleVersionMap("))
         self.assertIn("PRVI cap genesis initialization denied", app)
         self.assertIn("prvicap.ValidateGenesisBase(initialPRVI.String())", app)
         self.assertLess(app.index("prvicap.ValidateGenesisBase(initialPRVI.String())"),
