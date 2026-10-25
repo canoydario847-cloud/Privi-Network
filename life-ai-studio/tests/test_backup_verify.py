@@ -248,6 +248,21 @@ def test_verify_copy_rejects_symlink_even_to_private_backup(tmp_path):
         backup.verify_existing_copy(alias, digest)
 
 
+def test_verify_copy_rejects_hardlinked_backup_even_if_mode_is_private(tmp_path):
+    source = tmp_path / "restored.sqlite3"
+    make_database(source)
+    os.chmod(source, 0o600)
+    other_name = tmp_path / "second-name.sqlite3"
+    os.link(source, other_name)
+    assert os.stat(source).st_nlink == 2
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    with pytest.raises(ValueError, match="multiple hard links"):
+        backup.verify_existing_copy(source, digest)
+    # A real standalone copy is still allowed after removing the alias.
+    other_name.unlink()
+    assert backup.verify_existing_copy(source, digest)["restore_drill"] == "passed"
+
+
 def test_verify_copy_restores_the_exact_bytes_that_passed_checksum(tmp_path, monkeypatch):
     source = tmp_path / "restored.sqlite3"
     make_database(source)
