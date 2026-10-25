@@ -205,6 +205,40 @@ def validate_database(conn):
         ).fetchone()
         if mismatch is not None:
             raise ValueError("Not a LIFE database; BNB redemption member mismatch")
+    # Native PRVI payment tables are disabled in staging, but a recoverable
+    # snapshot must preserve their customer-to-quote-to-redemption ownership.
+    # The current schema has no declared foreign keys for these relationships.
+    # Older snapshots may omit these optional tables entirely.
+    if "redemptions" in tables and "quotes" not in tables:
+        raise ValueError("Not a LIFE database; PRVI redemptions present without quotes")
+    if "quotes" in tables:
+        columns = {row[1] for row in conn.execute('PRAGMA table_info("quotes")')}
+        if {"id", "user_id"} - columns:
+            raise ValueError("Not a LIFE database; PRVI quote ownership columns missing")
+        orphan = conn.execute(
+            'SELECT 1 FROM "quotes" q LEFT JOIN "users" u '
+            'ON q.user_id = u.id WHERE u.id IS NULL LIMIT 1'
+        ).fetchone()
+        if orphan is not None:
+            raise ValueError("Not a LIFE database; orphaned PRVI quotes")
+    if "redemptions" in tables:
+        columns = {row[1] for row in conn.execute('PRAGMA table_info("redemptions")')}
+        if {"quote_id", "user_id"} - columns:
+            raise ValueError("Not a LIFE database; PRVI redemption ownership columns missing")
+        orphan = conn.execute(
+            'SELECT 1 FROM "redemptions" r '
+            'LEFT JOIN "quotes" q ON r.quote_id = q.id '
+            'LEFT JOIN "users" u ON r.user_id = u.id '
+            'WHERE q.id IS NULL OR u.id IS NULL LIMIT 1'
+        ).fetchone()
+        if orphan is not None:
+            raise ValueError("Not a LIFE database; orphaned PRVI redemptions")
+        mismatch = conn.execute(
+            'SELECT 1 FROM "redemptions" r JOIN "quotes" q ON r.quote_id = q.id '
+            'WHERE r.user_id != q.user_id LIMIT 1'
+        ).fetchone()
+        if mismatch is not None:
+            raise ValueError("Not a LIFE database; PRVI redemption member mismatch")
     # Cogvative provenance is private, owner-scoped project history. SQLite's
     # current schema does not declare foreign keys for these tables, so a
     # mechanically valid backup can otherwise restore unattached attestations.
