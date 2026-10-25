@@ -17,7 +17,7 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp_types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import Field
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from .config import Settings
 from .store import EVENT_TYPES, LotStore, seed_demo
@@ -235,6 +235,21 @@ def build_server(
                              "authentication": {"required": False, "schemes": []},
                              "tools": tools, "resources": [], "prompts": []},
                             headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=3600"})
+
+    @mcp.custom_route("/pay", methods=["GET"], include_in_schema=False)
+    async def pay_page(_: Request) -> Response:
+        """Pay for one call to a paid tool with a browser wallet (MetaMask)."""
+        from pathlib import Path
+        lot = [{"name": "lot_code", "label": "Lot or batch code", "required": True, "value": "DEMO-STEEL-0001"}]
+        cfg = {"service": "Privi Verify", "mcp_path": "/mcp", "network": settings.network["network"],
+               "payments_enabled": settings.payments_enabled, "tools": [
+                   {"name": "privi_verify_lot", "title": "Verify a lot",
+                    "price": settings.prices_usd["privi_verify_lot"], "args": lot},
+                   {"name": "privi_chain_of_custody", "title": "Chain of custody for a lot",
+                    "price": settings.prices_usd["privi_chain_of_custody"], "args": lot}]}
+        html = (Path(__file__).parent / "pay.html").read_text(encoding="utf-8")
+        html = html.replace("/*PRIVI_PAY_CONFIG*/null", json.dumps(cfg).replace("</", "<\\/"))
+        return Response(html, media_type="text/html; charset=utf-8")
 
     @mcp.custom_route("/health", methods=["GET"], include_in_schema=False)
     async def health(_: Request) -> JSONResponse:
