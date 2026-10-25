@@ -24,7 +24,8 @@ def make_database(path):
             "CREATE TABLE sessions (token_hash TEXT PRIMARY KEY, user_id TEXT, expires INTEGER);"
             "CREATE TABLE projects (id TEXT PRIMARY KEY, owner_id TEXT, title TEXT,"
             " kind TEXT, created INTEGER);"
-            "CREATE TABLE files (project_id TEXT, path TEXT, content TEXT, version INTEGER);"
+            "CREATE TABLE files (project_id TEXT, path TEXT, content TEXT, version INTEGER,"
+            " PRIMARY KEY(project_id,path));"
             "CREATE TABLE ledger (id TEXT PRIMARY KEY, user_id TEXT, kind TEXT,"
             " service TEXT, amount INTEGER, idempotency TEXT, created INTEGER);"
             "CREATE TABLE settings (name TEXT PRIMARY KEY, value TEXT NOT NULL);"
@@ -167,6 +168,18 @@ def test_matching_columns_without_session_primary_key_are_rejected(tmp_path):
         db.execute("CREATE TABLE sessions (token_hash TEXT, user_id TEXT, expires INTEGER)")
     destination = tmp_path / "vault" / "unsafe-copy.sqlite3"
     with pytest.raises(ValueError, match="sessions primary key mismatch"):
+        backup.backup_and_verify(source, destination)
+    assert not destination.exists()
+
+
+def test_matching_file_columns_without_composite_key_are_rejected(tmp_path):
+    source = tmp_path / "missing-file-key.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute("DROP TABLE files")
+        db.execute("CREATE TABLE files (project_id TEXT, path TEXT, content TEXT, version INTEGER)")
+    destination = tmp_path / "vault" / "unsafe-files-copy.sqlite3"
+    with pytest.raises(ValueError, match="files primary key mismatch"):
         backup.backup_and_verify(source, destination)
     assert not destination.exists()
 
