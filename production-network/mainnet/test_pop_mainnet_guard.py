@@ -31,6 +31,12 @@ class TestPoPMainnetGate(unittest.TestCase):
                 self.assertIs(result["production_mainnet_activated"], False)
                 self.assertIs(result["financial_prvi_issued"], False)
 
+    def test_invalid_manifest_has_no_financial_issuance(self):
+        result = gate_module.gate(None)
+        self.assertEqual(result["status"], "NO_GO")
+        self.assertIs(result["financial_prvi_issued"], False)
+        self.assertIs(result["production_mainnet_activated"], False)
+
     def test_foreign_chain_settlement_is_refused(self):
         for field, bad in (("chain_family", "base"), ("iot_settlement", "bnb"),
                            ("target_protocol", "proof-of-stake"),
