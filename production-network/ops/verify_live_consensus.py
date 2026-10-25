@@ -91,7 +91,29 @@ def check(evm_rpc,comet_rpc,expected_cosmos,expected_evm,now=None):
         raise RuntimeError("CometBFT commit header height mismatch")
     if header.get("chain_id")!=expected_cosmos:
         raise RuntimeError("CometBFT commit header chain ID mismatch")
-    signed=commit["signed_header"]["commit"]["signatures"]
+    # A vote count is not proof of the block being reported. The commit,
+    # its signed header, and the independently queried block at this height
+    # must agree. CometBFT block hashes are NOT Ethereum block hashes.
+    commit_record=commit["signed_header"]["commit"]
+    if str(commit_record.get("height"))!=str(height):
+        raise RuntimeError("CometBFT commit vote height mismatch")
+    commit_block_id=commit_record.get("block_id")
+    commit_hash=commit_block_id.get("hash") if isinstance(commit_block_id,dict) else None
+    if (not isinstance(commit_hash,str) or len(commit_hash)!=64
+            or any(c not in "0123456789abcdefABCDEF" for c in commit_hash)):
+        raise RuntimeError("CometBFT commit block hash invalid")
+    block=get(comet_rpc.rstrip("/")+"/block?"+urlencode({"height":str(height)}))["result"]
+    block_id=block.get("block_id")
+    block_hash=block_id.get("hash") if isinstance(block_id,dict) else None
+    if not isinstance(block_hash,str) or block_hash.upper()!=commit_hash.upper():
+        raise RuntimeError("CometBFT block hash differs from signed commit")
+    block_record=block.get("block")
+    block_header=block_record.get("header") if isinstance(block_record,dict) else None
+    if (not isinstance(block_header,dict)
+            or str(block_header.get("height"))!=str(height)
+            or block_header.get("chain_id")!=expected_cosmos):
+        raise RuntimeError("CometBFT fetched block header mismatch")
+    signed=commit_record["signatures"]
     signers=set()
     for signature in signed:
         # Flag 2 is a real commit vote; absent/nil flags do not count.
