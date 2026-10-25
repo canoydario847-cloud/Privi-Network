@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 
@@ -201,3 +202,22 @@ def test_server_card(store):
     with TestClient(s.streamable_http_app(host="0.0.0.0", stateless_http=True, json_response=True)) as http:
         card = http.get("/.well-known/mcp/server-card.json").json()
         assert card["serverInfo"]["name"] == "privi-verify" and any(t["name"] == "privi_verify_lot" for t in card["tools"])
+
+
+def test_pay_page_tools_ask_for_payment(store):
+    """/pay lists each paid tool with arguments the tool accepts, and calling it unpaid returns x402 terms."""
+    import re
+    from starlette.testclient import TestClient
+    s = build_server(settings(), store, FakeFacilitator())
+    hdr = {"Accept": "application/json, text/event-stream"}
+    with TestClient(s.streamable_http_app(host="0.0.0.0", stateless_http=True, json_response=True)) as http:
+        page = http.get("/pay")
+        assert page.status_code == 200 and page.headers["content-type"].startswith("text/html")
+        assert "/*PRIVI_PAY_CONFIG*/" not in page.text
+        cfg = json.loads(re.search(r"const CONFIG = (\{.*?\});\n", page.text).group(1))
+        assert {t["name"] for t in cfg["tools"]} == {"privi_verify_lot", "privi_chain_of_custody"}
+        for t in cfg["tools"]:
+            args = {a["name"]: a["value"] for a in t["args"]}
+            r = http.post("/mcp", headers=hdr, json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                                                     "params": {"name": t["name"], "arguments": args}}).json()["result"]
+            assert r["isError"] and r["structuredContent"]["accepts"][0]["network"] == cfg["network"]

@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privi · Pay with MetaMask</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#0b1f3a;--mut:#5b6472;--line:#e3e6eb;--ok:#1a7f37;--bad:#c62828;--warn:#9a5b00;--acc:#1d4ed8}
+@media (prefers-color-scheme:dark){:root{--bg:#0b1220;--card:#121b2d;--ink:#e6eaf0;--mut:#9aa4b2;--line:#25304a;--ok:#4ade80;--bad:#f87171;--warn:#f0a65a;--acc:#7aa2ff;color-scheme:dark}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:600px;margin:40px auto;padding:0 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px;margin-bottom:16px}
+h1{font-size:22px;margin:0 0 4px}p{color:var(--mut);margin:.3em 0 1em}
+label{display:block;font-size:14px;font-weight:600;margin:14px 0 6px}
+input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--ink);font:inherit}
+textarea{min-height:80px;resize:vertical}
+.tools{display:flex;flex-direction:column;gap:8px}
+.tool{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer}
+.tool input{width:auto;margin-top:5px}.tool b{display:block}.tool span{color:var(--mut);font-size:14px}
+.price{margin-left:auto;font:600 15px ui-monospace,Menlo,monospace;white-space:nowrap}
+button{margin-top:16px;width:100%;padding:12px;border:0;border-radius:10px;background:var(--acc);color:#fff;font:600 16px system-ui;cursor:pointer}
+button:disabled{opacity:.5;cursor:default}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+ol{padding-left:20px;color:var(--mut)}li{margin:.3em 0}
+#log{font:13px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;word-break:break-all;color:var(--mut)}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}small{color:var(--mut)}
+a{color:var(--acc)}
+</style></head><body><main>
+<div class="card">
+<h1 id="title">Privi · Pay with MetaMask</h1>
+<p>Pay for one call to a paid Privi tool from your own wallet. MetaMask signs a USDC payment authorization; Privi sends no transaction from your wallet and never sees your keys.</p>
+<ol><li>Pick a tool.</li><li>Connect MetaMask. It switches to <span id="netname">Base</span>.</li><li>Approve the signature request. The USDC moves only if the tool runs.</li></ol>
+<div class="tools" id="tools"></div>
+<div id="args"></div>
+<button id="go">Connect MetaMask and pay</button>
+<p id="off" class="warn" hidden></p>
+</div>
+<div class="card"><div id="log">Your wallet needs USDC on <span id="netname2">Base</span> to pay. Gas is covered by the payment network, so no ETH is needed.</div></div>
+</main>
+<script>
+const CONFIG = /*PRIVI_PAY_CONFIG*/null;
+const CHAINS = {"eip155:8453": {id: 8453, name: "Base", scan: "https://basescan.org/tx/",
+                 add: {chainId: "0x2105", chainName: "Base", nativeCurrency: {name: "Ether", symbol: "ETH", decimals: 18},
+                       rpcUrls: ["https://mainnet.base.org"], blockExplorerUrls: ["https://basescan.org"]}},
+                "eip155:84532": {id: 84532, name: "Base Sepolia (testnet)", scan: "https://sepolia.basescan.org/tx/",
+                 add: {chainId: "0x14a34", chainName: "Base Sepolia", nativeCurrency: {name: "Ether", symbol: "ETH", decimals: 18},
+                       rpcUrls: ["https://sepolia.base.org"], blockExplorerUrls: ["https://sepolia.basescan.org"]}}};
+const $ = id => document.getElementById(id);
+const log = (t, cls) => { const d = document.createElement('div'); d.textContent = t; if (cls) d.className = cls; $('log').appendChild(d); return d; };
+const short = a => a.slice(0, 6) + '…' + a.slice(-4);
+const chain = CHAINS[CONFIG.network] || CHAINS["eip155:8453"];
+
+document.title = CONFIG.service + ' · Pay with MetaMask';
+$('title').textContent = CONFIG.service + ' · Pay with MetaMask';
+$('netname').textContent = $('netname2').textContent = chain.name;
+if (!CONFIG.payments_enabled) {
+  $('off').hidden = false;
+  $('off').textContent = 'This server is not charging right now (payments are off), so tools run free and nothing is listed in the x402 Bazaar.';
+}
+
+CONFIG.tools.forEach((t, i) => {
+  const row = document.createElement('label'); row.className = 'tool'; row.htmlFor = 'tool-' + t.name;
+  row.innerHTML = '<input type="radio" name="tool"><div><b></b><span></span></div><span class="price"></span>';
+  const radio = row.querySelector('input'); radio.id = 'tool-' + t.name; radio.value = t.name; radio.checked = i === 0;
+  row.querySelector('b').textContent = t.title;
+  row.querySelector('div span').textContent = t.name;
+  row.querySelector('.price').textContent = '$' + t.price + ' USDC';
+  radio.onchange = renderArgs;
+  $('tools').appendChild(row);
+});
+const current = () => CONFIG.tools.find(t => t.name === document.querySelector('input[name=tool]:checked').value);
+function renderArgs() {
+  const box = $('args'); box.textContent = '';
+  for (const a of current().args) {
+    const l = document.createElement('label'); l.htmlFor = 'arg-' + a.name; l.textContent = a.label; box.appendChild(l);
+    let el;
+    if (a.choices) { el = document.createElement('select'); a.choices.forEach(c => { const o = document.createElement('option'); o.value = o.textContent = c; el.appendChild(o); }); }
+    else el = document.createElement(a.long ? 'textarea' : 'input');
+    el.id = 'arg-' + a.name; if (a.value) el.value = a.value; box.appendChild(el);
+  }
+}
+renderArgs();
+
+let rid = 0;
+async function mcp(method, params) {
+  const r = await fetch(CONFIG.mcp_path, {method: 'POST', headers: {'Content-Type': 'application/json',
+    'Accept': 'application/json, text/event-stream', 'MCP-Protocol-Version': '2025-06-18'},
+    body: JSON.stringify({jsonrpc: '2.0', id: ++rid, method, params})});
+  let body = await r.text();
+  if (/^\s*(event|data):/.test(body)) body = body.split('\n').find(l => l.startsWith('data:')).slice(5);
+  const msg = JSON.parse(body);
+  if (msg.error) throw new Error(msg.error.message || JSON.stringify(msg.error));
+  return msg.result;
+}
+function paymentRequired(res) {
+  let sc = res.structuredContent;
+  if (!(sc && sc.accepts)) { try { sc = JSON.parse(res.content[0].text); } catch (e) { return null; } }
+  return res.isError && sc && Array.isArray(sc.accepts) ? sc : null;
+}
+const hex32 = () => '0x' + Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join('');
+
+async function ensureChain(ch) {
+  const want = '0x' + ch.id.toString(16);
+  if ((await ethereum.request({method: 'eth_chainId'})).toLowerCase() === want) return;
+  try { await ethereum.request({method: 'wallet_switchEthereumChain', params: [{chainId: want}]}); }
+  catch (e) {
+    if (e && (e.code === 4902 || (e.data && e.data.originalError && e.data.originalError.code === 4902)))
+      await ethereum.request({method: 'wallet_addEthereumChain', params: [ch.add]});
+    else throw e;
+  }
+}
+
+$('go').onclick = async () => {
+  $('log').textContent = '';
+  if (!window.ethereum) return log('No browser wallet found. Open this page in Chrome, Brave or Edge with MetaMask installed, or in the MetaMask mobile app browser.', 'bad');
+  const tool = current();
+  const args = {};
+  for (const a of tool.args) { const v = $('arg-' + a.name).value.trim(); if (v) args[a.name] = v; else if (a.required) return log('Fill in ' + a.label + '.', 'bad'); }
+  $('go').disabled = true;
+  try {
+    const [address] = await ethereum.request({method: 'eth_requestAccounts'});
+    log('Wallet: ' + address);
+    await mcp('initialize', {protocolVersion: '2025-06-18', capabilities: {}, clientInfo: {name: 'privi-pay-page', version: '1'}});
+    const call = {name: tool.name, arguments: args};
+    const first = await mcp('tools/call', call);
+    const required = paymentRequired(first);
+    if (!required) {
+      log('The server ran the tool without asking for payment, so nothing was charged.', 'warn');
+      log(JSON.stringify(first.structuredContent || first, null, 2));
+      return;
+    }
+    const req = required.accepts[0];
+    const ch = CHAINS[req.network];
+    if (req.scheme !== 'exact' || !ch) throw new Error('Unsupported payment option: ' + req.scheme + ' on ' + req.network);
+    const usd = (Number(req.amount) / 1e6).toFixed(2);
+    log('Price: $' + usd + ' USDC on ' + ch.name + ', paid to ' + short(req.payTo) + '.');
+    if (address.toLowerCase() === req.payTo.toLowerCase())
+      log('You are paying the wallet that receives Privi payments, so the USDC comes back to you. If the payment network refuses this, switch MetaMask to a different account.', 'warn');
+    await ensureChain(ch);
+    const now = Math.floor(Date.now() / 1000);
+    const auth = {from: address, to: req.payTo, value: String(req.amount), validAfter: String(now - 600),
+                  validBefore: String(now + Number(req.maxTimeoutSeconds || 60)), nonce: hex32()};
+    const typed = {
+      types: {
+        EIP712Domain: [{name: 'name', type: 'string'}, {name: 'version', type: 'string'},
+                       {name: 'chainId', type: 'uint256'}, {name: 'verifyingContract', type: 'address'}],
+        TransferWithAuthorization: [{name: 'from', type: 'address'}, {name: 'to', type: 'address'},
+          {name: 'value', type: 'uint256'}, {name: 'validAfter', type: 'uint256'},
+          {name: 'validBefore', type: 'uint256'}, {name: 'nonce', type: 'bytes32'}]},
+      primaryType: 'TransferWithAuthorization',
+      domain: {name: req.extra.name, version: req.extra.version, chainId: ch.id, verifyingContract: req.asset},
+      message: auth};
+    log('Approve the signature request in MetaMask…');
+    const signature = await ethereum.request({method: 'eth_signTypedData_v4', params: [address, JSON.stringify(typed)]});
+    const payment = {x402Version: required.x402Version, resource: required.resource, accepted: req,
+                     payload: {signature, authorization: auth}};
+    if (required.extensions) payment.extensions = required.extensions;
+    log('Signed. Sending the payment and running ' + tool.name + '… (validBefore gives this ' + (req.maxTimeoutSeconds || 60) + ' seconds)');
+    const second = await mcp('tools/call', {...call, _meta: {'x402/payment': payment}});
+    if (second.isError) {
+      const sc = second.structuredContent || {};
+      throw new Error(sc.error || (second.content && second.content[0] && second.content[0].text) || 'payment not accepted');
+    }
+    const receipt = (second._meta || {})['x402/payment-response'] || {};
+    log('Paid. The tool ran and the payment settled.', 'ok');
+    if (receipt.transaction) {
+      const p = log('Transaction: '); const a = document.createElement('a');
+      a.href = (CHAINS[receipt.network] || ch).scan + receipt.transaction; a.target = '_blank'; a.rel = 'noopener';
+      a.textContent = short(receipt.transaction); p.appendChild(a);
+    }
+    if (CONFIG.payments_enabled) log('The x402 Bazaar lists this tool within about 15 minutes of its first settled payment.');
+    log(JSON.stringify(second.structuredContent, null, 2));
+  } catch (e) {
+    log(e && e.code === 4001 ? 'You cancelled in MetaMask. Nothing was charged.' : 'Not paid: ' + ((e && e.message) || e), 'bad');
+  } finally { $('go').disabled = false; }
+};
+</script>
+</body></html>
