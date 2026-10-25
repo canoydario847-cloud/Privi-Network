@@ -16,6 +16,24 @@ def now():
 def uid(prefix):
     return prefix + "_" + uuid.uuid4().hex[:22]
 
+def database_readable():
+    """Non-mutating availability check, not a production launch assertion.
+
+    Read-only SQLite URI mode prevents a missing database from being created
+    by a monitoring probe. The core account table must also be queryable.
+    """
+    try:
+        location = Path(DB).expanduser().resolve(strict=True)
+        if not location.is_file():
+            return False
+        uri = location.as_uri() + "?mode=ro"
+        with sqlite3.connect(uri, uri=True, timeout=2) as conn:
+            conn.execute("SELECT 1 FROM users LIMIT 1").fetchone()
+        return True
+    except (OSError, sqlite3.Error):
+        return False
+
+
 @contextmanager
 def transaction():
     conn = sqlite3.connect(DB, timeout=30)
