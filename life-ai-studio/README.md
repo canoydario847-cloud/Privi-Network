@@ -51,6 +51,24 @@ Service-to-service only; never place these in the browser. POST `/api/internal/c
 ```
 The server verifies service identity, LIFE member, wallet binding, available credits, and idempotency, then debits atomically. Each product must separately adopt this endpoint; existing service endpoints are not silently modified or billed. Service keys should be kept in a secret manager. For production refunds and multi-step expensive jobs, add reserve/capture semantics and compensating events before integration. Do not charge legacy USDC x402 requests again.
 
+
+### Working toward production (separate from disposable staging)
+`GET /health` remains a lightweight **liveness** endpoint. `GET /api/production-readiness`
+is a public, non-secret **release-gate checklist** and deliberately reports `ready:false`
+until each gate is demonstrated. Never configure this readiness checklist as the
+Render HTTP health path while LIFE is still in staging; that would turn known
+launch blockers into unnecessary service outages.
+
+LIFE now persists failed-login throttling in SQLite (five incorrect attempts per
+email/client combination in a 15-minute window, then a 15-minute lockout);
+this is defense in depth, not a substitute for edge rate limits, verified
+enrollment, MFA, fraud monitoring or an independent security review.
+LIFE's SQLite architecture is still single-instance and requires a separately
+verified durable volume and backup/restore test. Horizontal production scale
+needs a database migration and multi-worker safe queues; these are explicit
+unmet checklist items. The staging service must remain a no-real-payment,
+no-real-personal-data preview until the release gates are satisfied.
+
 ### Security and scaling notes
 This is a **single-instance MVP** using SQLite. Use an encrypted durable disk/volume and backups. Before public deployment add rate limiting and account verification, email recovery/MFA, distributed persistent job queues, team RBAC/invitations, secret rotation, endpoint audit, monitoring, legal terms/privacy, paid membership renewals and PostgreSQL with row-level isolation. API calls have timeouts and provider keys remain server-side. The agent collaboration loop is reviewer-controlled, **not autonomous code execution**. Users can run different projects in different pages concurrently; proposals reference shared file versions and fail on stale merges.
 
