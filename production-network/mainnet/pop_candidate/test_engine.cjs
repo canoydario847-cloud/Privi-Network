@@ -67,6 +67,42 @@ test("four unique PoP position admissions yield exact three-of-four quorum",()=>
   assert.equal(proof.productionConsensus,false);
 });
 
+test("candidate certificate refuses caller-forged quorum and committee copies",()=>{
+  const f=fixture();
+  const {proposal,votes}=f.bundle();
+  assert.equal(verifyCertificate(f.committee,proposal,votes).valid,true);
+  const forged={...f.committee,quorum:1};
+  assert.throws(()=>verifyCertificate(forged,proposal,votes.slice(0,1)),
+                /Unverified PoP committee/);
+  // Reusing the same keys and membership does not turn a shallow copy
+  // into an independently attested admission record.
+  assert.throws(()=>verifyCertificate({...f.committee},proposal,votes),
+                /Unverified PoP committee/);
+  assert.equal(Object.isFrozen(f.committee),true);
+  assert.equal(Object.isFrozen(f.committee.validators),true);
+  assert.equal(Object.isFrozen(f.committee.validators[0]),true);
+  assert.throws(()=>{f.committee.quorum=1;},TypeError);
+  assert.throws(()=>{f.committee.validators.pop();},TypeError);
+});
+
+test("candidate certificate detects post-admission signer-map tampering",()=>{
+  const f=fixture();
+  const {proposal,votes}=f.bundle();
+  const signer=f.committee.validators[0];
+  const original=f.committee.byId.get(signer.id);
+  try {
+    f.committee.byId.set(signer.id,{...original});
+    assert.throws(()=>verifyCertificate(f.committee,proposal,votes),
+                  /membership changed/);
+    f.committee.byId.delete(signer.id);
+    assert.throws(()=>verifyCertificate(f.committee,proposal,votes),
+                  /quorum or membership metadata inconsistent/);
+  } finally {
+    f.committee.byId.set(signer.id,original);
+  }
+  assert.equal(verifyCertificate(f.committee,proposal,votes).valid,true);
+});
+
 test("quorum never formed from one or two votes",()=>{
   const f=fixture();
   for(const n of [0,1,2]){
