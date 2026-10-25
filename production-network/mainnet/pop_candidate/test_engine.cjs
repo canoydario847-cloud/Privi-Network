@@ -179,6 +179,23 @@ test("validator cannot double vote same height for conflicting position blocks",
   lock.accept(f.committee.epoch,6,0,v.id,"0x"+"c".repeat(64));
 });
 
+test("in-memory research signer lock does not reset at epoch transition",()=>{
+  const f=fixture();
+  const id=f.committee.validators[0].id, lock=new ResearchVoteLock();
+  const first="0x"+"c".repeat(64), conflicting="0x"+"d".repeat(64);
+  lock.accept(1,25,0,id,first);
+  lock.accept(1,25,1,id,first); // round changes do not reset same-block lock
+  assert.throws(()=>lock.accept(2,25,0,id,conflicting),
+                /epoch transition/,"new epoch cannot bypass a same-height lock");
+  assert.throws(()=>lock.accept(2,25,0,id,first),
+                /epoch transition/,"even same block requires reviewed epoch handoff");
+  // Unrelated heights remain signable with a later epoch.
+  lock.accept(2,26,0,id,conflicting);
+  // A failed cross-epoch attempt must not overwrite the original commitment.
+  assert.throws(()=>lock.accept(1,25,2,id,conflicting),/double-sign/);
+  lock.accept(1,25,2,id,first);
+});
+
 test("no valid validator quorum with ambiguous unsigned position proof",()=>{
   const f=fixture();
   const noAnchor=structuredClone(f.registry);
