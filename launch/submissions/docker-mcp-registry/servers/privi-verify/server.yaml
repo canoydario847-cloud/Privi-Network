@@ -1,0 +1,19 @@
+name: privi-verify
+type: remote
+dynamic:
+  tools: true
+meta:
+  category: tools
+  tags:
+    - supply-chain
+    - manufacturing
+    - traceability
+    - x402
+    - remote
+about:
+  title: Privi Verify
+  description: Verify where a manufactured lot came from. Agents look up a lot or batch code and get its integrity check and full chain of custody, with history checkpoints anchored on Base. Pricing is listed by the free privi_pricing tool; paid lookups settle in USDC on Base through x402.
+  icon: https://raw.githubusercontent.com/canoydario847-cloud/Privi-Network/main/assets/logo-400.png
+remote:
+  transport_type: streamable-http
+  url: https://privi-verify.onrender.com/mcp
