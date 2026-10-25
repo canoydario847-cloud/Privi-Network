@@ -12,7 +12,7 @@ from pathlib import Path
 import httpx
 from eth_account import Account
 from fastapi import FastAPI, HTTPException, Request, Response, Depends
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 import agents
@@ -161,6 +161,17 @@ def javascript():
 @app.get("/style.css")
 def stylesheet():
     return FileResponse(STATIC / "style.css", media_type="text/css")
+@app.get("/readyz")
+def operational_ready():
+    """Operational DB read probe only; never a release approval or live payment gate."""
+    body = {"service": "privi-life-ai-studio", "check": "database_readability",
+            "production_launch_approved": False}
+    if store.database_readable():
+        return {**body, "status": "ok"}
+    # No DB path, connection errors or customer data in public responses.
+    return JSONResponse(status_code=503, content={**body, "status": "unavailable"})
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "privi-life-ai-studio", "staging": STAGING_MODE, "prvi_settlement_enabled": payment_ready(), "bnb_priv_payment_configured": bnb_priv.configured(STAGING_MODE, COOKIE_SECURE) is not None}
