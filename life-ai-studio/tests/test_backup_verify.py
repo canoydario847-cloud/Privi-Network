@@ -15,10 +15,14 @@ SPEC.loader.exec_module(backup)
 def make_database(path):
     with sqlite3.connect(str(path)) as db:
         db.executescript(
-            "CREATE TABLE users (id TEXT PRIMARY KEY);"
-            "CREATE TABLE sessions (token_hash TEXT PRIMARY KEY);"
-            "CREATE TABLE projects (id TEXT PRIMARY KEY);"
-            "CREATE TABLE ledger (id TEXT PRIMARY KEY);"
+            "CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT, pwdhash TEXT,"
+            " wallet TEXT, member_since INTEGER, credits INTEGER);"
+            "CREATE TABLE sessions (token_hash TEXT PRIMARY KEY, user_id TEXT, expires INTEGER);"
+            "CREATE TABLE projects (id TEXT PRIMARY KEY, owner_id TEXT, title TEXT,"
+            " kind TEXT, created INTEGER);"
+            "CREATE TABLE files (project_id TEXT, path TEXT, content TEXT, version INTEGER);"
+            "CREATE TABLE ledger (id TEXT PRIMARY KEY, user_id TEXT, kind TEXT,"
+            " service TEXT, amount INTEGER, idempotency TEXT, created INTEGER);"
             "CREATE TABLE settings (name TEXT PRIMARY KEY, value TEXT NOT NULL);"
             "INSERT INTO settings VALUES ('device-theme', 'cosmic');"
         )
@@ -92,6 +96,33 @@ def test_unrelated_valid_sqlite_is_not_accepted_as_life_backup(tmp_path):
     with pytest.raises(ValueError, match="missing core tables"):
         backup.backup_and_verify(source, dest)
     assert not dest.exists()
+
+
+def test_spoofed_life_table_names_are_rejected(tmp_path):
+    source = tmp_path / "spoof.sqlite3"
+    with sqlite3.connect(str(source)) as db:
+        db.executescript(
+            "CREATE TABLE users (id TEXT PRIMARY KEY);"
+            "CREATE TABLE sessions (token_hash TEXT PRIMARY KEY);"
+            "CREATE TABLE projects (id TEXT PRIMARY KEY);"
+            "CREATE TABLE files (project_id TEXT, path TEXT);"
+            "CREATE TABLE ledger (id TEXT PRIMARY KEY);"
+        )
+    destination = tmp_path / "vault" / "spoof-copy.sqlite3"
+    with pytest.raises(ValueError, match="missing columns"):
+        backup.backup_and_verify(source, destination)
+    assert not destination.exists()
+
+
+def test_missing_project_files_table_is_rejected(tmp_path):
+    source = tmp_path / "no-files.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute("DROP TABLE files")
+    destination = tmp_path / "vault" / "missing-files-copy.sqlite3"
+    with pytest.raises(ValueError, match="missing core tables"):
+        backup.backup_and_verify(source, destination)
+    assert not destination.exists()
 
 
 def test_empty_sqlite_is_not_accepted_as_life_backup(tmp_path):
