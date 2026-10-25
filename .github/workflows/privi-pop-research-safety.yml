@@ -11,7 +11,7 @@ on:
       - "production-network/mainnet/test_pop_mainnet_guard.py"
       - "production-network/mainnet/privi_pop_iot_development.template.json"
   push:
-    branches: [main]
+    branches: [main, feat/life-ai-studio-multiagent]
     paths:
       - ".github/workflows/privi-pop-research-safety.yml"
       - "production-network/mainnet/pop_candidate/**"
