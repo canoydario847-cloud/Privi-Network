@@ -1,6 +1,10 @@
 """Zero-customer-data integration tests for the SQLite snapshot/restore drill."""
 import importlib.util
+import hashlib
 import os
+import shutil
+import subprocess
+import sys
 import sqlite3
 import stat
 from pathlib import Path
@@ -169,3 +173,52 @@ def test_directory_fsync_failure_never_reports_success(tmp_path, monkeypatch):
         backup.backup_and_verify(source, destination)
     # A link may exist, but it must not be reported as verified/durable.
     assert destination.exists()
+
+
+def test_independently_restored_copy_matches_trusted_digest_and_restores(tmp_path):
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    local = tmp_path / "vault" / "original.sqlite3"
+    created = backup.backup_and_verify(source, local)
+    restored_copy = tmp_path / "restored-from-other-host.sqlite3"
+    shutil.copyfile(local, restored_copy)
+    verified = backup.verify_existing_copy(restored_copy, created["sha256"])
+    assert verified["sha256"] == created["sha256"]
+    assert verified["restore_drill"] == "passed"
+    assert verified["encrypted_off_host_copy"] == "NOT_VERIFIED"
+
+
+def test_modified_restored_copy_rejected_before_restore(tmp_path):
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    local = tmp_path / "vault" / "original.sqlite3"
+    created = backup.backup_and_verify(source, local)
+    altered = tmp_path / "altered.sqlite3"
+    shutil.copyfile(local, altered)
+    with altered.open("ab") as handle:
+        handle.write(b"changed after original backup")
+    with pytest.raises(ValueError, match="SHA-256 mismatch"):
+        backup.verify_existing_copy(altered, created["sha256"])
+
+
+def test_existing_copy_requires_trusted_digest_and_real_life_schema(tmp_path):
+    unrelated = tmp_path / "unrelated.sqlite3"
+    with sqlite3.connect(str(unrelated)) as db:
+        db.execute("CREATE TABLE unrelated (id INTEGER)")
+    actual_hash = hashlib.sha256(unrelated.read_bytes()).hexdigest()
+    with pytest.raises(ValueError, match="64 hexadecimal"):
+        backup.verify_existing_copy(unrelated, "invalid")
+    with pytest.raises(ValueError, match="missing core tables"):
+        backup.verify_existing_copy(unrelated, actual_hash)
+
+
+def test_verify_copy_cli_requires_digest_and_reports_failure(tmp_path):
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    result = subprocess.run(
+        [sys.executable, str(SPEC.origin), "--verify-copy", str(source),
+         "--expected-sha256", "0" * 64],
+        text=True, capture_output=True, check=False,
+    )
+    assert result.returncode != 0
+    assert "SHA-256 mismatch" in result.stderr
