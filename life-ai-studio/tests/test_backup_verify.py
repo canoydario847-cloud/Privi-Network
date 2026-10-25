@@ -198,8 +198,10 @@ def test_directory_fsync_failure_never_reports_success(tmp_path, monkeypatch):
     monkeypatch.setattr(backup.os, "fsync", fail_directory_fsync)
     with pytest.raises(OSError, match="directory fsync failure"):
         backup.backup_and_verify(source, destination)
-    # A link may exist, but it must not be reported as verified/durable.
-    assert destination.exists()
+    # A failed directory sync must not leave an unverified published backup.
+    assert not destination.exists()
+    monkeypatch.setattr(backup.os, "fsync", original_fsync)
+    assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
 
 
 def test_independently_restored_copy_matches_trusted_digest_and_restores(tmp_path):
