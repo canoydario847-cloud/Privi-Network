@@ -238,6 +238,21 @@ python tools/backup_verify.py \
 # off-host storage through your organization's approved backup system.
 ```
 
+After retrieving a copy from approved off-host storage to a **private operator
+machine**, compare it to the SHA-256 value saved separately from the original
+backup report, then perform a fresh SQLite restore drill:
+
+```bash
+python tools/backup_verify.py \\
+  --verify-copy /private/restored/life-copy.sqlite3 \\
+  --expected-sha256 '<trusted 64-character SHA-256 from original backup report>'
+```
+
+A changed copy, invalid digest, missing LIFE schema, or failed restore exits
+nonzero. The original digest must come from a **separately retained trusted
+record**, not from the copy being checked. Passing this test does not prove
+encryption, off-host storage, or recoverability after an actual host failure.
+
 This tool **does not** schedule backups, encrypt them, test an actual off-host
 restore, or certify recoverability after a host failure. It never sends
 customer data over the network. Operators must manage retention, encrypted
