@@ -142,6 +142,17 @@ def verify_existing_copy(snapshot: Path, expected_sha256: str):
     # This checks the final path only; operators must also secure parent
     # directories and avoid concurrently writable/untrusted restore folders.
     snapshot = Path(snapshot).expanduser().absolute()
+    # Restored copies contain private account and session data. A private file
+    # in a shared directory still exposes its name and enables path swapping.
+    # Require the same private, non-symlinked vault as backup creation.
+    parent = snapshot.parent
+    parent_metadata = parent.lstat()
+    if not stat.S_ISDIR(parent_metadata.st_mode):
+        raise ValueError("Restore directory must be a real private directory, not a symlink")
+    if parent_metadata.st_mode & 0o077:
+        raise ValueError("Restore directory must have mode 0700; chmod 700 the vault first")
+    if "public" in snapshot.parts or "public" in parent.resolve().parts:
+        raise ValueError("Refusing to verify a backup within a public web directory")
     metadata = snapshot.lstat()
     if not stat.S_ISREG(metadata.st_mode):
         raise ValueError("Backup copy must be a regular file, not a symlink")
