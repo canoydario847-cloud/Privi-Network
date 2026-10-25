@@ -2,6 +2,7 @@
 import importlib.util
 import os
 import sqlite3
+import stat
 from pathlib import Path
 
 import pytest
@@ -101,3 +102,39 @@ def test_empty_sqlite_is_not_accepted_as_life_backup(tmp_path):
     with pytest.raises(ValueError, match="missing core tables"):
         backup.backup_and_verify(source, dest)
     assert not dest.exists()
+
+
+def test_backup_fsyncs_snapshot_before_directory(tmp_path, monkeypatch):
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    destination = tmp_path / "vault" / "snapshot.sqlite3"
+    observed = []
+    original_fsync = os.fsync
+
+    def tracked_fsync(fd):
+        kind = "directory" if stat.S_ISDIR(os.fstat(fd).st_mode) else "file"
+        observed.append(kind)
+        return original_fsync(fd)
+
+    monkeypatch.setattr(backup.os, "fsync", tracked_fsync)
+    result = backup.backup_and_verify(source, destination)
+    assert result["restore_drill"] == "passed"
+    assert observed == ["file", "directory"]
+
+
+def test_directory_fsync_failure_never_reports_success(tmp_path, monkeypatch):
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    destination = tmp_path / "vault" / "snapshot.sqlite3"
+    original_fsync = os.fsync
+
+    def fail_directory_fsync(fd):
+        if stat.S_ISDIR(os.fstat(fd).st_mode):
+            raise OSError("simulated directory fsync failure")
+        return original_fsync(fd)
+
+    monkeypatch.setattr(backup.os, "fsync", fail_directory_fsync)
+    with pytest.raises(OSError, match="directory fsync failure"):
+        backup.backup_and_verify(source, destination)
+    # A link may exist, but it must not be reported as verified/durable.
+    assert destination.exists()
