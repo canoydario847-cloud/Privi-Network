@@ -1,4 +1,4 @@
-"""Privi Cogvative Signature™ — line-level code attestations.
+"""Privi Cognitive Signatures — line-level code attestations.
 
 Copyright (c) 2026 Privi World Co. All rights reserved in this original module.
 Neither a cryptographic signature nor this notice establishes ownership of
@@ -13,8 +13,8 @@ from datetime import datetime, timezone
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
-BRAND = "Privi Cogvative Signature™"
-NOTICE = "© 2026 Privi World Co. Privi Cogvative Signature™. Rights in underlying code are subject to applicable licenses and contributor agreements."
+BRAND = "Privi Cognitive Signatures"
+NOTICE = "© 2026 Privi World Co. Privi Cognitive Signatures. Rights in underlying code are subject to applicable licenses and contributor agreements."
 ROYALTY_BPS = 4000
 CALL_CREDITS = 1
 # Future mainnet price proposal, NOT an executed or escrowed PRVI payment.
