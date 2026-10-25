@@ -238,3 +238,31 @@ func TestGenesisRejectsForgedNativeBalancesWithoutWritingCapState(t *testing.T) 
     })
   }
 }
+
+func TestReconcileFailedBalanceAuditDoesNotAdvanceBurnWatermark(t *testing.T) {
+  initial := sdkmath.NewInt(1000)
+  k, data, ctx := setup(t, initial.String())
+  forged := sdkmath.NewInt(700)
+  // Supply metadata claims a burn to 900, but actual account balances
+  // total 700. A failed conservation audit must not record that burn.
+  if err := k.Reconcile(ctx, fakeBank{base: sdkmath.NewInt(900), actual: &forged}); !errors.Is(err, ErrUnexpectedSupply) {
+    t.Fatalf("forged burn accepted: %v", err)
+  }
+  if got := string(data.content[string(keyObservedSupply)]); got != "1000" {
+    t.Fatalf("failed reconciliation advanced watermark to %q", got)
+  }
+  // A genuine burn may advance the watermark only after conservation passes.
+  if err := k.Reconcile(ctx, fakeBank{base: sdkmath.NewInt(900)}); err != nil {
+    t.Fatalf("valid burn rejected: %v", err)
+  }
+  if got := string(data.content[string(keyObservedSupply)]); got != "900" {
+    t.Fatalf("valid burn watermark = %q, want 900", got)
+  }
+  // No later increase is allowed, even though it remains below genesis cap.
+  if err := k.Reconcile(ctx, fakeBank{base: sdkmath.NewInt(901)}); !errors.Is(err, ErrUnexpectedSupply) {
+    t.Fatalf("post-burn supply rebound accepted: %v", err)
+  }
+  if got := string(data.content[string(keyObservedSupply)]); got != "900" {
+    t.Fatalf("rejected rebound changed watermark to %q", got)
+  }
+}
