@@ -7,7 +7,9 @@ storage, and periodically test actual disaster recovery procedures.
 
 import argparse
 import hashlib
+import hmac
 import json
+import re
 import os
 import sqlite3
 import tempfile
@@ -117,16 +119,49 @@ def backup_and_verify(source: Path, destination: Path):
             tmp_path.unlink(missing_ok=True)
 
 
+
+def verify_existing_copy(snapshot: Path, expected_sha256: str):
+    """Verify a restored off-host copy against a separately retained digest.
+
+    Passing proves byte identity and SQLite recoverability, not off-host
+    placement, encryption, access control, or retention.
+    """
+    if not isinstance(expected_sha256, str) or not re.fullmatch(r"[a-fA-F0-9]{64}", expected_sha256):
+        raise ValueError("Expected SHA-256 must be exactly 64 hexadecimal characters")
+    snapshot = Path(snapshot).expanduser().resolve(strict=True)
+    if not snapshot.is_file():
+        raise ValueError("Backup copy is not a regular file")
+    digest = hashlib.sha256()
+    with snapshot.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    actual = digest.hexdigest()
+    if not hmac.compare_digest(actual, expected_sha256.lower()):
+        raise ValueError("Backup SHA-256 mismatch; refusing restore verification")
+    tables = verify_restore_drill(snapshot)
+    return {"backup": str(snapshot), "sha256": actual,
+            "bytes": snapshot.stat().st_size, "tables_verified": tables,
+            "restore_drill": "passed", "encrypted_off_host_copy": "NOT_VERIFIED"}
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", required=True, type=Path, help="LIFE_DB_PATH SQLite database")
-    parser.add_argument("--destination", required=True, type=Path, help="New private backup filepath (must not exist)")
+    parser.add_argument("--source", type=Path, help="LIFE_DB_PATH SQLite database")
+    parser.add_argument("--destination", type=Path, help="New private backup filepath (must not exist)")
+    parser.add_argument("--verify-copy", type=Path, help="Restored copy to verify read-only")
+    parser.add_argument("--expected-sha256", help="Trusted digest from the original backup report")
     args = parser.parse_args()
+    if args.verify_copy is not None:
+        if args.source is not None or args.destination is not None or args.expected_sha256 is None:
+            parser.error("--verify-copy requires --expected-sha256 and cannot be combined with --source/--destination")
+        action = lambda: verify_existing_copy(args.verify_copy, args.expected_sha256)
+    else:
+        if args.source is None or args.destination is None or args.expected_sha256 is not None:
+            parser.error("Backup creation requires --source and --destination only")
+        action = lambda: backup_and_verify(args.source, args.destination)
     try:
-        print(json.dumps(backup_and_verify(args.source, args.destination), sort_keys=True))
+        print(json.dumps(action(), sort_keys=True))
     except (OSError, sqlite3.Error, ValueError) as exc:
         parser.exit(1, "LIFE snapshot NOT verified: " + str(exc) + "\n")
-
 
 if __name__ == "__main__":
     main()
