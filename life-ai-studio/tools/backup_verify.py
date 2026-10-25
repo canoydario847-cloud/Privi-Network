@@ -69,6 +69,29 @@ def validate_database(conn):
         actual = tuple(row[1] for row in sorted(columns, key=lambda row: row[5]) if row[5] > 0)
         if actual != expected:
             raise ValueError(f"Not a LIFE database; table {table} primary key mismatch")
+    # Idempotent LIFE credit charges rely on the composite uniqueness of
+    # (user_id, idempotency). A restored database missing this constraint can
+    # silently accept duplicate charges even when its columns and PKs match.
+    ledger_columns = {
+        row[1]: row for row in conn.execute('PRAGMA table_info("ledger")')
+    }
+    if not all(ledger_columns[name][3] for name in ("user_id", "idempotency")):
+        raise ValueError("Not a LIFE database; ledger idempotency columns must be NOT NULL")
+    unique_indexes = conn.execute('PRAGMA index_list("ledger")').fetchall()
+    has_idempotency_guard = False
+    for index in unique_indexes:
+        # A partial index does not protect every ledger record.
+        if not index[2] or (len(index) > 4 and index[4]):
+            continue
+        index_name = index[1].replace('"', '""')
+        index_columns = tuple(row[2] for row in conn.execute(
+            f'PRAGMA index_info("{index_name}")'
+        ))
+        if index_columns == ("user_id", "idempotency"):
+            has_idempotency_guard = True
+            break
+    if not has_idempotency_guard:
+        raise ValueError("Not a LIFE database; ledger idempotency UNIQUE constraint missing")
     return len(tables)
 
 
