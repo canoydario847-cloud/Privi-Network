@@ -219,6 +219,39 @@ durable production database and customer support/refund procedures are still
 required. Never submit real payments to staging, a test wallet or an
 unverified merchant address.
 
+### Consistent SQLite snapshots and restore drills (preproduction)
+
+For an operator-managed **single-instance** LIFE SQLite deployment, use
+`tools/backup_verify.py` to create a transactionally consistent snapshot
+with SQLite's online backup API. The tool checks integrity and foreign-key
+consistency, restores into a disposable second SQLite database, computes a
+SHA-256 digest, and publishes the snapshot with `0600` permissions. It
+**refuses to overwrite** a prior snapshot or write inside a public web directory.
+
+```bash
+# Use a private filesystem outside the public web root. Do not use staging demo data.
+mkdir -p -m 700 /secure/life-backups
+python tools/backup_verify.py \
+  --source "${LIFE_DB_PATH}" \
+  --destination "/secure/life-backups/life-$(date -u +%Y%m%dT%H%M%SZ).sqlite3"
+# Copy the verified snapshot to independently encrypted, access-controlled
+# off-host storage through your organization's approved backup system.
+```
+
+This tool **does not** schedule backups, encrypt them, test an actual off-host
+restore, or certify recoverability after a host failure. It never sends
+customer data over the network. Operators must manage retention, encrypted
+off-host copies, encryption key recovery, retention/deletion policy, periodic
+full disaster-recovery drills, alerting and restore permissions. Run on a
+separate protected operator environment, **never** in the public web root or
+a GitHub artifact. Do not store production backups on Render's ephemeral disk.
+
+The production readiness gate
+`persistent_multi_instance_database_and_restore_test` stays **false**
+until durable independent storage and verified multi-instance migration/
+restore exercises are complete. Never treat this private snapshot test as
+approval to accept sensitive customer data or real token payments.
+
 ### Existing USDC paid service
 The `ledger-server` code already documents Privi Ledger's USDC-on-Base
 x402 paid audit tools and a $29 USDC/30-day Pro plan. Real receipt settlement
