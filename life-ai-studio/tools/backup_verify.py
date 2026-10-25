@@ -139,17 +139,32 @@ def verify_existing_copy(snapshot: Path, expected_sha256: str):
         raise ValueError("Backup copy must be a regular file, not a symlink")
     if metadata.st_mode & 0o077:
         raise ValueError("Backup copy is accessible to group/others; chmod 600 first")
-    snapshot = snapshot.resolve(strict=True)
-    digest = hashlib.sha256()
-    with snapshot.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    actual = digest.hexdigest()
-    if not hmac.compare_digest(actual, expected_sha256.lower()):
-        raise ValueError("Backup SHA-256 mismatch; refusing restore verification")
-    tables = verify_restore_drill(snapshot)
+    # Pin the source inode using O_NOFOLLOW. Do not hash one path and later
+    # reopen that path for the restore drill: a replaced/modified copy could
+    # otherwise be accepted after its original bytes passed the digest check.
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    with os.fdopen(os.open(snapshot, flags), "rb") as source_file:
+        opened = os.fstat(source_file.fileno())
+        if not stat.S_ISREG(opened.st_mode):
+            raise ValueError("Backup copy must be a regular file, not a symlink")
+        if opened.st_mode & 0o077:
+            raise ValueError("Backup copy is accessible to group/others; chmod 600 first")
+        with tempfile.TemporaryDirectory(prefix="life-verify-copy-") as temp_dir:
+            # Both digest and restore validation use this private, pinned copy,
+            # not a potentially mutable operator-controlled restore path.
+            frozen = Path(temp_dir) / "snapshot.sqlite3"
+            digest = hashlib.sha256()
+            with os.fdopen(os.open(frozen, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as output:
+                for chunk in iter(lambda: source_file.read(1024 * 1024), b""):
+                    digest.update(chunk)
+                    output.write(chunk)
+            actual = digest.hexdigest()
+            if not hmac.compare_digest(actual, expected_sha256.lower()):
+                raise ValueError("Backup SHA-256 mismatch; refusing restore verification")
+            tables = verify_restore_drill(frozen)
+            size = frozen.stat().st_size
     return {"backup": str(snapshot), "sha256": actual,
-            "bytes": snapshot.stat().st_size, "tables_verified": tables,
+            "bytes": size, "tables_verified": tables,
             "restore_drill": "passed", "encrypted_off_host_copy": "NOT_VERIFIED"}
 
 def main():
