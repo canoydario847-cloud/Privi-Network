@@ -12,6 +12,7 @@ import json
 import re
 import os
 import sqlite3
+import stat
 import tempfile
 from pathlib import Path
 
@@ -128,9 +129,17 @@ def verify_existing_copy(snapshot: Path, expected_sha256: str):
     """
     if not isinstance(expected_sha256, str) or not re.fullmatch(r"[a-fA-F0-9]{64}", expected_sha256):
         raise ValueError("Expected SHA-256 must be exactly 64 hexadecimal characters")
-    snapshot = Path(snapshot).expanduser().resolve(strict=True)
-    if not snapshot.is_file():
-        raise ValueError("Backup copy is not a regular file")
+    # Operator restores can contain account, session and project secrets.
+    # Refuse symlink indirection and copies exposed to other local users.
+    # This checks the final path only; operators must also secure parent
+    # directories and avoid concurrently writable/untrusted restore folders.
+    snapshot = Path(snapshot).expanduser().absolute()
+    metadata = snapshot.lstat()
+    if not stat.S_ISREG(metadata.st_mode):
+        raise ValueError("Backup copy must be a regular file, not a symlink")
+    if metadata.st_mode & 0o077:
+        raise ValueError("Backup copy is accessible to group/others; chmod 600 first")
+    snapshot = snapshot.resolve(strict=True)
     digest = hashlib.sha256()
     with snapshot.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
