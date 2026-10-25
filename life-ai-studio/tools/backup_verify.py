@@ -111,6 +111,41 @@ def validate_database(conn):
             break
     if not has_idempotency_guard:
         raise ValueError("Not a LIFE database; ledger idempotency UNIQUE constraint missing")
+    # Optional AI collaboration tables exist in current LIFE deployments but
+    # may be absent from earlier, core-only snapshots. When present, their
+    # ownership links must survive restore even without declared foreign keys.
+    optional_ai_columns = {
+        "runs": {"id", "project_id"},
+        "proposals": {"run_id", "project_id"},
+    }
+    for table, required in optional_ai_columns.items():
+        if table in tables:
+            present = {row[1] for row in conn.execute(f'PRAGMA table_info("{table}")')}
+            if required - present:
+                raise ValueError(f"Not a LIFE database; {table} ownership columns missing")
+    if "proposals" in tables and "runs" not in tables:
+        raise ValueError("Not a LIFE database; proposals present without runs")
+    if "runs" in tables:
+        orphan_run = conn.execute(
+            'SELECT 1 FROM "runs" r LEFT JOIN "projects" p '
+            'ON r.project_id = p.id WHERE p.id IS NULL LIMIT 1'
+        ).fetchone()
+        if orphan_run is not None:
+            raise ValueError("Not a LIFE database; orphaned AI runs")
+    if "proposals" in tables:
+        orphan_proposal = conn.execute(
+            'SELECT 1 FROM "proposals" q LEFT JOIN "runs" r ON q.run_id = r.id '
+            'LEFT JOIN "projects" p ON q.project_id = p.id '
+            'WHERE r.id IS NULL OR p.id IS NULL LIMIT 1'
+        ).fetchone()
+        if orphan_proposal is not None:
+            raise ValueError("Not a LIFE database; orphaned AI proposals")
+        mismatched_project = conn.execute(
+            'SELECT 1 FROM "proposals" q JOIN "runs" r ON q.run_id = r.id '
+            'WHERE q.project_id != r.project_id LIMIT 1'
+        ).fetchone()
+        if mismatched_project is not None:
+            raise ValueError("Not a LIFE database; AI proposal project mismatch")
     # The current LIFE schema does not declare foreign keys for these
     # relationships, so PRAGMA foreign_key_check alone misses orphaned
     # sessions, projects, project files and credit history. Reject a snapshot
