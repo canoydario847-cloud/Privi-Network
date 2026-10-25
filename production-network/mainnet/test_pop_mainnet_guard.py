@@ -23,6 +23,14 @@ class TestPoPMainnetGate(unittest.TestCase):
         self.assertFalse(result["financial_prvi_issued"])
         self.assertTrue(any("PoP BFT consensus" in x for x in result["blockers"]))
 
+    def test_invalid_manifest_never_omits_financial_safety_flags(self):
+        for manifest in (None, [], "", 42):
+            with self.subTest(manifest=manifest):
+                result = gate_module.gate(manifest)
+                self.assertEqual(result["status"], "NO_GO")
+                self.assertIs(result["production_mainnet_activated"], False)
+                self.assertIs(result["financial_prvi_issued"], False)
+
     def test_foreign_chain_settlement_is_refused(self):
         for field, bad in (("chain_family", "base"), ("iot_settlement", "bnb"),
                            ("target_protocol", "proof-of-stake"),
