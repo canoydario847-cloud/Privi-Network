@@ -1,5 +1,7 @@
 # Privi: the trust layer for AI agents
 
+[![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/canoydario847-cloud/privi-network)
+
 Remote MCP servers that make AI agents safer and accountable, paid in USDC through [x402](https://x402.org) with free tiers.
 Built by **Dario Canoy**, Privi World Co, Port Huron, Michigan. Live status of every service: **[Privi Hub](https://privi-hub.onrender.com)**.
 
@@ -7,7 +9,9 @@ Built by **Dario Canoy**, Privi World Co, Port Huron, Michigan. Live status of e
 { "mcpServers": {
     "privi-ledger": { "url": "https://privi-ledger.onrender.com/mcp" },
     "privi-verify": { "url": "https://privi-verify.onrender.com/mcp" },
-    "privi-anchor": { "url": "https://privi-anchor.onrender.com/mcp" } } }
+    "privi-anchor": { "url": "https://privi-anchor.onrender.com/mcp" },
+    "privi-quantum": { "url": "https://privi-quantum.onrender.com/mcp" },
+    "privi-call": { "url": "https://privi-call.onrender.com/mcp" } } }
 ```
 
 | Product | What it does | Start with |
@@ -18,13 +22,15 @@ Built by **Dario Canoy**, Privi World Co, Port Huron, Michigan. Live status of e
 | **Passport / KYA / Mandates** | Verifiable trust scores for agents, wallet-to-agent binding, and human-signed spending limits | `passport_gate`, `kya_check`, `mandate_check` (free) |
 | **Privi Live** | Kill switch, wallet-signed approvals, trust feed over WebSocket, a metered MCP gateway (optionally Guard-screened) and paid agent-to-agent rooms | `live_info`, `live_kill`, `gateway_create` |
 | **Privi Verify** | Manufacturing lot verification and chain of custody, pay per call | `privi_verify_lot` |
-| **Privi Anchor** | Proof of existence: anchor any hash on the Privi chain | `anchor_hashes`, `anchor_verify` (free) |
+| **Privi Anchor** | Proof of existence: anchor document or output hashes on Base while native Privi financial mainnet is not launched | `anchor_hashes`, `anchor_verify` (free) |
 
 | Folder | Service | MCP endpoint | MCP Registry |
 |---|---|---|---|
 | `ledger-server/` | Ledger, Guard, Scan, Passport, KYA, Mandates, Live, Fortress, Gov | `https://privi-ledger.onrender.com/mcp` | `io.github.canoydario847-cloud/privi-ledger` |
 | `mcp-server/` | Privi Verify | `https://privi-verify.onrender.com/mcp` | `io.github.canoydario847-cloud/privi-verify` |
 | `anchor-server/` | Privi Anchor | `https://privi-anchor.onrender.com/mcp` | `io.github.canoydario847-cloud/privi-anchor` |
+| `quantum-server/` | Privi Quantum (research optimization tools) | `https://privi-quantum.onrender.com/mcp` | `io.github.canoydario847-cloud/privi-quantum` (verify registry status) |
+| `call-server/` | Privi Call (agent-call routing) | `https://privi-call.onrender.com/mcp` | `io.github.canoydario847-cloud/privi-call` (verify registry status) |
 | `guard-sdk/` | Privi Guard clients (Python, JS) and Claude Code hook | — | PyPI / npm `privi-guard` |
 | `discovery/` | Agent discovery: A2A card, MCP manifest, llms.txt | `https://privi-discovery.onrender.com` | — |
 | `sites/` | Product websites and the Privi Hub | — | — |
