@@ -69,6 +69,25 @@ def validate_database(conn):
         actual = tuple(row[1] for row in sorted(columns, key=lambda row: row[5]) if row[5] > 0)
         if actual != expected:
             raise ValueError(f"Not a LIFE database; table {table} primary key mismatch")
+    # Restored account identity must retain the same uniqueness constraints as
+    # the live store. Without these, two accounts could share an email or a
+    # wallet and login / ownership lookups become ambiguous.
+    user_columns = {row[1]: row for row in conn.execute('PRAGMA table_info("users")')}
+    if not user_columns["email"][3]:
+        raise ValueError("Not a LIFE database; users email must be NOT NULL")
+    user_unique_indexes = conn.execute('PRAGMA index_list("users")').fetchall()
+    required_user_uniques = {("email",), ("wallet",)}
+    for index in user_unique_indexes:
+        if not index[2] or (len(index) > 4 and index[4]):
+            continue  # Non-unique and partial indexes cannot protect all accounts.
+        name = index[1].replace('"', '""')
+        columns = tuple(row[2] for row in conn.execute(f'PRAGMA index_info("{name}")'))
+        required_user_uniques.discard(columns)
+    if required_user_uniques:
+        raise ValueError(
+            "Not a LIFE database; users UNIQUE constraint missing: "
+            + ", ".join(", ".join(columns) for columns in sorted(required_user_uniques))
+        )
     # Idempotent LIFE credit charges rely on the composite uniqueness of
     # (user_id, idempotency). A restored database missing this constraint can
     # silently accept duplicate charges even when its columns and PKs match.
