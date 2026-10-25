@@ -31,7 +31,9 @@ def gate(manifest: dict, *, financial_mainnet: bool = True) -> dict:
     """Describe blockers without enabling chain state, funds, or deployment."""
     blockers = []
     if not isinstance(manifest, dict):
-        return {"status": "NO_GO", "blockers": ["Invalid mainnet manifest"]}
+        return {"status": "NO_GO", "production_mainnet_activated": False,
+                "financial_prvi_issued": False,
+                "blockers": ["Invalid mainnet manifest"]}
     if manifest.get("chain_family") != "privi-native":
         blockers.append("Native Privi chain identity required")
     if manifest.get("target_protocol") != "Point of Position":
