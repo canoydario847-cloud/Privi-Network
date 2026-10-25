@@ -34,6 +34,50 @@ def make_database(path):
         )
 
 
+@pytest.mark.parametrize("scenario, expected", [
+    ("valid", None),
+    ("orphan", "invalid wallet challenge ownership"),
+    ("null_nonce", "invalid wallet challenge ownership"),
+    ("missing_primary_key", "wallet challenge nonce primary key missing"),
+    ("missing_message", "wallet challenge columns missing"),
+    ("nullable_owner", "wallet challenge required fields nullable"),
+])
+def test_restored_wallet_challenge_ownership(tmp_path, scenario, expected):
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute(
+            "INSERT INTO users VALUES ('u1','member@example.test','hash',NULL,1,0)"
+        )
+        columns = (
+            "nonce_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, wallet TEXT NOT NULL, "
+            "message TEXT NOT NULL, expires INTEGER NOT NULL"
+        )
+        if scenario == "missing_primary_key":
+            columns = columns.replace("nonce_hash TEXT PRIMARY KEY", "nonce_hash TEXT")
+        if scenario == "missing_message":
+            columns = columns.replace("message TEXT NOT NULL, ", "")
+        if scenario == "nullable_owner":
+            columns = columns.replace("user_id TEXT NOT NULL", "user_id TEXT")
+        db.execute("CREATE TABLE challenges (" + columns + ")")
+        if scenario not in ("missing_primary_key", "missing_message", "nullable_owner"):
+            db.execute(
+                "INSERT INTO challenges VALUES (?,?,?,?,?)",
+                (
+                    None if scenario == "null_nonce" else "noncehash",
+                    "absent" if scenario == "orphan" else "u1",
+                    "0x" + "a" * 40, "synthetic-test-challenge", 123456,
+                ),
+            )
+    destination = tmp_path / "vault" / "backup.sqlite3"
+    if expected is None:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        with pytest.raises(ValueError, match=expected):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Invalid authentication state must not publish a backup"
+
+
 def test_creates_private_consistent_snapshot_and_restores(tmp_path):
     source = tmp_path / "life.sqlite3"
     make_database(source)
