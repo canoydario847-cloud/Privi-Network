@@ -53,3 +53,29 @@ The Render Life database (life_0gs7, Free tier) last reported status=available a
 ## Verify any subsequent authorized changes
 
 Check every affected service's Events for suspended, failed, and restart events; verify latest live deployment; check /health while warm; inspect HTTP 5xx after deployments; and check instance count/memory/CPU. If the new HTTP health probe causes restarts because it is not implemented correctly, revert the probe configuration while investigating. Free-plan idle sleeping remains an unresolved availability risk even with an HTTP health check.
+
+
+## Verified Render source-path and build-filter inventory (2026-10-25)
+
+All 12 static sites are configured to auto-deploy on every applicable main-branch commit and currently have **no build filter**. The following paths are taken from each existing Render service's \`publishPath\` setting, not inferred from names. **These are candidate include filters only**; confirm shared files before saving each filter in Render.
+
+| Static site | Verified publishPath | Candidate Render include path |
+|---|---|---|
+| privi-guard | sites/guard | sites/guard/** |
+| privi-hub | sites/hub | sites/hub/** |
+| privi-live | sites/live | sites/live/** |
+| privi-developers | sites/developers | sites/developers/** |
+| privi-chainflow | sites/chainflow | sites/chainflow/** |
+| privi-gov | sites/gov | sites/gov/** |
+| privi-mandates | sites/mandates | sites/mandates/** |
+| privi-kya | sites/kya | sites/kya/** |
+| privi-passport | sites/passport | sites/passport/** |
+| privi-fortress | sites/fortress | sites/fortress/** |
+| privi-world | sites/home | sites/home/** |
+| jose-site | jose-site | jose-site/** |
+
+Other services with no configured build filters: privi-discovery (main, Python, \`discovery/app.py\`), jose-backend (main, Node, \`jose-backend/src/server.js\`), and privi-life-ai-staging (branch \`feat/life-ai-studio-multiagent\`, Docker context \`./life-ai-studio\`). Do not change staging to \`main\` just to add a filter.
+
+All five paid MCP APIs already have the expected service-directory include filters: Anchor \`anchor-server/**\`, Ledger \`ledger-server/**\`, Verify \`mcp-server/**\`, Quantum \`quantum-server/**\`, Call \`call-server/**\`. Their deployment 502s cannot be resolved by redundant code-filter changes because explicit API-triggered deploys still cause restarts.
+
+**Change-control rule:** An include-only filter may *silently skip important updates* to shared configs, static assets, or transitive dependencies. Check dependencies and test the filter in an isolated branch/preview first. Do not assume filters are risk-free or that these notes were automatically applied.
