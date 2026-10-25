@@ -62,6 +62,39 @@ def test_login_throttle_is_persistent_and_temporarily_blocks_signins(monkeypatch
             (store._login_key(email, "testclient"),)).fetchone() is None
 
 
+def test_login_throttle_blocks_distributed_clients_and_recovers(monkeypatch):
+    import store
+
+    email = os.urandom(7).hex() + "@example.com"
+    password = "a-strong-password-for-life"
+    with TestClient(app.app) as browser:
+        assert browser.post("/api/auth/signup", json={
+            "email": email, "password": password
+        }).status_code == 200
+        assert browser.post("/api/auth/logout").status_code == 200
+        for i in range(store.LOGIN_MAX_FAILURES):
+            # Separate network origins each have only one failure.
+            store.login_failed(email, f"remote-client-{i}")
+        assert store.login_blocked(email, "never-seen-client")
+        blocked = browser.post("/api/auth/login", json={
+            "email": email, "password": password
+        })
+        assert blocked.status_code == 429
+        with store.transaction() as db:
+            account_key = store._login_email_key(email)
+            assert db.execute("SELECT failures FROM login_throttle WHERE key_hash=?",
+                              (account_key,)).fetchone()["failures"] == store.LOGIN_MAX_FAILURES
+
+        clock = store.now()
+        monkeypatch.setattr(store, "now", lambda: clock + store.LOGIN_WINDOW_SECONDS + 1)
+        assert browser.post("/api/auth/login", json={
+            "email": email, "password": password
+        }).status_code == 200
+        with store.transaction() as db:
+            assert db.execute("SELECT 1 FROM login_throttle WHERE key_hash=?",
+                              (account_key,)).fetchone() is None
+
+
 def test_database_operational_readiness_is_read_only_and_separate_from_launch(tmp_path, monkeypatch):
     import sqlite3
     import store
