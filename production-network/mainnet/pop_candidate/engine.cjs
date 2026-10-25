@@ -195,8 +195,10 @@ function verifyCertificate(committee, proposal, votes) {
   });
 }
 // This lock is ephemeral test logic and is not crash-safe. It MUST NOT be
-// plugged directly into a live validator. Signed-persistent lock + replay
-// across epochs/upgrades and multi-round locking need a real protocol.
+// plugged directly into a live validator. One instance represents a single
+// chain/genesis; no automatic recovery, network transport, or view change.
+// Match the durable research guard's conservative rule: epoch transitions
+// cannot clear a same-height commitment, even when the block hash is equal.
 class ResearchVoteLock {
   constructor(){this.commits=new Map();}
   accept(epoch,height,round,validatorId,blockHash) {
@@ -205,10 +207,13 @@ class ResearchVoteLock {
           "Invalid voter");
     check(typeof blockHash==="string" && HEX.test(blockHash),
           "Invalid vote block hash");
-    const key=JSON.stringify([epoch,height,validatorId]);
+    // Epoch is deliberately excluded. An unreviewed validator-set transition
+    // must not reset a previous same-height signing commitment.
+    const key=JSON.stringify([height,validatorId]);
     const old=this.commits.get(key);
-    check(!old || old===blockHash,"PoP conflicting-height double-sign rejected");
-    this.commits.set(key,blockHash);
+    check(!old || old.epoch===epoch,"PoP unreviewed same-height epoch transition rejected");
+    check(!old || old.blockHash===blockHash,"PoP conflicting-height double-sign rejected");
+    this.commits.set(key,{epoch,blockHash});
   }
 }
 module.exports={
