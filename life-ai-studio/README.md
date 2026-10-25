@@ -239,7 +239,11 @@ python tools/backup_verify.py \
 ```
 
 After retrieving a copy from approved off-host storage to a **private operator
-machine**, compare it to the SHA-256 value saved separately from the original
+machine**, place it outside any public web directory and restrict its local
+permissions to the operator (`chmod 600 /private/restored/life-copy.sqlite3`).
+The verifier rejects symlinks and group/world-readable restored files. Keep
+the parent directory private and inaccessible to untrusted local users.
+Compare the copy to the SHA-256 value saved separately from the original
 backup report, then perform a fresh SQLite restore drill:
 
 ```bash
