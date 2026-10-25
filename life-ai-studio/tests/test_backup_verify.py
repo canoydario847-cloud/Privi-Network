@@ -182,6 +182,7 @@ def test_independently_restored_copy_matches_trusted_digest_and_restores(tmp_pat
     created = backup.backup_and_verify(source, local)
     restored_copy = tmp_path / "restored-from-other-host.sqlite3"
     shutil.copyfile(local, restored_copy)
+    os.chmod(restored_copy, 0o600)
     verified = backup.verify_existing_copy(restored_copy, created["sha256"])
     assert verified["sha256"] == created["sha256"]
     assert verified["restore_drill"] == "passed"
@@ -195,6 +196,7 @@ def test_modified_restored_copy_rejected_before_restore(tmp_path):
     created = backup.backup_and_verify(source, local)
     altered = tmp_path / "altered.sqlite3"
     shutil.copyfile(local, altered)
+    os.chmod(altered, 0o600)
     with altered.open("ab") as handle:
         handle.write(b"changed after original backup")
     with pytest.raises(ValueError, match="SHA-256 mismatch"):
@@ -206,6 +208,7 @@ def test_existing_copy_requires_trusted_digest_and_real_life_schema(tmp_path):
     with sqlite3.connect(str(unrelated)) as db:
         db.execute("CREATE TABLE unrelated (id INTEGER)")
     actual_hash = hashlib.sha256(unrelated.read_bytes()).hexdigest()
+    os.chmod(unrelated, 0o600)
     with pytest.raises(ValueError, match="64 hexadecimal"):
         backup.verify_existing_copy(unrelated, "invalid")
     with pytest.raises(ValueError, match="missing core tables"):
@@ -215,6 +218,7 @@ def test_existing_copy_requires_trusted_digest_and_real_life_schema(tmp_path):
 def test_verify_copy_cli_requires_digest_and_reports_failure(tmp_path):
     source = tmp_path / "life.sqlite3"
     make_database(source)
+    os.chmod(source, 0o600)
     result = subprocess.run(
         [sys.executable, str(SPEC.origin), "--verify-copy", str(source),
          "--expected-sha256", "0" * 64],
@@ -222,3 +226,23 @@ def test_verify_copy_cli_requires_digest_and_reports_failure(tmp_path):
     )
     assert result.returncode != 0
     assert "SHA-256 mismatch" in result.stderr
+
+
+def test_verify_copy_rejects_world_readable_file_before_digest(tmp_path):
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    os.chmod(source, 0o644)
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    with pytest.raises(ValueError, match="chmod 600"):
+        backup.verify_existing_copy(source, digest)
+
+
+def test_verify_copy_rejects_symlink_even_to_private_backup(tmp_path):
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    os.chmod(source, 0o600)
+    alias = tmp_path / "link.sqlite3"
+    alias.symlink_to(source)
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    with pytest.raises(ValueError, match="not a symlink"):
+        backup.verify_existing_copy(alias, digest)
