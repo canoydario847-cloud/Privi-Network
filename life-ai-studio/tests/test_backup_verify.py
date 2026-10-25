@@ -49,6 +49,55 @@ def test_creates_private_consistent_snapshot_and_restores(tmp_path):
         assert db.execute("SELECT value FROM settings").fetchone()[0] == "cosmic"
 
 
+@pytest.mark.parametrize("scenario, expected", [
+    ("valid", None),
+    ("orphan_run", "orphaned AI runs"),
+    ("missing_run", "orphaned AI proposals"),
+    ("missing_project", "orphaned AI proposals"),
+    ("wrong_project", "AI proposal project mismatch"),
+])
+def test_restored_ai_collaboration_references(tmp_path, scenario, expected):
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.executescript(
+            "CREATE TABLE runs (id TEXT PRIMARY KEY, project_id TEXT NOT NULL);"
+            "CREATE TABLE proposals (id TEXT PRIMARY KEY, run_id TEXT NOT NULL,"
+            " project_id TEXT NOT NULL);"
+            "INSERT INTO users VALUES ('u1','member@example.test','hash',NULL,1,0);"
+            "INSERT INTO projects VALUES ('p1','u1','First','code',1);"
+            "INSERT INTO projects VALUES ('p2','u1','Second','code',1);"
+            "INSERT INTO runs VALUES ('r1','p1');"
+        )
+        if scenario == "orphan_run":
+            db.execute("INSERT INTO runs VALUES ('r2','absent')")
+        else:
+            run = "absent" if scenario == "missing_run" else "r1"
+            project = "absent" if scenario == "missing_project" else (
+                "p2" if scenario == "wrong_project" else "p1"
+            )
+            db.execute("INSERT INTO proposals VALUES ('q1',?,?)", (run, project))
+    destination = tmp_path / "vault" / "backup.sqlite3"
+    if expected is None:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        with pytest.raises(ValueError, match=expected):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Invalid AI ownership must not publish a backup"
+
+
+def test_restore_rejects_proposals_without_run_table(tmp_path):
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute(
+            "CREATE TABLE proposals (id TEXT PRIMARY KEY, run_id TEXT, project_id TEXT)"
+        )
+    with backup.readonly_connection(source) as db:
+        with pytest.raises(ValueError, match="proposals present without runs"):
+            backup.validate_database(db)
+
+
 def test_existing_backup_is_not_overwritten(tmp_path):
     source, dest = tmp_path / "life.sqlite3", tmp_path / "existing.sqlite3"
     make_database(source)
