@@ -111,7 +111,7 @@ No provider API keys are configured and no swaps or PRVI purchases can be made
 in ephemeral SQLite, so preview state resets on restart or redeploy. Do not use
 real emails, passwords, personal files, live wallet credentials or customer data.
 This is a UI/functional demonstration, not a public membership launch.
-\n## Privi Cogvative Signature™ — code authorship and royalty metering
+\n## Privi Cognitive Signatures — code authorship and royalty metering
 © 2026 Privi World Co (this original platform module); underlying code rights
 remain governed by each contributor's agreement and each component's license.
 
