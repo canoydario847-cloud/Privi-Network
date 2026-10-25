@@ -37,6 +37,30 @@ class TestPoPMainnetGate(unittest.TestCase):
         self.assertIs(result["financial_prvi_issued"], False)
         self.assertIs(result["production_mainnet_activated"], False)
 
+    def test_missing_and_invalid_json_cli_fail_closed(self):
+        import contextlib
+        import io
+        import sys
+        import tempfile
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as directory:
+            file_path = Path(directory) / "manifest.json"
+            for exists in (False, True):
+                with self.subTest(exists=exists):
+                    if exists:
+                        file_path.write_text("not json", encoding="utf-8")
+                    output = io.StringIO()
+                    with patch.object(sys, "argv", ["guard", "--manifest", str(file_path)]):
+                        with contextlib.redirect_stdout(output):
+                            with self.assertRaises(SystemExit) as caught:
+                                gate_module.main()
+                    self.assertEqual(caught.exception.code, 3)
+                    result = json.loads(output.getvalue())
+                    self.assertEqual(result["status"], "NO_GO")
+                    self.assertIs(result["production_mainnet_activated"], False)
+                    self.assertIs(result["financial_prvi_issued"], False)
+
     def test_foreign_chain_settlement_is_refused(self):
         for field, bad in (("chain_family", "base"), ("iot_settlement", "bnb"),
                            ("target_protocol", "proof-of-stake"),
