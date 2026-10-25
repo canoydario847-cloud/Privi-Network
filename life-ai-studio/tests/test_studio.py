@@ -62,6 +62,37 @@ def test_login_throttle_is_persistent_and_temporarily_blocks_signins(monkeypatch
             (store._login_key(email, "testclient"),)).fetchone() is None
 
 
+def test_database_operational_readiness_is_read_only_and_separate_from_launch(tmp_path, monkeypatch):
+    import sqlite3
+    import store
+
+    liveness = client.get("/health")
+    available = client.get("/readyz")
+    assert liveness.status_code == 200
+    assert available.status_code == 200
+    assert available.json()["check"] == "database_readability"
+    assert available.json()["production_launch_approved"] is False
+    assert client.get("/api/production-readiness").json()["ready"] is False
+
+    missing = tmp_path / "missing.sqlite3"
+    monkeypatch.setattr(store, "DB", str(missing))
+    unavailable = client.get("/readyz")
+    assert unavailable.status_code == 503
+    assert unavailable.json() == {
+        "service": "privi-life-ai-studio", "check": "database_readability",
+        "production_launch_approved": False, "status": "unavailable",
+    }
+    assert not missing.exists(), "Monitoring must never create a missing DB"
+    assert client.get("/health").status_code == 200
+
+    wrong = tmp_path / "unrelated.sqlite3"
+    with sqlite3.connect(str(wrong)) as db:
+        db.execute("CREATE TABLE unrelated (id INTEGER)")
+    monkeypatch.setattr(store, "DB", str(wrong))
+    assert client.get("/readyz").status_code == 503
+    assert client.get("/api/production-readiness").json()["ready"] is False
+
+
 def test_production_readiness_is_truthful_and_separate_from_health():
     health = client.get("/health")
     readiness = client.get("/api/production-readiness")
