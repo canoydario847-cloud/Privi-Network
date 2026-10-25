@@ -92,6 +92,33 @@ def test_symlinked_backup_parent_into_public_is_rejected(tmp_path):
     assert not (web_root / "life-copy.sqlite3").exists()
 
 
+def test_backup_refuses_existing_group_accessible_vault(tmp_path):
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    vault = tmp_path / "shared-vault"
+    vault.mkdir()
+    os.chmod(vault, 0o750)
+    destination = vault / "backup.sqlite3"
+    with pytest.raises(ValueError, match="mode 0700"):
+        backup.backup_and_verify(source, destination)
+    assert not destination.exists()
+    os.chmod(vault, 0o700)
+    assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+
+
+def test_backup_refuses_symlink_to_private_vault(tmp_path):
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    vault = tmp_path / "private-vault"
+    vault.mkdir(mode=0o700)
+    alias = tmp_path / "vault-alias"
+    alias.symlink_to(vault, target_is_directory=True)
+    destination = alias / "backup.sqlite3"
+    with pytest.raises(ValueError, match="real private directory"):
+        backup.backup_and_verify(source, destination)
+    assert not (vault / "backup.sqlite3").exists()
+
+
 def test_unrelated_valid_sqlite_is_not_accepted_as_life_backup(tmp_path):
     source = tmp_path / "unrelated.sqlite3"
     with sqlite3.connect(str(source)) as db:
