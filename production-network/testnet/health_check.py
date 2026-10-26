@@ -31,6 +31,8 @@ def check(nodes, expected_chain):
     chains = {n['network'] for n in nodes}
     if len(chains) != 1 or (expected_chain and expected_chain not in chains):
         raise ValueError('Chain IDs disagree')
+    if any(type(n.get('height')) is not int or n['height'] < 1 for n in nodes):
+        raise ValueError('Invalid CometBFT block height')
     heights = [n['height'] for n in nodes]
     if min(heights) < 1 or max(heights) - min(heights) > 10:
         raise ValueError('Block heights are not synchronized')
