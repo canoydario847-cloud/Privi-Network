@@ -3,9 +3,13 @@
 import argparse
 import json
 import urllib.request
+import urllib.parse
 
 
 def status(url):
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in ('', '/'):
+        raise ValueError('RPC must be an HTTP(S) origin without credentials, path, query or fragment')
     with urllib.request.urlopen(url.rstrip('/') + '/status', timeout=8) as response:
         result = json.load(response)['result']
     info = result['node_info']
