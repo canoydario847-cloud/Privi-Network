@@ -351,3 +351,51 @@ Test with synthetic 4- and 7-member research committees:
 consensus protocol, genuine validator key custody and external
 attestations, authenticated finalized chain state, durable recovery,
 and independently validated operator processes.
+
+
+## Deterministic non-financial state-binding experiment (research only)
+
+The `toy_state_commitment.cjs` module adds a **deliberately isolated
+counter-state application** to test the next consensus boundary: a
+valid Ed25519 PoP certificate and correct parent hash do not by
+themselves prove what an application executed. It uses no financial
+transfers, staking, coins, production IoT data, wallets or ABCI state.
+
+For up to 64 supplied candidate blocks, the verifier:
+
+1. Checks the caller-provided starting state against a separately
+   expected SHA-256 state digest. This digest is *not* independently
+   proven canonical or derived from a production genesis.
+2. Checks a synthetic research checkpoint **issuer signature** against
+   a separately pinned research governance public key and verifies
+   each committee-admitted quorum certificate and contiguous
+   parent/block hashes using the existing research modules.
+3. Executes canonical, bounded counter-increment operations with
+   per-account strict monotonically increasing nonces, integer
+   overflow safeguards, deterministic key ordering and account/operation
+   limits. It rejects all financial, unrecognized or malformed opcodes.
+4. Recomputes each ordered operation digest, resulting state digest,
+   and candidate block hash from chain/genesis/epoch, height, parent,
+   operations and resulting state. The signed candidate must bind to
+   this *same* computed commitment; an inconsistent, replayed or
+   forged transition refuses the **whole** sequence.
+
+This is an offline educational execution model for reasoning about
+commitment binding—not an implementation of the Cosmos SDK bank keeper,
+ABCI block execution, CometBFT voting, Privi validator finality, IoT
+accounting, token vesting, staking or PRVI's 1-billion cap.
+
+The result explicitly states
+`validatesLiveCosmosEvmState:false`,
+`startingStateExternallyAuthenticated:false`,
+`checkpointFinalityVerified:false`,
+`productionConsensus:false` and `finalized:false`.
+
+Regression suite:
+
+    node --test production-network/mainnet/pop_candidate/test_toy_state_commitment.cjs
+
+**Financial mainnet remains NO-GO.** The next substantive engineering
+work is a formally reviewed state commitment and actual independently
+verified *Cosmos EVM* execution proof plus the full PoP consensus
+protocol. Passing this toy test proves neither.
