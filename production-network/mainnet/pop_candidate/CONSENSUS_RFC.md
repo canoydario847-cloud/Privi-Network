@@ -233,3 +233,40 @@ Offline adversarial tests:
 
     node --test production-network/mainnet/pop_candidate/test_epoch_overlap.cjs
 
+
+
+## Consecutive signed candidate certificate ancestry (offline research)
+
+The opt-in `candidate_ancestry.cjs` preflight checks a **bounded** (1–256)
+series of synthetic research proposals and Ed25519 voting certificates
+against an explicitly supplied `{height, blockHash}` checkpoint:
+
+1. The committee must be the exact object previously returned by verified
+   governance-root-signed validator admissions.
+2. Each candidate must have the next consecutive height, its previous-block
+   hash must match the preceding signed candidate (or the starting
+   checkpoint), and no candidate hash may recur.
+3. Every proposal and quorum is independently checked using
+   `verifyCertificate`: correct PoP proposer, signed exact height/round/
+   previous/current hashes, admitted distinct voting keys and quorum.
+4. Any missing, duplicate, reordered, disconnected or unsigned certificate
+   refuses the **entire** sequence. It also rejects an invalid/missing
+   checkpoint and chain-height overflow.
+
+The response reports `finalized: false`,
+`verifiesExecution: false`, `verifiesCheckpointAuthenticity: false` and
+`productionConsensus: false`. A **caller-supplied** checkpoint is not
+a trustworthy canonical ledger or verified state root. A properly signed
+candidate can still represent unavailable, unexecuted or invalid state,
+and this preflight does NOT establish a BFT network's global safety,
+independent block availability, finalized ancestry, fork choice or
+actual PoP node integration. Nor does it implement finalized epoch handoff
+or permit financial PRVI mainnet activation.
+
+Offline adversarial regression:
+
+    node --test production-network/mainnet/pop_candidate/test_candidate_ancestry.cjs
+
+**NO-GO:** Only a production chain with externally authenticated
+finalized checkpoints, independent validator evidence, audited
+consensus execution and recovery can establish genuine mainnet finality.
