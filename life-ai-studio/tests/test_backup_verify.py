@@ -877,3 +877,29 @@ def test_restore_rejects_broken_stripe_checkout_audit_history(tmp_path, scenario
         with pytest.raises(ValueError, match=expected):
             backup.backup_and_verify(source, destination)
         assert not destination.exists(), "Broken Stripe audit history must not publish a backup"
+
+@pytest.mark.parametrize("balance,valid", [
+    (0, True),
+    (25, True),
+    (-1, False),
+    (None, False),
+    ("not-a-number", False),
+    (1.5, False),
+])
+def test_restore_rejects_malformed_member_credit_balances(tmp_path, balance, valid):
+    """Synthetic member balances must be nonnegative SQLite integers."""
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute(
+            "INSERT INTO users (id,email,pwdhash,wallet,member_since,credits) "
+            "VALUES (?,?,?,?,?,?)",
+            ("u1", "synthetic@example.invalid", "synthetic-hash", None, 1, balance),
+        )
+    destination = tmp_path / "vault" / "snapshot.sqlite3"
+    if valid:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        with pytest.raises(ValueError, match="invalid member credit balance"):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Unsafe balance must not publish a snapshot"
