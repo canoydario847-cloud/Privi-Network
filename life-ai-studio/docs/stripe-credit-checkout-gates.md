@@ -1,6 +1,6 @@
 # Stripe Checkout for LIFE credits — test-mode integration contract
 
-Status: DESIGN / NOT ACTIVATED. Stripe account connection alone does not enable payment fulfillment.
+Status: GATED IMPLEMENTATION / NOT ACTIVATED. Stripe account connection alone does not enable payment fulfillment.
 
 ## Scope
 - Sell **non-transferable LIFE AI service credits** (not PRVI, PRIV, USDC, or an investment).
@@ -8,7 +8,7 @@ Status: DESIGN / NOT ACTIVATED. Stripe account connection alone does not enable 
 - Never enable the existing native PRVI/BNB payment switches as part of Stripe work.
 - Set credit pack prices and exact credits per pack only after owner approval.
 
-## Required server flow (not implemented yet)
+## Required server flow and release gates
 1. Authenticated user selects an allowlisted pack ID. The server resolves the fixed price ID, currency and credit quantity from trusted configuration; never trust client-supplied amounts or credits.
 2. Server creates a Stripe Checkout Session in payment mode, attaching an opaque internal member ID and pack ID as metadata. Use a fixed allowed success/cancel origin and authenticate all credit-account reads.
 3. Verify the Stripe webhook signature against the **raw request body** and endpoint signing secret; reject malformed or replayed events. Never fulfill from a browser redirect.
@@ -33,3 +33,12 @@ Official integration references:
 - One-time price: `price_1UUeYxBQR6zcBQ9LjHniLyKv` — USD 1000 cents ($10.00); **inactive**.
 - No checkout links, sessions, webhooks, credit fulfillment or live products were enabled by this catalog setup.
 - Activate **test-mode-only** checkout after signed webhook handling, durable idempotent ledger, account authorization and automated sandbox tests pass; do not activate real-money billing without a separate review.
+
+## Code progress (not a production approval)
+- `stripe_credits.py` uses Stripe's official Python SDK to create a fixed-price hosted Checkout Session and verify webhook signatures against the raw body.
+- The server independently re-fetches the paid Checkout Session and its line items, validates amount/currency/price, and credits the recorded member exactly once using a durable SQLite transaction.
+- `/api/payments/stripe/status`, `/api/payments/stripe/checkout` and `/api/payments/stripe/webhook` are implemented behind fail-closed gates; the Wallet page only displays the payment button when the backend reports ready.
+- Configure the webhook endpoint at `https://<reviewed-life-domain>/api/payments/stripe/webhook` with events `checkout.session.completed` and `checkout.session.async_payment_succeeded` only. Keep the signing secret server-side.
+- Required server-only settings: `LIFE_STRIPE_CHECKOUT_ENABLED`, `LIFE_STRIPE_MODE`, `LIFE_STRIPE_SECRET_KEY`, `LIFE_STRIPE_WEBHOOK_SECRET`, `LIFE_STRIPE_PRICE_ID`; live mode additionally requires `LIFE_STRIPE_LIVE_APPROVED=1`, `LIFE_STAGING_ONLY=0`, `LIFE_COOKIE_SECURE=1`, and HTTPS `PUBLIC_ORIGIN`.
+- Checked-in defaults keep checkout and live approval **OFF**. Never copy live secrets to Git. Both Stripe catalog products and prices were created **inactive**.
+- Before any live activation: implement and test refunds/disputes/reversals, off-host database backups and restore, customer support/reconciliation, fraud controls, and independent security/privacy review. SQLite single-instance MVP is not approved for financial production.
