@@ -39,6 +39,14 @@ class HealthCheckTest(unittest.TestCase):
             with self.subTest(missing=missing), self.assertRaisesRegex(ValueError, 'Missing'):
                 check(nodes, 'privi-testnet-1')
 
+    def test_invalid_block_heights_rejected(self):
+        for height in (None, '100', 0, -1, True, 100.5):
+            nodes = [{'node_id': str(n), 'network': 'privi-testnet-1',
+                      'height': 100, 'catching_up': False} for n in range(4)]
+            nodes[0]['height'] = height
+            with self.subTest(height=height), self.assertRaisesRegex(ValueError, 'Invalid'):
+                check(nodes, 'privi-testnet-1')
+
     def test_lag_rejected(self):
         nodes = [{'node_id': str(n), 'network': 'privi-testnet-1', 'height': 100+n*20,
                   'catching_up': False} for n in range(4)]
