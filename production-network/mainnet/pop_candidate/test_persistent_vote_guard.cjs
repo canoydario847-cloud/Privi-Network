@@ -231,6 +231,43 @@ test("symlinked ancestor of research vote lock is rejected",()=>{
   } finally {fs.rmSync(root,{recursive:true,force:true});}
 });
 
+
+test("caller-supplied committee cannot obtain a research signature or reserve a height",()=>{
+  const f=fixture(),dir=tempRoot();
+  try {
+    const p=f.proposal(),v=f.committee.validators[0];
+    const input={lockDirectory:dir,proposal:p,privateKey:f.keysById.get(v.id)};
+    const cloned={...f.committee};
+    // A shallow copy preserves the proposer, signatures and key map.
+    // It does not carry proof that the actual governance root admitted it.
+    assert.throws(()=>signCommitWithResearchLock({...input,committee:cloned}),
+                  /Unverified PoP committee/);
+    assert.deepEqual(fs.readdirSync(dir),[],"forged committee cannot leave signing state");
+    const forgedQuorum={...f.committee,quorum:1};
+    assert.throws(()=>signCommitWithResearchLock({...input,committee:forgedQuorum}),
+                  /Unverified PoP committee/);
+    assert.deepEqual(fs.readdirSync(dir),[]);
+    // A genuine admitted committee can still produce a research-only signature.
+    assert.ok(signCommitWithResearchLock({...input,committee:f.committee}).signature);
+  } finally {fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test("mutated signer-map cannot obtain a research signature",()=>{
+  const f=fixture(),dir=tempRoot(),p=f.proposal();
+  const proposer=f.committee.byId.get(p.proposerId);
+  const voter=f.committee.validators[0];
+  const input={lockDirectory:dir,committee:f.committee,proposal:p,
+               privateKey:f.keysById.get(voter.id)};
+  try {
+    f.committee.byId.set(p.proposerId,{...proposer});
+    assert.throws(()=>signCommitWithResearchLock(input),/membership changed/);
+    assert.deepEqual(fs.readdirSync(dir),[]);
+  } finally {
+    f.committee.byId.set(p.proposerId,proposer);
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
+});
+
 test("unauthorized key or malformed proposal cannot obtain a lock",()=>{
   const f=fixture(),dir=tempRoot();
   try {
