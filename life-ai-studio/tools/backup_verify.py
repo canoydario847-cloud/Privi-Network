@@ -290,6 +290,28 @@ def validate_database(conn):
         ).fetchone()
         if mismatch is not None:
             raise ValueError("Not a LIFE database; Stripe checkout ledger mismatch")
+    # Verify the reverse relationship too: a Stripe credit ledger entry with
+    # no matching Checkout order cannot be independently reconciled after a
+    # restore. Earlier snapshots may lack the optional orders table, but they
+    # must not contain orphaned Stripe credit entries.
+    stripe_ledger = (
+        "SELECT 1 FROM \"ledger\" WHERE "
+        "service = 'stripe_life_credits' OR idempotency LIKE 'stripe:%' LIMIT 1"
+    )
+    if "stripe_checkout_sessions" not in tables:
+        if conn.execute(stripe_ledger).fetchone() is not None:
+            raise ValueError("Not a LIFE database; Stripe credit ledger without checkout orders")
+    else:
+        orphan_credit = conn.execute(
+            'SELECT 1 FROM "ledger" l '
+            'LEFT JOIN "stripe_checkout_sessions" s '
+            "ON l.idempotency = 'stripe:' || s.session_id "
+            "WHERE (l.service = 'stripe_life_credits' "
+            "OR l.idempotency LIKE 'stripe:%') "
+            'AND s.session_id IS NULL LIMIT 1'
+        ).fetchone()
+        if orphan_credit is not None:
+            raise ValueError("Not a LIFE database; orphaned Stripe credit ledger entry")
     # Native PRVI payment tables are disabled in staging, but a recoverable
     # snapshot must preserve their customer-to-quote-to-redemption ownership.
     # The current schema has no declared foreign keys for these relationships.
