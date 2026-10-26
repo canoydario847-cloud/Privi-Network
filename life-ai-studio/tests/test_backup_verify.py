@@ -1134,3 +1134,32 @@ def test_restore_rejects_cogvative_wallet_link_ownership(tmp_path, table, scenar
         with pytest.raises(ValueError, match=expected):
             backup.backup_and_verify(source, destination)
         assert not destination.exists(), "Do not publish cross-account wallet links"
+
+
+@pytest.mark.parametrize("email", ["", "   ", b"binary@example.test"])
+def test_backup_rejects_blank_or_binary_member_email(tmp_path, email):
+    source = tmp_path / "bad-email.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute(
+            "INSERT INTO users (id, email, pwdhash, wallet, member_since, credits) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            ("u1", email, "synthetic-hash", None, 1, 0),
+        )
+    destination = tmp_path / "vault" / "backup.sqlite3"
+    with pytest.raises(ValueError, match="invalid member email identity"):
+        backup.backup_and_verify(source, destination)
+    assert not destination.exists()
+
+
+def test_backup_accepts_nonempty_text_member_email(tmp_path):
+    source = tmp_path / "good-email.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute(
+            "INSERT INTO users (id, email, pwdhash, wallet, member_since, credits) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            ("u1", "member@example.test", "synthetic-hash", None, 1, 0),
+        )
+    destination = tmp_path / "vault" / "backup.sqlite3"
+    assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
