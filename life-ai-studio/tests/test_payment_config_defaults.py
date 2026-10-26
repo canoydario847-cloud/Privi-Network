@@ -36,6 +36,12 @@ class PaymentDefaultSafetyTests(unittest.TestCase):
         self.assertEqual(len(values), 1)
         self.assertEqual(values[0], "1", "sample config must default to disposable staging")
 
+    def test_staging_sample_disables_trial_credit_issuance(self):
+        values = [line.partition("=")[2].strip()
+                  for line in ENV.read_text(encoding="utf-8").splitlines()
+                  if line.strip().startswith("LIFE_DEV_TRIAL_CREDITS=")]
+        self.assertEqual(values, ["0"], "sample must not issue trial credits by default")
+
     def test_runtime_defaults_to_staging_if_flag_is_missing(self):
         app_path = ENV.parent / "app.py"
         tree = ast.parse(app_path.read_text(encoding="utf-8"))
