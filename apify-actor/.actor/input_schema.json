@@ -1,0 +1,23 @@
+{
+  "title": "Post-Quantum TLS Check input",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "hosts": {
+      "title": "Hosts",
+      "type": "array",
+      "description": "Public hostnames or URLs to check, optionally with a TLS port (443, 8443, 4443, 465, 636, 853, 993, 995). Up to 500 per run.",
+      "editor": "stringList",
+      "prefill": ["www.cloudflare.com", "github.com", "www.irs.gov"]
+    },
+    "timeoutSeconds": {
+      "title": "Timeout per probe (seconds)",
+      "type": "integer",
+      "description": "How long to wait for each TLS reply.",
+      "default": 6,
+      "minimum": 2,
+      "maximum": 20
+    }
+  },
+  "required": ["hosts"]
+}
