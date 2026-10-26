@@ -357,7 +357,7 @@ def test_backup_accepts_consistent_account_project_and_ledger_ownership(tmp_path
         db.execute("INSERT INTO projects VALUES ('p1', 'u1', 'title', 'code', 100)")
         db.execute("INSERT INTO files VALUES ('p1', 'file.txt', 'private', 1)")
         db.execute(
-            "INSERT INTO ledger VALUES ('l1', 'u1', 'charge', 'agent', 1, 'idem1', 100)"
+            "INSERT INTO ledger VALUES ('l1', 'u1', 'charge', 'agent', -1, 'idem1', 100)"
         )
     destination = tmp_path / "vault" / "owned-copy.sqlite3"
     assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
@@ -1017,3 +1017,37 @@ def test_backup_rejects_invalid_private_file_versions(tmp_path, version, accepte
         with pytest.raises(ValueError, match="invalid project file version"):
             backup.backup_and_verify(source, destination)
         assert not destination.exists(), "Invalid private files must not publish a backup"
+
+
+@pytest.mark.parametrize("kind,amount,accepted", [
+    ("credit", 2, True),
+    ("charge", -2, True),
+    ("charge", 0, True),  # store.charge permits zero-cost usage.
+    ("credit", 0, False),
+    ("credit", -2, False),
+    ("charge", 2, False),
+    ("refund", 2, False),
+    (None, 2, False),
+    ("credit", None, False),
+    ("credit", "not-an-amount", False),
+    ("charge", 1.5, False),
+])
+def test_restore_rejects_invalid_credit_ledger_amounts(tmp_path, kind, amount, accepted):
+    """A restore must not publish a ledger with invalid credit or debit entries."""
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute(
+            "INSERT INTO users VALUES ('u1','synthetic@example.invalid','hash',NULL,1,0)"
+        )
+        db.execute(
+            "INSERT INTO ledger VALUES (?,?,?,?,?,?,?)",
+            ("l1", "u1", kind, "agent_run", amount, "idem1", 100),
+        )
+    destination = tmp_path / "vault" / "snapshot.sqlite3"
+    if accepted:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        with pytest.raises(ValueError, match="invalid credit ledger amount or kind"):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Malformed credit history must not publish a backup"
