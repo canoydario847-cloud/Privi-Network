@@ -146,7 +146,24 @@ function proposalFields(committee,height,round,previousBlockHash,blockHash,propo
   return [committee.chainId,committee.genesisHash,committee.epoch,height,
           round,previousBlockHash,blockHash,proposerId];
 }
+// Every public verification/signing path must require the exact committee
+// produced by governance-signature validation. A caller-supplied map, even
+// with matching keys, must never acquire research signing authority.
+function assertValidatedCommittee(committee) {
+  check(committee && validatedCommittees.has(committee),
+        "Unverified PoP committee: parse signed governance admission first");
+  const count=committee.validators.length;
+  check(count>=4 && count<=31 &&
+        committee.quorum===Math.floor(2*count/3)+1 &&
+        committee.byId instanceof Map && committee.byId.size===count,
+        "PoP committee quorum or membership metadata inconsistent");
+  for(const validator of committee.validators) {
+    check(committee.byId.get(validator.id)===validator,
+          "PoP committee membership changed after admission");
+  }
+}
 function verifyProposal(committee, proposal) {
+  assertValidatedCommittee(committee);
   check(proposal && typeof proposal==="object" && !Array.isArray(proposal),
         "Proposal missing");
   const {height,round,previousBlockHash,blockHash,proposerId,signature:proposalSig}=proposal;
@@ -160,16 +177,8 @@ function voteFields(proposalFields, validatorId) {
   return [...proposalFields,validatorId];
 }
 function verifyCertificate(committee, proposal, votes) {
-  check(committee && validatedCommittees.has(committee),
-        "Unverified PoP committee: parse signed governance admission first");
-  const count=committee.validators.length;
-  check(count>=4 && count<=31 && committee.quorum===Math.floor(2*count/3)+1 &&
-        committee.byId instanceof Map && committee.byId.size===count,
-        "PoP committee quorum or membership metadata inconsistent");
-  for(const validator of committee.validators){
-    check(committee.byId.get(validator.id)===validator,
-          "PoP committee membership changed after admission");
-  }
+  // verifyProposal enforces attested committee identity and frozen membership
+  // before the caller can use a proposal in either a certificate or signature.
   const fields=verifyProposal(committee,proposal);
   check(Array.isArray(votes) && votes.length <= committee.validators.length,
         "Malformed PoP vote certificate");
