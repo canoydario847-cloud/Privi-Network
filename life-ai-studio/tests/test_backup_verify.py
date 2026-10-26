@@ -774,6 +774,7 @@ def test_backup_rejects_null_primary_key_data(tmp_path, table, statement):
     ("valid", None),
     ("null_key", "invalid login throttle state"),
     ("malformed_hash", "invalid login throttle state"),
+    ("blob_hash", "invalid login throttle state"),
     ("negative_failures", "invalid login throttle state"),
     ("bad_lockout", "invalid login throttle state"),
     ("missing_pk", "login throttle primary key missing"),
@@ -804,7 +805,9 @@ def test_restore_rejects_invalid_persisted_login_throttle(tmp_path, scenario, ex
                 "INSERT INTO login_throttle VALUES (?,?,?,?)",
                 (
                     None if scenario == "null_key" else (
-                        "not-a-sha256-hash" if scenario == "malformed_hash" else "a" * 64
+                        b"a" * 64 if scenario == "blob_hash" else (
+                            "not-a-sha256-hash" if scenario == "malformed_hash" else "a" * 64
+                        )
                     ),
                     -1 if scenario == "negative_failures" else 5,
                     200,
