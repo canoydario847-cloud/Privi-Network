@@ -33,6 +33,7 @@ from .config import PHONE_COST_PER_MIN, SPEECH_COST_PER_TURN, Settings
 from .router import RouteError, Router, check_public_endpoint
 from .store import Store, anchor_head, mask_phone, sha
 from .x402 import PAYMENT_META_KEY, Paywall
+from . import privi_token
 
 __version__ = "0.1.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/call-server"
@@ -132,6 +133,17 @@ def build_server(settings: Settings | None = None, store: Store | None = None, r
     )
 
     # ---------------- tools ----------------
+
+    _market_token: list = []
+
+    def _privi_token():
+        if getattr(paywall, "privi", None) is not None:
+            return paywall.privi
+        if not _market_token:  # payments off: still answer market questions, read-only
+            from .privi_token import PriviToken
+            _market_token.append(PriviToken.from_env(s.pay_to, ":memory:"))
+        return _market_token[0]
+    privi_token.register_market_tool(mcp, _privi_token)
 
     @mcp.tool(title="Find agents on the Privi Call network", annotations=READ_ONLY)
     def call_directory(

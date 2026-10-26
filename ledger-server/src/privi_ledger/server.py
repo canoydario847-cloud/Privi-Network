@@ -35,6 +35,7 @@ from .plans import Plans
 from .gov_ai import HIGH_IMPACT_PRACTICES, GovAIInventory
 from .gov_pqc import KINDS, STATUSES, QuantumReady, canonical_json, classify
 from .x402 import Facilitator, Paywall
+from . import privi_token
 from .kya import KYA, KYAError, checksum as eth_checksum
 from .mandate import MandateError, Mandates
 from .fortress import Fortress, FortressError
@@ -213,6 +214,17 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
                         f"USDC per 30 days via x402) for unlimited entries"}, is_error=True)
 
     # ---------------- free ----------------
+
+    _market_token: list = []
+
+    def _privi_token():
+        if getattr(paywall, "privi", None) is not None:
+            return paywall.privi
+        if not _market_token:  # payments off: still answer market questions, read-only
+            from .privi_token import PriviToken
+            _market_token.append(PriviToken.from_env(settings.pay_to, ":memory:"))
+        return _market_token[0]
+    privi_token.register_market_tool(mcp, _privi_token)
 
     @mcp.tool(title="Ledger pricing", annotations=READ_ONLY)
     def ledger_pricing() -> dict[str, Any]:

@@ -1,13 +1,14 @@
 # Publishes the Privi websites (sites/*) to Cloudflare Pages, one Pages project per site.
 #
 # Needs two repository secrets (Settings -> Secrets and variables -> Actions):
-#   CLOUDFLARE_API_TOKEN   token with: Account / Cloudflare Pages / Edit  and  Zone / DNS / Edit (zone priviflow.us)
-#   CLOUDFLARE_ACCOUNT_ID  the account ID shown on the Cloudflare dashboard overview
+#   CLOUDFLARE_API_TOKEN   token with: Account / Cloudflare Pages / Edit  and  Zone / DNS / Edit (zone privishine.info)
+#                          (the secret saved as CLOUDFARE_API is used when CLOUDFLARE_API_TOKEN is not set)
+#   CLOUDFLARE_ACCOUNT_ID  optional; defaults to the Privi account below (an account ID is not a secret)
 #
 # Every push to main that touches sites/ redeploys the sites to privi-<site>.pages.dev.
-# The custom domains (priviflow.us, gov.priviflow.us, ...) are attached only when the workflow is
-# run by hand with "Attach priviflow.us domains" ticked: that step points each hostname's DNS at
-# Cloudflare Pages (replacing the old Render record for that hostname only; MX/TXT are never touched).
+# The custom domains (www.privishine.info, gov.privishine.info, ...) are attached only when the workflow
+# is run by hand with "Attach privishine.info domains" ticked. Only those hostnames are changed; the apex
+# privishine.info (Railway app), explorer.privishine.info, MX and TXT records are never touched.
 name: Cloudflare Pages
 
 on:
@@ -17,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       attach_domains:
-        description: "Attach priviflow.us domains (moves DNS for these hostnames from Render to Cloudflare Pages)"
+        description: "Attach privishine.info domains (www, gov, chainflow, ... point at Cloudflare Pages)"
         type: boolean
         default: false
 
@@ -33,8 +34,8 @@ jobs:
       matrix:
         site: [home, fortress, passport, kya, mandates, gov, chainflow, developers, live, hub, guard]
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CLOUDFARE_API }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || '13303bee4c6d300e54bfc490400e8126' }}
     steps:
       - uses: actions/checkout@v4
       - name: Check secrets
@@ -62,9 +63,9 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.attach_domains
     runs-on: ubuntu-latest
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      ZONE_NAME: priviflow.us
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CLOUDFARE_API }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || '13303bee4c6d300e54bfc490400e8126' }}
+      ZONE_NAME: privishine.info
     steps:
       - uses: actions/checkout@v4
       - name: Attach custom domains and point DNS at Pages

@@ -1,3 +1,3 @@
 User-agent: *
 Allow: /
-Sitemap: https://chainflow.priviflow.us/sitemap.xml
+Sitemap: https://chainflow.privishine.info/sitemap.xml

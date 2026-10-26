@@ -1,6 +1,6 @@
 """Privi ChainFlow web API on top of Privi Verify.
 
-Browser-facing routes for chainflow.priviflow.us:
+Browser-facing routes for chainflow.privishine.info:
 
     POST /api/chainflow/events          record a lot event (manufacturer key, Bearer)
     POST /api/chainflow/key             check a manufacturer key
@@ -101,7 +101,7 @@ th{{color:var(--steel);font-weight:500;width:36%}}code{{word-break:break-all;fon
 
 
 def add_routes(mcp, store: LotStore, settings, onchain: Callable[[str, dict], dict], public_url: str,
-               chainflow_url: str = "https://chainflow.priviflow.us") -> None:
+               chainflow_url: str = "https://chainflow.privishine.info") -> None:
 
     @mcp.custom_route("/api/chainflow/key", methods=["POST", "OPTIONS"], include_in_schema=False)
     async def key_check(request: Request) -> JSONResponse:
