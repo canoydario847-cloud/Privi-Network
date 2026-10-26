@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#081327">
+<title>Privi Base token — contract, wallets and markets</title>
+<meta name="description" content="Find Privi's project-declared Base ERC-20 contract and independently verify its wallet compatibility, liquidity and trading markets.">
+<link rel="canonical" href="https://www.privishine.info/base-token.html">
+<style>
+:root{color-scheme:dark;--bg:#081327;--ink:#eef7ff;--panel:#152746;--muted:#bacbde;--line:#355174;--mint:#89f5e3}
+*{box-sizing:border-box}body{font:16px/1.6 system-ui,-apple-system,Segoe UI,sans-serif;background:radial-gradient(circle at 75% 0,#203e72,transparent 45%),var(--bg);color:var(--ink);margin:0}a{color:var(--mint)}
+header,main,footer{padding:24px;max-width:1000px;margin:auto}header{display:flex;justify-content:space-between;gap:12px;align-items:center}header strong{font-size:21px}h1{font-size:clamp(35px,5vw,54px);line-height:1.1;letter-spacing:-.03em;margin:24px 0}h2{margin:0 0 14px;font-size:23px}p{margin:0 0 14px}
+.lead{font-size:19px;color:var(--muted);max-width:680px}.chip{display:inline-block;border:1px solid #277878;background:#163c4a;color:var(--mint);border-radius:20px;font-size:13px;padding:5px 12px;font-weight:700}
+section{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:24px;margin:26px 0}
+.note{color:var(--muted);font-size:14px}.warning{border-left:4px solid #eccb86;background:#393442;color:#f6e7c3;padding:12px 16px;border-radius:0 9px 9px 0}
+.address{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:16px 0}
+code{font-size:14px;overflow-wrap:anywhere;background:#081d38;padding:12px;border-radius:8px}
+button,.button{background:var(--mint);color:#0a2631;border:0;border-radius:8px;padding:11px 15px;text-decoration:none;display:inline-block;font-weight:700;cursor:pointer;font:700 14px system-ui}.button.alt{background:#243e5d;color:white;border:1px solid #45668d}
+.links{display:flex;flex-wrap:wrap;gap:12px;margin:18px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}.grid article{background:#10223d;border:1px solid var(--line);padding:18px;border-radius:12px}.grid h3{margin:0 0 9px}
+footer{color:var(--muted);font-size:13px;border-top:1px solid var(--line)}
+</style></head>
+<body>
+<header><strong>PRIVI WORLD</strong><a href="/">Back to Privi</a></header><main>
+<span class="chip">Base mainnet · project-declared asset</span>
+<h1>Privi token on Base</h1>
+<p class="lead">Check the exact contract, learn how to hold tokens in your own wallet, and investigate decentralized trading markets before exchanging any funds.</p>
+<section><h2>Base ERC-20 token reference</h2>
+<p class="note">Recorded in the public Privi-Network repository, not independently confirmed by this static page from live chain data.</p>
+<div class="address"><code id="contract">0xA11626baF87524e61B5697634C7Ec48D26279D6C</code><button id="copy">Copy address</button></div>
+<p><strong>Project code label:</strong> PRIVI &nbsp;·&nbsp; <strong>Base chain ID:</strong> 8453 &nbsp;·&nbsp; <strong>Decimals (in code):</strong> 18</p>
+<p class="warning"><strong>Verification required:</strong> The existence of this page does not establish contract security, token ownership, a trading price, pool liquidity, or an exchange listing. A similarly named token can be unrelated. This is distinct from BNB PRIV and the proposed native PRVI coin.</p>
+<div class="links"><a class="button" rel="noopener noreferrer" target="_blank" href="https://basescan.org/token/0xA11626baF87524e61B5697634C7Ec48D26279D6C">Check on BaseScan</a><button id="wallet">Import in compatible wallet</button></div>
+<p id="status" aria-live="polite" class="note"></p></section>
+<section><h2>Check trading availability</h2><p class="note">These are marketplaces or market-data tools, <strong>not</strong> claims of a Privi listing. On a DEX, a swap needs funded liquidity, and actual available quotes can differ greatly from indicative prices.</p>
+<div class="grid">
+<article><h3>Uniswap</h3><p>Search this contract on Base and inspect the pool before swapping.</p><a href="https://app.uniswap.org/" target="_blank" rel="noopener noreferrer">Visit Uniswap</a></article>
+<article><h3>Aerodrome</h3><p>Explore possible Base pools. Liquidity or pair creation may still be needed.</p><a href="https://aerodrome.finance/" target="_blank" rel="noopener noreferrer">Visit Aerodrome</a></article>
+<article><h3>DEX Screener</h3><p>Look for an indexed pair with trades and liquidity; zero results are possible.</p><a href="https://dexscreener.com/base/0xA11626baF87524e61B5697634C7Ec48D26279D6C" target="_blank" rel="noopener noreferrer">Check token activity</a></article>
+<article><h3>GeckoTerminal</h3><p>Check trading pairs by matching the exact Base contract address.</p><a href="https://www.geckoterminal.com/" target="_blank" rel="noopener noreferrer">Visit GeckoTerminal</a></article>
+</div></section>
+<section><h2>Hold PRIVI safely</h2><p>Choose a wallet that supports Base mainnet. Verify the address and on-chain token information on BaseScan before importing it as a custom asset. Adding a token to your wallet only displays your balance; it does not purchase anything or create market value.</p><p class="note">Never share a wallet seed phrase or private key. Do not send this token to an exchange deposit address unless that exact exchange has officially announced support for the contract and Base network.</p></section>
+<section><h2>Project links</h2><p>Privi World Co. · Founder: Dario Canoy. <a href="https://github.com/canoydario847-cloud/Privi-Network/blob/main/call-server/src/privi_call/privi_token.py">View token and swap-desk references in source</a>. <a href="mailto:dariocanoy@priviflow.us">Contact the project</a>.</p><p class="note">No guaranteed return, market listing, audit, profitability, or investment claim is made on this page.</p></section>
+</main><footer>© 2026 Privi World Co. · <a href="/">Privi home</a> · <a href="/privacy.html">Privacy</a></footer>
+<script>
+const address=document.getElementById('contract').textContent.trim(),status=document.getElementById('status');
+document.getElementById('copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(address);status.textContent='Copied. Always verify the address before using.'}catch{status.textContent='Select the visible address and copy it manually.'}});
+document.getElementById('wallet').addEventListener('click',async()=>{try{
+ if(!window.ethereum?.request){status.textContent='No compatible browser wallet detected. Import manually.';return;}
+ const chain=await window.ethereum.request({method:'eth_chainId'});
+ if(String(chain).toLowerCase()!=='0x2105'){status.textContent='Switch your wallet to Base mainnet (chain ID 8453), then retry.';return;}
+ const added=await window.ethereum.request({method:'wallet_watchAsset',params:{type:'ERC20',options:{address,symbol:'PRIVI',decimals:18}}});
+ status.textContent=added?'Wallet accepted the asset import. No purchase took place.':'Token import was declined.';
+}catch(e){status.textContent='Wallet import unavailable or declined. You may import it manually after verification.'}});
+</script></body></html>
