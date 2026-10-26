@@ -245,6 +245,51 @@ def validate_database(conn):
         ).fetchone()
         if mismatch is not None:
             raise ValueError("Not a LIFE database; BNB redemption member mismatch")
+    # Stripe Checkout is disabled in staging, but a future restore must not
+    # lose which member owns an order or whether its credits were fulfilled.
+    # SQLite currently declares no foreign keys for checkout orders. Reject
+    # orphaned, malformed or mismatched order/ledger history before publishing.
+    if "stripe_checkout_sessions" in tables:
+        info = conn.execute('PRAGMA table_info("stripe_checkout_sessions")').fetchall()
+        cols = {row[1]: row for row in info}
+        required = {"session_id", "user_id", "price_id", "credits",
+                    "amount_cents", "created", "fulfilled_at"}
+        if required - cols.keys():
+            raise ValueError("Not a LIFE database; Stripe checkout columns missing")
+        pk = tuple(row[1] for row in sorted(info, key=lambda row: row[5]) if row[5] > 0)
+        if pk != ("session_id",):
+            raise ValueError("Not a LIFE database; Stripe checkout session primary key missing")
+        if not all(cols[name][3] for name in
+                   ("user_id", "price_id", "credits", "amount_cents", "created")):
+            raise ValueError("Not a LIFE database; Stripe checkout required fields nullable")
+        malformed = conn.execute(
+            'SELECT 1 FROM "stripe_checkout_sessions" s '
+            'LEFT JOIN "users" u ON s.user_id = u.id '
+            "WHERE u.id IS NULL OR s.session_id IS NULL "
+            "OR typeof(s.session_id) != 'text' OR s.session_id NOT LIKE 'cs_%' "
+            "OR typeof(s.price_id) != 'text' OR length(s.price_id) = 0 "
+            "OR typeof(s.credits) != 'integer' OR s.credits != 100 "
+            "OR typeof(s.amount_cents) != 'integer' OR s.amount_cents != 1000 "
+            "OR typeof(s.created) != 'integer' OR s.created < 0 "
+            "OR (s.fulfilled_at IS NOT NULL AND "
+            "(typeof(s.fulfilled_at) != 'integer' OR s.fulfilled_at < s.created)) "
+            "LIMIT 1"
+        ).fetchone()
+        if malformed is not None:
+            raise ValueError("Not a LIFE database; invalid Stripe checkout order")
+        # Each fulfilled order must have exactly one corresponding credit
+        # ledger entry. Pending orders must not have issued credits.
+        mismatch = conn.execute(
+            'SELECT 1 FROM "stripe_checkout_sessions" s '
+            'LEFT JOIN "ledger" l ON l.idempotency = "stripe:" || s.session_id '
+            'WHERE (s.fulfilled_at IS NULL AND l.id IS NOT NULL) '
+            'OR (s.fulfilled_at IS NOT NULL AND '
+            "(l.id IS NULL OR l.user_id != s.user_id OR l.amount != s.credits "
+            "OR l.kind != 'credit' OR l.service != 'stripe_life_credits')) "
+            'LIMIT 1'
+        ).fetchone()
+        if mismatch is not None:
+            raise ValueError("Not a LIFE database; Stripe checkout ledger mismatch")
     # Native PRVI payment tables are disabled in staging, but a recoverable
     # snapshot must preserve their customer-to-quote-to-redemption ownership.
     # The current schema has no declared foreign keys for these relationships.
