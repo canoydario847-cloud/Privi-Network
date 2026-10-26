@@ -108,6 +108,16 @@ def validate_database(conn):
     ).fetchone()
     if invalid_email is not None:
         raise ValueError("Not a LIFE database; invalid member email identity")
+    # A linked wallet is an optional account identifier. SQLite permits empty
+    # strings and BLOB values in a UNIQUE TEXT column; restoring either could
+    # break wallet-based ownership checks. Keep NULL for unlinked members and
+    # never include wallet values in backup errors or logs.
+    invalid_wallet = conn.execute(
+        'SELECT 1 FROM "users" WHERE "wallet" IS NOT NULL AND '
+        '(typeof("wallet") != \'text\' OR length(trim("wallet")) = 0) LIMIT 1'
+    ).fetchone()
+    if invalid_wallet is not None:
+        raise ValueError("Not a LIFE database; invalid linked wallet identity")
     # Idempotent LIFE credit charges rely on the composite uniqueness of
     # (user_id, idempotency). A restored database missing this constraint can
     # silently accept duplicate charges even when its columns and PKs match.
