@@ -810,3 +810,70 @@ def test_restore_rejects_invalid_persisted_login_throttle(tmp_path, scenario, ex
         with pytest.raises(ValueError, match=expected):
             backup.backup_and_verify(source, destination)
         assert not destination.exists(), "Invalid throttle state must not publish a backup"
+
+
+@pytest.mark.parametrize("scenario,expected", [
+    ("pending", None),
+    ("fulfilled", None),
+    ("orphan_member", "invalid Stripe checkout order"),
+    ("wrong_amount", "invalid Stripe checkout order"),
+    ("missing_primary_key", "Stripe checkout session primary key missing"),
+    ("missing_column", "Stripe checkout columns missing"),
+    ("nullable_member", "Stripe checkout required fields nullable"),
+    ("fulfilled_without_ledger", "Stripe checkout ledger mismatch"),
+    ("pending_with_ledger", "Stripe checkout ledger mismatch"),
+    ("wrong_ledger_member", "Stripe checkout ledger mismatch"),
+    ("wrong_ledger_amount", "Stripe checkout ledger mismatch"),
+    ("wrong_ledger_service", "Stripe checkout ledger mismatch"),
+    ("bad_fulfillment_time", "invalid Stripe checkout order"),
+])
+def test_restore_rejects_broken_stripe_checkout_audit_history(tmp_path, scenario, expected):
+    """Checkout orders must preserve owner, fulfillment state and exact credit entry."""
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute("INSERT INTO users VALUES ('u1','one@example.test','hash',NULL,1,0)")
+        db.execute("INSERT INTO users VALUES ('u2','two@example.test','hash',NULL,1,0)")
+        columns = (
+            "session_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, "
+            "price_id TEXT NOT NULL, credits INTEGER NOT NULL, "
+            "amount_cents INTEGER NOT NULL, created INTEGER NOT NULL, fulfilled_at INTEGER"
+        )
+        if scenario == "missing_primary_key":
+            columns = columns.replace("session_id TEXT PRIMARY KEY", "session_id TEXT")
+        if scenario == "missing_column":
+            columns = columns.replace("price_id TEXT NOT NULL, ", "")
+        if scenario == "nullable_member":
+            columns = columns.replace("user_id TEXT NOT NULL", "user_id TEXT")
+        db.execute("CREATE TABLE stripe_checkout_sessions (" + columns + ")")
+        if scenario not in {"missing_primary_key", "missing_column", "nullable_member"}:
+            completed = scenario in {
+                "fulfilled", "fulfilled_without_ledger", "wrong_ledger_member",
+                "wrong_ledger_amount", "wrong_ledger_service", "bad_fulfillment_time",
+            }
+            db.execute(
+                "INSERT INTO stripe_checkout_sessions VALUES (?,?,?,?,?,?,?)",
+                ("cs_test_123", "missing" if scenario == "orphan_member" else "u1",
+                 "price_test", 100, 999 if scenario == "wrong_amount" else 1000,
+                 100, 99 if scenario == "bad_fulfillment_time" else (101 if completed else None)),
+            )
+            with_ledger = scenario in {
+                "fulfilled", "pending_with_ledger", "wrong_ledger_member",
+                "wrong_ledger_amount", "wrong_ledger_service",
+            }
+            if with_ledger:
+                db.execute(
+                    "INSERT INTO ledger VALUES (?,?,?,?,?,?,?)",
+                    ("led1", "u2" if scenario == "wrong_ledger_member" else "u1",
+                     "credit", "wrong_service" if scenario == "wrong_ledger_service"
+                     else "stripe_life_credits",
+                     99 if scenario == "wrong_ledger_amount" else 100,
+                     "stripe:cs_test_123", 101),
+                )
+    destination = tmp_path / "vault" / "stripe-audit-copy.sqlite3"
+    if expected is None:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        with pytest.raises(ValueError, match=expected):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Broken Stripe audit history must not publish a backup"
