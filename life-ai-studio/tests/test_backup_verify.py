@@ -34,6 +34,31 @@ def make_database(path):
         )
 
 
+@pytest.mark.parametrize("value, expected", [
+    (1, None),
+    (None, "invalid membership timestamp"),
+    (-1, "invalid membership timestamp"),
+    ("unknown", "invalid membership timestamp"),
+    (1.5, "invalid membership timestamp"),
+])
+def test_restored_membership_timestamp_is_integer_nonnegative(tmp_path, value, expected):
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute(
+            "INSERT INTO users (id,email,pwdhash,wallet,member_since,credits) "
+            "VALUES (?,?,?,?,?,?)",
+            ("u1", "member@example.test", "synthetic-hash", None, value, 0),
+        )
+    destination = tmp_path / "vault" / "backup.sqlite3"
+    if expected is None:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        with pytest.raises(ValueError, match=expected):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Invalid membership timestamps must not publish a backup"
+
+
 @pytest.mark.parametrize("scenario, expected", [
     ("valid", None),
     ("orphan", "invalid wallet challenge ownership"),
