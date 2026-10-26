@@ -24,6 +24,8 @@ def status(url):
 def check(nodes, expected_chain):
     if len(nodes) < 4:
         raise ValueError('Four or more CometBFT endpoints required')
+    if any(not isinstance(n.get('node_id'), str) or not n['node_id'].strip() for n in nodes):
+        raise ValueError('Missing CometBFT node ID')
     if len({n['node_id'] for n in nodes}) != len(nodes):
         raise ValueError('Duplicate CometBFT node IDs')
     chains = {n['network'] for n in nodes}
