@@ -310,3 +310,44 @@ Offline synthetic regression:
 
 No private production keys, financial mainnet activation, PRVI issuance,
 production validators, network transports or real checkpoints are involved.
+
+
+## Conflicting signed quorum certificate evidence (offline research)
+
+The read-only `certificate_conflicts.cjs` audit accepts **two**
+individually valid quorum-signed *research* certificates from the exact
+same governance-admitted committee at the same height. It verifies
+both original signed proposals, all Ed25519 commit votes, quorum
+thresholds, and voter identity before attempting to report any conflict.
+
+If the two certificates commit to **different current block hashes OR
+different previous-block hashes**, the audit computes their
+cryptographically verified signer intersection. For each intersecting
+key it emits the two complete signed `commit` field arrays and their
+original signatures, allowing an independent reviewer with the
+governance-admitted research registry to reproduce verification.
+A different round alone, without a different parent/current hash,
+**does not** qualify as equivocation in this conservative experiment.
+Two 3-of-4 committees' quorums intersect in at least 2 signers within
+one committee; two 5-of-7 quorums intersect in at least 3. The
+checker refuses a missing quorum, duplicate/unknown signer, forged
+signature, unverifiable registry or mismatched height.
+
+This only establishes that the same Ed25519 **keys** signed
+contradictory research commitments when such evidence is provided.
+It does not establish who physically used a key, malicious intent,
+which branch is valid, whether other hidden certificates exist,
+whether a canonical state was executed, or Byzantine finality.
+It **never authorizes slashing or financial penalties**. Reports
+explicitly set `finalityProven:false`,
+`slashingAuthorized:false`, `operatorMisconductProven:false`
+and `productionConsensus:false`.
+
+Test with synthetic 4- and 7-member research committees:
+
+    node --test production-network/mainnet/pop_candidate/test_certificate_conflicts.cjs
+
+**NO-GO:** Production mainnet still requires a formally reviewed
+consensus protocol, genuine validator key custody and external
+attestations, authenticated finalized chain state, durable recovery,
+and independently validated operator processes.
