@@ -454,6 +454,15 @@ def validate_database(conn):
     ).fetchone()
     if invalid_ledger_amount is not None:
         raise ValueError("Not a LIFE database; invalid credit ledger amount or kind")
+    # Audit timestamps must be SQLite integers, not NULL, floating point, or
+    # coerced text. A malformed timestamp makes credit history unreliable in
+    # an independently restored snapshot. Do not log financial row contents.
+    invalid_ledger_timestamp = conn.execute(
+        'SELECT 1 FROM "ledger" WHERE typeof("created") != \'integer\' '
+        'OR "created" < 0 LIMIT 1'
+    ).fetchone()
+    if invalid_ledger_timestamp is not None:
+        raise ValueError("Not a LIFE database; invalid credit ledger timestamp")
     return len(tables)
 
 
