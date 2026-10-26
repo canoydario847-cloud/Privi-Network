@@ -35,6 +35,31 @@ def member():
     return linked.json()
 
 
+def test_private_api_never_cached_even_on_auth_and_origin_errors():
+    # Use a separate browser to avoid leaking session state into other tests.
+    with TestClient(app.app) as browser:
+        unauthenticated = browser.get("/api/me")
+        created = browser.post("/api/auth/signup", json={
+            "email": os.urandom(8).hex() + "@example.test",
+            "password": "strong_password_123",
+        })
+        account = browser.get("/api/me")
+        project_list = browser.get("/api/projects")
+        origin_denied = browser.post("/api/auth/logout",
+            headers={"origin": "https://untrusted.example"})
+        assert [r.status_code for r in (
+            unauthenticated, created, account, project_list, origin_denied
+        )] == [401, 200, 200, 200, 403]
+        for response in (unauthenticated, created, account, project_list, origin_denied):
+            assert response.headers["cache-control"] == "no-store"
+            assert response.headers["pragma"] == "no-cache"
+            assert response.headers["x-content-type-options"] == "nosniff"
+            assert response.headers["x-frame-options"] == "DENY"
+        # Only private/API responses are forcibly uncacheable; the public
+        # liveness endpoint remains independent of account privacy headers.
+        assert browser.get("/health").headers.get("cache-control") != "no-store"
+
+
 def test_login_throttle_is_persistent_and_temporarily_blocks_signins(monkeypatch):
     import store
     from fastapi.testclient import TestClient

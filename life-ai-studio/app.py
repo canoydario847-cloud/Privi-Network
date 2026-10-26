@@ -139,12 +139,18 @@ def own(project_id, user):
 
 @app.middleware("http")
 async def origin_guard(request: Request, call_next):
+    rejected = False
     if request.method in ("POST", "PUT", "PATCH", "DELETE"):
         origin = request.headers.get("origin")
         # If browser sends Origin, it must match this site's configured origin.
-        if origin is not None and origin.rstrip("/") != ORIGIN:
-            return Response(status_code=403, content="Cross-origin write rejected")
-    response = await call_next(request)
+        rejected = origin is not None and origin.rstrip("/") != ORIGIN
+    response = (Response(status_code=403, content="Cross-origin write rejected")
+                if rejected else await call_next(request))
+    # Authenticated project data, account details and even error responses must
+    # not be cached by browsers or intermediary proxies shared by customers.
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "same-origin"
