@@ -16,7 +16,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.11", "3.13"]
-        server: ["mcp-server", "ledger-server", "anchor-server", "call-server"]
+        server: ["mcp-server", "ledger-server", "anchor-server", "call-server", "quantum-server"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

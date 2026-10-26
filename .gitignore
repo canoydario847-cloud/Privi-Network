@@ -6,3 +6,7 @@ privi-data/
 
 # Example env templates are safe to commit (no secrets)
 !.env.example
+
+# Python bytecode
+__pycache__/
+*.pyc

@@ -35,6 +35,9 @@ Privi Quantum joins three things into one pipeline:
 | `quantum_optimize` | Solves a problem; returns the decision, quality vs. the proven optimum, quantum run details, attestation, optional OpenQASM |
 | `quantum_verify` | Checks both signatures, the body hash and the Privi chain anchor |
 | `pqc_scan_code` | Finds quantum-vulnerable crypto (RSA, ECC, DH, DSA, weak hashes) in code; 0–100 readiness score |
+| `pqc_endpoint_check` | Tests up to 20 public sites (e.g. `www.agency.gov`) for TLS 1.3 and hybrid post-quantum key exchange (X25519MLKEM768, FIPS 203); returns a fix per site and CBOM-ready assets |
+| `pqc_readiness_package` | Signed EO 14409 / OMB M-26-15 package from code, an asset inventory and/or live `endpoints`: prioritized deadlines, the nine plan elements, CycloneDX 1.6 CBOM |
+| `pqc_federal_deadlines` | The federal post-quantum timeline with sources |
 | `quantum_status` | Algorithm, limits, backends, signing key, anchoring |
 
 ### Ready-made problems

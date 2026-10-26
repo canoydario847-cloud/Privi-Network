@@ -3,7 +3,9 @@
 """Privi Quantum MCP server: quantum optimization for factories, sealed with
 post-quantum signatures and anchored on chain (Base).
 
-Free:  quantum_status, quantum_problems, quantum_optimize, quantum_verify, pqc_scan_code
+Free:  quantum_status, quantum_problems, quantum_optimize, quantum_verify, pqc_scan_code,
+       pqc_endpoint_check, pqc_readiness_package, pqc_federal_deadlines
+       (government / contractor post-quantum readiness)
 """
 from __future__ import annotations
 
@@ -22,13 +24,13 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp_types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import Field
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import HTMLResponse, JSONResponse, Response
 
-from . import qaoa, scanner
+from . import govpqc, govreport, pqctls, qaoa, scanner
 from .anchoring import AnchorError, HttpAnchorClient, anchor_pending
 from .attest import PQ_ALG, Attestor
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/quantum-server"
 PUBLIC_URL = os.getenv("QUANTUM_PUBLIC_URL", "https://privi-quantum.onrender.com").rstrip("/")
 COPYRIGHT = "Copyright (c) 2026 Privi World Co. All rights reserved."
@@ -47,6 +49,15 @@ factory decisions and returns answers you can prove later.
    cannot be forged even by a quantum computer, and its hash is anchored on the Privi
    blockchain within minutes. quantum_verify checks one for anyone.
 4. pqc_scan_code finds quantum-vulnerable cryptography (RSA, ECC, DH) in code or config.
+5. For U.S. government work: pqc_readiness_package turns code files and/or a cryptographic
+   asset list into the evidence EO 14409 and OMB M-26-15 ask for: a prioritized migration
+   list with the federal deadline for each asset, the nine M-26-15 plan elements (evidence vs
+   gaps), and a CycloneDX 1.6 CBOM, signed with ML-DSA-87 and anchored on chain, with a public
+   report page. Profiles: agency, contractor (EO 14409 FAR items), nss_vendor (NSA CNSA 2.0).
+   pqc_federal_deadlines returns the timeline with sources.
+6. pqc_endpoint_check tests up to 20 public sites or services (e.g. www.agency.gov) for TLS 1.3 and
+   hybrid post-quantum key exchange (X25519MLKEM768) and returns CBOM-ready assets; pass
+   `endpoints` to pqc_readiness_package to check them and add them to the package in one call.
 
 All tools are free. Privi is built by Dario Canoy (Privi World Co, Port Huron, Michigan).
 For the other Privi tools, pilots, partnerships, manufacturing or government work, see
@@ -107,12 +118,13 @@ def _who(ctx: Context) -> str:
 
 
 def build_server(settings: Settings | None = None, attestor: Attestor | None = None,
-                 anchor_client=None) -> MCPServer:
+                 anchor_client=None, endpoint_checker=None) -> MCPServer:
     settings = settings or Settings.from_env()
     attestor = attestor or Attestor(settings.db_path, settings.signing_seed)
     if anchor_client is None and settings.anchor_api_key:
         anchor_client = HttpAnchorClient(settings.anchor_url, settings.anchor_api_key)
     limiter = RateLimiter(settings.rate_per_min)
+    check_endpoints = endpoint_checker or pqctls.check_endpoints
     cpu = anyio.CapacityLimiter(settings.max_concurrent)
     keys = attestor.public_keys()
 
@@ -238,6 +250,108 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
             return _result({"error": "code is larger than 200 KB"}, is_error=True)
         return _result(scanner.scan_text(code, filename))
 
+    def make_package(organization: str, assets: list[dict] | None, files: list[dict] | None, profile: str,
+                     pqc_lead: str = "", system_name: str = "", impact: str = "unknown", hva: bool = False,
+                     endpoints: list[str] | None = None) -> dict[str, Any]:
+        assets = list(assets or [])
+        endpoint_summary = None
+        if endpoints:
+            if len(endpoints) > pqctls.MAX_HOSTS:
+                raise ValueError(f"check at most {pqctls.MAX_HOSTS} endpoints per package")
+            checked = check_endpoints([str(x) for x in endpoints])
+            endpoint_summary = checked["summary"]
+            for r in checked["results"]:
+                if r.get("asset"):
+                    assets.append({**r["asset"], "impact": impact, "hva": hva})
+        scan = None
+        files = files or []
+        if len(files) > 50:
+            raise ValueError("send at most 50 files per package")
+        if sum(len(str(f.get("content", "")).encode()) for f in files) > 1_000_000:
+            raise ValueError("files are larger than 1 MB in total")
+        if files:
+            merged: dict[str, Any] = {"findings": [], "files_scanned": 0}
+            for f in files:
+                r = scanner.scan_text(str(f.get("content", "")), str(f.get("name") or "file")[:200])
+                merged["findings"] += r["findings"]
+                merged["files_scanned"] += 1
+            sev = [x["severity"] for x in merged["findings"]]
+            pen = sum(scanner.WEIGHT[x] for x in sev)
+            merged["readiness_score"] = max(0, round(100 - pen * 100 / (pen + 40))) if pen else 100
+            scan = merged
+            assets += govpqc.assets_from_scan(scan, system_name or "Scanned code", impact, hva)
+        if not assets:
+            raise ValueError("give code files to scan, public endpoints to check and/or a list of cryptographic assets")
+        if len(assets) > 1000:
+            raise ValueError("at most 1000 assets per package")
+        pkg = govpqc.build_package({"name": organization, "pqc_lead": pqc_lead}, assets, profile, scan)
+        att = attestor.issue("pqc_readiness", {"organization": pkg["organization"]["name"], "profile": pkg["profile"],
+                                               "summary": pkg["summary"], "cbom_sha256": pkg["cbom_sha256"],
+                                               "package_body": pkg, "copyright": COPYRIGHT})
+        aid = att["id"]
+        return {"package_id": aid, "summary": pkg["summary"],
+                "top_priorities": [{k: a[k] for k in ("priority", "system", "asset", "algorithm", "deadline", "action")}
+                                   for a in pkg["assets"][:10]],
+                "plan_elements": [{k: x[k] for k in ("element", "name", "status")} for x in pkg["plan_elements"]] if pkg["plan_elements"] else None,
+                "contractor_readiness": pkg.get("contractor_readiness"),
+                "endpoint_check": endpoint_summary,
+                "report_url": f"{PUBLIC_URL}/reports/{aid}", "cbom_url": f"{PUBLIC_URL}/reports/{aid}.cbom.json",
+                "signed_package_url": f"{PUBLIC_URL}/reports/{aid}.json", "cbom_sha256": pkg["cbom_sha256"],
+                "signatures": f"Ed25519 + {PQ_ALG}",
+                "anchoring": "queued for the next on-chain anchor batch (every few minutes); quantum_verify checks it" if anchor_client else "anchoring not configured",
+                "caveats": pkg["caveats"]}
+
+    @mcp.tool(title="Post-quantum readiness package (government)", annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False))
+    async def pqc_readiness_package(
+        organization: Annotated[str, Field(description="Agency, office or company name")],
+        ctx: Context,
+        assets: Annotated[list[dict[str, Any]] | None, Field(description=(
+            "Cryptographic assets: [{system, asset, algorithm, usage (key_establishment|signature|encryption|tls|ssh|vpn|"
+            "code_signing|certificate|hash|other), protocol (e.g. 'TLS 1.2'), impact (high|moderate|low), hva (bool), "
+            "sensitive_past_2030 (bool), owner, vendor, status, cnsa_category}]"))] = None,
+        files: Annotated[list[dict[str, str]] | None, Field(description="Code or config files to scan: [{name, content}] (up to 50 files, 1 MB)")] = None,
+        profile: Annotated[str, Field(description="agency (OMB M-26-15) | contractor (EO 14409 FAR items) | nss_vendor (NSA CNSA 2.0)")] = "agency",
+        pqc_lead: Annotated[str, Field(description="Name of the PQC Migration Lead (M-26-15 governance)")] = "",
+        system_name: Annotated[str, Field(description="System the scanned files belong to")] = "",
+        impact: Annotated[str, Field(description="FIPS 199 impact of that system: high | moderate | low")] = "unknown",
+        hva: Annotated[bool, Field(description="Is that system a High Value Asset (M-19-03)?")] = False,
+        endpoints: Annotated[list[str] | None, Field(description="Public hostnames to check live for TLS 1.3 and hybrid post-quantum key exchange (up to 20), e.g. ['www.agency.gov']")] = None,
+    ) -> CallToolResult:
+        """Build a signed post-quantum readiness package: prioritized migration list with the federal deadline for
+        each asset (EO 14409, OMB M-26-15, NIST IR 8547 draft, CNSA 2.0), the nine M-26-15 plan elements marked as
+        evidence or gaps, and a CycloneDX 1.6 CBOM. Signed with ML-DSA-87, anchored on chain, public report URL. Free."""
+        if not limiter.allow(_who(ctx)):
+            return _result({"error": f"rate limit: {settings.rate_per_min} calls per minute"}, is_error=True)
+        try:
+            return _result(await anyio.to_thread.run_sync(lambda: make_package(
+                organization, assets, files, profile, pqc_lead, system_name, impact, hva, endpoints)))
+        except ValueError as ex:
+            return _result({"error": str(ex)}, is_error=True)
+
+    @mcp.tool(title="Check public endpoints for post-quantum TLS", annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
+    async def pqc_endpoint_check(
+        endpoints: Annotated[list[str], Field(description="Public hostnames or URLs (up to 20), optionally with a TLS port, e.g. ['www.irs.gov', 'login.gov:443']")],
+        ctx: Context,
+    ) -> CallToolResult:
+        """Test live public sites and services for TLS 1.3 and hybrid post-quantum key exchange (X25519MLKEM768,
+        FIPS 203), the protection against 'harvest now, decrypt later'. Sends two TLS hellos per endpoint and no data.
+        Returns a status and fix per endpoint plus CBOM-ready assets for pqc_readiness_package. Free."""
+        if not limiter.allow(_who(ctx)):
+            return _result({"error": f"rate limit: {settings.rate_per_min} calls per minute"}, is_error=True)
+        if not endpoints:
+            return _result({"error": "give at least one hostname"}, is_error=True)
+        if len(endpoints) > pqctls.MAX_HOSTS:
+            return _result({"error": f"at most {pqctls.MAX_HOSTS} endpoints per call"}, is_error=True)
+        return _result(await anyio.to_thread.run_sync(lambda: check_endpoints([str(x) for x in endpoints])))
+
+    @mcp.tool(title="Federal post-quantum deadlines", annotations=READ_ONLY)
+    def pqc_federal_deadlines() -> dict[str, Any]:
+        """The U.S. federal post-quantum timeline (EO 14409, OMB M-26-15, NIST IR 8547 draft, NSA CNSA 2.0), the
+        approved replacement algorithms, and links to the sources. Free."""
+        return govpqc.deadlines_reference()
+
     # ---------------- http ----------------
 
     cors = {"Access-Control-Allow-Origin": "*"}
@@ -261,6 +375,73 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         if not att:
             return JSONResponse({"error": "not found"}, status_code=404, headers=cors)
         return JSONResponse(att, headers=cors)
+
+    @mcp.custom_route("/reports/{aid}.cbom.json", methods=["GET"], include_in_schema=False)
+    async def report_cbom(request: Request) -> Response:
+        att = attestor.get(request.path_params["aid"])
+        if not att or att["body"].get("kind") != "pqc_readiness":
+            return JSONResponse({"error": "not found"}, status_code=404, headers=cors)
+        return Response(json.dumps(att["body"]["package_body"]["cbom"], indent=2), media_type="application/vnd.cyclonedx+json",
+                        headers={**cors, "Content-Disposition": f'attachment; filename="{att["id"]}.cbom.json"'})
+
+    @mcp.custom_route("/reports/{aid}.json", methods=["GET"], include_in_schema=False)
+    async def report_json(request: Request) -> JSONResponse:
+        att = attestor.get(request.path_params["aid"])
+        if not att or att["body"].get("kind") != "pqc_readiness":
+            return JSONResponse({"error": "not found"}, status_code=404, headers=cors)
+        return JSONResponse(att, headers=cors)
+
+    @mcp.custom_route("/reports/{aid}", methods=["GET"], include_in_schema=False)
+    async def report_page(request: Request) -> Response:
+        att = attestor.get(request.path_params["aid"])
+        if not att or att["body"].get("kind") != "pqc_readiness":
+            return HTMLResponse("<h1>Report not found</h1>", status_code=404)
+        v = Attestor.verify(att, keys["ed25519"], keys["ml_dsa_87"])
+        return HTMLResponse(govreport.render(att, v, PUBLIC_URL), headers={"Cache-Control": "no-store"})
+
+    @mcp.custom_route("/api/pqc/package", methods=["POST", "OPTIONS"], include_in_schema=False)
+    async def api_package(request: Request) -> JSONResponse:
+        """Browser endpoint for the agency demo on gov.priviflow.us (same logic as the MCP tool)."""
+        pre = {**cors, "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type"}
+        if request.method == "OPTIONS":
+            return JSONResponse({}, headers=pre)
+        ip = (request.headers.get("x-forwarded-for") or (request.client.host if request.client else "web")).split(",")[0]
+        if not limiter.allow(hashlib.sha256(ip.encode()).hexdigest()[:12]):
+            return JSONResponse({"error": "rate limited, try again in a minute"}, status_code=429, headers=pre)
+        try:
+            raw = await request.body()
+            if len(raw) > 1_200_000:
+                return JSONResponse({"error": "request too large"}, status_code=413, headers=pre)
+            b = json.loads(raw or b"{}")
+            out = await anyio.to_thread.run_sync(lambda: make_package(
+                str(b.get("organization") or "Demo agency")[:160], b.get("assets"), b.get("files"),
+                str(b.get("profile") or "agency"), str(b.get("pqc_lead") or "")[:120], str(b.get("system_name") or "")[:120],
+                str(b.get("impact") or "unknown"), bool(b.get("hva")), b.get("endpoints")))
+            return JSONResponse(out, headers=pre)
+        except (ValueError, json.JSONDecodeError, AttributeError, TypeError) as ex:
+            return JSONResponse({"error": str(ex)}, status_code=400, headers=pre)
+
+    @mcp.custom_route("/api/pqc/endpoints", methods=["POST", "OPTIONS"], include_in_schema=False)
+    async def api_endpoints(request: Request) -> JSONResponse:
+        """Browser endpoint for the live .gov check on gov.priviflow.us (same logic as pqc_endpoint_check)."""
+        pre = {**cors, "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type"}
+        if request.method == "OPTIONS":
+            return JSONResponse({}, headers=pre)
+        ip = (request.headers.get("x-forwarded-for") or (request.client.host if request.client else "web")).split(",")[0]
+        if not limiter.allow(hashlib.sha256(ip.encode()).hexdigest()[:12]):
+            return JSONResponse({"error": "rate limited, try again in a minute"}, status_code=429, headers=pre)
+        try:
+            b = json.loads((await request.body())[:20_000] or b"{}")
+            hosts = [str(x) for x in (b.get("endpoints") or [])]
+        except (json.JSONDecodeError, AttributeError, TypeError):
+            return JSONResponse({"error": "send JSON {\"endpoints\": [\"www.example.gov\"]}"}, status_code=400, headers=pre)
+        if not hosts or len(hosts) > pqctls.MAX_HOSTS:
+            return JSONResponse({"error": f"send 1 to {pqctls.MAX_HOSTS} hostnames"}, status_code=400, headers=pre)
+        return JSONResponse(await anyio.to_thread.run_sync(lambda: check_endpoints(hosts)), headers=pre)
+
+    @mcp.custom_route("/api/pqc/deadlines", methods=["GET"], include_in_schema=False)
+    async def api_deadlines(_: Request) -> JSONResponse:
+        return JSONResponse(govpqc.deadlines_reference(), headers={**cors, "Cache-Control": "public, max-age=3600"})
 
     @mcp.custom_route("/.well-known/glama.json", methods=["GET"], include_in_schema=False)
     async def glama(_: Request) -> JSONResponse:
@@ -297,7 +478,10 @@ split conflicting jobs across shifts. Every answer is checked against the proven
 OpenQASM for IBM, Amazon Braket and Azure quantum hardware.</p>
 <p>Connect your AI agent (MCP, streamable HTTP, free):</p>
 <pre>{{ "mcpServers": {{ "privi-quantum": {{ "url": "{url}/mcp" }} }} }}</pre>
-<p>Tools: <code>quantum_optimize</code>, <code>quantum_problems</code>, <code>quantum_verify</code>, <code>pqc_scan_code</code>, <code>quantum_status</code>.
+<p>Tools: <code>quantum_optimize</code>, <code>quantum_problems</code>, <code>quantum_verify</code>, <code>pqc_scan_code</code>,
+<code>pqc_readiness_package</code>, <code>pqc_federal_deadlines</code>, <code>quantum_status</code>.</p>
+<p>For agencies and contractors: a signed post-quantum readiness package (EO 14409, OMB M-26-15, CycloneDX 1.6 CBOM)
+in one call. Try the 10-minute demo at <a href="https://gov.priviflow.us/demo.html">gov.priviflow.us/demo.html</a>.
 Public signing keys: <a href="{url}/keys">/keys</a>. Status: <a href="{url}/status">/status</a>.</p>
 <p>Built by Privi World Co, Port Huron, Michigan. <a href="https://privi-hub.onrender.com">Everything Privi offers</a> ·
 <a href="mailto:dariocanoy@priviflow.us">dariocanoy@priviflow.us</a></p>
