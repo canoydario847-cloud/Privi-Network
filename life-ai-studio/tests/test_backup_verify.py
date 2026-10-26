@@ -960,6 +960,7 @@ def test_restore_rejects_orphaned_stripe_credit_ledger(tmp_path, scenario, expec
     ("short_hash", False),
     ("uppercase_hash", False),
     ("nonhex_hash", False),
+    ("blob_hash", False),  # SQLite accepts BLOB values in TEXT PK columns.
     ("negative_expiry", False),
     ("text_expiry", False),
     ("null_expiry", False),
@@ -976,6 +977,8 @@ def test_restore_rejects_malformed_session_authentication_state(tmp_path, scenar
         session_hash = "A" * 64
     elif scenario == "nonhex_hash":
         session_hash = "g" * 64
+    elif scenario == "blob_hash":
+        session_hash = b"a" * 64
     elif scenario == "negative_expiry":
         expiry = -1
     elif scenario == "text_expiry":
