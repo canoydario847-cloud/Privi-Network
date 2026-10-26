@@ -113,6 +113,20 @@ class JsonRpcChain:
         return int(b["timestamp"], 16) if b else None
 
 
+class ReadOnlyChain(JsonRpcChain):
+    """Read-only view of another EVM chain (no key): used to verify anchors made there earlier."""
+
+    def __init__(self, rpc_url: str, chain_id: int, address: str = "", timeout: float = 20.0):
+        self.rpc_url, self.chain_id, self.timeout = rpc_url, chain_id, timeout
+        self.address = address
+        self._lock = threading.Lock()
+        self._id = 0
+        self._next_nonce = None
+
+    def send_data(self, data_hex: str) -> str:  # pragma: no cover - never signs
+        raise RpcError("read-only chain")
+
+
 def wait_receipt(chain: Chain, tx_hash: str, timeout_s: float = 25.0, poll_s: float = 1.5) -> dict | None:
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:

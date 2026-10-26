@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Privi World Co. All rights reserved.
 # Privi Quantum - https://priviflow.us - dariocanoy@priviflow.us
-"""Anchor attestation hashes on chain (Base) through Privi Anchor.
+"""Anchor attestation hashes on chain (the Privi Devnet) through Privi Anchor.
 
 A background loop batches every not-yet-anchored attestation (up to 100 per
 transaction) into one Privi Anchor call. The on-chain record fixes WHEN a result

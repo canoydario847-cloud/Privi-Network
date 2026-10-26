@@ -15,6 +15,8 @@ VERIFY = "https://privi-verify.onrender.com"
 ANCHOR = "https://privi-anchor.onrender.com"
 HUB = "https://privi-discovery.onrender.com"
 CALL = "https://privi-call.onrender.com"
+QUANTUM = "https://privi-quantum.onrender.com"
+DEVNET = "https://privi-devnet.onrender.com"
 REPO = "https://github.com/canoydario847-cloud/Privi-Network"
 EMAIL = "dariocanoy@priviflow.us"
 PASSPORT_ID = "pp_0be5f707a050950e"
@@ -339,21 +341,156 @@ SITES["live"] = page(
 )
 
 SITES["gov"] = page(
-    "gov", "Privi for government: AI inventories and post-quantum readiness",
-    "Tamper-evident OMB M-25-21 AI use-case inventories and EO 14409 post-quantum migration plans, sealed on chain, with defense-grade Fortress controls.",
-    "Inventories and plans an inspector general can verify",
-    "Agencies must inventory their AI use cases and plan their move to post-quantum cryptography. Privi keeps both as versioned, tamper-evident records, checks them against the requirements before you submit, and seals each export on chain.",
-    [("Contact us", f"mailto:{EMAIL}?subject=Privi%20for%20government"), ("Fortress controls", URLS["fortress"])],
+    "gov", "Privi for government: post-quantum readiness and AI inventories",
+    "Signed post-quantum readiness packages for EO 14409 and OMB M-26-15 with a CycloneDX CBOM, plus tamper-evident AI use-case inventories, sealed on Privi's own chain.",
+    "Post-quantum evidence an inspector general can verify",
+    "EO 14409 and OMB M-26-15 move federal key establishment to post-quantum cryptography by the end of 2030 and signatures in 2031, starting with High Value Assets. Privi turns your code and crypto inventory into a prioritized, deadline-mapped plan and a machine-readable CBOM, signed with ML-DSA-87 and anchored on chain, in one call.",
+    [("Run the 10-minute demo", URLS["gov"] + "/demo.html"), ("Capability statement", URLS["gov"] + "/capability.html")],
     STH_WIDGET,
-    sec("What agencies get", defs([
+    sec("Post-quantum readiness package", defs([
+        ("Inventory in, plan out", "Scan code and configuration, add your systems' algorithms, protocols, FIPS 199 impact and HVA status. Every asset gets the federal deadline that applies to it and a FIPS 203/204/205 replacement."),
+        ("The nine M-26-15 plan elements", "Each element is marked as evidence in the package or as a gap the agency must supply, so the living migration plan you submitted on October 22 keeps improving."),
+        ("CycloneDX 1.6 CBOM", "A machine-readable Cryptographic Bill of Materials of every asset, ready for the minimum CBOM elements CISA and NIST are due to publish in March 2027."),
+        ("Signed and anchored", "Each package is signed with Ed25519 and ML-DSA-87 (NIST FIPS 204, the CNSA 2.0 parameter set) and anchored on the Privi Devnet. Anyone can check it on its public report page."),
+        ("Contractors and NSS vendors", "Contractor profile: EO 14409 FAR items (FIPS incl. PQC by Dec 31, 2030, proposed). NSS vendor profile: NSA CNSA 2.0 dates per product category."),
+    ]), "Free for agencies and contractors through the Privi Quantum MCP server (<code>pqc_readiness_package</code>) or the demo page.")
+    + sec("AI use-case inventories and continuous records", defs([
         ("AI use-case inventory", "Records in OMB M-25-21 reporting fields. Every change is a new version in the tamper-evident log, and a readiness check flags missing fields, PII without a privacy impact assessment and high-impact AI missing minimum risk practices."),
-        ("Post-quantum migration", "Classify each system's cryptography, record quantum-vulnerable assets and get a prioritized migration plan aligned with EO 14409 and OMB M-26-15. Exports are sealed on chain."),
+        ("Versioned crypto inventory", "Privi Ledger keeps each system's cryptographic inventory as a versioned record and exports the CBOM and migration plan sealed on chain."),
         ("Two-person integrity", "Require two officers' signatures before an agent changes the inventory, publishes an export or takes any other sensitive step."),
         ("Evidence for oversight", "Hand an inspector a dual-signed bundle they can verify on an air-gapped machine."),
     ]))
     + sec("Plain about certification", "",
-          "Privi is an early-stage company. It does not yet hold FedRAMP authorization, a DoD Impact Level or FIPS 140-3 module validation. Fortress controls are designed to support those efforts, and pilots with agencies and contractors are welcome."),
+          "Privi is an early-stage company. It does not yet hold FedRAMP authorization, a DoD Impact Level or FIPS 140-3 module validation, and its deadlines follow EO 14409, OMB M-26-15, the NIST IR 8547 draft and CNSA 2.0 as of October 2026. Pilots with agencies and contractors are welcome."),
 )
+
+GOV_DEMO_CSS = """
+.demo{display:grid;gap:18px;max-width:900px}
+.demo .card{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:20px}
+.demo label{display:block;font-weight:600;margin:12px 0 6px}
+.demo input,.demo select,.demo textarea{width:100%;padding:10px 12px;border:1.5px solid var(--rule);border-radius:8px;background:var(--paper);color:var(--ink);font:15px "IBM Plex Sans",sans-serif}
+.demo textarea{font:13px/1.5 "IBM Plex Mono",monospace;min-height:150px}
+.demo .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.demo button{padding:12px 20px;border:0;border-radius:8px;background:var(--seal);color:var(--on-seal);font:600 15px "IBM Plex Sans",sans-serif;cursor:pointer;margin-top:16px}
+.demo button:disabled{opacity:.5}.demo table{width:100%;border-collapse:collapse;font-size:14px}.demo td,.demo th{padding:8px;border-top:1px solid var(--rule);text-align:left;vertical-align:top}
+.demo .tw{overflow-x:auto}.p1{color:#B4252F;font-weight:600}.p2{color:#9A5B00;font-weight:600}
+"""
+
+SAMPLE_CODE = """# benefits-portal/auth.py
+from cryptography.hazmat.primitives.asymmetric import rsa
+key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+token = jwt.encode(claims, key, algorithm="RS256")
+legacy_checksum = hashlib.md5(record).hexdigest()
+
+# benefits-portal/nginx.conf
+ssl_protocols TLSv1.2;
+ssl_ecdh_curve prime256v1;"""
+
+SAMPLE_ASSETS = """Benefits portal, public TLS, ECDSA P-256, tls, TLS 1.2, high, yes
+Benefits portal, records encryption at rest, AES-128-GCM, encryption, , high, yes
+Payroll, site-to-site VPN, X25519+ML-KEM-768, vpn, TLS 1.3, moderate, no
+Grants system, code signing, RSA-3072, code_signing, , moderate, no"""
+
+GOV_DEMO = page(
+    "gov", "Privi for government: 10-minute post-quantum readiness demo",
+    "Run a signed EO 14409 / OMB M-26-15 post-quantum readiness package with a CycloneDX 1.6 CBOM in your browser.",
+    "A post-quantum readiness package in 10 minutes",
+    "Use the sample agency or paste your own code and inventory. Privi Quantum classifies every asset, maps it to the federal deadline, builds the CBOM, signs the package with ML-DSA-87 and anchors it on chain. Nothing here needs an account.",
+    [("Back to Privi for government", URLS["gov"]), ("Capability statement", URLS["gov"] + "/capability.html")],
+    "",
+    f"""<section><div class="demo">
+<div class="card"><h2>1. Who is this for?</h2>
+<div class="row"><div><label for="org">Agency or company</label><input id="org" value="Department of Example (demo)"></div>
+<div><label for="lead">PQC Migration Lead</label><input id="lead" value="Jordan Smith (demo)"></div>
+<div><label for="profile">Profile</label><select id="profile"><option value="agency">Federal agency (OMB M-26-15)</option><option value="contractor">Federal contractor (EO 14409 FAR)</option><option value="nss_vendor">NSS vendor (NSA CNSA 2.0)</option></select></div></div></div>
+<div class="card"><h2>2. Code or configuration to scan</h2>
+<div class="row"><div><label for="sys">System</label><input id="sys" value="Benefits portal"></div>
+<div><label for="impact">FIPS 199 impact</label><select id="impact"><option>high</option><option>moderate</option><option>low</option></select></div>
+<div><label for="hva">High Value Asset?</label><select id="hva"><option value="1">Yes</option><option value="0">No</option></select></div></div>
+<label for="code">Paste code or config (nothing is stored except the findings)</label><textarea id="code">{e(SAMPLE_CODE)}</textarea></div>
+<div class="card"><h2>3. Cryptographic inventory</h2>
+<p class="note">One asset per line: system, asset, algorithm, usage, protocol, impact, HVA (yes/no). Usage is one of key_establishment, signature, encryption, tls, ssh, vpn, code_signing, certificate, hash.</p>
+<textarea id="assets">{e(SAMPLE_ASSETS)}</textarea>
+<button id="go" type="button">Build the signed package</button> <span id="state" class="note" role="status"></span></div>
+<div class="card" id="result" hidden><h2>4. Result</h2><div id="summary"></div><div class="tw"><table id="prio"></table></div>
+<p id="links"></p><div class="tw"><table id="els"></table></div></div>
+<div class="card"><h2>5. Verify it yourself</h2><ol class="note" style="margin:0;padding-left:20px">
+<li>Open the report: both signatures are checked against Privi Quantum's <a href="{QUANTUM}/keys">public keys</a>.</li>
+<li>Within a few minutes the package hash is anchored on the <a href="{DEVNET}">Privi Devnet</a>; the report links the transaction.</li>
+<li>Download the CBOM and compare its SHA-256 with the one in the report.</li>
+<li>Agents can do the same over MCP: <code>pqc_readiness_package</code> and <code>quantum_verify</code> at <code>{QUANTUM}/mcp</code>.</li></ol></div>
+</div></section>
+<script>
+const $=s=>document.querySelector(s);const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}}[c]));
+function parseAssets(t){{return t.split("\n").map(l=>l.trim()).filter(Boolean).map(l=>{{const c=l.split(",").map(x=>x.trim());
+  return {{system:c[0],asset:c[1],algorithm:c[2],usage:c[3]||"other",protocol:c[4]||"",impact:c[5]||"unknown",hva:/^y/i.test(c[6]||"")}}}})}}
+$("#go").onclick=async()=>{{
+  $("#go").disabled=true;$("#state").textContent="Building and signing… (the server may take ~30 s to wake up)";
+  try{{
+    const body={{organization:$("#org").value,pqc_lead:$("#lead").value,profile:$("#profile").value,system_name:$("#sys").value,
+      impact:$("#impact").value,hva:$("#hva").value==="1",files:$("#code").value.trim()?[{{name:"pasted-code",content:$("#code").value}}]:[],
+      assets:parseAssets($("#assets").value)}};
+    const r=await fetch("{QUANTUM}/api/pqc/package",{{method:"POST",headers:{{"content-type":"application/json"}},body:JSON.stringify(body)}});
+    const d=await r.json();if(!r.ok)throw new Error(d.error||r.status);
+    const s=d.summary,b=s.by_priority;$("#result").hidden=false;
+    $("#summary").innerHTML=`<p><strong>${{s.assets}}</strong> assets · <span class="p1">${{b.P1}} P1</span> · <span class="p2">${{b.P2}} P2</span> · ${{b.P3}} P3 · ${{b["P4 done"]}} already PQC/hybrid · next deadline <strong>${{esc(s.next_deadline||"—")}}</strong></p>`;
+    $("#prio").innerHTML="<tr><th>Priority</th><th>System</th><th>Algorithm</th><th>Due</th><th>Action</th></tr>"+d.top_priorities.map(a=>`<tr><td class="${{a.priority==="P1"?"p1":a.priority==="P2"?"p2":""}}">${{esc(a.priority)}}</td><td>${{esc(a.system)}}</td><td>${{esc(a.algorithm)}}</td><td style="white-space:nowrap">${{esc(a.deadline||"—")}}</td><td>${{esc(a.action)}}</td></tr>`).join("");
+    $("#links").innerHTML=`<a class="btn" href="${{d.report_url}}" target="_blank" rel="noopener">Open the signed report</a> <a class="btn alt" href="${{d.cbom_url}}">Download the CBOM</a><br><span class="note">Package ${{esc(d.package_id)}} · CBOM SHA-256 <code>${{esc(d.cbom_sha256)}}</code></span>`;
+    $("#els").innerHTML=d.plan_elements?"<tr><th>#</th><th>M-26-15 plan element</th><th>Status</th></tr>"+d.plan_elements.map(x=>`<tr><td>${{x.element}}</td><td>${{esc(x.name)}}</td><td>${{esc(x.status)}}</td></tr>`).join(""):
+      d.contractor_readiness?"<tr><th>Contractor item</th><th>Status</th></tr>"+d.contractor_readiness.map(x=>`<tr><td>${{esc(x.item)}}</td><td>${{esc(x.status)}}</td></tr>`).join(""):"";
+    $("#state").textContent="Done. Signed with Ed25519 + ML-DSA-87; anchoring on the Privi Devnet within minutes.";
+    $("#result").scrollIntoView({{behavior:"smooth"}});
+  }}catch(err){{$("#state").textContent="Could not build the package: "+err.message}}
+  $("#go").disabled=false;
+}};
+</script>""",
+    extra_head=f"<style>{GOV_DEMO_CSS}</style>",
+)
+
+CAPABILITY = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privi World Co capability statement</title><meta name="description" content="Capability statement: post-quantum readiness, tamper-evident AI records and verifiable supply-chain provenance.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+:root{{--ink:#0E1B33;--steel:#5A6B85;--seal:#2F5BEA;--rule:#DCE1EA;--paper:#FFFFFF}}
+@media (prefers-color-scheme:dark){{:root{{--ink:#E7ECF4;--steel:#93A3BB;--seal:#7FA2FF;--rule:#22314A;--paper:#0D1626}}}}
+*{{box-sizing:border-box}}body{{margin:0;background:var(--paper);color:var(--ink);font:14px/1.5 "IBM Plex Sans",system-ui,sans-serif;padding:28px 16px}}
+.sheet{{max-width:860px;margin:0 auto}}h1{{font:600 30px/1.1 "IBM Plex Sans Condensed",sans-serif;margin:0}}h2{{font:600 15px "IBM Plex Sans Condensed",sans-serif;text-transform:uppercase;letter-spacing:.06em;color:var(--seal);margin:0 0 6px}}
+.top{{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;border-bottom:2px solid var(--ink);padding-bottom:12px;margin-bottom:16px}}
+.grid{{display:grid;grid-template-columns:1.4fr 1fr;gap:18px}}.box{{border:1px solid var(--rule);border-radius:8px;padding:14px;margin-bottom:14px}}
+ul{{margin:0;padding-left:18px}}li{{margin:0 0 4px}}dl{{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:0}}dt{{color:var(--steel)}}dd{{margin:0}}
+.mono{{font-family:"IBM Plex Mono",monospace;font-size:12.5px}}a{{color:var(--seal)}}.note{{color:var(--steel);font-size:12.5px}}
+@media (max-width:700px){{.grid{{grid-template-columns:1fr}}}}
+@media print{{body{{padding:0;font-size:12px}}.box{{break-inside:avoid}}a{{color:inherit;text-decoration:none}}}}
+</style></head><body><div class="sheet">
+<div class="top"><div><h1>Privi World Co</h1><div>Capability statement · Post-quantum readiness · Verifiable AI and supply-chain records</div></div>
+<div class="note" style="text-align:right">Port Huron, Michigan<br>{EMAIL} · +1 313-413-8532<br><a href="{URLS['gov']}">{URLS['gov'].replace('https://','')}</a></div></div>
+<div class="grid"><div>
+<div class="box"><h2>Core competencies</h2><ul>
+<li><strong>Post-quantum readiness packages</strong> mapped to EO 14409 and OMB M-26-15: prioritized migration lists, the nine plan elements, CycloneDX 1.6 CBOMs.</li>
+<li><strong>Post-quantum signatures in production</strong>: every Privi record is signed with Ed25519 and ML-DSA-87 (NIST FIPS 204, the CNSA 2.0 parameter set).</li>
+<li><strong>Tamper-evident records</strong> for AI agents and agency inventories (OMB M-25-21): Merkle transparency log, two-person integrity, air-gapped evidence bundles.</li>
+<li><strong>Verifiable supply-chain provenance</strong> for manufactured lots (Privi ChainFlow / Verify), anchored on chain.</li>
+<li><strong>Agent-ready services</strong>: every capability is callable by AI agents over the Model Context Protocol and listed in the official MCP Registry.</li></ul></div>
+<div class="box"><h2>Differentiators</h2><ul>
+<li>Live today: 8 services, public verification pages, no account needed to check a record.</li>
+<li>Evidence anyone can re-check without trusting Privi: published keys, inclusion proofs, on-chain anchors.</li>
+<li>Honest scope: heuristic scanning finds where to look; deadlines cited to the official texts.</li></ul></div>
+<div class="box"><h2>Past performance</h2><p style="margin:0">New company (2026). Seeking pilot agencies, primes and contractors for PQC inventory and CBOM work. Live demo: <a href="{URLS['gov']}/demo.html">{URLS['gov'].replace('https://','')}/demo.html</a></p></div>
+</div><div>
+<div class="box"><h2>Company data</h2><dl>
+<dt>Legal name</dt><dd>Privi World Co</dd><dt>Entity</dt><dd>Delaware C corporation, founded 2026</dd>
+<dt>Location</dt><dd>Port Huron, St. Clair County, Michigan</dd><dt>Point of contact</dt><dd>Dario Canoy, Founder &amp; CEO</dd>
+<dt>Email</dt><dd>{EMAIL}</dd><dt>Phone</dt><dd>+1 313-413-8532</dd></dl></div>
+<div class="box"><h2>NAICS codes</h2><dl class="mono">
+<dt>541511</dt><dd>Custom Computer Programming Services</dd><dt>541512</dt><dd>Computer Systems Design Services</dd>
+<dt>541519</dt><dd>Other Computer Related Services</dd><dt>518210</dt><dd>Computing Infrastructure Providers, Data Processing, Web Hosting</dd></dl></div>
+<div class="box"><h2>Standards we build to</h2><ul class="mono" style="font-size:12.5px">
+<li>FIPS 203 / 204 / 205</li><li>NSA CNSA 2.0</li><li>OMB M-26-15 · EO 14409</li><li>NIST IR 8547 (draft)</li><li>OMB M-25-21</li><li>CycloneDX 1.6 CBOM</li><li>RFC 9162 transparency logs</li></ul></div>
+<div class="box"><h2>Certifications</h2><p style="margin:0" class="note">Not yet FedRAMP authorized; no DoD Impact Level; cryptographic modules not yet FIPS 140-3 validated.</p></div>
+</div></div></div></body></html>"""
+
+EXTRA = {"gov": {"demo.html": GOV_DEMO, "capability.html": CAPABILITY}}
 
 SITES["chainflow"] = page(
     "chainflow", "Privi ChainFlow: verifiable lot provenance for manufacturers",
@@ -622,7 +759,14 @@ def main():
         (d / "sitemap.xml").write_text('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
                                        f"<url><loc>{URLS[key]}/</loc></url></urlset>", encoding="utf-8")
         (d / "favicon.svg").write_text(LOGO.replace(' aria-hidden="true"', ' xmlns="http://www.w3.org/2000/svg"'), encoding="utf-8")
-        print("built", key)
+        extra = EXTRA.get(key, {})
+        for name, doc in extra.items():
+            (d / name).write_text(doc, encoding="utf-8")
+        if extra:
+            (d / "sitemap.xml").write_text('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+                                           f"<url><loc>{URLS[key]}/</loc></url>" + "".join(f"<url><loc>{URLS[key]}/{n}</loc></url>" for n in extra)
+                                           + "</urlset>", encoding="utf-8")
+        print("built", key, *extra)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 """On-chain checkpoints through Privi Anchor.
 
 Periodically takes the latest fingerprint ("head") of every chain of records that
-changed and anchors those heads on chain (Base, until the Privi chain mainnet) with Privi Anchor. Once a
+changed and anchors those heads on chain (the Privi Devnet, until the Privi mainnet) with Privi Anchor. Once a
 head is anchored, nobody (Privi included) can rewrite history up to that point
 without the mismatch showing: an audit compares the anchored head with the
 record at the same position.

@@ -18,7 +18,7 @@ def h(s: str) -> str:
 
 class FakeChain:
     """In-memory EVM: records self-sent anchor txs and mines them immediately."""
-    chain_id = 8453  # Base
+    chain_id = 772626  # Privi Devnet
     address = WALLET
 
     def __init__(self, mine=True):
@@ -74,7 +74,8 @@ def test_anchor_then_verify(store, monkeypatch):
     async def go():
         async with Client(build_server(Settings(), chain, store, receipt_timeout=1)) as c:
             st = (await c.call_tool("anchor_status", {})).structured_content
-            assert st["anchor_wallet"] == WALLET and st["chain_id"] == 8453 and "Base" in st["network"]
+            assert st["anchor_wallet"] == WALLET and st["chain_id"] == 772626 and "Privi Devnet" in st["network"]
+            assert st["explorer"] == "https://privi-devnet.onrender.com" and st["archived_networks"][0]["chain_id"] == 8453
             ht = (await c.call_tool("anchor_hash_text", {"text": "report v1"})).structured_content
             assert ht["sha256"] == docs[0]
 
@@ -131,8 +132,8 @@ def test_auth_limits_and_validation(store, monkeypatch):
     assert not chain.txs  # nothing was sent for rejected calls
 
 
-def test_devnet_anchors_survive_move_to_base(tmp_path, monkeypatch):
-    """Anchors made on the Privi devnet are reported honestly after the move, not as forgeries."""
+def test_old_devnet_anchors_reported_honestly(tmp_path, monkeypatch):
+    """Anchors from the retired 262144 devnet are reported honestly, not as forgeries."""
     import sqlite3
     db = str(tmp_path / "old.db")
     old = sqlite3.connect(db)  # a pre-0.4 database: no chain_id column
@@ -148,8 +149,8 @@ def test_devnet_anchors_survive_move_to_base(tmp_path, monkeypatch):
     old.close()
 
     monkeypatch.setenv("ANCHOR_ALLOW_LOCAL", "1")
-    store = AnchorStore(db, 8453)
-    assert store.stats()["confirmed_batches"] == 0, "devnet anchors are not counted as Base anchors"
+    store = AnchorStore(db, 772626)
+    assert store.stats()["confirmed_batches"] == 0, "old devnet anchors are not counted on the new devnet"
     assert store.confirmed_on_current_chain() == 0
     chain = FakeChain()
 
@@ -159,10 +160,56 @@ def test_devnet_anchors_survive_move_to_base(tmp_path, monkeypatch):
             assert v["verified"] is None and v["anchored_on_chain_id"] == 262144 and "Devnet" in v["reason"]
             assert v["block_number"] == 58638
             r = (await c.call_tool("anchor_hashes", {"hashes": [h("genesis")]})).structured_content
-            assert r["status"] == "confirmed" and r["chain_id"] == 8453
+            assert r["status"] == "confirmed" and r["chain_id"] == 772626
             v = (await c.call_tool("anchor_verify", {"hash": h("genesis")})).structured_content
-            assert v["verified"] is True and v["tx_link"].startswith("https://basescan.org/tx/")
+            assert v["verified"] is True and v["tx_link"].startswith("https://privi-devnet.onrender.com/tx/")
     anyio.run(go)
+
+
+def test_base_anchors_still_verify_after_move_to_devnet(tmp_path, monkeypatch):
+    """Anchors made on Base before the move are checked read-only on Base, by chain id."""
+    from privi_anchor import server as server_mod
+    monkeypatch.setenv("ANCHOR_ALLOW_LOCAL", "1")
+    base = FakeChain()
+    base.chain_id = 8453
+    base_store = AnchorStore(str(tmp_path / "s.db"), 8453)
+
+    async def anchor_on_base():
+        async with Client(build_server(Settings(rpc_url="https://mainnet.base.org", chain_id=8453), base, base_store,
+                                       receipt_timeout=1)) as c:
+            return (await c.call_tool("anchor_hashes", {"hashes": [h("base doc")]})).structured_content
+    r = anyio.run(anchor_on_base)
+    assert r["chain_id"] == 8453
+
+    readers = []
+
+    def fake_reader(rpc_url, chain_id, address="", timeout=20.0):
+        readers.append((rpc_url, chain_id))
+        return base
+    monkeypatch.setattr(server_mod, "ReadOnlyChain", fake_reader)
+    dev = FakeChain()
+    dev_store = AnchorStore(str(tmp_path / "s.db"), 772626)  # same database, now anchoring on the devnet
+
+    async def verify_after_move():
+        async with Client(build_server(Settings(), dev, dev_store, receipt_timeout=1)) as c:
+            v = (await c.call_tool("anchor_verify", {"hash": h("base doc")})).structured_content
+            assert v["verified"] is True and v["chain_id"] == 8453 and v["archived_network"] is True
+            assert v["tx_link"].startswith("https://basescan.org/tx/") and v["network"] == "Base"
+            rc = r["receipts"][0]
+            v2 = (await c.call_tool("anchor_verify", {"hash": rc["hash"], "tx_hash": rc["tx_hash"],
+                                                      "proof": rc["proof"]})).structured_content
+            assert v2["verified"] is True and v2["chain_id"] == 8453  # not on the devnet: found on Base
+            n = (await c.call_tool("anchor_hashes", {"hashes": [h("new doc")]})).structured_content
+            assert n["chain_id"] == 772626 and n["tx_link"].startswith("https://privi-devnet.onrender.com/tx/")
+    anyio.run(verify_after_move)
+    assert ("https://mainnet.base.org", 8453) in readers
+    assert dev_store.stats()["confirmed_batches"] == 1, "only the devnet anchor counts on the current chain"
+
+
+def test_archive_spec_parsing():
+    from privi_anchor.server import parse_archive
+    a = parse_archive("8453=Base|https://mainnet.base.org|https://basescan.org/tx/;84532=Base Sepolia|https://sepolia.base.org")
+    assert a[8453].name == "Base" and a[84532].explorer_tx_url == "" and parse_archive("") == {}
 
 
 def test_daily_gas_budget(store, monkeypatch):

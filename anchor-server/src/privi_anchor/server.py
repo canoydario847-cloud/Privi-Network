@@ -1,4 +1,4 @@
-"""Privi Anchor MCP server: timestamped proof-of-existence on chain (Base until the Privi chain mainnet).
+"""Privi Anchor MCP server: timestamped proof-of-existence on the Privi Devnet (until the Privi mainnet launches).
 
 Free:     anchor_status, anchor_hash_text, anchor_verify
 API key:  anchor_hashes
@@ -24,16 +24,17 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from . import merkle
-from .chain import Chain, JsonRpcChain, RpcError, wait_receipt
+from .chain import Chain, JsonRpcChain, ReadOnlyChain, RpcError, wait_receipt
 from .store import AnchorStore
 
-__version__ = "0.4.1"
+__version__ = "0.5.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/anchor-server"
 MAX_HASHES = 100
 
 INSTRUCTIONS = """\
 Privi Anchor puts a permanent, timestamped proof that some data existed on chain:
-on Base (Ethereum L2) until the Privi chain mainnet launches. Hash the content yourself (SHA-256, or use anchor_hash_text),
+on the Privi Devnet (EVM chain 772626, explorer https://privi-devnet.onrender.com) until the Privi
+mainnet launches. Anchors made earlier on Base still verify. Hash the content yourself (SHA-256, or use anchor_hash_text),
 then anchor_hashes records up to 100 hashes in one transaction. Keep the returned
 receipt (tx_hash + proof). Anyone can later check it with anchor_verify, which
 reads the chain directly, so the proof does not depend on trusting this server.
@@ -50,18 +51,47 @@ https://privi-discovery.onrender.com/.well-known/agent.json."""
 READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=True)
 
 
+DEVNET_RPC = "https://privi-devnet.onrender.com"
+
+
+@dataclass
+class ArchiveNet:
+    """A chain Privi anchored on earlier: read-only, so its anchors keep verifying."""
+    chain_id: int
+    name: str
+    rpc_url: str
+    explorer_tx_url: str
+
+
+def parse_archive(spec: str) -> dict[int, ArchiveNet]:
+    """ANCHOR_ARCHIVE_CHAINS="8453=Base|https://mainnet.base.org|https://basescan.org/tx/;..." """
+    out: dict[int, ArchiveNet] = {}
+    for part in (spec or "").split(";"):
+        if "=" not in part:
+            continue
+        cid, rest = part.split("=", 1)
+        bits = [b.strip() for b in rest.split("|")]
+        if len(bits) >= 2 and cid.strip().isdigit():
+            out[int(cid)] = ArchiveNet(int(cid), bits[0], bits[1], bits[2] if len(bits) > 2 else "")
+    return out
+
+
+DEFAULT_ARCHIVE = "8453=Base|https://mainnet.base.org|https://basescan.org/tx/"
+
+
 @dataclass
 class Settings:
-    # Privi runs on Base until the Privi chain mainnet launches.
-    rpc_url: str = "https://mainnet.base.org"
-    chain_id: int = 8453
-    network_name: str = "Base (until the Privi chain mainnet launches)"
+    # Privi anchors on its own chain: the Privi Devnet until the Privi mainnet launches.
+    rpc_url: str = DEVNET_RPC
+    chain_id: int = 772626
+    network_name: str = "Privi Devnet (until the Privi mainnet launches)"
     private_key: str = ""
     db_path: str = "anchor.db"
     api_keys: set[str] = field(default_factory=set)
     rate_per_min: int = 30
-    explorer_tx_url: str = "https://basescan.org/tx/"
-    max_tx_per_day: int = 500  # gas budget: each anchor is a real Base transaction
+    explorer_tx_url: str = DEVNET_RPC + "/tx/"
+    max_tx_per_day: int = 5000  # devnet gas is valueless TEST; this only bounds abuse
+    archive: dict[int, ArchiveNet] = field(default_factory=lambda: parse_archive(DEFAULT_ARCHIVE))
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -75,6 +105,7 @@ class Settings:
             rate_per_min=int(os.getenv("ANCHOR_RATE_PER_MIN", "30")),
             explorer_tx_url=os.getenv("ANCHOR_EXPLORER_TX_URL", cls.explorer_tx_url),
             max_tx_per_day=int(os.getenv("ANCHOR_MAX_TX_PER_DAY", str(cls.max_tx_per_day))),
+            archive=parse_archive(os.getenv("ANCHOR_ARCHIVE_CHAINS", DEFAULT_ARCHIVE)),
         )
 
 
@@ -114,7 +145,7 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
 
     mcp = MCPServer(
         name="privi-anchor", title="Privi Anchor",
-        description="Timestamped proof-of-existence for AI outputs and data, anchored on Base until the Privi chain mainnet launches.",
+        description="Timestamped proof-of-existence for AI outputs and data, anchored on the Privi Devnet until the Privi mainnet launches.",
         instructions=INSTRUCTIONS, website_url=SOURCE, version=__version__,
     )
 
@@ -138,7 +169,8 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
             "network": settings.network_name, "chain_id": settings.chain_id, "rpc_url": settings.rpc_url,
             "anchor_wallet": chain.address if chain else None, "anchoring_enabled": chain is not None,
             "max_hashes_per_call": MAX_HASHES, "max_tx_per_day": settings.max_tx_per_day,
-            "until": "Privi anchors on Base until the Privi chain mainnet launches", "calldata_format": "0x50525641 ('PRVA') + 0x01 + 32-byte Merkle root",
+            "until": "Privi anchors on the Privi Devnet until the Privi mainnet launches", "explorer": settings.explorer_tx_url.rsplit("/tx/", 1)[0] or None,
+            "archived_networks": [{"chain_id": a.chain_id, "network": a.name} for a in settings.archive.values() if a.chain_id != settings.chain_id], "calldata_format": "0x50525641 ('PRVA') + 0x01 + 32-byte Merkle root",
             "merkle": "sha256(min(a,b)||max(a,b)); single leaf is its own root", **store.stats(),
         }
         if chain:
@@ -166,26 +198,53 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
             leaf = merkle.norm_hash(hash)
         except ValueError as e:
             return _result({"error": str(e)}, is_error=True)
-        if not chain:
+        current_reader = chain or (ReadOnlyChain(settings.rpc_url, settings.chain_id) if settings.rpc_url else None)
+        if not current_reader:
             return _result({"error": "chain access is not configured on this server"}, is_error=True)
+        service_address = chain.address if chain else ""
+
+        def net_for(cid: int | None):
+            """(reader, chain_id, network name, explorer prefix) for the chain an anchor lives on."""
+            if cid is None or cid == settings.chain_id:
+                return current_reader, settings.chain_id, settings.network_name, settings.explorer_tx_url
+            a = settings.archive.get(cid)
+            if a:
+                return ReadOnlyChain(a.rpc_url, a.chain_id, service_address), a.chain_id, a.name, a.explorer_tx_url
+            return None
+
         rec = None
+        candidates: list[int | None]
         if not tx_hash:
             rec = store.find_leaf(leaf)
             if not rec or not rec.get("tx_hash"):
                 return _result({"hash": leaf, "verified": False, "reason": "no anchor found for this hash"})
-            if rec.get("chain_id") is not None and rec["chain_id"] != settings.chain_id:
-                net = "the Privi EVM Devnet" if rec["chain_id"] == AnchorStore.LEGACY_CHAIN_ID else f"chain {rec['chain_id']}"
-                return _result({"hash": leaf, "verified": None, "anchored_on_chain_id": rec["chain_id"], "tx_hash": rec["tx_hash"],
-                                "proof": rec["proof"], "block_number": rec.get("block_number"), "block_time": rec.get("block_time"),
-                                "reason": f"anchored on {net} before Privi moved to Base; that transaction lives on that chain, "
-                                          "not on Base. Re-anchor the hash to get a Base receipt."})
             tx_hash, proof = rec["tx_hash"], rec["proof"]
+            candidates = [rec.get("chain_id")]
+        else:
+            candidates = [None] + [c for c in settings.archive if c != settings.chain_id]
         proof = proof or []
-        try:
-            tx = await anyio.to_thread.run_sync(chain.transaction, tx_hash)
-            rcpt = await anyio.to_thread.run_sync(chain.receipt, tx_hash)
-        except RpcError as e:
-            return _result({"error": f"could not read the chain: {e}"}, is_error=True)
+
+        net = None
+        tx = rcpt = None
+        for cid in candidates:
+            net = net_for(cid)
+            if net is None:
+                name = "the old Privi EVM Devnet" if cid == AnchorStore.LEGACY_CHAIN_ID else f"chain {cid}"
+                return _result({"hash": leaf, "verified": None, "anchored_on_chain_id": cid, "tx_hash": tx_hash,
+                                "proof": proof, "block_number": rec.get("block_number") if rec else None,
+                                "block_time": rec.get("block_time") if rec else None,
+                                "reason": f"anchored on {name}, which this server can no longer read. "
+                                          f"Re-anchor the hash to get a {settings.network_name} receipt."})
+            try:
+                tx = await anyio.to_thread.run_sync(net[0].transaction, tx_hash)
+                rcpt = await anyio.to_thread.run_sync(net[0].receipt, tx_hash) if tx else None
+            except RpcError as e:
+                if len(candidates) == 1:
+                    return _result({"error": f"could not read {net[2]}: {e}"}, is_error=True)
+                continue
+            if tx:
+                break
+        reader, cid, net_name, explorer = net
         if not tx:
             return _result({"hash": leaf, "verified": False, "tx_hash": tx_hash, "reason": "transaction not found on chain"})
         onchain_root = merkle.root_from_calldata(tx.get("input") or tx.get("data") or "")
@@ -193,10 +252,13 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
             computed = merkle.root_from_proof(leaf, proof)
         except ValueError as e:
             return _result({"error": f"bad proof: {e}"}, is_error=True)
-        out: dict[str, Any] = {"hash": leaf, "tx_hash": tx_hash, "tx_link": tx_link(tx_hash),
-                               "chain_id": settings.chain_id, "anchored_by": tx.get("from"),
-                               "by_privi_anchor_service": bool(tx.get("from")) and tx["from"].lower() == chain.address.lower(),
+        out: dict[str, Any] = {"hash": leaf, "tx_hash": tx_hash, "tx_link": explorer + tx_hash if explorer else None,
+                               "chain_id": cid, "network": net_name, "anchored_by": tx.get("from"),
+                               "by_privi_anchor_service": bool(tx.get("from") and service_address)
+                                                          and tx["from"].lower() == service_address.lower(),
                                "merkle_root": onchain_root, "proof": proof}
+        if cid != settings.chain_id:
+            out["archived_network"] = True
         if not onchain_root:
             return _result({**out, "verified": False, "reason": "transaction is not a Privi anchor"})
         if computed != onchain_root:
@@ -206,7 +268,7 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
         if int(rcpt.get("status", "0x0"), 16) != 1:
             return _result({**out, "verified": False, "reason": "anchor transaction failed on chain"})
         block = int(rcpt["blockNumber"], 16)
-        ts = await anyio.to_thread.run_sync(chain.block_timestamp, block)
+        ts = await anyio.to_thread.run_sync(reader.block_timestamp, block)
         if rec and rec["status"] != "confirmed":
             store.update_batch(rec["batch_id"], status="confirmed", block_number=block, block_time=ts)
         return _result({**out, "verified": True, "block_number": block, "block_time": ts,
@@ -221,7 +283,7 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
         ctx: Context,
         label: Annotated[str, Field(description="Optional note kept in this server's index (not on chain)")] = "",
     ) -> CallToolResult:
-        """Anchor up to 100 hashes on chain (Base until the Privi chain mainnet) in one transaction. Returns, for each hash, a
+        """Anchor up to 100 hashes on chain (the Privi Devnet until the Privi mainnet) in one transaction. Returns, for each hash, a
         receipt (tx_hash, Merkle proof, block, time) that anyone can check with anchor_verify.
         Requires an API key (Authorization: Bearer)."""
         who = client_key(ctx)
@@ -279,7 +341,7 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
         """Static MCP server card (Smithery and other directories read it when they cannot scan)."""
         tools = [t.model_dump(by_alias=True, exclude_none=True) for t in await mcp.list_tools()]
         return JSONResponse({"serverInfo": {"name": "privi-anchor", "title": "Privi Anchor", "version": __version__,
-                                            "description": "Timestamped proof-of-existence: anchor any hash on Base (until the Privi chain mainnet) and verify it later.",
+                                            "description": "Timestamped proof-of-existence: anchor any hash on the Privi Devnet (until the Privi mainnet) and verify it later.",
                                             "websiteUrl": "https://privi-hub.onrender.com"},
                              "authentication": {"required": False, "schemes": []},
                              "tools": tools, "resources": [], "prompts": []},

@@ -10,7 +10,7 @@ Agency AI Reporting" under M-25-21.
 Here every use case is versioned; each change is also written to the
 organization's tamper-evident "ai-inventory" log; a gap check flags what an
 OMB review would flag; and the public export is hashed and sealed on the
-chain (Base, until the Privi chain mainnet) so the published file can be proven unaltered.
+chain (the Privi Devnet, until the Privi mainnet) so the published file can be proven unaltered.
 
 Field names follow the guidance's reporting fields. Confirm column names
 against OMB's official template before submission.

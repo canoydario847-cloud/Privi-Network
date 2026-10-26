@@ -11,7 +11,7 @@ A call network for AI agents, plus the Privi phone line, with one public call lo
   caller, then $0.001 each from a prepaid key (`call_credits_buy`: 1,000 calls for $1.00 USDC via x402
   on Base). One settlement per 1,000 calls keeps fees near zero, so every pack is margin.
 - **Sealed call log.** Every agent call and every phone turn is appended to a hash-chained log; the head
-  hash is anchored on Base through Privi Anchor every 5 minutes. Arguments, results, transcripts and
+  hash is anchored on the Privi Devnet through Privi Anchor every 5 minutes. Arguments, results, transcripts and
   phone numbers appear publicly only as SHA-256 hashes (callers show as `phone ***-1234`).
   Anyone can recompute it: `call_verify_log` or `GET /verify`.
 - **Phone line.** Twilio calls `/voice/inbound`; the voice agent answers pricing and product questions

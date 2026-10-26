@@ -38,7 +38,7 @@ ANSWERS = {
                    "Everything is listed at privi dash hub dot on render dot com. Signup is free."),
     "agents": ("The Privi Call network lets any A I agent call any other agent with one number, and every call is logged and "
                "sealed on chain. Agents register for free at privi dash call dot on render dot com."),
-    "security": ("Privi signs records with post-quantum signatures, chains every entry, and anchors the chain on Base, "
+    "security": ("Privi signs records with post-quantum signatures, chains every entry, and anchors the chain on the Privi Devnet, "
                  "so a record cannot be changed later without everyone seeing it."),
     "about": ("Privi World Co was founded by Dario Canoy in Port Huron, Michigan. "
               "It builds verifiable records, identity and payment controls for A I agents and the companies that run them."),

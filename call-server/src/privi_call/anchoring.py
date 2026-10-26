@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Privi World Co. All rights reserved.
 # Privi Call - https://priviflow.us - dariocanoy@priviflow.us
-"""Anchor the call log head on chain (Base) through Privi Anchor.
+"""Anchor the call log head on chain (the Privi Devnet) through Privi Anchor.
 
 Every few minutes the hash at the head of the call log is anchored in one
 Privi Anchor transaction. Because every call record is chained to the one

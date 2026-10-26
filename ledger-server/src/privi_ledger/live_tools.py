@@ -350,7 +350,7 @@ def register(mcp: MCPServer, live: LiveService, gateways: Gateways, rooms: Rooms
 
     @mcp.tool(title="Rooms: close and seal", annotations=DESTRUCTIVE)
     async def room_close(ctx: Context, room_id: Annotated[str, Field(description="rm_... ID")]) -> CallToolResult:
-        """Close a room and seal its transcript: the hash is signed (Ed25519 + ML-DSA-87), anchored on chain (Base) and written
+        """Close a room and seal its transcript: the hash is signed (Ed25519 + ML-DSA-87), anchored on chain (the Privi Devnet) and written
         to both organizations' logs. Either party can close. Requires the organization API key."""
         org = org_from(ctx)
         if not org:

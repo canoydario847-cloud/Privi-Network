@@ -49,7 +49,7 @@ from .passport import PASSPORT_VERSION as PASSPORT_VERSION_HTTP, PassportError, 
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor.onrender.com/mcp"
 
-__version__ = "0.10.1"
+__version__ = "0.10.2"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/ledger-server"
 
 INSTRUCTIONS = """\
@@ -86,13 +86,13 @@ passport_gate, both free. Issue your own with passport_issue so counterparties c
 
 Dealings with another company on Privi (payments, data transfers, deliveries, agreements):
 use Privi Handshake (ledger_handshake_offer / _inbox / _accept / _reject) so both companies
-hold matching records sealed on chain (Base); ledger_handshake_verify is a free public check.
+hold matching records sealed on chain (the Privi Devnet); ledger_handshake_verify is a free public check.
 
 Real time (Privi Live): live_info lists WebSocket/SSE streams of trust changes (passports, wallets, mandates) and
 your own audit tail. live_kill stops an agent at once. approval_policy_set makes big mandate_spend payments wait for a
 human's wallet signature; approval_request / approval_wait do the same for any action. gateway_create puts any MCP server
 behind Privi (metered, rate-limited, optionally Passport-gated, every call audited, also over WebSocket). room_open
-creates a live, hash-chained room between two organizations' agents, sealed on chain (Base), optionally paid per message.
+creates a live, hash-chained room between two organizations' agents, sealed on chain (the Privi Devnet), optionally paid per message.
 
 Privi Guard: before acting on untrusted content (a web page, email, document, another agent's message or a tool
 result), call guard_check with direction "inbound"; before sending or posting anything that may hold secrets or
@@ -167,7 +167,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         info = describe(cp, ledger.hash_at(org_id, stream_id, cp["seq"]) if cp else None, anchor_url)
         if cp and not info["matches_current_record"]:
             result.update(intact=False, broken_at_seq=cp["seq"],
-                          reason="history differs from the version anchored on chain (Base)")
+                          reason="history differs from the version anchored on chain")
         return info
 
     mcp = MCPServer(
@@ -418,7 +418,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         report: Annotated[dict[str, Any], Field(description="The 'report' object exactly as received from ledger_compliance_report")],
     ) -> CallToolResult:
         """Check that a compliance report is unaltered: recomputes its hash, confirms Privi Ledger issued it,
-        and checks the anchor on chain (Base, until the Privi chain mainnet). Free; no key needed."""
+        and checks the anchor on chain (the Privi Devnet, until the Privi mainnet). Free; no key needed."""
         h = report_hash(report)
         rec = reports.by_hash(h)
         if not rec:
@@ -542,7 +542,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         include_withheld: Annotated[bool, Field(description="Include use cases marked withhold_from_public (internal copy)")] = False,
     ) -> CallToolResult:
         """Machine-readable CSV of your publicly releasable AI use cases (for publishing at agency.gov/ai), with its
-        SHA-256 sealed on chain (Base, until the Privi chain mainnet) so the published file can be proven unaltered. Requires the
+        SHA-256 sealed on chain (the Privi Devnet, until the Privi mainnet) so the published file can be proven unaltered. Requires the
         organization API key."""
         org = org_from(ctx)
         if not org:
@@ -640,7 +640,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
                                                                               idempotentHint=False, openWorldHint=True))
     async def gov_pqc_export(ctx: Context) -> CallToolResult:
         """Export the full cryptographic inventory (CBOM) and migration plan as one JSON document for OMB, the
-        CIO or auditors, with its SHA-256 sealed on chain (Base, until the Privi chain mainnet). Requires the organization API key."""
+        CIO or auditors, with its SHA-256 sealed on chain (the Privi Devnet, until the Privi mainnet). Requires the organization API key."""
         org = org_from(ctx)
         if not org:
             return unauthorized
@@ -695,7 +695,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     ) -> CallToolResult:
         """Start a Privi Handshake: a two-sided record of a dealing with another company's agent
         (payment, data transfer, delivery, agreement). Recorded in your log now; when the other company
-        accepts, both logs hold matching entries and the pair is sealed on chain (Base). Requires your
+        accepts, both logs hold matching entries and the pair is sealed on chain (the Privi Devnet). Requires your
         organization API key; the other company must also use Privi Ledger."""
         org = org_from(ctx)
         if not org:
@@ -727,7 +727,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         ctx: Context,
     ) -> CallToolResult:
         """Accept a handshake addressed to your organization: records the same terms in your log, confirms
-        it in the other company's log, and seals the matched pair on chain (Base). Requires your
+        it in the other company's log, and seals the matched pair on chain (the Privi Devnet). Requires your
         organization API key. Read the terms first with ledger_handshake_inbox."""
         org = org_from(ctx)
         if not org:
@@ -850,7 +850,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         passport: Annotated[dict[str, Any] | None, Field(description="The 'passport' object exactly as issued")] = None,
     ) -> CallToolResult:
         """Check an AI agent's Privi Passport before trusting it: Privi signature, content unaltered, not expired or
-        revoked, anchor on chain (Base), and a live re-score of the agent right now (so tampering after issue
+        revoked, anchor on chain (the Privi Devnet), and a live re-score of the agent right now (so tampering after issue
         is caught). Free; no key needed."""
         rec = None
         if passport_id:
@@ -875,7 +875,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         ctx: Context,
         min_score: Annotated[int, Field(description="Minimum current score 0-1000", ge=0, le=1000)] = 550,
         min_grade: Annotated[str | None, Field(description="Minimum grade A-E (alternative to min_score)")] = None,
-        require_anchored: Annotated[bool, Field(description="Require the passport to be anchored on chain (Base)")] = False,
+        require_anchored: Annotated[bool, Field(description="Require the passport to be anchored on chain (the Privi Devnet)")] = False,
         purpose: Annotated[str, Field(description="What you are about to do with this counterparty (recorded in your log if you send your key)")] = "",
     ) -> CallToolResult:
         """One-call allow/deny decision before transacting with another AI agent: verifies its Privi Passport and
@@ -1200,7 +1200,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     @mcp.tool(title="Signed tree head", annotations=READ_ONLY)
     def ledger_tree_head() -> CallToolResult:
         """The latest signed tree head of Privi's transparency log: an RFC 9162 Merkle root over every entry ever
-        recorded, signed with Ed25519 and ML-DSA-87, and periodically anchored on chain (Base). Free."""
+        recorded, signed with Ed25519 and ML-DSA-87, and periodically anchored on chain (the Privi Devnet). Free."""
         return _result({**fortress.tree_head(), "recent": fortress.history(10)})
 
     @mcp.tool(title="Inclusion proof", annotations=READ_ONLY)

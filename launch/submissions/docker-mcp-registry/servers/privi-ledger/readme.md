@@ -5,7 +5,7 @@ Privi Ledger gives AI agents a trust layer: it checks what an agent reads and se
 ## Features
 
 - **Privi Guard**: check untrusted text (web pages, emails, tool output) for prompt injection before an agent acts on it. Returns a verdict, a risk score and a signed receipt.
-- **Audit logs**: hash-chained, tamper-evident logs of an agent's actions, with checkpoints anchored on Base.
+- **Audit logs**: hash-chained, tamper-evident logs of an agent's actions, with checkpoints anchored on the Privi Devnet.
 - **Passports and KYA**: signed trust credentials for agents, and wallet-to-agent binding, that anyone can verify for free.
 - **Compliance reports**: sealed reports and PDFs auditors can verify.
 
