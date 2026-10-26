@@ -375,6 +375,16 @@ def validate_database(conn):
         if orphan is not None:
             # Never print account IDs, file paths, session tokens or emails.
             raise ValueError(f"Not a LIFE database; orphaned {child} owner references")
+    # Credit balances are used for authorization to consume paid AI services.
+    # SQLite's dynamic typing can admit NULL, text or negative balances even
+    # if a lookalike schema contains the expected columns. Reject these before
+    # treating a restored snapshot as safe; never print account details.
+    invalid_balance = conn.execute(
+        'SELECT 1 FROM "users" WHERE typeof("credits") != \'integer\' '
+        'OR "credits" < 0 LIMIT 1'
+    ).fetchone()
+    if invalid_balance is not None:
+        raise ValueError("Not a LIFE database; invalid member credit balance")
     return len(tables)
 
 
