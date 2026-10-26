@@ -1,4 +1,4 @@
-# Render Blueprint for the Privi MCP servers (Ledger, Verify, Anchor, Quantum, Call).
+# Render Blueprint for the Privi Devnet and the Privi MCP servers (Ledger, Verify, Anchor, Quantum, Call).
 # Apply once: dashboard.render.com -> New -> Blueprint -> canoydario847-cloud/Privi-Network.
 # Render asks only for the values marked `sync: false`; every internal secret is generated
 # and shared between the services automatically.
@@ -14,6 +14,35 @@ envVarGroups:
         sync: false
 
 services:
+  # ------------------------------------------------------------------ Privi Devnet
+  # Privi's own chain (Cosmos EVM v0.7.3, EVM chain 772626, valueless TEST gas). Every Privi
+  # checkpoint is anchored here until the Privi mainnet launches. Public RPC + explorer on one URL.
+  - type: web
+    name: privi-devnet
+    runtime: docker
+    plan: starter
+    region: virginia
+    dockerfilePath: ./devnet/Dockerfile
+    dockerContext: ./devnet
+    buildFilter:
+      paths: ["devnet/**"]
+    healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: privi-devnet-data         # chain state: blocks, receipts, validator key
+      mountPath: /data
+      sizeGB: 10
+    envVars:
+      - key: DEVNET_PUBLIC_URL
+        value: https://privi-devnet.onrender.com
+      - key: DEVNET_EVM_CHAIN_ID
+        value: "772626"
+      - key: DEVNET_COSMOS_CHAIN_ID
+        value: privi-devnet-1
+      # Funded with TEST at genesis (first boot only): the Privi Anchor wallet and the owner wallet.
+      - key: DEVNET_FUND_ADDRESSES
+        value: "0x1D0e608d273b601E9Bd1A8a23584077C51AC9D89,0x1990589FD200E043b8C6FD9ec5956c61b3071048"
+
   # ------------------------------------------------------------------ Privi Anchor
   - type: web
     name: privi-anchor

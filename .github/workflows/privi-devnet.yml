@@ -1,0 +1,79 @@
+name: Privi Devnet image
+
+# Builds the devnet node image exactly as Render will, boots it, sends a real anchor
+# transaction with Privi Anchor's own chain client, and checks state survives a restart.
+on:
+  pull_request:
+    paths: ["devnet/**", "anchor-server/**", ".github/workflows/privi-devnet.yml"]
+  push:
+    branches: [devnet-everything]
+    paths: ["devnet/**", ".github/workflows/privi-devnet.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  devnet:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gateway unit check (stdlib)
+        run: python3 -m py_compile devnet/gateway.py devnet/bech32.py
+      - name: Build devnet image
+        run: docker build -t privi-devnet devnet
+      - name: Throwaway funded test wallet
+        run: |
+          pip install -q "eth-account>=0.13"
+          python3 - <<'EOF' >> "$GITHUB_ENV"
+          from eth_account import Account
+          a = Account.create()
+          print(f"TEST_ADDR={a.address}")
+          print(f"TEST_KEY={a.key.hex()}")
+          EOF
+      - name: Boot devnet
+        run: |
+          docker volume create devnet-data
+          docker run -d --name devnet -p 10000:10000 -v devnet-data:/data \
+            -e DEVNET_FUND_ADDRESSES="$TEST_ADDR" privi-devnet
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:10000/health; then echo; exit 0; fi
+            sleep 5
+          done
+          docker logs devnet | tail -80
+          exit 1
+      - name: Anchor a transaction with Privi Anchor's chain client
+        run: |
+          pip install -q ./anchor-server
+          python3 - <<'EOF'
+          import json, os, urllib.request
+          from privi_anchor.chain import JsonRpcChain, wait_receipt
+          c = JsonRpcChain("http://127.0.0.1:10000", 772626, os.environ["TEST_KEY"])
+          assert c.remote_chain_id() == 772626, c.remote_chain_id()
+          bal = c.balance_wei(); print("balance", bal); assert bal > 10**20
+          h = c.send_data("0x" + b"Privi Devnet CI anchor".hex())
+          r = wait_receipt(c, h, timeout_s=60)
+          assert r and r["status"] == "0x1", r
+          tx = json.load(urllib.request.urlopen(f"http://127.0.0.1:10000/api/tx/{h}"))
+          print(json.dumps(tx, indent=1))
+          assert tx["data_text"] == "Privi Devnet CI anchor" and tx["status"] == "success"
+          open("/tmp/anchor_tx", "w").write(h)
+          EOF
+      - name: Restart keeps chain state
+        run: |
+          before=$(curl -fsS http://127.0.0.1:10000/api/status | jq .latest_block)
+          docker restart devnet
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:10000/health >/dev/null; then break; fi; sleep 3
+          done
+          after=$(curl -fsS http://127.0.0.1:10000/api/status | jq .latest_block)
+          echo "before=$before after=$after"; test "$after" -ge "$before"
+          curl -fsS "http://127.0.0.1:10000/api/tx/$(cat /tmp/anchor_tx)" | jq -e '.status=="success"'
+      - name: Public gateway refuses signing methods
+        run: |
+          curl -fsS -XPOST http://127.0.0.1:10000/ -H 'content-type: application/json' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"eth_accounts","params":[]}' | jq -e '.error.code==-32601'
+      - name: Node logs
+        if: always()
+        run: docker logs devnet 2>&1 | tail -60
