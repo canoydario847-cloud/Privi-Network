@@ -132,7 +132,19 @@ The research implementation supplies \`persistent_vote_guard.cjs\`.
 Before emitting a **research-only** commit signature from an admitted
 Ed25519 validator, it reserves a height lock scoped by
 \`(research-chain-id, genesis-hash, height, validator-id)\`. The stored record
-also includes the admitted membership epoch and accepted candidate block hash.
+also includes the admitted membership epoch, candidate block hash, and
+the claimed **previous-block hash**. A research signer now rejects the
+same candidate hash at the same height with a different parent link,
+including across rounds or process restarts. This improves signed
+proposal consistency, but the parent hash is still an unverified
+proposal assertion, NOT proof of finalized native chain state.
+
+The on-disk record format is now `PriviPoPResearchHeightLock/v2`.
+A preexisting parentless v1 lock is NEVER silently upgraded or overwritten;
+replay fails closed and requires audited operator recovery. The lock filename
+remains scoped to chain/genesis/validator/height and deliberately does not
+include epoch, round, block hash, or parent hash, preventing an alternative
+claim from bypassing an earlier height reservation.
 
 **Fail-closed epoch behavior:** A signer cannot forget a same-height
 commitment merely because committee membership moved to a new epoch:
@@ -151,7 +163,7 @@ so a previous directory-sync failure cannot be mistaken for durable
 commitment. Corrupted or conflicting records are never auto-deleted.
 Dedicated tests cover ordinary restart/replay, corrupted locks,
 symlink ancestors, hard links, simulated sync failure, and competing
-signing processes across epoch boundaries.
+signing processes across epoch boundaries and conflicting parent links.
 
 These controls remain *local research experiments*: they do not prove
 that two committees' quorums overlap, that a proposal is valid on a
