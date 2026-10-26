@@ -33,7 +33,7 @@ class PaymentDefaultSafetyTests(unittest.TestCase):
     def test_staging_setting_is_explicit_and_boolean(self):
         values = [line.partition("=")[2].strip() for line in ENV.read_text(encoding="utf-8").splitlines() if line.strip().startswith(STAGING_SWITCH + "=")]
         self.assertEqual(len(values), 1)
-        self.assertIn(values[0], ("0", "1"))
+        self.assertEqual(values[0], "1", "sample config must default to disposable staging")
 
     def test_duplicate_or_enabled_defaults_are_rejected(self):
         for text in (
