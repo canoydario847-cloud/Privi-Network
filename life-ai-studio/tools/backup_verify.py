@@ -127,6 +127,16 @@ def validate_database(conn):
     ).fetchone()
     if invalid_member_since is not None:
         raise ValueError("Not a LIFE database; invalid membership timestamp")
+    # Account credit balances must remain nonnegative integer counters after
+    # recovery. SQLite's dynamic typing can preserve NULL, REAL, or text in
+    # an INTEGER column; such balances would make credit accounting unsafe.
+    # Never include account identifiers or balances in validation errors.
+    invalid_credits = conn.execute(
+        'SELECT 1 FROM "users" WHERE typeof("credits") != \'integer\' '
+        'OR "credits" < 0 LIMIT 1'
+    ).fetchone()
+    if invalid_credits is not None:
+        raise ValueError("Not a LIFE database; invalid member credit balance")
     # A linked wallet is an optional account identifier. SQLite permits empty
     # strings and BLOB values in a UNIQUE TEXT column; restoring either could
     # break wallet-based ownership checks. Keep NULL for unlinked members and
