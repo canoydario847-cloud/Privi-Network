@@ -253,6 +253,45 @@ def login_succeeded(email, client_host):
         db.execute("DELETE FROM login_throttle WHERE key_hash IN (?,?)",
                    _login_throttle_keys(email, client_host))
 
+# Persistent signup-abuse throttle, scoped to the actual socket peer.
+# Do not trust client-supplied X-Forwarded-For headers here. Reverse proxies
+# must be configured and audited before non-staging signup is allowed.
+SIGNUP_MAX_ATTEMPTS = 10
+SIGNUP_WINDOW_SECONDS = 900
+
+
+def signup_allowed(client_host):
+    """Atomically count signup attempts across requests/restarts, not just successes.
+
+    Uses the existing opaque-hash throttle table; no raw IP address is stored.
+    A shared NAT/proxy address may affect multiple people, so review limits and
+    trusted proxy handling before customer onboarding.
+    """
+    host = client_host if isinstance(client_host, str) and client_host else "unknown"
+    key = sha("life-signup-v1:" + host)
+    stamp = now()
+    with transaction() as db:
+        row = db.execute(
+            "SELECT failures,window_started,blocked_until FROM login_throttle "
+            "WHERE key_hash=?", (key,)
+        ).fetchone()
+        if row and row["blocked_until"] > stamp:
+            return False
+        if row and 0 <= stamp - row["window_started"] < SIGNUP_WINDOW_SECONDS:
+            attempts, started = row["failures"] + 1, row["window_started"]
+        else:
+            attempts, started = 1, stamp
+        blocked_until = stamp + SIGNUP_WINDOW_SECONDS if attempts > SIGNUP_MAX_ATTEMPTS else 0
+        db.execute(
+            "INSERT INTO login_throttle(key_hash,failures,window_started,blocked_until) "
+            "VALUES(?,?,?,?) ON CONFLICT(key_hash) DO UPDATE SET "
+            "failures=excluded.failures,window_started=excluded.window_started,"
+            "blocked_until=excluded.blocked_until",
+            (key, attempts, started, blocked_until)
+        )
+        return attempts <= SIGNUP_MAX_ATTEMPTS
+
+
 def get_user(user_id):
     with transaction() as db:
         return obj(db.execute("SELECT id,email,wallet,member_since,credits FROM users WHERE id=?",
