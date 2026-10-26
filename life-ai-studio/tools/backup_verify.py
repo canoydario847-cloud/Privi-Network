@@ -408,6 +408,16 @@ def validate_database(conn):
     ).fetchone()
     if bad_session is not None:
         raise ValueError("Not a LIFE database; invalid session authentication state")
+    # File versions are optimistic-concurrency counters for private project
+    # edits. SQLite's dynamic typing permits invalid values in older or
+    # lookalike schemas; restoring them could bypass version conflict checks.
+    # Never disclose private project IDs, filenames, or contents.
+    invalid_file_version = conn.execute(
+        'SELECT 1 FROM "files" WHERE typeof("version") != \'integer\' '
+        'OR "version" < 1 LIMIT 1'
+    ).fetchone()
+    if invalid_file_version is not None:
+        raise ValueError("Not a LIFE database; invalid project file version")
     # Credit balances are used for authorization to consume paid AI services.
     # SQLite's dynamic typing can admit NULL, text or negative balances even
     # if a lookalike schema contains the expected columns. Reject these before
