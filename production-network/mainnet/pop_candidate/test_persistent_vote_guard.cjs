@@ -39,8 +39,8 @@ function fixture(){
   })};
   const committee=parseRegistry(registry,gov.pub);
   const keysById=new Map(keys.map(k=>[k.id,k.privateKey]));
-  function proposal(height=5,round=0,blockHash="0x"+"c".repeat(64)){
-    const previousBlockHash="0x"+"b".repeat(64);
+  function proposal(height=5,round=0,blockHash="0x"+"c".repeat(64),
+                    previousBlockHash="0x"+"b".repeat(64)){
     const proposerId=proposer(committee,height,round);
     const fields=proposalFields(committee,height,round,previousBlockHash,blockHash,proposerId);
     return {height,round,blockHash,previousBlockHash,proposerId,
@@ -66,7 +66,7 @@ test("3-of-4 genuine votes are reserved on disk before signature release",()=>{
       });
       assert.equal(vote.validatorId,validator.id);
       assert.equal(vote.researchOnly,true);
-      const r=recordFor(f.committee,p.height,validator.id,p.blockHash);
+      const r=recordFor(f.committee,p.height,validator.id,p.blockHash,p.previousBlockHash);
       const file=path.join(dir,lockedFileName(r));
       const saved=JSON.parse(fs.readFileSync(file,"utf8"));
       assert.deepEqual(saved,r);
@@ -93,27 +93,82 @@ test("same height cannot sign conflicting block even across round or process res
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });
 
+test("research signer refuses same candidate block hash with a different signed parent",()=>{
+  const f=fixture(),dir=tempRoot();
+  try{
+    const id=f.committee.validators[0].id;
+    const privateKey=f.keysById.get(id);
+    const first=f.proposal(19,0,"0x"+"c".repeat(64),"0x"+"a".repeat(64));
+    const second=f.proposal(19,1,"0x"+"c".repeat(64),"0x"+"b".repeat(64));
+    const input={lockDirectory:dir,committee:f.committee,privateKey};
+    const signed=signCommitWithResearchLock({...input,proposal:first});
+    const savedPath=path.join(dir,lockedFileName(recordFor(f.committee,19,id,
+                                  first.blockHash,first.previousBlockHash)));
+    assert.equal(signed.researchOnly,true);
+    assert.equal(JSON.parse(fs.readFileSync(savedPath,"utf8")).previousBlockHash,
+                 first.previousBlockHash);
+    assert.throws(()=>signCommitWithResearchLock({...input,proposal:second}),
+                  /conflicting parent at locked height/);
+    assert.equal(fs.readdirSync(dir).length,1);
+    assert.equal(JSON.parse(fs.readFileSync(savedPath,"utf8")).previousBlockHash,
+                 first.previousBlockHash,"rejected vote must preserve first durable lock");
+    const replay=signCommitWithResearchLock({...input,proposal:first});
+    assert.equal(replay.signature,signed.signature);
+  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test("research signer refuses missing parent commitment before writing lock",()=>{
+  const f=fixture(),dir=tempRoot();
+  try{
+    const p=f.proposal(),v=f.committee.validators[0];
+    assert.throws(()=>recordFor(f.committee,p.height,v.id,p.blockHash),
+                  /previous-block hash/);
+    assert.throws(()=>reservePosition(dir,f.committee,p.height,v.id,p.blockHash),
+                  /previous-block hash/);
+    assert.deepEqual(fs.readdirSync(dir),[]);
+  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test("legacy parentless lock cannot be silently upgraded or reused",()=>{
+  const f=fixture(),dir=tempRoot();
+  try{
+    const p=f.proposal(),v=f.committee.validators[0];
+    const input={lockDirectory:dir,committee:f.committee,proposal:p,
+                 privateKey:f.keysById.get(v.id)};
+    signCommitWithResearchLock(input);
+    const file=path.join(dir,lockedFileName(recordFor(f.committee,
+                 p.height,v.id,p.blockHash,p.previousBlockHash)));
+    const record=JSON.parse(fs.readFileSync(file,"utf8"));
+    delete record.previousBlockHash;
+    record.format="PriviPoPResearchHeightLock/v1";
+    fs.writeFileSync(file,JSON.stringify(record)+"\n");
+    assert.throws(()=>signCommitWithResearchLock(input),/inconsistent/);
+    assert.equal(JSON.parse(fs.readFileSync(file,"utf8")).format,
+                 "PriviPoPResearchHeightLock/v1");
+  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
 test("same-height vote lock does not reset when a research committee epoch changes",()=>{
   const f=fixture(),dir=tempRoot();
   try {
     const id=f.committee.validators[0].id;
     const oldHash="0x"+"e".repeat(64),nextHash="0x"+"f".repeat(64);
-    const prior=recordFor(f.committee,25,id,oldHash);
+    const prior=recordFor(f.committee,25,id,oldHash,"0x"+"b".repeat(64));
     const changed={...f.committee,epoch:f.committee.epoch+1};
-    const next=recordFor(changed,25,id,nextHash);
+    const next=recordFor(changed,25,id,nextHash,"0x"+"b".repeat(64));
     assert.equal(lockedFileName(prior),lockedFileName(next),
       "same signer and height MUST share the lock across epochs");
-    reservePosition(dir,f.committee,25,id,oldHash);
-    assert.throws(()=>reservePosition(dir,changed,25,id,nextHash),
+    reservePosition(dir,f.committee,25,id,oldHash,"0x"+"b".repeat(64));
+    assert.throws(()=>reservePosition(dir,changed,25,id,nextHash,"0x"+"b".repeat(64)),
       /equivocation|inconsistent/);
-    assert.throws(()=>reservePosition(dir,changed,25,id,oldHash),
+    assert.throws(()=>reservePosition(dir,changed,25,id,oldHash,"0x"+"b".repeat(64)),
       /inconsistent/,"unreviewed epoch migration cannot silently reset old signer state");
     const saved=JSON.parse(fs.readFileSync(path.join(dir,lockedFileName(prior)),"utf8"));
     assert.equal(saved.epoch,f.committee.epoch);
     assert.equal(saved.blockHash,oldHash);
     assert.equal(fs.readdirSync(dir).length,1);
     // A NEW height remains signable even in the changed research epoch.
-    assert.equal(reservePosition(dir,changed,26,id,nextHash).alreadyReserved,false);
+    assert.equal(reservePosition(dir,changed,26,id,nextHash,"0x"+"b".repeat(64)).alreadyReserved,false);
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });
 
@@ -124,7 +179,7 @@ test("corrupt lock state must fail closed and remain present for audit",()=>{
     const input={lockDirectory:dir,committee:f.committee,proposal:p,
                  privateKey:f.keysById.get(v.id)};
     signCommitWithResearchLock(input);
-    const file=path.join(dir,lockedFileName(recordFor(f.committee,p.height,v.id,p.blockHash)));
+    const file=path.join(dir,lockedFileName(recordFor(f.committee,p.height,v.id,p.blockHash,p.previousBlockHash)));
     fs.writeFileSync(file,"broken-json");
     assert.throws(()=>signCommitWithResearchLock(input),/corrupt/);
     assert.equal(fs.readFileSync(file,"utf8"),"broken-json");
@@ -162,7 +217,7 @@ test("failed existing-lock directory sync refuses a signature, then permits retr
   const originalSync=fs.fsyncSync;
   try {
     const signed=signCommitWithResearchLock(input);
-    const file=path.join(dir,lockedFileName(recordFor(f.committee,p.height,v.id,p.blockHash)));
+    const file=path.join(dir,lockedFileName(recordFor(f.committee,p.height,v.id,p.blockHash,p.previousBlockHash)));
     fs.fsyncSync=function(fd){
       if (fs.fstatSync(fd).isDirectory()) throw Error("simulated directory sync failure");
       return originalSync(fd);
@@ -184,7 +239,7 @@ test("hard-linked existing lock must fail closed",()=>{
     const input={lockDirectory:dir,committee:f.committee,proposal:p,
                  privateKey:f.keysById.get(v.id)};
     const signed=signCommitWithResearchLock(input);
-    const file=path.join(dir,lockedFileName(recordFor(f.committee,p.height,v.id,p.blockHash)));
+    const file=path.join(dir,lockedFileName(recordFor(f.committee,p.height,v.id,p.blockHash,p.previousBlockHash)));
     const alias=path.join(dir,"linked-lock.json");
     fs.linkSync(file,alias);
     assert.equal(fs.statSync(file).nlink,2);
@@ -290,8 +345,8 @@ test("research-only network and false committee are refused",()=>{
   try {
     const p=f.proposal(),v=f.committee.validators[0];
     const fake={...f.committee,mode:"production"};
-    assert.throws(()=>reservePosition(dir,fake,p.height,v.id,p.blockHash),/RESEARCH ONLY/);
+    assert.throws(()=>reservePosition(dir,fake,p.height,v.id,p.blockHash,p.previousBlockHash),/RESEARCH ONLY/);
     const another={...f.committee,chainId:"ethereum"};
-    assert.throws(()=>reservePosition(dir,another,p.height,v.id,p.blockHash),/Native Privi research/);
+    assert.throws(()=>reservePosition(dir,another,p.height,v.id,p.blockHash,p.previousBlockHash),/Native Privi research/);
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });
