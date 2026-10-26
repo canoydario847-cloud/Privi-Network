@@ -156,7 +156,8 @@ async def origin_guard(request: Request, call_next):
                 if rejected else await call_next(request))
     # Authenticated project data, account details and even error responses must
     # not be cached by browsers or intermediary proxies shared by customers.
-    if request.url.path.startswith("/api/"):
+    # Monitoring must never reuse a cached OK during a database outage.
+    if request.url.path.startswith("/api/") or request.url.path in ("/health", "/readyz"):
         response.headers["Cache-Control"] = "no-store"
         response.headers["Pragma"] = "no-cache"
     response.headers["X-Content-Type-Options"] = "nosniff"
