@@ -34,6 +34,31 @@ def make_database(path):
         )
 
 
+@pytest.mark.parametrize("password_hash, valid", [
+    ("synthetic-hash", True),
+    (None, False),
+    ("", False),
+    ("  \\t  ", False),
+    (b"binary-hash", False),
+])
+def test_restored_account_requires_nonblank_text_password_hash(tmp_path, password_hash, valid):
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute(
+            "INSERT INTO users (id,email,pwdhash,wallet,member_since,credits) "
+            "VALUES (?,?,?,?,?,?)",
+            ("u1", "synthetic@example.invalid", password_hash, None, 1, 0),
+        )
+    destination = tmp_path / "vault" / "snapshot.sqlite3"
+    if valid:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        with pytest.raises(ValueError, match="invalid member password hash"):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Malformed authentication state must not publish a backup"
+
+
 @pytest.mark.parametrize("value, expected", [
     (1, None),
     (None, "invalid membership timestamp"),
