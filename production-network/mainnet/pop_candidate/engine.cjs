@@ -123,7 +123,10 @@ function parseRegistry(registry, governanceKey) {
   validated.forEach(Object.freeze);
   Object.freeze(validated);
   const byId=new Map(validated.map(v=>[v.id,v]));
-  const committee=Object.freeze({chainId,genesisHash,epoch,mode,quorum,validators:validated,byId});
+  // Pin the governance root that actually verified all admission signatures.
+  // Adjacent epochs must not silently switch authorities with an identical validator set.
+  const committee=Object.freeze({chainId,genesisHash,epoch,mode,
+    governanceKeyId:gov.id,quorum,validators:validated,byId});
   validatedCommittees.add(committee);
   return committee;
 }
