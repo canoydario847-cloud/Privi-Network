@@ -113,7 +113,7 @@ def validate_database(conn):
     # the expected columns. Reject malformed state without logging hashes.
     invalid_password_hash = conn.execute(
         'SELECT 1 FROM "users" WHERE typeof("pwdhash") != \'text\' '
-        'OR length(trim("pwdhash")) = 0 LIMIT 1'
+        'OR length(trim("pwdhash", char(9) || char(10) || char(13) || \' \')) = 0 LIMIT 1'
     ).fetchone()
     if invalid_password_hash is not None:
         raise ValueError("Not a LIFE database; invalid member password hash")
