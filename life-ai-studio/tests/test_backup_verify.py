@@ -38,7 +38,7 @@ def make_database(path):
     ("synthetic-hash", True),
     (None, False),
     ("", False),
-    ("  \\t  ", False),
+    ("  \t  ", False),
     (b"binary-hash", False),
 ])
 def test_restored_account_requires_nonblank_text_password_hash(tmp_path, password_hash, valid):
