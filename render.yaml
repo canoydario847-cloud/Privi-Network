@@ -70,6 +70,8 @@ services:
       mountPath: /data
       sizeGB: 1
     envVars:
+      - key: PRIVI_PAYMENTS          # paid tools also accept the PRIVI token (price from the Privi swap desk)
+        value: "1"
       - fromGroup: privi-coinbase-cdp
       - key: LEDGER_DB_PATH
         value: /data/ledger.db
@@ -122,6 +124,8 @@ services:
       mountPath: /data
       sizeGB: 1
     envVars:
+      - key: PRIVI_PAYMENTS          # paid tools also accept the PRIVI token (price from the Privi swap desk)
+        value: "1"
       - fromGroup: privi-coinbase-cdp
       - key: PRIVI_DB_PATH
         value: /data/privi.db
@@ -197,6 +201,8 @@ services:
       mountPath: /data
       sizeGB: 1
     envVars:
+      - key: PRIVI_PAYMENTS          # paid tools also accept the PRIVI token (price from the Privi swap desk)
+        value: "1"
       - fromGroup: privi-coinbase-cdp
       - key: CALL_DB_PATH
         value: /data/call.db

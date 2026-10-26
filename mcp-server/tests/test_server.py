@@ -61,7 +61,7 @@ def test_free_tools(store):
         async with Client(build_server(settings(), store, FakeFacilitator())) as c:
             names = {t.name for t in (await c.list_tools()).tools}
             assert names == {"privi_pricing", "privi_lookup_fingerprint", "privi_verify_lot",
-                             "privi_chain_of_custody", "privi_record_event"}
+                             "privi_chain_of_custody", "privi_record_event", "privi_token_market"}
             price = await c.call_tool("privi_pricing", {})
             assert price.structured_content["network"] == "eip155:84532"
             head = store.events("LOT-1")[-1]["record_hash"]

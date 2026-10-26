@@ -8,7 +8,7 @@ AUTH=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: appli
 : "${CLOUDFLARE_ACCOUNT_ID:?}" "${ZONE_NAME:?}"
 
 declare -A HOSTS=(
-  [home]="${ZONE_NAME}" [fortress]="fortress.${ZONE_NAME}" [passport]="passport.${ZONE_NAME}"
+  [home]="www.${ZONE_NAME}" [fortress]="fortress.${ZONE_NAME}" [passport]="passport.${ZONE_NAME}"
   [kya]="kya.${ZONE_NAME}" [mandates]="mandates.${ZONE_NAME}" [gov]="gov.${ZONE_NAME}"
   [chainflow]="chainflow.${ZONE_NAME}" [developers]="developers.${ZONE_NAME}" [live]="live.${ZONE_NAME}"
   [hub]="hub.${ZONE_NAME}" [guard]="guard.${ZONE_NAME}"
@@ -20,6 +20,7 @@ zone_id=$(curl -fsS "${AUTH[@]}" "$API/zones?name=${ZONE_NAME}" | jq -r '.result
 fail=0
 for site in "${!HOSTS[@]}"; do
   host="${HOSTS[$site]}"; project="privi-${site}"; target="${project}.pages.dev"
+  case "$host" in "${ZONE_NAME}"|"explorer.${ZONE_NAME}") echo "::error::refusing to touch ${host}"; exit 1;; esac
   echo "== ${host} -> ${target}"
 
   # 1. custom domain on the Pages project (409/already exists is fine)
@@ -43,13 +44,4 @@ for site in "${!HOSTS[@]}"; do
   fi
 done
 
-# www -> apex (proxied CNAME so https://www.priviflow.us works too)
-www=$(curl -fsS "${AUTH[@]}" "$API/zones/${zone_id}/dns_records?name=www.${ZONE_NAME}" | jq -r '.result[0].id // empty')
-if [ -z "$www" ]; then
-  curl -fsS "${AUTH[@]}" -X POST "$API/zones/${zone_id}/dns_records" \
-    --data "{\"type\":\"CNAME\",\"name\":\"www.${ZONE_NAME}\",\"content\":\"privi-home.pages.dev\",\"proxied\":true,\"ttl\":1}" >/dev/null
-  curl -sS "${AUTH[@]}" -X POST "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/privi-home/domains" \
-    --data "{\"name\":\"www.${ZONE_NAME}\"}" >/dev/null || true
-  echo "== www.${ZONE_NAME} -> privi-home.pages.dev"
-fi
 exit $fail

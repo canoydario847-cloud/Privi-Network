@@ -1,3 +1,3 @@
 User-agent: *
 Allow: /
-Sitemap: https://passport.priviflow.us/sitemap.xml
+Sitemap: https://passport.privishine.info/sitemap.xml

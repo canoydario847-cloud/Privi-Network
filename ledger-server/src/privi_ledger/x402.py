@@ -14,6 +14,7 @@ Spec: https://github.com/x402-foundation/x402/blob/main/specs/transports-v2/mcp.
 from __future__ import annotations
 
 import json
+import os
 import urllib.error
 import urllib.request
 from typing import Any, Awaitable, Callable, Protocol
@@ -154,12 +155,17 @@ class HttpFacilitator:
 
 class Paywall:
     def __init__(self, settings: Settings, facilitator: Facilitator | None = None,
-                 service: dict | None = None, discovery: dict[str, dict] | None = None):
+                 service: dict | None = None, discovery: dict[str, dict] | None = None, privi=None):
         """service: {"url": public MCP endpoint, "serviceName", "tags", "iconUrl"} for x402 resource metadata.
         discovery: {tool: {"inputSchema", "example", "output"}} declared to the x402 Bazaar."""
         self.settings = settings
         self.service = service or {}
         self.discovery = discovery or {}
+        # PRIVI token payments: an explicit PriviToken, or opt-in with PRIVI_PAYMENTS=1 (reads Base mainnet).
+        if privi is None and os.getenv("PRIVI_PAYMENTS") == "1":
+            from .privi_token import PriviToken
+            privi = PriviToken.from_env(settings.pay_to, getattr(settings, "db_path", None) or "privi-payments.db")
+        self.privi = privi
         self.facilitator = facilitator or HttpFacilitator(
             settings.facilitator_url, settings.facilitator_auth,
             cdp_key_id=getattr(settings, "cdp_key_id", ""), cdp_key_secret=getattr(settings, "cdp_key_secret", ""))
@@ -199,11 +205,23 @@ class Paywall:
         ext = self.extensions(tool, description)
         if ext:
             body["extensions"] = ext
+        alt = self.privi_quote(tool)
+        if alt:
+            body["privi"] = alt
         return CallToolResult(
             is_error=True,
             structured_content=body,
             content=[TextContent(type="text", text=json.dumps(body, separators=(",", ":")))],
         )
+
+    def privi_quote(self, tool: str) -> dict | None:
+        """The PRIVI alternative to the USDC price, or None when PRIVI payments are off or unpriced."""
+        if not self.privi or tool not in self.settings.prices_usd:
+            return None
+        try:
+            return self.privi.quote_usd(self.settings.prices_usd[tool])
+        except Exception:  # never let a market read break the USDC path
+            return None
 
     def _matches(self, payload: dict, req: dict) -> str | None:
         if not isinstance(payload, dict):
@@ -232,6 +250,16 @@ class Paywall:
         if not self.settings.payments_enabled:
             data = await work()
             return CallToolResult(content=[TextContent(type="text", text=json.dumps(data))], structured_content=data)
+
+        privi_payment = (meta or {}).get("privi/payment")
+        if privi_payment is not None and self.privi:
+            ok, info = await anyio.to_thread.run_sync(
+                self.privi.verify_payment, privi_payment, tool, self.settings.prices_usd[tool])
+            if not ok:
+                return self.payment_required(tool, description, f"Invalid PRIVI payment: {info['error']}")
+            data = await work()
+            return CallToolResult(content=[TextContent(type="text", text=json.dumps(data))], structured_content=data,
+                                  meta={"privi/receipt": info})
 
         payload = (meta or {}).get(PAYMENT_META_KEY)
         if payload is None:

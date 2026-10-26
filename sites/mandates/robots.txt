@@ -1,3 +1,3 @@
 User-agent: *
 Allow: /
-Sitemap: https://mandates.priviflow.us/sitemap.xml
+Sitemap: https://mandates.privishine.info/sitemap.xml

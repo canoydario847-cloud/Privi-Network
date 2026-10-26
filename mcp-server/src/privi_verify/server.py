@@ -25,6 +25,7 @@ from .store import EVENT_TYPES, LotStore, seed_demo
 from . import chainflow
 from .anchoring import Checkpoints, HttpAnchorClient, describe, start_loop
 from .x402 import Facilitator, Paywall
+from . import privi_token
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor.onrender.com/mcp"
 
@@ -106,6 +107,17 @@ def build_server(
     )
 
     # ---------------- free ----------------
+
+    _market_token: list = []
+
+    def _privi_token():
+        if getattr(paywall, "privi", None) is not None:
+            return paywall.privi
+        if not _market_token:  # payments off: still answer market questions, read-only
+            from .privi_token import PriviToken
+            _market_token.append(PriviToken.from_env(settings.pay_to, ":memory:"))
+        return _market_token[0]
+    privi_token.register_market_tool(mcp, _privi_token)
 
     @mcp.tool(title="Privi pricing", annotations=READ_ONLY)
     def privi_pricing() -> dict[str, Any]:
