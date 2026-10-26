@@ -1,4 +1,5 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: UNLICENSED
+// Copyright (c) 2026 Privi World Co. All rights reserved.
 pragma solidity ^0.8.24;
 
 /*
