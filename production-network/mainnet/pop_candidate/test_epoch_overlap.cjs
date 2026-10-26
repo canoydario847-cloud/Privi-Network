@@ -16,6 +16,7 @@ function fixture(n) {
   function committee(signers,epoch,options={}) {
     const usedChain=options.chainId||chainId;
     const usedGenesis=options.genesisHash||genesisHash;
+    const signer=options.governanceSigner||gov;
     const validators=signers.map((key,i)=>{
       const operatorId=(options.changeOperatorAt===i?"ALTERNATE_OPERATOR_":"OPERATOR_")+i;
       const faultDomain="host"+i+".separate-operator.example";
@@ -27,12 +28,12 @@ function fixture(n) {
       return {id:key.id,keySpkiBase64:key.pub,operatorId,faultDomain,
               companyId,positionSequence,anchorBlockHash,positionHash,
               admissionSignature:crypto.sign(null,
-                signedMessage("admit",fields),gov.privateKey).toString("base64")};
+                signedMessage("admit",fields),signer.privateKey).toString("base64")};
     });
     return parseRegistry({chainId:usedChain,genesisHash:usedGenesis,epoch,
-      mode:TRUSTED_MODE,validators},gov.pub);
+      mode:TRUSTED_MODE,validators},signer.pub);
   }
-  return {keys,committee};
+  return {keys,committee,governance:gov};
 }
 
 test("4-of-4 stable identities meet necessary adjacent-epoch overlap, but cannot authorize handoff",()=>{
@@ -105,6 +106,32 @@ test("rejects forged admission wrappers and mutated member maps, even with copie
     assert.throws(()=>analyzeEpochOverlap(a,b),/membership changed/);
   } finally { b.byId.set(first.id,original); }
   assert.equal(analyzeEpochOverlap(a,b).overlapNecessaryCondition,true);
+});
+
+
+test("genuine signatures under different governance roots cannot authorize adjacent-epoch preflight",()=>{
+  const f=fixture(4);
+  const original=f.committee(f.keys,1);
+  const replacementRoot=makeSigner();
+  const replacement=f.committee(f.keys,2,{governanceSigner:replacementRoot});
+  assert.notEqual(original.governanceKeyId,replacement.governanceKeyId);
+  assert.equal(original.governanceKeyId,f.governance.id);
+  assert.equal(replacement.governanceKeyId,replacementRoot.id);
+  // Both committees have independently valid admissions and identical
+  // validator signatures, but there is no signed governance handoff.
+  assert.equal(original.validators.length,4);
+  assert.equal(replacement.validators.length,4);
+  assert.throws(()=>analyzeEpochOverlap(original,replacement),
+    /governance authority change requires separately reviewed root handoff/);
+  const unchangedRoot=f.committee(f.keys,2);
+  assert.equal(analyzeEpochOverlap(original,unchangedRoot).permitsEpochTransition,false);
+});
+
+test("governance root cannot be overwritten on an admitted committee",()=>{
+  const f=fixture(4);
+  const old=f.committee(f.keys,1);
+  assert.equal(Object.isFrozen(old),true);
+  assert.throws(()=>{old.governanceKeyId="0x"+"f".repeat(64);},TypeError);
 });
 
 test("self-comparison is not an admitted epoch transition",()=>{
