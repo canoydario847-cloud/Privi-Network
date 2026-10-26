@@ -38,9 +38,9 @@ def validate(root: Path = REPO) -> list[str]:
     except (FileNotFoundError, ET.ParseError, ValueError, OSError) as exc:
         return [f"Invalid or missing Play prerequisite file: {exc}"]
 
-    match = re.search(r'\\bapplicationId\\s*=\\s*"([^"]+)"', gradle)
+    match = re.search(r'\bapplicationId\s*=\s*"([^"]+)"', gradle)
     pkg = match.group(1) if match else ""
-    if not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_]*(?:\\.[a-zA-Z][a-zA-Z0-9_]*)+", pkg):
+    if not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_]*(?:\.[a-zA-Z][a-zA-Z0-9_]*)+", pkg):
         errors.append("Android applicationId must be a valid package name")
 
     host = strings.get("hostName", "")
@@ -52,7 +52,7 @@ def validate(root: Path = REPO) -> list[str]:
         errors.append("Android hostName must be one lowercase hostname")
 
     try:
-        asset_statements = json.loads(strings.get("assetStatements", "").replace('\\\\"', '"'))
+        asset_statements = json.loads(strings.get("assetStatements", "").replace('\\"', '"'))
         matches = any(
             statement.get("target", {}).get("namespace") == "web"
             and statement.get("target", {}).get("site") == f"https://{host}"
