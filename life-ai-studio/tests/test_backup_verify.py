@@ -353,7 +353,7 @@ def test_backup_accepts_consistent_account_project_and_ledger_ownership(tmp_path
         db.execute(
             "INSERT INTO users VALUES ('u1', 'u@example.test', 'test-hash', NULL, 1, 5)"
         )
-        db.execute("INSERT INTO sessions VALUES ('token-hash', 'u1', 100)")
+        db.execute("INSERT INTO sessions VALUES ('" + "a" * 64 + "', 'u1', 100)")
         db.execute("INSERT INTO projects VALUES ('p1', 'u1', 'title', 'code', 100)")
         db.execute("INSERT INTO files VALUES ('p1', 'file.txt', 'private', 1)")
         db.execute(
@@ -945,3 +945,44 @@ def test_restore_rejects_orphaned_stripe_credit_ledger(tmp_path, scenario, expec
         with pytest.raises(ValueError, match=expected):
             backup.backup_and_verify(source, destination)
         assert not destination.exists(), "Unreconciled Stripe credits must not publish a backup"
+
+
+@pytest.mark.parametrize("scenario,valid", [
+    ("valid", True),
+    ("short_hash", False),
+    ("uppercase_hash", False),
+    ("nonhex_hash", False),
+    ("negative_expiry", False),
+    ("text_expiry", False),
+    ("null_expiry", False),
+])
+def test_restore_rejects_malformed_session_authentication_state(tmp_path, scenario, valid):
+    """Only well-formed SHA-256 session identifiers and integer expiries restore."""
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    session_hash = "a" * 64
+    expiry = 123456
+    if scenario == "short_hash":
+        session_hash = "a" * 63
+    elif scenario == "uppercase_hash":
+        session_hash = "A" * 64
+    elif scenario == "nonhex_hash":
+        session_hash = "g" * 64
+    elif scenario == "negative_expiry":
+        expiry = -1
+    elif scenario == "text_expiry":
+        expiry = "not-a-time"
+    elif scenario == "null_expiry":
+        expiry = None
+    with sqlite3.connect(str(source)) as db:
+        db.execute("INSERT INTO users VALUES (?,?,?,?,?,?)",
+                   ("u1", "synthetic@example.invalid", "hash", None, 1, 0))
+        db.execute("INSERT INTO sessions VALUES (?,?,?)",
+                   (session_hash, "u1", expiry))
+    destination = tmp_path / "vault" / "snapshot.sqlite3"
+    if valid:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        with pytest.raises(ValueError, match="invalid session authentication state"):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Unsafe session state must not publish a snapshot"
