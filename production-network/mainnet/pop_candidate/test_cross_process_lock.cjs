@@ -16,7 +16,7 @@ function committee() {
   return {chainId:"privi-pop-research-race",genesisHash,epoch:1,
           mode:TRUSTED_MODE,byId:new Map([[validatorId,{}]])};
 }
-function runWorker(dir, blockHash) {
+function runWorker(dir, blockHash, epoch=1) {
   const worker = `
     "use strict";
     const {reservePosition} = require(process.argv[1]);
@@ -25,7 +25,7 @@ function runWorker(dir, blockHash) {
     const research = {
       mode:"attested-position-research-not-live-consensus",
       chainId:"privi-pop-research-race",genesisHash:"0x"+"a".repeat(64),
-      epoch:1,byId:new Map([[signerId,{}]])
+      epoch:Number(process.argv[4]),byId:new Map([[signerId,{}]])
     };
     try {
       reservePosition(dir,research,7,signerId,blockHash);
@@ -37,7 +37,7 @@ function runWorker(dir, blockHash) {
   `;
   return new Promise((resolve,reject)=>{
     const child=spawn(process.execPath,["-e",worker,
-      require.resolve("./persistent_vote_guard.cjs"),dir,blockHash],{
+      require.resolve("./persistent_vote_guard.cjs"),dir,blockHash,String(epoch)],{
       stdio:["ignore","pipe","pipe"]
     });
     let stderr="";
@@ -64,6 +64,37 @@ test("two competing research validator processes cannot reserve opposing commits
       assert.equal(fs.readdirSync(dir).length,1);
       assert.equal(fs.statSync(file).mode & 0o077,0);
     } finally {
+      fs.rmSync(dir,{recursive:true,force:true});
+    }
+  }
+});
+
+
+test("concurrent cross-epoch attempts never reopen same-height signing lock",async()=>{
+  for(const sameHash of [true,false]){
+    const dir=fs.mkdtempSync(path.join(os.tmpdir(),"privi-pop-cross-epoch-race-"));
+    fs.chmodSync(dir,0o700);
+    try{
+      const firstHash="0x"+"c".repeat(64);
+      const nextHash=sameHash?firstHash:"0x"+"d".repeat(64);
+      const results=await Promise.all([
+        runWorker(dir,firstHash,1),
+        runWorker(dir,nextHash,2)
+      ]);
+      assert.deepEqual(results.map(x=>x.code).sort((a,b)=>a-b),[0,13],
+        "a signer must not accept two same-height votes across research epochs");
+      assert.match(results.find(x=>x.code===13).stderr,/inconsistent|equivocation|corrupt/);
+      const file=path.join(dir,lockedFileName(recordFor(committee(),7,validatorId,firstHash)));
+      const saved=JSON.parse(fs.readFileSync(file,"utf8"));
+      assert.ok(saved.epoch===1 || saved.epoch===2);
+      assert.equal(saved.blockHash,saved.epoch===1?firstHash:nextHash);
+      assert.equal(fs.readdirSync(dir).length,1);
+      // The previously accepted epoch wins; the other epoch cannot
+      // replay even an identical hash after a validator process restart.
+      const replay=await runWorker(dir,saved.blockHash,saved.epoch===1?2:1);
+      assert.equal(replay.code,13);
+      assert.match(replay.stderr,/inconsistent|equivocation/);
+    }finally{
       fs.rmSync(dir,{recursive:true,force:true});
     }
   }
