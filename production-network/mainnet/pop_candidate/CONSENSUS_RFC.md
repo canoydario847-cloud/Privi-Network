@@ -181,6 +181,12 @@ separately governance-admitted adjacent-epoch committees** on the same
 research chain and genesis. It does not sign or execute membership changes.
 For each epoch it requires the exact committee object returned by verified
 Ed25519 governance admissions, not a caller-forged quorum configuration.
+The validator registry now records the fingerprint of the Ed25519 governance
+root used to verify those admissions. The preflight rejects adjacent epochs
+signed by different governance roots, even when the validator roster is
+identical. Governance key rotation needs an independently reviewed and
+signed authority handoff; accepting two individually valid registries does
+**not** prove their authority was continuous.
 For comparison, a shared validator must retain its exact signing identity,
 operator identity, failure domain and PoP position evidence; otherwise it
 is conservatively counted as changed.
