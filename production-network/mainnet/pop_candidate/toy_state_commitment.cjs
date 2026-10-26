@@ -53,8 +53,9 @@ function stateRoot(state){
   return digest("state",stateEntries(normalizedState(state)));
 }
 function snapshot(map) {
-  const result=Object.create(null);
-  for(const [k,v] of map)result[k]={value:v.value,nonce:v.nonce};
+  // Keep ordinary JSON-compatible objects for strict revalidation on each height.
+  const result={};
+  for(const [k,v] of map)result[k]=Object.freeze({value:v.value,nonce:v.nonce});
   return Object.freeze(result);
 }
 function applyOps(state,operations){
