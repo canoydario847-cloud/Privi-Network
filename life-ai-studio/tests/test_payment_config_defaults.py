@@ -35,6 +35,12 @@ class PaymentDefaultSafetyTests(unittest.TestCase):
         self.assertEqual(len(values), 1)
         self.assertEqual(values[0], "1", "sample config must default to disposable staging")
 
+    def test_staging_flag_rejects_unsafe_examples(self):
+        for text in ("LIFE_STAGING_ONLY=0", "LIFE_STAGING_ONLY=", "LIFE_STAGING_ONLY=1\\nLIFE_STAGING_ONLY=0", ""):
+            values = [line.partition("=")[2].strip() for line in text.splitlines() if line.strip().startswith(STAGING_SWITCH + "=")]
+            with self.subTest(text=text):
+                self.assertNotEqual(values, ["1"])
+
     def test_duplicate_or_enabled_defaults_are_rejected(self):
         for text in (
             "PRVI_MAINNET_PAYMENTS_ENABLED=1\nBNB_PRIV_PAYMENTS_ENABLED=0",
