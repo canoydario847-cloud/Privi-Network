@@ -515,21 +515,95 @@ ul{{margin:0;padding-left:18px}}li{{margin:0 0 4px}}dl{{display:grid;grid-templa
 
 EXTRA = {"gov": {"demo.html": GOV_DEMO, "capability.html": CAPABILITY}}
 
+CHAINFLOW_CSS = """
+.cf{display:grid;gap:18px;max-width:900px}.cf .card{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:20px}
+.cf label{display:block;font-weight:600;margin:12px 0 6px}.cf .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.cf input,.cf select,.cf textarea{width:100%;padding:10px 12px;border:1.5px solid var(--rule);border-radius:8px;background:var(--paper);color:var(--ink);font:15px "IBM Plex Sans",sans-serif}
+.cf button{padding:12px 20px;border:0;border-radius:8px;background:var(--seal);color:var(--on-seal);font:600 15px "IBM Plex Sans",sans-serif;cursor:pointer;margin-top:14px}
+.cf button:disabled{opacity:.5}.cf table{width:100%;border-collapse:collapse;font-size:15px}.cf th,.cf td{padding:7px 4px;border-top:1px solid var(--rule);text-align:left;vertical-align:top}
+.cf th{color:var(--steel);font-weight:500;width:34%}.cf code{word-break:break-all}.ok{color:var(--verified);font-weight:600}.bad{color:#B4252F;font-weight:600}
+.labelcard{display:flex;gap:18px;align-items:center;flex-wrap:wrap;border:2px dashed var(--rule);border-radius:12px;padding:16px;background:#fff;color:#0E1B33}
+.labelcard #qr img,.labelcard #qr canvas{width:140px;height:140px}
+@media print{body *{visibility:hidden}.labelcard,.labelcard *{visibility:visible}.labelcard{position:absolute;left:0;top:0}}
+"""
+
 SITES["chainflow"] = page(
     "chainflow", "Privi ChainFlow: verifiable lot provenance for manufacturers",
-    "Tamper-evident chain of custody for manufactured lots, checkable by buyers and their AI agents per call in USDC.",
+    "Record each lot event, print a QR label, and let any buyer check it. Tamper-evident chain of custody for manufactured lots, anchored on chain.",
     "Prove where every lot came from",
-    "ChainFlow records each lot's journey, from received to produced, inspected and shipped, in a chain no one can quietly edit. Buyers and their agents verify provenance per check, paid in USDC, with no account.",
-    [("Verify a lot", URLS["developers"]), ("Pilot ChainFlow", f"mailto:{EMAIL}?subject=ChainFlow%20pilot")],
+    "ChainFlow records each lot's journey, from received to produced, inspected and shipped, in a chain no one can quietly edit. Print the QR label on the box; anyone who scans it sees the event and whether the history is intact. Buyers' AI agents pull the full chain of custody per check, paid in USDC.",
+    [("Check a label", "#check"), ("Record an event", "#record"), ("Pilot ChainFlow", f"mailto:{EMAIL}?subject=ChainFlow%20pilot")],
     STH_WIDGET,
-    sec("Built for small manufacturers", defs([
-        ("Record events", "Each receiving, production, inspection and shipping event is linked to the previous one by a SHA-256 fingerprint."),
-        ("Anchored on chain", "Lot fingerprints are checkpointed on the Privi chain every few minutes."),
-        ("Paid per check", "Buyers' agents pay a few cents in USDC on Base per verification through x402. Lookups by fingerprint are free."),
+    f"""<section id="check"><div class="cf">
+<div class="card"><h2>Check a label (free)</h2>
+<p class="note" style="margin-top:0">Paste the fingerprint printed under the QR code, or scan the code with a phone camera.</p>
+<label for="fp">Label fingerprint</label><input id="fp" placeholder="64 hex characters" autocomplete="off" spellcheck="false">
+<button id="lookup" type="button">Check</button> <span id="lstate" class="note" role="status"></span>
+<div id="lres"></div></div></div></section>
+<section id="record"><div class="cf">
+<div class="card"><h2>Record an event (manufacturers)</h2>
+<p class="note" style="margin-top:0">Use the manufacturer key Privi issued you. It stays in this browser tab only. No key yet? <a href="mailto:{EMAIL}?subject=ChainFlow%20pilot%20key">Ask for a pilot key</a>.</p>
+<label for="key">Manufacturer key</label><input id="key" type="password" autocomplete="off">
+<div class="row"><div><label for="lot">Lot or batch code</label><input id="lot" placeholder="BW-2026-0042"></div>
+<div><label for="etype">Event</label><select id="etype"><option>received</option><option selected>produced</option><option>inspected</option><option>shipped</option><option>transferred</option><option>recalled</option></select></div></div>
+<div class="row"><div><label for="loc">Where</label><input id="loc" placeholder="Plant 2, Port Huron MI"></div>
+<div><label for="actor">By (company or person)</label><input id="actor" placeholder="Blue Water Fab"></div></div>
+<div class="row"><div><label for="prod">Product or part number</label><input id="prod" placeholder="Bracket A-12"></div>
+<div><label for="qty">Quantity</label><input id="qty" placeholder="800 pcs"></div></div>
+<label for="notes">Notes</label><input id="notes" placeholder="Heat number, PO, inspection result…">
+<button id="rec" type="button">Record and make label</button> <span id="rstate" class="note" role="status"></span>
+<div id="label" hidden style="margin-top:16px"><div class="labelcard"><div id="qr"></div><div><strong id="lt"></strong><br><span id="ls"></span><br><code id="lf" style="font-size:12px"></code><br><span style="font-size:12px">Scan to verify · Privi ChainFlow</span></div></div>
+<p><a class="btn" id="lopen" target="_blank" rel="noopener">Open the public label page</a> <button class="btn alt" id="print" type="button" style="margin-top:0">Print label</button></p></div>
+</div></div></section>"""
+    + sec("How it works", defs([
+        ("Record events", "Each receiving, production, inspection and shipping event is linked to the previous one by a SHA-256 fingerprint, so changing any past event breaks every fingerprint after it."),
+        ("Label every lot", "Each event gets a fingerprint and a public label page. Print the QR code on the box, pallet or certificate of conformance."),
+        ("Anchored on chain", "Every lot's latest fingerprint is checkpointed on chain (Base today; the Privi chain once its mainnet launches) every few minutes, so not even Privi can rewrite history unnoticed."),
+        ("Paid per check", "A label check is free. Buyers' agents pull the full chain of custody for a few cents in USDC on Base through x402, with no account."),
         ("Michigan first", "Built in Port Huron for the manufacturers around it, open to anyone."),
     ]))
-    + sec("For buyers' agents", f"<pre>privi_verify_lot(lot_code=\"DEMO-STEEL-0001\")\nprivi_chain_of_custody(lot_code=\"DEMO-STEEL-0001\")</pre><p class='note'>MCP endpoint: <code>{VERIFY}/mcp</code></p>"),
-)
+    + sec("For buyers' agents", f"<pre>privi_lookup_fingerprint(fingerprint=\"<from the label>\")   # free\nprivi_verify_lot(lot_code=\"BW-2026-0042\")                   # paid, x402\nprivi_chain_of_custody(lot_code=\"BW-2026-0042\")             # paid, x402</pre><p class='note'>MCP endpoint: <code>{VERIFY}/mcp</code> · people can pay per check at <a href='{VERIFY}/pay'>{VERIFY.replace('https://','')}/pay</a></p>"),
+    extra_head=f"<style>{CHAINFLOW_CSS}</style>",
+).replace("</body></html>", f"""<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+const V="{VERIFY}";const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}}[c]));
+try{{$("#key").value=sessionStorage.getItem("cf_key")||""}}catch(e){{}}
+const q=new URLSearchParams(location.search).get("fp");if(q){{$("#fp").value=q}}
+async function lookup(){{
+  const fp=$("#fp").value.trim().toLowerCase().replace(/^0x/,"");if(!fp)return;
+  $("#lookup").disabled=true;$("#lstate").textContent="Checking… (the server may take ~30 s to wake up)";$("#lres").innerHTML="";
+  try{{
+    const r=await fetch(V+"/api/chainflow/label/"+encodeURIComponent(fp));const d=await r.json();
+    if(!d.found){{$("#lstate").textContent=d.error||"No ChainFlow record has this fingerprint.";}}
+    else{{
+      const st=d.recalled?'<span class="bad">Recalled lot</span>':d.integrity.history_intact?'<span class="ok">Record intact</span>':'<span class="bad">Record altered</span>';
+      const oc=d.onchain.covered?`Anchored on chain, block ${{esc(d.onchain.block_number)}}`:esc(d.onchain.note);
+      $("#lres").innerHTML=`<p>${{st}}</p><table>${{[["Lot",d.lot_code],["Product",d.product||"—"],["Event",`#${{d.seq}} ${{d.event_type}}`],["When (UTC)",d.occurred_at],["Where",d.location],["By",d.actor],["Quantity",d.quantity||"—"],["Later events",d.later_events]].map(([k,v])=>`<tr><th>${{k}}</th><td>${{esc(v)}}</td></tr>`).join("")}}</table><p class="note">${{oc}} · <a href="${{V}}/label/${{esc(d.fingerprint)}}">Public label page</a></p>`;
+      $("#lstate").textContent="";
+    }}
+  }}catch(err){{$("#lstate").textContent="Could not reach Privi Verify: "+err.message}}
+  $("#lookup").disabled=false;
+}}
+$("#lookup").onclick=lookup;$("#fp").addEventListener("keydown",e=>{{if(e.key==="Enter")lookup()}});if(q)lookup();
+$("#rec").onclick=async()=>{{
+  const key=$("#key").value.trim();if(!key){{$("#rstate").textContent="Enter your manufacturer key.";return}}
+  try{{sessionStorage.setItem("cf_key",key)}}catch(e){{}}
+  $("#rec").disabled=true;$("#rstate").textContent="Recording…";
+  try{{
+    const body={{lot_code:$("#lot").value,event_type:$("#etype").value,location:$("#loc").value,actor:$("#actor").value,product:$("#prod").value,quantity:$("#qty").value,notes:$("#notes").value}};
+    const r=await fetch(V+"/api/chainflow/events",{{method:"POST",headers:{{"content-type":"application/json","authorization":"Bearer "+key}},body:JSON.stringify(body)}});
+    const d=await r.json();if(!r.ok)throw new Error(d.error||r.status);
+    const ev=d.event;$("#label").hidden=false;$("#qr").innerHTML="";
+    if(window.QRCode){{new QRCode($("#qr"),{{text:d.label_url,width:280,height:280,correctLevel:QRCode.CorrectLevel.M}})}}else{{$("#qr").textContent="QR code unavailable; use the label page link."}}
+    $("#lt").textContent=(ev.product||ev.lot_code)+" · "+ev.lot_code;$("#ls").textContent=`#${{ev.seq}} ${{ev.event_type}} · ${{ev.location}} · ${{ev.occurred_at}}`;
+    $("#lf").textContent=ev.record_hash;$("#lopen").href=d.label_url;
+    $("#rstate").textContent="Recorded. It will be anchored on chain within a few minutes.";
+  }}catch(err){{$("#rstate").textContent="Not recorded: "+err.message}}
+  $("#rec").disabled=false;
+}};
+$("#print").onclick=()=>window.print();
+</script></body></html>""")
 
 SITES["developers"] = page(
     "developers", "Privi for developers: MCP servers for agent trust",

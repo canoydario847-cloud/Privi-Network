@@ -1,11 +1,21 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Privi ChainFlow: verifiable lot provenance for manufacturers</title><meta name="description" content="Tamper-evident chain of custody for manufactured lots, checkable by buyers and their AI agents per call in USDC.">
+<title>Privi ChainFlow: verifiable lot provenance for manufacturers</title><meta name="description" content="Record each lot event, print a QR label, and let any buyer check it. Tamper-evident chain of custody for manufactured lots, anchored on chain.">
 <link rel="canonical" href="https://chainflow.priviflow.us"><link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="alternate" type="text/plain" href="https://privi-discovery.onrender.com/llms.txt" title="llms.txt">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
-<meta property="og:title" content="Privi ChainFlow: verifiable lot provenance for manufacturers"><meta property="og:description" content="Tamper-evident chain of custody for manufactured lots, checkable by buyers and their AI agents per call in USDC."><meta property="og:type" content="website">
-<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebPage", "name": "Privi ChainFlow: verifiable lot provenance for manufacturers", "description": "Tamper-evident chain of custody for manufactured lots, checkable by buyers and their AI agents per call in USDC.", "url": "https://chainflow.priviflow.us", "publisher": {"@type": "Organization", "name": "Privi World Co", "url": "https://priviflow.us", "email": "dariocanoy@priviflow.us", "founder": {"@type": "Person", "name": "Dario Canoy"}}}</script>
+<meta property="og:title" content="Privi ChainFlow: verifiable lot provenance for manufacturers"><meta property="og:description" content="Record each lot event, print a QR label, and let any buyer check it. Tamper-evident chain of custody for manufactured lots, anchored on chain."><meta property="og:type" content="website">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebPage", "name": "Privi ChainFlow: verifiable lot provenance for manufacturers", "description": "Record each lot event, print a QR label, and let any buyer check it. Tamper-evident chain of custody for manufactured lots, anchored on chain.", "url": "https://chainflow.priviflow.us", "publisher": {"@type": "Organization", "name": "Privi World Co", "url": "https://priviflow.us", "email": "dariocanoy@priviflow.us", "founder": {"@type": "Person", "name": "Dario Canoy"}}}</script><style>
+.cf{display:grid;gap:18px;max-width:900px}.cf .card{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:20px}
+.cf label{display:block;font-weight:600;margin:12px 0 6px}.cf .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.cf input,.cf select,.cf textarea{width:100%;padding:10px 12px;border:1.5px solid var(--rule);border-radius:8px;background:var(--paper);color:var(--ink);font:15px "IBM Plex Sans",sans-serif}
+.cf button{padding:12px 20px;border:0;border-radius:8px;background:var(--seal);color:var(--on-seal);font:600 15px "IBM Plex Sans",sans-serif;cursor:pointer;margin-top:14px}
+.cf button:disabled{opacity:.5}.cf table{width:100%;border-collapse:collapse;font-size:15px}.cf th,.cf td{padding:7px 4px;border-top:1px solid var(--rule);text-align:left;vertical-align:top}
+.cf th{color:var(--steel);font-weight:500;width:34%}.cf code{word-break:break-all}.ok{color:var(--verified);font-weight:600}.bad{color:#B4252F;font-weight:600}
+.labelcard{display:flex;gap:18px;align-items:center;flex-wrap:wrap;border:2px dashed var(--rule);border-radius:12px;padding:16px;background:#fff;color:#0E1B33}
+.labelcard #qr img,.labelcard #qr canvas{width:140px;height:140px}
+@media print{body *{visibility:hidden}.labelcard,.labelcard *{visibility:visible}.labelcard{position:absolute;left:0;top:0}}
+</style>
 <style>
 :root{--paper:#F7F8FA;--surface:#FFFFFF;--ink:#0E1B33;--steel:#5A6B85;--seal:#2F5BEA;--on-seal:#FFFFFF;--verified:#0F8A5F;--rule:#DCE1EA;--code:#EEF1F6}
 @media (prefers-color-scheme:dark){:root:not([data-theme=light]){--paper:#0D1626;--surface:#122036;--ink:#E7ECF4;--steel:#93A3BB;--seal:#7FA2FF;--on-seal:#0D1626;--verified:#3CCB94;--rule:#22314A;--code:#16263F}}
@@ -54,7 +64,7 @@ footer .cols{display:flex;gap:40px;flex-wrap:wrap;justify-content:space-between}
 </style></head><body>
 <header><div class="wrap bar"><a class="mark" href="https://priviflow.us"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#0E1B33"/><path d="M18 46V18h14a10 10 0 0 1 0 20h-6v8z" fill="none" stroke="#7FA2FF" stroke-width="5" stroke-linejoin="round"/><circle cx="46" cy="44" r="4" fill="#3CCB94"/></svg>Privi</a><nav aria-label="Privi sites"><a href="https://priviflow.us">Privi</a><a href="https://fortress.priviflow.us">Fortress</a><a href="https://passport.priviflow.us">Passport</a><a href="https://kya.priviflow.us">KYA</a><a href="https://mandates.priviflow.us">Mandates</a><a href="https://gov.priviflow.us">Government</a><a href="https://guard.priviflow.us">Guard</a><a href="https://live.priviflow.us">Live</a><a href="https://privi-call.onrender.com">Call</a><a href="https://privi-ledger.onrender.com/scan">Scan</a><a href="https://hub.priviflow.us">Hub</a><a href="https://chainflow.priviflow.us" aria-current=page>ChainFlow</a><a href="https://developers.priviflow.us">Developers</a></nav></div></header>
 <main><div class="wrap">
-<div class="hero"><div><h1>Prove where every lot came from</h1><p class="lede">ChainFlow records each lot's journey, from received to produced, inspected and shipped, in a chain no one can quietly edit. Buyers and their agents verify provenance per check, paid in USDC, with no account.</p><div class="cta"><a class="btn" href="https://developers.priviflow.us">Verify a lot</a><a class="btn alt" href="mailto:dariocanoy@priviflow.us?subject=ChainFlow%20pilot">Pilot ChainFlow</a></div></div>
+<div class="hero"><div><h1>Prove where every lot came from</h1><p class="lede">ChainFlow records each lot's journey, from received to produced, inspected and shipped, in a chain no one can quietly edit. Print the QR label on the box; anyone who scans it sees the event and whether the history is intact. Buyers' AI agents pull the full chain of custody per check, paid in USDC.</p><div class="cta"><a class="btn" href="#check">Check a label</a><a class="btn alt" href="#record">Record an event</a><a class="btn alt" href="mailto:dariocanoy@priviflow.us?subject=ChainFlow%20pilot">Pilot ChainFlow</a></div></div>
 <aside class="proof" aria-live="polite">
   <h2>Live from Privi Ledger</h2>
   <p>The current root of Privi's transparency log. Every action recorded by every organization is a leaf in this tree.</p>
@@ -75,10 +85,70 @@ fetch("https://privi-ledger.onrender.com/log/sth").then(r=>r.json()).then(d=>{
   const a=d.anchor; document.getElementById("chain").innerHTML=a&&a.block_number?'<span class="ok">Anchored, Privi block '+a.block_number+'</span>':'Anchored every 15 minutes';
 }).catch(()=>{document.getElementById("root").innerHTML='<span class="wait">Privi Ledger is waking up. Refresh in a few seconds.</span>'});
 </script></div>
-<section><h2>Built for small manufacturers</h2><dl class="defs"><dt>Record events</dt><dd>Each receiving, production, inspection and shipping event is linked to the previous one by a SHA-256 fingerprint.</dd><dt>Anchored on chain</dt><dd>Lot fingerprints are checkpointed on the Privi chain every few minutes.</dd><dt>Paid per check</dt><dd>Buyers' agents pay a few cents in USDC on Base per verification through x402. Lookups by fingerprint are free.</dd><dt>Michigan first</dt><dd>Built in Port Huron for the manufacturers around it, open to anyone.</dd></dl></section><section><h2>For buyers&#x27; agents</h2><pre>privi_verify_lot(lot_code="DEMO-STEEL-0001")
-privi_chain_of_custody(lot_code="DEMO-STEEL-0001")</pre><p class='note'>MCP endpoint: <code>https://privi-verify.onrender.com/mcp</code></p></section>
+<section id="check"><div class="cf">
+<div class="card"><h2>Check a label (free)</h2>
+<p class="note" style="margin-top:0">Paste the fingerprint printed under the QR code, or scan the code with a phone camera.</p>
+<label for="fp">Label fingerprint</label><input id="fp" placeholder="64 hex characters" autocomplete="off" spellcheck="false">
+<button id="lookup" type="button">Check</button> <span id="lstate" class="note" role="status"></span>
+<div id="lres"></div></div></div></section>
+<section id="record"><div class="cf">
+<div class="card"><h2>Record an event (manufacturers)</h2>
+<p class="note" style="margin-top:0">Use the manufacturer key Privi issued you. It stays in this browser tab only. No key yet? <a href="mailto:dariocanoy@priviflow.us?subject=ChainFlow%20pilot%20key">Ask for a pilot key</a>.</p>
+<label for="key">Manufacturer key</label><input id="key" type="password" autocomplete="off">
+<div class="row"><div><label for="lot">Lot or batch code</label><input id="lot" placeholder="BW-2026-0042"></div>
+<div><label for="etype">Event</label><select id="etype"><option>received</option><option selected>produced</option><option>inspected</option><option>shipped</option><option>transferred</option><option>recalled</option></select></div></div>
+<div class="row"><div><label for="loc">Where</label><input id="loc" placeholder="Plant 2, Port Huron MI"></div>
+<div><label for="actor">By (company or person)</label><input id="actor" placeholder="Blue Water Fab"></div></div>
+<div class="row"><div><label for="prod">Product or part number</label><input id="prod" placeholder="Bracket A-12"></div>
+<div><label for="qty">Quantity</label><input id="qty" placeholder="800 pcs"></div></div>
+<label for="notes">Notes</label><input id="notes" placeholder="Heat number, PO, inspection result…">
+<button id="rec" type="button">Record and make label</button> <span id="rstate" class="note" role="status"></span>
+<div id="label" hidden style="margin-top:16px"><div class="labelcard"><div id="qr"></div><div><strong id="lt"></strong><br><span id="ls"></span><br><code id="lf" style="font-size:12px"></code><br><span style="font-size:12px">Scan to verify · Privi ChainFlow</span></div></div>
+<p><a class="btn" id="lopen" target="_blank" rel="noopener">Open the public label page</a> <button class="btn alt" id="print" type="button" style="margin-top:0">Print label</button></p></div>
+</div></div></section><section><h2>How it works</h2><dl class="defs"><dt>Record events</dt><dd>Each receiving, production, inspection and shipping event is linked to the previous one by a SHA-256 fingerprint, so changing any past event breaks every fingerprint after it.</dd><dt>Label every lot</dt><dd>Each event gets a fingerprint and a public label page. Print the QR code on the box, pallet or certificate of conformance.</dd><dt>Anchored on chain</dt><dd>Every lot's latest fingerprint is checkpointed on chain (Base today; the Privi chain once its mainnet launches) every few minutes, so not even Privi can rewrite history unnoticed.</dd><dt>Paid per check</dt><dd>A label check is free. Buyers' agents pull the full chain of custody for a few cents in USDC on Base through x402, with no account.</dd><dt>Michigan first</dt><dd>Built in Port Huron for the manufacturers around it, open to anyone.</dd></dl></section><section><h2>For buyers&#x27; agents</h2><pre>privi_lookup_fingerprint(fingerprint="<from the label>")   # free
+privi_verify_lot(lot_code="BW-2026-0042")                   # paid, x402
+privi_chain_of_custody(lot_code="BW-2026-0042")             # paid, x402</pre><p class='note'>MCP endpoint: <code>https://privi-verify.onrender.com/mcp</code> · people can pay per check at <a href='https://privi-verify.onrender.com/pay'>privi-verify.onrender.com/pay</a></p></section>
 </div></main>
 <footer><div class="wrap cols"><div><strong>Privi World Co</strong><br>Port Huron, Michigan<br><a href="mailto:dariocanoy@priviflow.us">dariocanoy@priviflow.us</a></div>
 <div>Built by Dario Canoy<br><a href="https://github.com/canoydario847-cloud/Privi-Network">Source on GitHub</a><br><a href="https://privi-discovery.onrender.com/llms.txt">For AI agents: llms.txt</a></div>
 <div>MCP servers<br><a href="https://privi-ledger.onrender.com">Ledger</a>, <a href="https://privi-verify.onrender.com">Verify</a>, <a href="https://privi-anchor.onrender.com">Anchor</a></div></div></footer>
-</body></html>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+const V="https://privi-verify.onrender.com";const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+try{$("#key").value=sessionStorage.getItem("cf_key")||""}catch(e){}
+const q=new URLSearchParams(location.search).get("fp");if(q){$("#fp").value=q}
+async function lookup(){
+  const fp=$("#fp").value.trim().toLowerCase().replace(/^0x/,"");if(!fp)return;
+  $("#lookup").disabled=true;$("#lstate").textContent="Checking… (the server may take ~30 s to wake up)";$("#lres").innerHTML="";
+  try{
+    const r=await fetch(V+"/api/chainflow/label/"+encodeURIComponent(fp));const d=await r.json();
+    if(!d.found){$("#lstate").textContent=d.error||"No ChainFlow record has this fingerprint.";}
+    else{
+      const st=d.recalled?'<span class="bad">Recalled lot</span>':d.integrity.history_intact?'<span class="ok">Record intact</span>':'<span class="bad">Record altered</span>';
+      const oc=d.onchain.covered?`Anchored on chain, block ${esc(d.onchain.block_number)}`:esc(d.onchain.note);
+      $("#lres").innerHTML=`<p>${st}</p><table>${[["Lot",d.lot_code],["Product",d.product||"—"],["Event",`#${d.seq} ${d.event_type}`],["When (UTC)",d.occurred_at],["Where",d.location],["By",d.actor],["Quantity",d.quantity||"—"],["Later events",d.later_events]].map(([k,v])=>`<tr><th>${k}</th><td>${esc(v)}</td></tr>`).join("")}</table><p class="note">${oc} · <a href="${V}/label/${esc(d.fingerprint)}">Public label page</a></p>`;
+      $("#lstate").textContent="";
+    }
+  }catch(err){$("#lstate").textContent="Could not reach Privi Verify: "+err.message}
+  $("#lookup").disabled=false;
+}
+$("#lookup").onclick=lookup;$("#fp").addEventListener("keydown",e=>{if(e.key==="Enter")lookup()});if(q)lookup();
+$("#rec").onclick=async()=>{
+  const key=$("#key").value.trim();if(!key){$("#rstate").textContent="Enter your manufacturer key.";return}
+  try{sessionStorage.setItem("cf_key",key)}catch(e){}
+  $("#rec").disabled=true;$("#rstate").textContent="Recording…";
+  try{
+    const body={lot_code:$("#lot").value,event_type:$("#etype").value,location:$("#loc").value,actor:$("#actor").value,product:$("#prod").value,quantity:$("#qty").value,notes:$("#notes").value};
+    const r=await fetch(V+"/api/chainflow/events",{method:"POST",headers:{"content-type":"application/json","authorization":"Bearer "+key},body:JSON.stringify(body)});
+    const d=await r.json();if(!r.ok)throw new Error(d.error||r.status);
+    const ev=d.event;$("#label").hidden=false;$("#qr").innerHTML="";
+    if(window.QRCode){new QRCode($("#qr"),{text:d.label_url,width:280,height:280,correctLevel:QRCode.CorrectLevel.M})}else{$("#qr").textContent="QR code unavailable; use the label page link."}
+    $("#lt").textContent=(ev.product||ev.lot_code)+" · "+ev.lot_code;$("#ls").textContent=`#${ev.seq} ${ev.event_type} · ${ev.location} · ${ev.occurred_at}`;
+    $("#lf").textContent=ev.record_hash;$("#lopen").href=d.label_url;
+    $("#rstate").textContent="Recorded. It will be anchored on chain within a few minutes.";
+  }catch(err){$("#rstate").textContent="Not recorded: "+err.message}
+  $("#rec").disabled=false;
+};
+$("#print").onclick=()=>window.print();
+</script></body></html>

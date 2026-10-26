@@ -221,3 +221,52 @@ def test_pay_page_tools_ask_for_payment(store):
             r = http.post("/mcp", headers=hdr, json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                                                      "params": {"name": t["name"], "arguments": args}}).json()["result"]
             assert r["isError"] and r["structuredContent"]["accepts"][0]["network"] == cfg["network"]
+
+
+def test_chainflow_web_api_and_labels(store, tmp_path):
+    """Manufacturers record events from the ChainFlow site with a key; anyone with a label sees that event free."""
+    from starlette.testclient import TestClient
+    from privi_verify.anchoring import Checkpoints
+    s = build_server(settings(payments_enabled=False, write_keys={"mk_test"}), store)
+    auth = {"Authorization": "Bearer mk_test"}
+    with TestClient(s.streamable_http_app(host="0.0.0.0", stateless_http=True, json_response=True)) as http:
+        pre = http.options("/api/chainflow/events")
+        assert pre.headers["access-control-allow-origin"] == "*" and "authorization" in pre.headers["access-control-allow-headers"]
+        assert http.post("/api/chainflow/key", headers=auth).json() == {"valid": True}
+        assert http.post("/api/chainflow/key", headers={"Authorization": "Bearer nope"}).status_code == 401
+        body = {"lot_code": "BW-2026-0042", "event_type": "inspected", "location": "Port Huron, MI",
+                "actor": "Blue Water Fab QA", "product": "Bracket A-12", "quantity": "800 pcs", "notes": "CMM pass"}
+        assert http.post("/api/chainflow/events", json=body).status_code == 401
+        bad = http.post("/api/chainflow/events", headers=auth, json={**body, "event_type": "painted"})
+        assert bad.status_code == 400 and "inspected" in bad.json()["event_types"]
+        r = http.post("/api/chainflow/events", headers=auth, json=body).json()
+        fp = r["event"]["record_hash"]
+        assert r["recorded"] and r["label_url"].endswith(f"/label/{fp}") and r["event"]["seq"] == 1
+
+        lab = http.get(f"/api/chainflow/label/{fp}").json()
+        assert lab["found"] and lab["lot_code"] == "BW-2026-0042" and lab["integrity"]["history_intact"]
+        assert lab["onchain"]["covered"] is False and lab["later_events"] == 0
+        page = http.get(f"/label/{fp}")
+        assert page.status_code == 200 and "Bracket A-12" in page.text and "Record intact" in page.text
+        assert http.get("/label/" + "0" * 64).status_code == 404
+        assert http.get("/api/chainflow/label/xyz").status_code == 400
+
+        # an earlier label stays valid when later events are added, and shows once a checkpoint covers it
+        first = store.events("LOT-1")[0]["record_hash"]
+
+        class FakeAnchor:
+            def anchor(self, hashes, label):
+                return {"status": "confirmed", "merkle_root": "ab" * 32, "tx_hash": "0x" + "cd" * 32, "block_number": 9,
+                        "block_time": 2, "receipts": [{"hash": h, "proof": [], "tx_hash": "0x" + "cd" * 32} for h in hashes]}
+        Checkpoints(store._db, store._lock).run_once(store.heads(), FakeAnchor(), "privi-verify")
+        old = http.get(f"/api/chainflow/label/{first}").json()
+        assert old["later_events"] == 2 and old["onchain"]["covered"] and old["onchain"]["block_number"] == 9
+
+    # tampering with an event after the label was printed shows on the label page
+    db = sqlite3.connect(str(tmp_path / "t.db"))
+    db.execute("UPDATE events SET quantity='9 t' WHERE lot_code='LOT-1' AND seq=1")
+    db.commit()
+    with TestClient(s.streamable_http_app(host="0.0.0.0", stateless_http=True, json_response=True)) as http:
+        page = http.get(f"/label/{first}")
+        assert page.status_code == 200 and "Record altered" in page.text
+        assert http.get(f"/api/chainflow/label/{first}").json()["integrity"]["history_intact"] is False

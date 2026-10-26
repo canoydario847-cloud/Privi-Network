@@ -3,7 +3,7 @@
   "name": "io.github.canoydario847-cloud/privi-verify",
   "title": "Privi Verify",
   "description": "Manufacturing lot verification and chain of custody for AI agents (supply chain, traceability, provenance). Pay per call with x402 (USDC on Base), no account needed; lookups free. Lot fingerprints anchored on the Privi chain. More Privi tools and founder contact: https://privi-discovery.onrender.com/llms.txt",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "websiteUrl": "https://privi-discovery.onrender.com",
   "repository": {
     "url": "https://github.com/canoydario847-cloud/Privi-Network",

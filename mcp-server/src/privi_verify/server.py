@@ -3,6 +3,7 @@
 Free tools:   privi_pricing, privi_lookup_fingerprint
 Paid tools:   privi_verify_lot, privi_chain_of_custody   (x402, USDC on Base)
 Write tool:   privi_record_event                          (manufacturer API key)
+Web API:      /api/chainflow/* and public /label/<fingerprint> pages for Privi ChainFlow
 """
 
 from __future__ import annotations
@@ -21,12 +22,13 @@ from starlette.responses import JSONResponse, Response
 
 from .config import Settings
 from .store import EVENT_TYPES, LotStore, seed_demo
+from . import chainflow
 from .anchoring import Checkpoints, HttpAnchorClient, describe, start_loop
 from .x402 import Facilitator, Paywall
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor.onrender.com/mcp"
 
-__version__ = "0.3.2"
+__version__ = "0.4.0"
 
 INSTRUCTIONS = """\
 Privi Verify checks where a manufactured lot came from and whether its records
@@ -218,6 +220,8 @@ def build_server(
         return _text_result({"recorded": True, "event": ev})
 
     # ---------------- http extras ----------------
+
+    chainflow.add_routes(mcp, store, settings, onchain, _pub)
 
     @mcp.custom_route("/.well-known/glama.json", methods=["GET"], include_in_schema=False)
     async def glama(_: Request) -> JSONResponse:
