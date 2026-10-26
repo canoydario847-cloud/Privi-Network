@@ -84,7 +84,7 @@ def verified_paid_session(cfg: Settings, raw_body: bytes, header: str):
     return session
 
 
-def fulfill_paid_session(session):
+def fulfill_paid_session(session, expected_price_id: str):
     """Credit exactly once per session in the same durable SQLite transaction."""
     session_id = session["id"]
     user_id = session.get("client_reference_id")
@@ -98,7 +98,7 @@ def fulfill_paid_session(session):
             "FROM stripe_checkout_sessions WHERE session_id=?", (session_id,)
         ).fetchone()
         if not order or order["user_id"] != user_id or order["credits"] != CREDITS or (
-            order["price_id"] != session["expected_price_id"]
+            order["price_id"] != expected_price_id
             or order["amount_cents"] != CENTS
         ):
             raise ValueError("Unknown or mismatched checkout order")
