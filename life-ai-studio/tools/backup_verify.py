@@ -108,6 +108,15 @@ def validate_database(conn):
     ).fetchone()
     if invalid_email is not None:
         raise ValueError("Not a LIFE database; invalid member email identity")
+    # A restored account must retain a usable password verifier. SQLite can
+    # store NULL, blank text or BLOB values even when a lookalike schema has
+    # the expected columns. Reject malformed state without logging hashes.
+    invalid_password_hash = conn.execute(
+        'SELECT 1 FROM "users" WHERE typeof("pwdhash") != \'text\' '
+        'OR length(trim("pwdhash")) = 0 LIMIT 1'
+    ).fetchone()
+    if invalid_password_hash is not None:
+        raise ValueError("Not a LIFE database; invalid member password hash")
     # Membership timestamps are used for account history and onboarding.
     # SQLite INTEGER affinity can still contain NULL, REAL or nonnumeric text;
     # accepting those in a restore would make membership records unreliable.
