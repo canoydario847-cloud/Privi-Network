@@ -221,6 +221,7 @@ SITES["home"] = page(
         ("The tree is sealed on chain", "<p>Tree heads and checkpoints are anchored on the Privi EVM chain, so even Privi cannot rewrite the past without it showing.</p>"),
     ]))
     + sec("Built for agents first", MCP_SNIPPET + f"<p class='note'>Agents connect over MCP. Paid tools settle in USDC on Base through x402, with no account needed. Humans start on the <a href='{URLS['developers']}'>developer site</a>.</p>"),
+    + sec("Privi Base token reference", "<p>Privi source code references a separate PRIVI ERC-20 on Base. <a href=\"/base-token.html\">Review the exact contract, compatible wallets and market verification links</a>. Trading and liquidity have not been independently confirmed on this page.</p>"),
 )
 
 SITES["fortress"] = page(
