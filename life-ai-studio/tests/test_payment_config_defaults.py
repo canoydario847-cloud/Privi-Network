@@ -7,6 +7,8 @@ import unittest
 
 ENV = Path(__file__).resolve().parents[1] / ".env.example"
 PAYMENT_SWITCHES = ("PRVI_MAINNET_PAYMENTS_ENABLED", "BNB_PRIV_PAYMENTS_ENABLED")
+# The disposable preview must remain explicit in deployment, not implied by this sample.
+STAGING_SWITCH = "LIFE_STAGING_ONLY"
 
 
 def parse_defaults(text):
@@ -27,6 +29,11 @@ class PaymentDefaultSafetyTests(unittest.TestCase):
         for key in PAYMENT_SWITCHES:
             with self.subTest(key=key):
                 self.assertEqual(values.get(key), ["0"], f"{key} must appear once and be 0")
+
+    def test_staging_setting_is_explicit_and_boolean(self):
+        values = [line.partition("=")[2].strip() for line in ENV.read_text(encoding="utf-8").splitlines() if line.strip().startswith(STAGING_SWITCH + "=")]
+        self.assertEqual(len(values), 1)
+        self.assertIn(values[0], ("0", "1"))
 
     def test_duplicate_or_enabled_defaults_are_rejected(self):
         for text in (
