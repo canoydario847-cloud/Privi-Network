@@ -760,3 +760,53 @@ def test_backup_rejects_null_primary_key_data(tmp_path, table, statement):
     with pytest.raises(ValueError, match=rf"{table} primary key contains NULL"):
         backup.backup_and_verify(source, destination)
     assert not destination.exists(), "Do not publish backups with NULL identities"
+
+
+@pytest.mark.parametrize("scenario,expected", [
+    ("valid", None),
+    ("null_key", "invalid login throttle state"),
+    ("malformed_hash", "invalid login throttle state"),
+    ("negative_failures", "invalid login throttle state"),
+    ("bad_lockout", "invalid login throttle state"),
+    ("missing_pk", "login throttle primary key missing"),
+    ("missing_column", "login throttle columns missing"),
+    ("nullable_counter", "login throttle required fields nullable"),
+])
+def test_restore_rejects_invalid_persisted_login_throttle(tmp_path, scenario, expected):
+    """An invalid restored throttle must not silently bypass account lockouts."""
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        key_column = "key_hash TEXT" if scenario == "missing_pk" else "key_hash TEXT PRIMARY KEY"
+        failures_column = (
+            "failures INTEGER" if scenario == "nullable_counter"
+            else "failures INTEGER NOT NULL"
+        )
+        other_columns = (
+            "window_started INTEGER NOT NULL"
+            if scenario == "missing_column"
+            else "window_started INTEGER NOT NULL, blocked_until INTEGER NOT NULL"
+        )
+        db.execute(
+            f"CREATE TABLE login_throttle ({key_column}, {failures_column}, "
+            f"{other_columns})"
+        )
+        if scenario not in {"missing_pk", "missing_column", "nullable_counter"}:
+            db.execute(
+                "INSERT INTO login_throttle VALUES (?,?,?,?)",
+                (
+                    None if scenario == "null_key" else (
+                        "not-a-sha256-hash" if scenario == "malformed_hash" else "a" * 64
+                    ),
+                    -1 if scenario == "negative_failures" else 5,
+                    200,
+                    100 if scenario == "bad_lockout" else 1100,
+                ),
+            )
+    destination = tmp_path / "vault" / "throttle-snapshot.sqlite3"
+    if expected is None:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        with pytest.raises(ValueError, match=expected):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Invalid throttle state must not publish a backup"
