@@ -66,6 +66,14 @@ footer .cols{display:flex;gap:40px;flex-wrap:wrap;justify-content:space-between}
 <main><div class="wrap">
 <div class="hero"><div><h1>A post-quantum readiness package in 10 minutes</h1><p class="lede">Use the sample agency or paste your own code and inventory. Privi Quantum classifies every asset, maps it to the federal deadline, builds the CBOM, signs the package with ML-DSA-87 and anchors it on chain. Nothing here needs an account.</p><div class="cta"><a class="btn" href="https://gov.priviflow.us">Back to Privi for government</a><a class="btn alt" href="https://gov.priviflow.us/capability.html">Capability statement</a></div></div></div>
 <section><div class="demo">
+<div class="card"><h2>Start here: are your public sites quantum-safe yet?</h2>
+<p class="note" style="margin-top:0">One hostname per line (up to 20). Each site gets two TLS hellos and no data; nothing is stored. The results go into the package below.</p>
+<textarea id="hosts" style="min-height:90px">www.whitehouse.gov
+www.cisa.gov
+www.nist.gov
+login.gov</textarea>
+<button id="check" type="button">Check post-quantum TLS</button> <span id="cstate" class="note" role="status"></span>
+<div class="tw"><table id="ctab" hidden></table></div></div>
 <div class="card"><h2>1. Who is this for?</h2>
 <div class="row"><div><label for="org">Agency or company</label><input id="org" value="Department of Example (demo)"></div>
 <div><label for="lead">PQC Migration Lead</label><input id="lead" value="Jordan Smith (demo)"></div>
@@ -94,12 +102,25 @@ Grants system, code signing, RSA-3072, code_signing, , moderate, no</textarea>
 <p id="links"></p><div class="tw"><table id="els"></table></div></div>
 <div class="card"><h2>5. Verify it yourself</h2><ol class="note" style="margin:0;padding-left:20px">
 <li>Open the report: both signatures are checked against Privi Quantum's <a href="https://privi-quantum.onrender.com/keys">public keys</a>.</li>
-<li>Within a few minutes the package hash is anchored on the <a href="https://privi-devnet.onrender.com">Privi Devnet</a>; the report links the transaction.</li>
+<li>Within a few minutes the package hash is anchored on chain; the report links the transaction.</li>
 <li>Download the CBOM and compare its SHA-256 with the one in the report.</li>
 <li>Agents can do the same over MCP: <code>pqc_readiness_package</code> and <code>quantum_verify</code> at <code>https://privi-quantum.onrender.com/mcp</code>.</li></ol></div>
 </div></section>
 <script>
 const $=s=>document.querySelector(s);const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const hostList=()=>$("#hosts").value.split(/\s+/).map(x=>x.trim()).filter(Boolean).slice(0,20);
+const LABEL={pq_hybrid:"Quantum-safe key exchange",tls13_classical:"TLS 1.3, classical key exchange",tls12:"TLS 1.2 only",no_tls13:"No modern TLS",unreachable:"Unreachable",blocked:"Not a public address",invalid:"Not a valid hostname"};
+$("#check").onclick=async()=>{
+  $("#check").disabled=true;$("#cstate").textContent="Checking… (the server may take ~30 s to wake up)";
+  try{
+    const r=await fetch("https://privi-quantum.onrender.com/api/pqc/endpoints",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({endpoints:hostList()})});
+    const d=await r.json();if(!r.ok)throw new Error(d.error||r.status);
+    const s=d.summary;$("#ctab").hidden=false;
+    $("#ctab").innerHTML="<tr><th>Site</th><th>Result</th><th>Key exchange</th><th>Next step</th></tr>"+d.results.map(x=>`<tr><td>${esc(x.host||x.target)}</td><td class="${x.status==="pq_hybrid"?"":x.status==="tls13_classical"?"p2":"p1"}">${esc(LABEL[x.status]||x.status)}</td><td>${esc(x.pq_key_exchange||x.classical_key_exchange||"—")}</td><td>${esc(x.action||x.detail||"")}</td></tr>`).join("");
+    $("#cstate").textContent=s.checked?`${s.pq_hybrid} of ${s.checked} sites use post-quantum key exchange (${s.pq_ready_percent}%).`:"No site could be checked.";
+  }catch(err){$("#cstate").textContent="Could not run the check: "+err.message}
+  $("#check").disabled=false;
+};
 function parseAssets(t){return t.split("
 ").map(l=>l.trim()).filter(Boolean).map(l=>{const c=l.split(",").map(x=>x.trim());
   return {system:c[0],asset:c[1],algorithm:c[2],usage:c[3]||"other",protocol:c[4]||"",impact:c[5]||"unknown",hva:/^y/i.test(c[6]||"")}})}
@@ -108,7 +129,7 @@ $("#go").onclick=async()=>{
   try{
     const body={organization:$("#org").value,pqc_lead:$("#lead").value,profile:$("#profile").value,system_name:$("#sys").value,
       impact:$("#impact").value,hva:$("#hva").value==="1",files:$("#code").value.trim()?[{name:"pasted-code",content:$("#code").value}]:[],
-      assets:parseAssets($("#assets").value)};
+      assets:parseAssets($("#assets").value),endpoints:hostList()};
     const r=await fetch("https://privi-quantum.onrender.com/api/pqc/package",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
     const d=await r.json();if(!r.ok)throw new Error(d.error||r.status);
     const s=d.summary,b=s.by_priority;$("#result").hidden=false;
@@ -117,7 +138,7 @@ $("#go").onclick=async()=>{
     $("#links").innerHTML=`<a class="btn" href="${d.report_url}" target="_blank" rel="noopener">Open the signed report</a> <a class="btn alt" href="${d.cbom_url}">Download the CBOM</a><br><span class="note">Package ${esc(d.package_id)} · CBOM SHA-256 <code>${esc(d.cbom_sha256)}</code></span>`;
     $("#els").innerHTML=d.plan_elements?"<tr><th>#</th><th>M-26-15 plan element</th><th>Status</th></tr>"+d.plan_elements.map(x=>`<tr><td>${x.element}</td><td>${esc(x.name)}</td><td>${esc(x.status)}</td></tr>`).join(""):
       d.contractor_readiness?"<tr><th>Contractor item</th><th>Status</th></tr>"+d.contractor_readiness.map(x=>`<tr><td>${esc(x.item)}</td><td>${esc(x.status)}</td></tr>`).join(""):"";
-    $("#state").textContent="Done. Signed with Ed25519 + ML-DSA-87; anchoring on the Privi Devnet within minutes.";
+    $("#state").textContent="Done. Signed with Ed25519 + ML-DSA-87; anchored on chain within minutes.";
     $("#result").scrollIntoView({behavior:"smooth"});
   }catch(err){$("#state").textContent="Could not build the package: "+err.message}
   $("#go").disabled=false;

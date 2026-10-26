@@ -244,3 +244,134 @@ def test_gov_package_tool_report_and_api(tmp_path):
         bad = http.post("/api/pqc/package", json={"organization": "Demo"})
         assert bad.status_code == 400
         assert http.get("/api/pqc/deadlines").json()["timeline"]
+
+
+# ---------------------------------------------------------------- live endpoint check (post-quantum TLS)
+
+import socket  # noqa: E402
+import struct  # noqa: E402
+import threading  # noqa: E402
+
+from privi_quantum import pqctls  # noqa: E402
+
+
+def _client_hello_info(data):
+    """Pull the offered groups and versions out of a ClientHello (enough for the fake server)."""
+    body = data[9:]
+    p = 2 + 32
+    p += 1 + body[p]
+    p += 2 + int.from_bytes(body[p:p + 2], "big")
+    p += 1 + body[p]
+    end = p + 2 + int.from_bytes(body[p:p + 2], "big"); p += 2
+    groups = []
+    while p + 4 <= end:
+        et, el = struct.unpack(">HH", body[p:p + 4]); ev = body[p + 4:p + 4 + el]; p += 4 + el
+        if et == 0x000A:
+            groups = [int.from_bytes(ev[i:i + 2], "big") for i in range(2, len(ev), 2)]
+    return groups
+
+
+def _server_hello(random, exts, suite=0x1301):
+    body = b"\x03\x03" + random + b"\x20" + b"\x00" * 32 + struct.pack(">H", suite) + b"\x00" + pqctls._vec(exts, 2)
+    hs = b"\x02" + len(body).to_bytes(3, "big") + body
+    return b"\x16\x03\x03" + pqctls._vec(hs, 2)
+
+
+class FakeTLS:
+    """Answers ClientHellos like a real server: 'pq' accepts X25519MLKEM768, 'tls13' is classical TLS 1.3,
+    'tls12' only speaks TLS 1.2."""
+
+    def __init__(self, mode):
+        self.mode = mode
+        self.sock = socket.socket(); self.sock.bind(("127.0.0.1", 0)); self.sock.listen(8)
+        self.port = self.sock.getsockname()[1]
+        threading.Thread(target=self.run, daemon=True).start()
+
+    def run(self):
+        while True:
+            try:
+                c, _ = self.sock.accept()
+            except OSError:
+                return
+            with c:
+                groups = _client_hello_info(c.recv(65536))
+                pq_only = groups and all(g in pqctls.PQ_GROUPS for g in groups)
+                if pq_only:
+                    if self.mode == "pq" and 0x11EC in groups:
+                        c.sendall(_server_hello(pqctls.HRR_RANDOM, pqctls._ext(0x002B, b"\x03\x04") + pqctls._ext(0x0033, b"\x11\xec")))
+                    else:
+                        c.sendall(b"\x15\x03\x03\x00\x02\x02\x28")      # handshake_failure
+                elif self.mode == "tls12":
+                    c.sendall(_server_hello(b"\x11" * 32, b"", suite=0xC02F))
+                else:
+                    c.sendall(_server_hello(b"\x22" * 32, pqctls._ext(0x002B, b"\x03\x04")
+                                            + pqctls._ext(0x0033, b"\x00\x1d" + pqctls._vec(b"\x09" * 32, 2))))
+
+
+@pytest.fixture(scope="module")
+def fake_tls():
+    servers = {m: FakeTLS(m) for m in ("pq", "tls13", "tls12")}
+    ports = {s.port: m for m, s in servers.items()}
+    old = pqctls.ALLOWED_PORTS
+    pqctls.ALLOWED_PORTS = set(old) | set(ports)
+    yield {m: s.port for m, s in servers.items()}
+    pqctls.ALLOWED_PORTS = old
+    for s in servers.values():
+        s.sock.close()
+
+
+def _loopback(host, port):
+    return "127.0.0.1"
+
+
+def test_endpoint_check_classifies_servers(fake_tls):
+    pq = pqctls.check_endpoint(f"https://www.pq.example.gov:{fake_tls['pq']}/login", 3, _loopback)
+    assert pq["status"] == "pq_hybrid" and pq["pq_key_exchange"] == "X25519MLKEM768" and pq["tls_version"] == "1.3"
+    assert govpqc.classify(pq["asset"]["algorithm"])["class"] == "hybrid"
+    c13 = pqctls.check_endpoint(f"classic.example.gov:{fake_tls['tls13']}", 3, _loopback)
+    assert c13["status"] == "tls13_classical" and c13["classical_key_exchange"] == "X25519" and "X25519MLKEM768" in c13["action"]
+    assert govpqc.classify(c13["asset"]["algorithm"])["class"] == "quantum_vulnerable"
+    old = pqctls.check_endpoint(f"old.example.gov:{fake_tls['tls12']}", 3, _loopback)
+    assert old["status"] == "tls12" and old["tls_version"] == "1.2"
+    assessed = govpqc.assess_asset(old["asset"], "agency")
+    assert assessed["priority"] == "P2" and "TLS 1.3" in assessed["action"]
+
+
+def test_endpoint_check_refuses_private_and_odd_targets():
+    assert pqctls.check_endpoint("10.1.2.3")["status"] == "blocked"
+    assert pqctls.check_endpoint("192.168.0.10:443")["status"] == "blocked"
+    assert pqctls.check_endpoint("not a host")["status"] == "invalid"
+    assert pqctls.check_endpoint("www.example.gov:22")["status"] == "invalid"
+    assert pqctls.check_endpoint("localhost")["status"] == "invalid"
+    out = pqctls.check_endpoints(["10.0.0.1"] * 30)
+    assert len(out["results"]) == 1 and out["summary"]["checked"] == 0
+
+
+def test_endpoint_tool_and_package(tmp_path, fake_tls):
+    from starlette.testclient import TestClient
+
+    def checker(hosts):
+        return pqctls.check_endpoints(hosts, 3, _loopback)
+    server = build_server(Settings(db_path=str(tmp_path / "e.db")), Attestor(str(tmp_path / "e.db")), FakeAnchor(), checker)
+    hosts = [f"www.pq.example.gov:{fake_tls['pq']}", f"classic.example.gov:{fake_tls['tls13']}"]
+
+    async def go():
+        async with Client(server) as c:
+            r = (await c.call_tool("pqc_endpoint_check", {"endpoints": hosts})).structured_content
+            assert r["summary"] == {"checked": 2, "pq_hybrid": 1, "tls13_classical": 1, "below_tls13": 0,
+                                    "unreachable_or_invalid": 0, "pq_ready_percent": 50}
+            pkg = await c.call_tool("pqc_readiness_package", {"organization": "Dept of Example", "endpoints": hosts, "impact": "high"})
+            assert not pkg.is_error, pkg
+            out = pkg.structured_content
+            assert out["endpoint_check"]["pq_hybrid"] == 1 and out["summary"]["assets"] == 2
+            assert any(p["priority"] == "P1" and "classic.example.gov" in p["system"] for p in out["top_priorities"])
+            too_many = await c.call_tool("pqc_endpoint_check", {"endpoints": [f"h{i}.example.gov" for i in range(21)]})
+            assert too_many.is_error
+    anyio.run(go)
+
+    app = server.streamable_http_app(host="0.0.0.0", stateless_http=True, json_response=True)
+    with TestClient(app) as http:
+        assert http.options("/api/pqc/endpoints").headers["access-control-allow-origin"] == "*"
+        ok = http.post("/api/pqc/endpoints", json={"endpoints": hosts[:1]})
+        assert ok.status_code == 200 and ok.json()["results"][0]["status"] == "pq_hybrid"
+        assert http.post("/api/pqc/endpoints", json={}).status_code == 400

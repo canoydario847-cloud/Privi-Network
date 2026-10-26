@@ -342,16 +342,17 @@ SITES["live"] = page(
 
 SITES["gov"] = page(
     "gov", "Privi for government: post-quantum readiness and AI inventories",
-    "Signed post-quantum readiness packages for EO 14409 and OMB M-26-15 with a CycloneDX CBOM, plus tamper-evident AI use-case inventories, sealed on Privi's own chain.",
+    "Signed post-quantum readiness packages for EO 14409 and OMB M-26-15 with a CycloneDX CBOM, a live check of agency sites for post-quantum TLS, plus tamper-evident AI use-case inventories, anchored on chain.",
     "Post-quantum evidence an inspector general can verify",
     "EO 14409 and OMB M-26-15 move federal key establishment to post-quantum cryptography by the end of 2030 and signatures in 2031, starting with High Value Assets. Privi turns your code and crypto inventory into a prioritized, deadline-mapped plan and a machine-readable CBOM, signed with ML-DSA-87 and anchored on chain, in one call.",
     [("Run the 10-minute demo", URLS["gov"] + "/demo.html"), ("Capability statement", URLS["gov"] + "/capability.html")],
     STH_WIDGET,
     sec("Post-quantum readiness package", defs([
+        ("Live check of your public sites", "Enter up to 20 hostnames, such as www.agency.gov. Privi Quantum tests each one for TLS 1.3 and hybrid post-quantum key exchange (X25519MLKEM768, FIPS 203), the protection against \u201charvest now, decrypt later,\u201d and adds the results to your CBOM. It sends two TLS hellos per site and no data."),
         ("Inventory in, plan out", "Scan code and configuration, add your systems' algorithms, protocols, FIPS 199 impact and HVA status. Every asset gets the federal deadline that applies to it and a FIPS 203/204/205 replacement."),
         ("The nine M-26-15 plan elements", "Each element is marked as evidence in the package or as a gap the agency must supply, so the living migration plan you submitted on October 22 keeps improving."),
         ("CycloneDX 1.6 CBOM", "A machine-readable Cryptographic Bill of Materials of every asset, ready for the minimum CBOM elements CISA and NIST are due to publish in March 2027."),
-        ("Signed and anchored", "Each package is signed with Ed25519 and ML-DSA-87 (NIST FIPS 204, the CNSA 2.0 parameter set) and anchored on the Privi Devnet. Anyone can check it on its public report page."),
+        ("Signed and anchored", "Each package is signed with Ed25519 and ML-DSA-87 (NIST FIPS 204, the CNSA 2.0 parameter set) and its hash is anchored on chain (Base today; the Privi chain once its mainnet launches). Anyone can check it on its public report page."),
         ("Contractors and NSS vendors", "Contractor profile: EO 14409 FAR items (FIPS incl. PQC by Dec 31, 2030, proposed). NSS vendor profile: NSA CNSA 2.0 dates per product category."),
     ]), "Free for agencies and contractors through the Privi Quantum MCP server (<code>pqc_readiness_package</code>) or the demo page.")
     + sec("AI use-case inventories and continuous records", defs([
@@ -399,6 +400,14 @@ GOV_DEMO = page(
     [("Back to Privi for government", URLS["gov"]), ("Capability statement", URLS["gov"] + "/capability.html")],
     "",
     f"""<section><div class="demo">
+<div class="card"><h2>Start here: are your public sites quantum-safe yet?</h2>
+<p class="note" style="margin-top:0">One hostname per line (up to 20). Each site gets two TLS hellos and no data; nothing is stored. The results go into the package below.</p>
+<textarea id="hosts" style="min-height:90px">www.whitehouse.gov
+www.cisa.gov
+www.nist.gov
+login.gov</textarea>
+<button id="check" type="button">Check post-quantum TLS</button> <span id="cstate" class="note" role="status"></span>
+<div class="tw"><table id="ctab" hidden></table></div></div>
 <div class="card"><h2>1. Who is this for?</h2>
 <div class="row"><div><label for="org">Agency or company</label><input id="org" value="Department of Example (demo)"></div>
 <div><label for="lead">PQC Migration Lead</label><input id="lead" value="Jordan Smith (demo)"></div>
@@ -416,12 +425,25 @@ GOV_DEMO = page(
 <p id="links"></p><div class="tw"><table id="els"></table></div></div>
 <div class="card"><h2>5. Verify it yourself</h2><ol class="note" style="margin:0;padding-left:20px">
 <li>Open the report: both signatures are checked against Privi Quantum's <a href="{QUANTUM}/keys">public keys</a>.</li>
-<li>Within a few minutes the package hash is anchored on the <a href="{DEVNET}">Privi Devnet</a>; the report links the transaction.</li>
+<li>Within a few minutes the package hash is anchored on chain; the report links the transaction.</li>
 <li>Download the CBOM and compare its SHA-256 with the one in the report.</li>
 <li>Agents can do the same over MCP: <code>pqc_readiness_package</code> and <code>quantum_verify</code> at <code>{QUANTUM}/mcp</code>.</li></ol></div>
 </div></section>
 <script>
 const $=s=>document.querySelector(s);const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}}[c]));
+const hostList=()=>$("#hosts").value.split(/\\s+/).map(x=>x.trim()).filter(Boolean).slice(0,20);
+const LABEL={{pq_hybrid:"Quantum-safe key exchange",tls13_classical:"TLS 1.3, classical key exchange",tls12:"TLS 1.2 only",no_tls13:"No modern TLS",unreachable:"Unreachable",blocked:"Not a public address",invalid:"Not a valid hostname"}};
+$("#check").onclick=async()=>{{
+  $("#check").disabled=true;$("#cstate").textContent="Checking… (the server may take ~30 s to wake up)";
+  try{{
+    const r=await fetch("{QUANTUM}/api/pqc/endpoints",{{method:"POST",headers:{{"content-type":"application/json"}},body:JSON.stringify({{endpoints:hostList()}})}});
+    const d=await r.json();if(!r.ok)throw new Error(d.error||r.status);
+    const s=d.summary;$("#ctab").hidden=false;
+    $("#ctab").innerHTML="<tr><th>Site</th><th>Result</th><th>Key exchange</th><th>Next step</th></tr>"+d.results.map(x=>`<tr><td>${{esc(x.host||x.target)}}</td><td class="${{x.status==="pq_hybrid"?"":x.status==="tls13_classical"?"p2":"p1"}}">${{esc(LABEL[x.status]||x.status)}}</td><td>${{esc(x.pq_key_exchange||x.classical_key_exchange||"—")}}</td><td>${{esc(x.action||x.detail||"")}}</td></tr>`).join("");
+    $("#cstate").textContent=s.checked?`${{s.pq_hybrid}} of ${{s.checked}} sites use post-quantum key exchange (${{s.pq_ready_percent}}%).`:"No site could be checked.";
+  }}catch(err){{$("#cstate").textContent="Could not run the check: "+err.message}}
+  $("#check").disabled=false;
+}};
 function parseAssets(t){{return t.split("\n").map(l=>l.trim()).filter(Boolean).map(l=>{{const c=l.split(",").map(x=>x.trim());
   return {{system:c[0],asset:c[1],algorithm:c[2],usage:c[3]||"other",protocol:c[4]||"",impact:c[5]||"unknown",hva:/^y/i.test(c[6]||"")}}}})}}
 $("#go").onclick=async()=>{{
@@ -429,7 +451,7 @@ $("#go").onclick=async()=>{{
   try{{
     const body={{organization:$("#org").value,pqc_lead:$("#lead").value,profile:$("#profile").value,system_name:$("#sys").value,
       impact:$("#impact").value,hva:$("#hva").value==="1",files:$("#code").value.trim()?[{{name:"pasted-code",content:$("#code").value}}]:[],
-      assets:parseAssets($("#assets").value)}};
+      assets:parseAssets($("#assets").value),endpoints:hostList()}};
     const r=await fetch("{QUANTUM}/api/pqc/package",{{method:"POST",headers:{{"content-type":"application/json"}},body:JSON.stringify(body)}});
     const d=await r.json();if(!r.ok)throw new Error(d.error||r.status);
     const s=d.summary,b=s.by_priority;$("#result").hidden=false;
@@ -438,7 +460,7 @@ $("#go").onclick=async()=>{{
     $("#links").innerHTML=`<a class="btn" href="${{d.report_url}}" target="_blank" rel="noopener">Open the signed report</a> <a class="btn alt" href="${{d.cbom_url}}">Download the CBOM</a><br><span class="note">Package ${{esc(d.package_id)}} · CBOM SHA-256 <code>${{esc(d.cbom_sha256)}}</code></span>`;
     $("#els").innerHTML=d.plan_elements?"<tr><th>#</th><th>M-26-15 plan element</th><th>Status</th></tr>"+d.plan_elements.map(x=>`<tr><td>${{x.element}}</td><td>${{esc(x.name)}}</td><td>${{esc(x.status)}}</td></tr>`).join(""):
       d.contractor_readiness?"<tr><th>Contractor item</th><th>Status</th></tr>"+d.contractor_readiness.map(x=>`<tr><td>${{esc(x.item)}}</td><td>${{esc(x.status)}}</td></tr>`).join(""):"";
-    $("#state").textContent="Done. Signed with Ed25519 + ML-DSA-87; anchoring on the Privi Devnet within minutes.";
+    $("#state").textContent="Done. Signed with Ed25519 + ML-DSA-87; anchored on chain within minutes.";
     $("#result").scrollIntoView({{behavior:"smooth"}});
   }}catch(err){{$("#state").textContent="Could not build the package: "+err.message}}
   $("#go").disabled=false;
@@ -468,6 +490,7 @@ ul{{margin:0;padding-left:18px}}li{{margin:0 0 4px}}dl{{display:grid;grid-templa
 <div class="grid"><div>
 <div class="box"><h2>Core competencies</h2><ul>
 <li><strong>Post-quantum readiness packages</strong> mapped to EO 14409 and OMB M-26-15: prioritized migration lists, the nine plan elements, CycloneDX 1.6 CBOMs.</li>
+<li><strong>Live post-quantum TLS checks</strong> of public agency sites (hybrid X25519MLKEM768 key exchange, TLS 1.3), fed straight into the CBOM.</li>
 <li><strong>Post-quantum signatures in production</strong>: every Privi record is signed with Ed25519 and ML-DSA-87 (NIST FIPS 204, the CNSA 2.0 parameter set).</li>
 <li><strong>Tamper-evident records</strong> for AI agents and agency inventories (OMB M-25-21): Merkle transparency log, two-person integrity, air-gapped evidence bundles.</li>
 <li><strong>Verifiable supply-chain provenance</strong> for manufactured lots (Privi ChainFlow / Verify), anchored on chain.</li>
