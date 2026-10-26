@@ -1,0 +1,33 @@
+name: Verify project-declared Base PRIVI token (read-only)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/base_privi_market_verify.py"
+      - ".github/workflows/base-privi-market-verify.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Read Base chain state (no signing or trading)
+        env:
+          BASE_RPC_URL: https://mainnet.base.org
+        run: python3 scripts/base_privi_market_verify.py | tee base-privi-market-evidence.json
+      - name: Upload dated evidence (no secrets)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: privi-base-market-verification
+          path: base-privi-market-evidence.json
+          if-no-files-found: ignore
