@@ -128,20 +128,35 @@ operational validator, finalized block or PoP financial mainnet.
 
 ## Durable vote-signing guard research (separate follow-up)
 
-The next research experiment supplies \`persistent_vote_guard.cjs\`.
+The research implementation supplies \`persistent_vote_guard.cjs\`.
 Before emitting a **research-only** commit signature from an admitted
-Ed25519 validator, it writes a height lock for
-\`(research-chain-id, genesis-hash, epoch, height, validator-id)\`
-and the accepted block hash. It uses a private local directory (0700),
-an exclusive create (O_EXCL), fsync on the file and directory, and
-refuses to overwrite corrupted or conflicting lock records.
+Ed25519 validator, it reserves a height lock scoped by
+\`(research-chain-id, genesis-hash, height, validator-id)\`. The stored record
+also includes the admitted membership epoch and accepted candidate block hash.
 
-This is materially stricter than the earlier volatile \`ResearchVoteLock\`:
-a restarted signing process rejects attempts to sign a *different* block
-at the same height, even if the round changes. Signatures are domain
-separated and require a governance-admitted signer and an authenticated
-candidate proposal. The implementation never handles financial wallet keys,
-PRVI emissions, PoS voting power or third-party settlement.
+**Fail-closed epoch behavior:** A signer cannot forget a same-height
+commitment merely because committee membership moved to a new epoch:
+even re-signing an *identical* block hash at that height in another epoch
+is refused until a separate, formally reviewed handoff protocol exists.
+The in-memory \`ResearchVoteLock\` now mirrors this conservative
+one-chain/genesis rule. A new height may be signed after an epoch
+change; that is NOT a safe, finished consensus membership protocol.
+
+The durable guard requires a private local lock directory (0700),
+refuses symlinked directory ancestry and existing hard-linked lock files,
+creates each record exclusively (O_EXCL), and fsyncs both the file and
+directory before any signature leaves the process. An existing lock
+is re-validated from an open file descriptor and re-synced on replay,
+so a previous directory-sync failure cannot be mistaken for durable
+commitment. Corrupted or conflicting records are never auto-deleted.
+Dedicated tests cover ordinary restart/replay, corrupted locks,
+symlink ancestors, hard links, simulated sync failure, and competing
+signing processes across epoch boundaries.
+
+These controls remain *local research experiments*: they do not prove
+that two committees' quorums overlap, that a proposal is valid on a
+live native ledger, that network partitions recover safely, or that
+PoP voting is integrated with running Privi validators.
 
 **Do not deploy:** This is only a filesystem-level non-equivocation
 experiment, not a production slashing/lock protocol. The entire host,
