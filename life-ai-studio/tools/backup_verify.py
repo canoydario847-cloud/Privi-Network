@@ -281,7 +281,7 @@ def validate_database(conn):
         # ledger entry. Pending orders must not have issued credits.
         mismatch = conn.execute(
             'SELECT 1 FROM "stripe_checkout_sessions" s '
-            'LEFT JOIN "ledger" l ON l.idempotency = "stripe:" || s.session_id '
+            "LEFT JOIN \"ledger\" l ON l.idempotency = 'stripe:' || s.session_id "
             'WHERE (s.fulfilled_at IS NULL AND l.id IS NOT NULL) '
             'OR (s.fulfilled_at IS NOT NULL AND '
             "(l.id IS NULL OR l.user_id != s.user_id OR l.amount != s.credits "
