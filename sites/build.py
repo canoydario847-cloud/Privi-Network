@@ -142,6 +142,11 @@ LIVE_WIDGET = f"""
 </script>"""
 
 
+# The home site is also the Privi Android app (a Trusted Web Activity): web app manifest + icons.
+APP_HEAD = ('<link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#0E1B33">'
+            '<link rel="apple-touch-icon" href="/icon-192.png">')
+
+
 def page(key, title, desc, h1, lede, ctas, aside, body, extra_head=""):
     nav = "".join(f'<a href="{URLS[k]}"{" aria-current=page" if k == key else ""}>{e(n)}</a>' for k, n in NAV)
     cta = "".join(f'<a class="btn{" alt" if i else ""}" href="{u}">{e(t)}</a>' for i, (t, u) in enumerate(ctas))
@@ -155,7 +160,7 @@ def page(key, title, desc, h1, lede, ctas, aside, body, extra_head=""):
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
 <meta property="og:title" content="{e(title)}"><meta property="og:description" content="{e(desc)}"><meta property="og:type" content="website">
-<script type="application/ld+json">{json.dumps(ld)}</script>{extra_head}
+<script type="application/ld+json">{json.dumps(ld)}</script>{APP_HEAD if key == "home" else ""}{extra_head}
 <style>{CSS}</style></head><body>
 <header><div class="wrap bar"><a class="mark" href="{URLS['home']}">{LOGO}Privi</a><nav aria-label="Privi sites">{nav}</nav></div></header>
 <main><div class="wrap">
