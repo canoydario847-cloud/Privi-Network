@@ -270,3 +270,43 @@ Offline adversarial regression:
 **NO-GO:** Only a production chain with externally authenticated
 finalized checkpoints, independent validator evidence, audited
 consensus execution and recovery can establish genuine mainnet finality.
+
+
+## Research checkpoint issuer attestation (still NOT finality)
+
+The new opt-in `checkpoint_attestation.cjs` requires a
+`PriviPoPResearchGovernanceCheckpoint/v1` **synthetic claim** signed
+under the same Ed25519 governance key that authenticated the research
+committee's validator admissions. Callers must supply a *separately
+trusted/pinned* governance public key: the checkpoint must never be allowed
+to select its own verification key. The verifier rejects an unverified
+committee, unexpected fields, changed chain/genesis/epoch, changed
+checkpoint height/hash, governance key substitution, malformed signatures,
+wrong research tag and any attempted production-finality assertion.
+
+The signing domain is `Privi/PoP/Research/2026/v1` with tag
+`research-checkpoint-attestation-v1`, distinct from validator
+`admit`, `propose` and `commit` signatures. A valid
+signature authenticates **which key issued the checkpoint claim**. It
+does NOT prove that key had external governance authorization or that
+the claimed block hash is canonical, finalized, available, executed or
+anchored in actual Privi consensus.
+
+`verifyAttestedCandidateAncestry` performs that signer check first,
+then uses `verifyCandidateAncestry` to verify each contiguous
+quorum-signed research candidate. Its result explicitly preserves
+`checkpointFinalityVerified:false`, `finalized:false`,
+`productionConsensus:false` and
+`verifiesCheckpointAuthenticity:false` (the canonical ledger state
+remains unauthenticated). This is a **pre-production trust-binding
+exercise, not a Privi checkpoint service or a signed genesis**.
+A real mainnet verifier would need external finalized-state evidence,
+independent operator attestations and a reviewed genesis/root-of-trust
+ceremony before trusting an on-chain finality claim.
+
+Offline synthetic regression:
+
+    node --test production-network/mainnet/pop_candidate/test_checkpoint_attestation.cjs
+
+No private production keys, financial mainnet activation, PRVI issuance,
+production validators, network transports or real checkpoints are involved.
