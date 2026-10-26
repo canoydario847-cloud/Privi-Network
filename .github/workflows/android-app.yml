@@ -5,7 +5,7 @@ name: Privi Android app
 on:
   push:
     branches: [main]
-    paths: ["android-app/**", ".github/workflows/android-app.yml"]
+    paths: ["android-app/**", "sites/home/.well-known/assetlinks.json", "sites/home/manifest.webmanifest", "sites/home/privacy.html", ".github/workflows/android-app.yml"]
   pull_request:
     paths: ["android-app/**", ".github/workflows/android-app.yml"]
   workflow_dispatch:
@@ -24,6 +24,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.14.3"
+      - name: Verify Android and web origin metadata (offline only)
+        run: python3 android-app/scripts/play_preflight.py
+      - name: Test Android publishing preflight
+        run: python3 -m unittest discover -s android-app/tests -p 'test_*.py' -v
       - name: Build release bundle
         working-directory: android-app
         run: gradle --no-daemon bundleRelease
