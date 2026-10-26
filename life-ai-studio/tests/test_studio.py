@@ -57,9 +57,9 @@ def test_private_api_never_cached_even_on_auth_and_origin_errors():
             assert response.headers["pragma"] == "no-cache"
             assert response.headers["x-content-type-options"] == "nosniff"
             assert response.headers["x-frame-options"] == "DENY"
-        # Only private/API responses are forcibly uncacheable; the public
-        # liveness endpoint remains independent of account privacy headers.
-        assert browser.get("/health").headers.get("cache-control") != "no-store"
+        # Public monitoring responses also must not be cached.
+        for probe in ("/health", "/readyz"):
+            assert browser.get(probe).headers["cache-control"] == "no-store"
 
 
 def test_cross_site_fetch_metadata_blocks_writes_without_origin():
@@ -183,6 +183,7 @@ def test_database_operational_readiness_is_read_only_and_separate_from_launch(tm
     monkeypatch.setattr(store, "DB", str(missing))
     unavailable = client.get("/readyz")
     assert unavailable.status_code == 503
+    assert unavailable.headers["cache-control"] == "no-store"
     assert unavailable.json() == {
         "service": "privi-life-ai-studio", "check": "database_readability",
         "production_launch_approved": False, "status": "unavailable",
