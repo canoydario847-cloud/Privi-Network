@@ -31,6 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 1          # Cloudflare rate-limits project creation (error 10429) when 11 sites go at once
       matrix:
         site: [home, fortress, passport, kya, mandates, gov, chainflow, developers, live, hub, guard]
     env:
@@ -62,11 +63,22 @@ jobs:
       - name: Create the Pages project (first run only)
         if: steps.secrets.outputs.ok == 'true'
         run: |
-          out=$(npx --yes wrangler@3.114.0 pages project create "privi-${{ matrix.site }}" --production-branch=main 2>&1) && echo "$out" || {
-            echo "$out"; echo "$out" | grep -qiE "already exists|8000002" || { echo "::error::could not create the Pages project"; exit 1; }; }
+          for attempt in 1 2 3 4 5; do
+            out=$(npx --yes wrangler@3.114.0 pages project create "privi-${{ matrix.site }}" --production-branch=main 2>&1) && { echo "$out"; exit 0; }
+            echo "$out"
+            echo "$out" | grep -qiE "already exists|8000002" && { echo "project exists"; exit 0; }
+            if echo "$out" | grep -qiE "rate limit|10429"; then echo "rate limited; waiting $((attempt*30))s"; sleep $((attempt*30)); continue; fi
+            echo "::error::could not create the Pages project"; exit 1
+          done
+          echo "::error::still rate limited after 5 tries"; exit 1
       - name: Deploy
         if: steps.secrets.outputs.ok == 'true'
-        run: npx --yes wrangler@3.114.0 pages deploy "sites/${{ matrix.site }}" --project-name="privi-${{ matrix.site }}" --branch=main --commit-dirty=true
+        run: |
+          for attempt in 1 2 3 4; do
+            npx --yes wrangler@3.114.0 pages deploy "sites/${{ matrix.site }}" --project-name="privi-${{ matrix.site }}" --branch=main --commit-dirty=true && exit 0
+            echo "deploy failed (attempt $attempt); retrying in $((attempt*30))s"; sleep $((attempt*30))
+          done
+          exit 1
 
   domains:
     needs: deploy
