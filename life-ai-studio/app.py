@@ -21,6 +21,7 @@ import fastlane
 import multichain
 import cogvative
 import bnb_priv
+import stripe_credits
 
 app = FastAPI(title="Privi LIFE AI Studio", version="0.1.0")
 store.init()
@@ -1034,6 +1035,76 @@ async def redeem(data: RedeemInput, user=Depends(member_wallet)):
                     q["credits"],0,"tx:"+data.tx_hash.lower(),store.now()))
     return {"status":"confirmed","credits_added":q["credits"],
             "balance":store.get_user(user["id"])["credits"]}
+
+def stripe_settings():
+    return stripe_credits.settings(staging=STAGING_MODE, secure_cookie=COOKIE_SECURE,
+                                   origin=ORIGIN)
+
+
+@app.get("/api/payments/stripe/status")
+def stripe_credit_status():
+    cfg = stripe_settings()
+    return {"enabled": cfg is not None, "credits": stripe_credits.CREDITS,
+            "amount_cents": stripe_credits.CENTS, "currency": "usd",
+            "livemode": cfg.live if cfg else False,
+            "token_sales_enabled": False, "base_swaps_enabled": False}
+
+
+@app.post("/api/payments/stripe/checkout")
+def stripe_credit_checkout(user=Depends(current)):
+    """Authenticated Stripe-hosted checkout; never trust amounts from browser."""
+    cfg = stripe_settings()
+    if cfg is None:
+        fail(503, "LIFE credit checkout is not enabled")
+    try:
+        session = stripe_credits.create_session(cfg, user["id"], ORIGIN)
+        session_id = session["id"]
+        checkout_url = session["url"]
+        if (not session_id.startswith("cs_") or bool(session["livemode"]) != cfg.live
+                or not isinstance(checkout_url, str)
+                or not checkout_url.startswith("https://checkout.stripe.com/")):
+            fail(503, "Unexpected Stripe checkout response")
+        # Never send the payment URL until the order is durably recorded.
+        with store.transaction() as db:
+            db.execute(
+                "INSERT INTO stripe_checkout_sessions "
+                "(session_id,user_id,price_id,credits,amount_cents,created,fulfilled_at) "
+                "VALUES (?,?,?,?,?,?,NULL)",
+                (session_id, user["id"], cfg.price_id,
+                 stripe_credits.CREDITS, stripe_credits.CENTS, store.now()))
+        return {"checkout_url": checkout_url}
+    except HTTPException:
+        raise
+    except Exception:
+        fail(503, "Unable to create a verified LIFE credit checkout")
+
+
+@app.post("/api/payments/stripe/webhook")
+async def stripe_credit_webhook(request: Request):
+    """Signed Stripe event; browser redirect never issues credits."""
+    cfg = stripe_settings()
+    if cfg is None:
+        fail(503, "Stripe credit fulfillment disabled")
+    raw = await request.body()
+    if len(raw) > 65536:
+        fail(413, "Stripe event too large")
+    header = request.headers.get("stripe-signature", "")
+    try:
+        session = stripe_credits.verified_paid_session(cfg, raw, header)
+    except (ValueError, stripe_credits.stripe.error.SignatureVerificationError):
+        fail(400, "Invalid Stripe payment event")
+    except Exception:
+        fail(503, "Stripe event verification unavailable")
+    if session is None:
+        return {"received": True, "credited": False}
+    try:
+        credited = stripe_credits.fulfill_paid_session(session, cfg.price_id)
+    except ValueError:
+        fail(409, "Stripe checkout order not ready or mismatched")
+    except Exception:
+        fail(503, "Stripe credit ledger temporarily unavailable")
+    return {"received": True, "credited": credited}
+
 
 @app.post("/api/internal/charge")
 def integration_charge(data: InternalCharge,request: Request):
