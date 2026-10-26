@@ -1163,3 +1163,29 @@ def test_backup_accepts_nonempty_text_member_email(tmp_path):
         )
     destination = tmp_path / "vault" / "backup.sqlite3"
     assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+
+
+@pytest.mark.parametrize("wallet,accepted", [
+    (None, True),  # Members may not have linked a wallet yet.
+    ("0xabc123", True),  # The restore verifier does not impose chain formats.
+    ("", False),
+    ("   ", False),
+    (b"binary-wallet", False),
+])
+def test_backup_rejects_invalid_linked_wallet_identity(tmp_path, wallet, accepted):
+    """Do not publish a restore containing blank or binary account wallet IDs."""
+    source = tmp_path / "wallet-identity.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute(
+            "INSERT INTO users (id,email,pwdhash,wallet,member_since,credits) "
+            "VALUES (?,?,?,?,?,?)",
+            ("u1", "synthetic@example.invalid", "synthetic-hash", wallet, 1, 0),
+        )
+    destination = tmp_path / "vault" / "snapshot.sqlite3"
+    if accepted:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        with pytest.raises(ValueError, match="invalid linked wallet identity"):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Invalid wallet identity must not publish a backup"
