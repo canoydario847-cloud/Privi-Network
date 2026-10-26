@@ -30,7 +30,7 @@ COOKIE_SECURE = os.getenv("LIFE_COOKIE_SECURE", "0") == "1"
 FEE_BPS = 1000
 AGENT_COST = 2
 # Missing environment configuration must never expose non-sandbox signup or payment routes.
-STAGING_MODE = os.getenv("LIFE_STAGING_ONLY", "1") == "1"
+STAGING_MODE = os.getenv("LIFE_STAGING_ONLY", "1") != "0"
 _demo_requests = {}  # One process only: sandbox is NOT a production signup service.
 
 # Product-wide PRVI utility directory. Other Privi services consume credits
