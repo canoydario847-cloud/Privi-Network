@@ -414,7 +414,8 @@ def validate_database(conn):
     # do not print token hashes or account identifiers in error messages.
     bad_session = conn.execute(
         'SELECT 1 FROM "sessions" WHERE '
-        'length("token_hash") != 64 OR "token_hash" GLOB \'*[^0-9a-f]*\' '
+        'typeof("token_hash") != \'text\' OR length("token_hash") != 64 '
+        'OR "token_hash" GLOB \'*[^0-9a-f]*\' '
         'OR typeof("expires") != \'integer\' OR "expires" < 0 LIMIT 1'
     ).fetchone()
     if bad_session is not None:
