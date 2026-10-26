@@ -172,3 +172,46 @@ Test only on disposable paths:
 
 Passing that test is *not* evidence that native Privi mainnet
 has implemented Point of Position validator finality.
+
+
+## Necessary cross-epoch quorum overlap study (not a transition protocol)
+
+The optional `epoch_overlap.cjs` research preflight now compares **two
+separately governance-admitted adjacent-epoch committees** on the same
+research chain and genesis. It does not sign or execute membership changes.
+For each epoch it requires the exact committee object returned by verified
+Ed25519 governance admissions, not a caller-forged quorum configuration.
+For comparison, a shared validator must retain its exact signing identity,
+operator identity, failure domain and PoP position evidence; otherwise it
+is conservatively counted as changed.
+
+With `N₁`, `N₂` admitted validators, quorums `Q₁`, `Q₂`, and `M`
+unchanged signer identities, the smallest guaranteed intersection between
+any two quorums is:
+
+    max(0, Q₁ + Q₂ - (N₁ + N₂ - M))
+
+Under an *unverified* candidate assumption of at most
+`max(floor((N₁-1)/3), floor((N₂-1)/3))` Byzantine members in the
+shared signer set, the preflight **rejects** transitions whose worst-case
+quorum overlap is not greater than that bound. For four research
+validators with 3-of-4 quorum, an unchanged four-member set has
+two guaranteed signers in the intersection; rotating even one member
+leaves only one, not a guaranteed honest intersection. For seven
+validators with 5-of-7 quorum, one new member similarly reduces
+guaranteed overlap from three to two when the assumed fault bound is two.
+
+**This is only a necessary static condition.** Even passing overlap does
+NOT establish any finalized joint-consensus handoff proof, validator key
+continuity, real Byzantine limit, authentic ledger position attestations,
+view-change safety, liveness or actual PoP consensus. The preflight
+**always returns `permitsEpochTransition: false`** on accepted research
+fixtures. Real native financial mainnet remains **NO-GO**, and neither
+the research preflight nor its test suite can authorize a real membership
+change. It does not alter validator deployments, native PRVI issuance,
+chain IDs, BNB PRIV or permanently valueless TEST.
+
+Offline adversarial tests:
+
+    node --test production-network/mainnet/pop_candidate/test_epoch_overlap.cjs
+
