@@ -248,9 +248,14 @@ def demo_login(request: Request, response: Response):
     return {**store.get_user(user_id), "demo": True}
 
 @app.post("/api/auth/signup")
-def signup(data: AuthInput, response: Response):
+def signup(data: AuthInput, response: Response, request: Request):
     if STAGING_MODE:
         fail(403, "Public signup is disabled in sandbox: use disposable Demo Workspace")
+    # Count even unsuccessful requests. A shared reverse-proxy socket peer can
+    # affect multiple users; review trusted proxy configuration before launch.
+    client_host = request.client.host if request.client else "unknown"
+    if not store.signup_allowed(client_host):
+        fail(429, "Too many signup attempts; try again later")
     email = data.email.strip().lower()
     if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
         fail(400, "Invalid email")
