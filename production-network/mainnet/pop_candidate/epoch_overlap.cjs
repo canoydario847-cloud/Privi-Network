@@ -30,6 +30,8 @@ function analyzeEpochOverlap(previous, next) {
   requireCondition(previous.chainId === next.chainId &&
                    previous.genesisHash === next.genesisHash,
     "PoP epoch preflight rejects chain or genesis identity changes");
+  requireCondition(previous.governanceKeyId === next.governanceKeyId,
+    "PoP governance authority change requires separately reviewed root handoff");
   requireCondition(BigInt(next.epoch) === BigInt(previous.epoch)+1n,
     "PoP epoch preflight requires exactly one forward epoch");
 
