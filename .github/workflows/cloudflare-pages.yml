@@ -1,0 +1,71 @@
+# Publishes the Privi websites (sites/*) to Cloudflare Pages, one Pages project per site.
+#
+# Needs two repository secrets (Settings -> Secrets and variables -> Actions):
+#   CLOUDFLARE_API_TOKEN   token with: Account / Cloudflare Pages / Edit  and  Zone / DNS / Edit (zone priviflow.us)
+#   CLOUDFLARE_ACCOUNT_ID  the account ID shown on the Cloudflare dashboard overview
+#
+# Every push to main that touches sites/ redeploys the sites to privi-<site>.pages.dev.
+# The custom domains (priviflow.us, gov.priviflow.us, ...) are attached only when the workflow is
+# run by hand with "Attach priviflow.us domains" ticked: that step points each hostname's DNS at
+# Cloudflare Pages (replacing the old Render record for that hostname only; MX/TXT are never touched).
+name: Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+    paths: ["sites/**", ".github/workflows/cloudflare-pages.yml", ".github/scripts/cloudflare-domains.sh"]
+  workflow_dispatch:
+    inputs:
+      attach_domains:
+        description: "Attach priviflow.us domains (moves DNS for these hostnames from Render to Cloudflare Pages)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: cloudflare-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        site: [home, fortress, passport, kya, mandates, gov, chainflow, developers, live, hub, guard]
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check secrets
+        id: secrets
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::notice::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID not set; skipping Cloudflare deploy."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.secrets.outputs.ok == 'true'
+        with:
+          node-version: "20"
+      - name: Create the Pages project (first run only)
+        if: steps.secrets.outputs.ok == 'true'
+        run: npx --yes wrangler@3.114.0 pages project create "privi-${{ matrix.site }}" --production-branch=main || echo "project exists"
+      - name: Deploy
+        if: steps.secrets.outputs.ok == 'true'
+        run: npx --yes wrangler@3.114.0 pages deploy "sites/${{ matrix.site }}" --project-name="privi-${{ matrix.site }}" --branch=main --commit-dirty=true
+
+  domains:
+    needs: deploy
+    if: github.event_name == 'workflow_dispatch' && inputs.attach_domains
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      ZONE_NAME: priviflow.us
+    steps:
+      - uses: actions/checkout@v4
+      - name: Attach custom domains and point DNS at Pages
+        run: bash .github/scripts/cloudflare-domains.sh
