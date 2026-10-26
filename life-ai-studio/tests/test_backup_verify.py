@@ -903,3 +903,45 @@ def test_restore_rejects_malformed_member_credit_balances(tmp_path, balance, val
         with pytest.raises(ValueError, match="invalid member credit balance"):
             backup.backup_and_verify(source, destination)
         assert not destination.exists(), "Unsafe balance must not publish a snapshot"
+
+
+@pytest.mark.parametrize("scenario,expected", [
+    ("unrelated_ledger", None),
+    ("stripe_without_orders_table", "Stripe credit ledger without checkout orders"),
+    ("stripe_without_order", "orphaned Stripe credit ledger entry"),
+    ("stripe_service_with_wrong_key", "orphaned Stripe credit ledger entry"),
+    ("stripe_prefix_with_wrong_service", "orphaned Stripe credit ledger entry"),
+])
+def test_restore_rejects_orphaned_stripe_credit_ledger(tmp_path, scenario, expected):
+    """Both sides of the Checkout-to-credit audit trail must survive a restore."""
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute(
+            "INSERT INTO users VALUES ('u1','synthetic@example.invalid','hash',NULL,1,0)"
+        )
+        if scenario not in ("stripe_without_orders_table", "unrelated_ledger"):
+            db.execute(
+                "CREATE TABLE stripe_checkout_sessions ("
+                "session_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, "
+                "price_id TEXT NOT NULL, credits INTEGER NOT NULL, "
+                "amount_cents INTEGER NOT NULL, created INTEGER NOT NULL, "
+                "fulfilled_at INTEGER)"
+            )
+        service = ("agent_run" if scenario in
+                   ("unrelated_ledger", "stripe_prefix_with_wrong_service")
+                   else "stripe_life_credits")
+        key = ("unrelated:synthetic" if scenario in
+               ("unrelated_ledger", "stripe_service_with_wrong_key")
+               else "stripe:cs_missing")
+        db.execute(
+            "INSERT INTO ledger VALUES (?,?,?,?,?,?,?)",
+            ("led1", "u1", "credit", service, 100, key, 1),
+        )
+    destination = tmp_path / "vault" / "stripe-ledger-copy.sqlite3"
+    if expected is None:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        with pytest.raises(ValueError, match=expected):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Unreconciled Stripe credits must not publish a backup"
