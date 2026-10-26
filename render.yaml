@@ -20,7 +20,7 @@ services:
   - type: web
     name: privi-devnet
     runtime: docker
-    plan: starter
+    plan: standard                    # 2 GB RAM: a Cosmos EVM node does not fit in starter's 512 MB
     region: virginia
     dockerfilePath: ./devnet/Dockerfile
     dockerContext: ./devnet
