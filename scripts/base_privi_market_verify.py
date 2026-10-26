@@ -166,6 +166,39 @@ def main() -> int:
                 report["swap_desk"] = d
             except Exception as error:
                 report["swap_desk_error"] = str(error)
+        # Treasury read-only preflight for the user-requested maximum LP allocation.
+        # This public repo wallet is only the project's declared owner wallet;
+        # it may NOT be the wallet from which the owner intends to supply funds.
+        treasury = os.getenv("PRIVI_TREASURY_WALLET", "0x1990589FD200E043b8C6FD9ec5956c61b3071048")
+        if not (treasury.startswith("0x") and len(treasury) == 42
+                and all(d in "0123456789abcdefABCDEF" for d in treasury[2:])):
+            raise RuntimeError("PRIVI_TREASURY_WALLET must be a valid hex address")
+        usdc_decimals = field_u(USDC, SEL["decimals"])
+        privi_decimals = report["token_onchain"]["decimals"]
+        privi_raw = balance(TOKEN, treasury)
+        usdc_raw = balance(USDC, treasury)
+        eth_raw = uint(str(rpc("eth_getBalance", [treasury, "latest"])))
+        privi_needed = 1_000_000 * 10 ** privi_decimals
+        usdc_needed = 1_000_000 * 10 ** usdc_decimals
+        report["requested_liquidity_preflight"] = {
+            "status": "read-only; no approval, transfer, pool deployment or pricing decision",
+            "candidate_project_owner_wallet": treasury,
+            "candidate_wallet_may_differ_from_actual_lp_wallet": True,
+            "privi_requested": "1000000",
+            "usdc_requested": "1000000",
+            "privi_balance_raw": str(privi_raw),
+            "usdc_balance_raw": str(usdc_raw),
+            "eth_gas_balance_wei": str(eth_raw),
+            "privi_decimals": privi_decimals,
+            "usdc_decimals": usdc_decimals,
+            "candidate_wallet_has_requested_privi": privi_raw >= privi_needed,
+            "candidate_wallet_has_requested_usdc": usdc_raw >= usdc_needed,
+            "candidate_wallet_has_some_eth_for_gas": eth_raw > 0,
+            "candidate_wallet_ready_by_balance_only": (
+                privi_raw >= privi_needed and usdc_raw >= usdc_needed and eth_raw > 0
+            ),
+            "important": "Balance only, not authorization, token approval, secure pool parameters, wallet signer access, legal approval or transaction completion",
+        }
         try:
             report["selected_pools"] = discover_v3_aero()
         except Exception as error:
