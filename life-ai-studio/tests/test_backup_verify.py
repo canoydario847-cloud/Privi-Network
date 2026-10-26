@@ -1065,3 +1065,32 @@ def test_restore_rejects_invalid_credit_ledger_amounts(tmp_path, kind, amount, a
         with pytest.raises(ValueError, match="invalid credit ledger amount or kind"):
             backup.backup_and_verify(source, destination)
         assert not destination.exists(), "Malformed credit history must not publish a backup"
+
+
+@pytest.mark.parametrize("created,accepted", [
+    (0, True),
+    (1700000000, True),
+    (-1, False),
+    ("not-a-timestamp", False),
+    (None, False),
+    (1.5, False),
+])
+def test_restore_rejects_invalid_credit_ledger_timestamps(tmp_path, created, accepted):
+    """Reject malformed financial audit times without publishing a snapshot."""
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute(
+            "INSERT INTO users VALUES ('u1','synthetic@example.invalid','hash',NULL,1,0)"
+        )
+        db.execute(
+            "INSERT INTO ledger VALUES (?,?,?,?,?,?,?)",
+            ("l1", "u1", "charge", "agent_run", -1, "idem1", created),
+        )
+    destination = tmp_path / "vault" / "snapshot.sqlite3"
+    if accepted:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        with pytest.raises(ValueError, match="invalid credit ledger timestamp"):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Malformed audit history must not publish a backup"
