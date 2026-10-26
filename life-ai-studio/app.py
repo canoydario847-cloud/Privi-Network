@@ -162,6 +162,10 @@ async def origin_guard(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "same-origin"
+    # HSTS only on an explicitly HTTPS deployment with secure session cookies.
+    # Avoid includeSubDomains/preload: other Privi subdomains are not audited.
+    if ORIGIN.startswith("https://") and COOKIE_SECURE:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000"
     response.headers["Content-Security-Policy"] = ("default-src 'self'; script-src 'self'; "
         "style-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'")
     return response
