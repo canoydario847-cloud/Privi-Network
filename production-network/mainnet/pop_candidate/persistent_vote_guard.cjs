@@ -8,7 +8,7 @@
  * machine, finalized position proofs and non-stake proposer rules are needed.
  *
  * Safety boundary: an honest validator may not precommit conflicting block
- * hashes at the same {chain,genesis,epoch,height}, even in different rounds.
+ * hashes OR parent links at the same {chain,genesis,height}, even in different rounds.
  * Reserve the block on durable LOCAL filesystem before releasing a signature.
  *
  * Assumptions NOT satisfied by itself:
@@ -43,7 +43,7 @@ function strictLocalDirectory(dir) {
   must((stat.mode & 0o077) === 0, "Local lock directory must be owner-only (0700)");
   return fs.realpathSync(dir);
 }
-function recordFor(committee, height, validatorId, blockHash) {
+function recordFor(committee, height, validatorId, blockHash, previousBlockHash) {
   must(committee?.mode === TRUSTED_MODE, "PoP validator lock is RESEARCH ONLY");
   must(typeof committee.chainId==="string" && committee.chainId.startsWith("privi-pop-research-"),
        "Native Privi research identity required");
@@ -54,10 +54,12 @@ function recordFor(committee, height, validatorId, blockHash) {
   must(typeof validatorId==="string" && HEX.test(validatorId) &&
        committee.byId?.has(validatorId),"Voter is not an admitted PoP signer");
   must(typeof blockHash==="string" && HEX.test(blockHash), "Invalid PoP candidate block hash");
+  must(typeof previousBlockHash==="string" && HEX.test(previousBlockHash) &&
+       previousBlockHash!==blockHash, "Invalid PoP previous-block hash commitment");
   return {
-    format:"PriviPoPResearchHeightLock/v1", chainId:committee.chainId,
+    format:"PriviPoPResearchHeightLock/v2", chainId:committee.chainId,
     genesisHash:committee.genesisHash,epoch:committee.epoch,
-    height,validatorId,blockHash
+    height,validatorId,blockHash,previousBlockHash
   };
 }
 function lockedFileName(record) {
@@ -72,9 +74,9 @@ function syncLockDirectory(location) {
   const rootFd=fs.openSync(location,fs.constants.O_RDONLY|fs.constants.O_DIRECTORY);
   try {fs.fsyncSync(rootFd);} finally {fs.closeSync(rootFd);}
 }
-function reservePosition(dir, committee, height, validatorId, blockHash) {
+function reservePosition(dir, committee, height, validatorId, blockHash, previousBlockHash) {
   const location = strictLocalDirectory(dir);
-  const record = recordFor(committee,height,validatorId,blockHash);
+  const record = recordFor(committee,height,validatorId,blockHash,previousBlockHash);
   const file=path.join(location,lockedFileName(record));
   let fd;
   try {
@@ -98,6 +100,7 @@ function reservePosition(dir, committee, height, validatorId, blockHash) {
       for (const field of Object.keys(record)) {
         must(old[field]===record[field],
              field==="blockHash" ? "PoP equivocation: conflicting block at locked height" :
+           field==="previousBlockHash" ? "PoP equivocation: conflicting parent at locked height" :
              "PoP existing height lock corrupt or inconsistent");
       }
       must(Object.keys(old).length===Object.keys(record).length,
@@ -142,7 +145,8 @@ function signCommitWithResearchLock({lockDirectory,committee,proposal,privateKey
   must(committee.byId.has(validatorId),"Private key is not a registered PoP validator");
   const height=proposal.height;
   // No signature may escape before local fsync is complete.
-  reservePosition(lockDirectory,committee,height,validatorId,proposal.blockHash);
+  reservePosition(lockDirectory,committee,height,validatorId,
+                  proposal.blockHash,proposal.previousBlockHash);
   const bytes=signedMessage("commit",voteFields(fields,validatorId));
   return {
     validatorId,
