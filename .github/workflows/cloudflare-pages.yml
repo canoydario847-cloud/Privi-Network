@@ -47,13 +47,23 @@ jobs:
           else
             echo "ok=true" >> "$GITHUB_OUTPUT"
           fi
+      - name: Clean up the API token
+        if: steps.secrets.outputs.ok == 'true'
+        run: |
+          # The saved secret may carry spaces, a line break or a pasted "Authorization: Bearer ..." command.
+          tok=$(printf '%s' "$CLOUDFLARE_API_TOKEN" | grep -oE '[A-Za-z0-9_-]{30,}' | head -n1 || true)
+          if [ -z "$tok" ]; then echo "::error::The Cloudflare token secret does not contain a token"; exit 1; fi
+          echo "::add-mask::$tok"
+          echo "CLOUDFLARE_API_TOKEN=$tok" >> "$GITHUB_ENV"
       - uses: actions/setup-node@v4
         if: steps.secrets.outputs.ok == 'true'
         with:
           node-version: "20"
       - name: Create the Pages project (first run only)
         if: steps.secrets.outputs.ok == 'true'
-        run: npx --yes wrangler@3.114.0 pages project create "privi-${{ matrix.site }}" --production-branch=main || echo "project exists"
+        run: |
+          out=$(npx --yes wrangler@3.114.0 pages project create "privi-${{ matrix.site }}" --production-branch=main 2>&1) && echo "$out" || {
+            echo "$out"; echo "$out" | grep -qiE "already exists|8000002" || { echo "::error::could not create the Pages project"; exit 1; }; }
       - name: Deploy
         if: steps.secrets.outputs.ok == 'true'
         run: npx --yes wrangler@3.114.0 pages deploy "sites/${{ matrix.site }}" --project-name="privi-${{ matrix.site }}" --branch=main --commit-dirty=true
@@ -68,5 +78,11 @@ jobs:
       ZONE_NAME: privishine.info
     steps:
       - uses: actions/checkout@v4
+      - name: Clean up the API token
+        run: |
+          tok=$(printf '%s' "$CLOUDFLARE_API_TOKEN" | grep -oE '[A-Za-z0-9_-]{30,}' | head -n1 || true)
+          if [ -z "$tok" ]; then echo "::error::The Cloudflare token secret does not contain a token"; exit 1; fi
+          echo "::add-mask::$tok"
+          echo "CLOUDFLARE_API_TOKEN=$tok" >> "$GITHUB_ENV"
       - name: Attach custom domains and point DNS at Pages
         run: bash .github/scripts/cloudflare-domains.sh
