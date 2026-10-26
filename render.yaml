@@ -62,24 +62,26 @@ services:
     envVars:
       - key: ANCHOR_DB_PATH
         value: /data/anchor.db
-      # Privi anchors on Base until the Privi chain mainnet launches.
+      # Privi anchors on its own testnet (Privi Devnet, valueless TEST gas) until the Privi
+      # mainnet launches. Earlier Base anchors still verify read-only (ANCHOR_ARCHIVE_CHAINS default).
+      # Set explicitly so values left over from the Base era in the dashboard are replaced.
       - key: ANCHOR_RPC_URL
-        value: https://mainnet.base.org
+        value: https://privi-devnet.onrender.com
       - key: ANCHOR_CHAIN_ID
-        value: "8453"
+        value: "772626"
       - key: ANCHOR_NETWORK_NAME
-        value: Base (until the Privi chain mainnet launches)
+        value: Privi Devnet (testnet, until the Privi mainnet launches)
       - key: ANCHOR_EXPLORER_TX_URL
-        value: https://basescan.org/tx/
-      - key: ANCHOR_MAX_TX_PER_DAY      # gas budget: ~500 Base txs/day is well under $1/day
-        value: "500"
+        value: https://privi-devnet.onrender.com/tx/
+      - key: ANCHOR_MAX_TX_PER_DAY      # TEST gas is valueless; the cap only guards against runaway loops
+        value: "5000"
       - key: ANCHOR_RATE_PER_MIN
         value: "30"
       - key: ANCHOR_GENESIS
         value: "1"
       - key: ANCHOR_API_KEYS          # shared with Ledger and Verify below
         generateValue: true
-      - key: ANCHOR_PRIVATE_KEY       # anchor wallet; needs a little ETH on Base (≈ $5 lasts weeks)
+      - key: ANCHOR_PRIVATE_KEY       # anchor wallet 0x1D0e…9D89; funded with TEST gas at Privi Devnet genesis
         sync: false
 
   # ------------------------------------------------------------------ Privi Ledger
