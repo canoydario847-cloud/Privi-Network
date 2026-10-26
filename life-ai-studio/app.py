@@ -144,8 +144,14 @@ async def origin_guard(request: Request, call_next):
     rejected = False
     if request.method in ("POST", "PUT", "PATCH", "DELETE"):
         origin = request.headers.get("origin")
-        # If browser sends Origin, it must match this site's configured origin.
-        rejected = origin is not None and origin.rstrip("/") != ORIGIN
+        # Require exact origin when provided, and reject cross-site browser
+        # writes even if Origin is absent. Non-browser service callbacks
+        # (including signed payment webhooks) typically send neither header.
+        fetch_site = request.headers.get("sec-fetch-site", "").lower()
+        rejected = (
+            (origin is not None and origin.rstrip("/") != ORIGIN)
+            or fetch_site in ("cross-site", "same-site")
+        )
     response = (Response(status_code=403, content="Cross-origin write rejected")
                 if rejected else await call_next(request))
     # Authenticated project data, account details and even error responses must
