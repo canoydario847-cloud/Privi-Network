@@ -389,6 +389,25 @@ def validate_database(conn):
         ).fetchone()
         if orphan is not None:
             raise ValueError("Not a LIFE database; orphaned Cogvative lines")
+    # Wallet and agent-claim links carry private account-to-project identity.
+    # The current schema has no foreign keys for these optional tables, so a
+    # valid SQLite file could restore another member's link into a project.
+    # Older core-only snapshots may omit them; never expose member/wallet data.
+    for table in ("cog_wallets", "cog_claim_challenges"):
+        if table not in tables:
+            continue
+        columns = {row[1] for row in conn.execute(f'PRAGMA table_info("{table}")')}
+        if {"user_id", "project_id"} - columns:
+            raise ValueError(f"Not a LIFE database; {table} ownership columns missing")
+        invalid = conn.execute(
+            f'SELECT 1 FROM "{table}" AS link '
+            'LEFT JOIN "users" u ON link.user_id = u.id '
+            'LEFT JOIN "projects" p ON link.project_id = p.id '
+            'WHERE u.id IS NULL OR p.id IS NULL OR p.owner_id != link.user_id '
+            'LIMIT 1'
+        ).fetchone()
+        if invalid is not None:
+            raise ValueError(f"Not a LIFE database; {table} ownership mismatch")
     # The current LIFE schema does not declare foreign keys for these
     # relationships, so PRAGMA foreign_key_check alone misses orphaned
     # sessions, projects, project files and credit history. Reject a snapshot
