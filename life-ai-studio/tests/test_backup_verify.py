@@ -41,6 +41,10 @@ def make_database(path):
     ("missing_primary_key", "wallet challenge nonce primary key missing"),
     ("missing_message", "wallet challenge columns missing"),
     ("nullable_owner", "wallet challenge required fields nullable"),
+    ("short_nonce", "invalid wallet challenge state"),
+    ("uppercase_nonce", "invalid wallet challenge state"),
+    ("text_expiry", "invalid wallet challenge state"),
+    ("negative_expiry", "invalid wallet challenge state"),
 ])
 def test_restored_wallet_challenge_ownership(tmp_path, scenario, expected):
     source = tmp_path / "life.sqlite3"
@@ -64,9 +68,13 @@ def test_restored_wallet_challenge_ownership(tmp_path, scenario, expected):
             db.execute(
                 "INSERT INTO challenges VALUES (?,?,?,?,?)",
                 (
-                    None if scenario == "null_nonce" else "noncehash",
+                    (None if scenario == "null_nonce" else
+                     "short" if scenario == "short_nonce" else
+                     "A" * 64 if scenario == "uppercase_nonce" else "a" * 64),
                     "absent" if scenario == "orphan" else "u1",
-                    "0x" + "a" * 40, "synthetic-test-challenge", 123456,
+                    "0x" + "a" * 40, "synthetic-test-challenge",
+                    "tomorrow" if scenario == "text_expiry" else
+                    -1 if scenario == "negative_expiry" else 123456,
                 ),
             )
     destination = tmp_path / "vault" / "backup.sqlite3"
