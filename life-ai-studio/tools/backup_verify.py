@@ -177,7 +177,7 @@ def validate_database(conn):
             raise ValueError("Not a LIFE database; login throttle required fields nullable")
         invalid = conn.execute(
             'SELECT 1 FROM "login_throttle" WHERE '
-            'key_hash IS NULL OR length(key_hash) != 64 '
+            'typeof(key_hash) != \'text\' OR length(key_hash) != 64 '
             "OR key_hash GLOB '*[^0-9a-f]*' "
             "OR typeof(failures) != 'integer' OR failures < 1 "
             "OR typeof(window_started) != 'integer' OR window_started < 0 "
