@@ -26,3 +26,10 @@ Official integration references:
 - https://docs.stripe.com/checkout/quickstart
 - https://docs.stripe.com/webhooks/signature
 - https://docs.stripe.com/payments/checkout/fulfill-orders
+
+## Confirmed Stripe sandbox catalog (2026-10-25)
+- Connected account: `Privi` (test mode only).
+- Product: `prod_VVfuwqhQqW4N2u` — 100 non-transferable LIFE credits; **inactive**.
+- One-time price: `price_1UUeYxBQR6zcBQ9LjHniLyKv` — USD 1000 cents ($10.00); **inactive**.
+- No checkout links, sessions, webhooks, credit fulfillment or live products were enabled by this catalog setup.
+- Activate **test-mode-only** checkout after signed webhook handling, durable idempotent ledger, account authorization and automated sandbox tests pass; do not activate real-money billing without a separate review.
