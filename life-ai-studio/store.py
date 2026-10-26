@@ -256,7 +256,7 @@ def login_succeeded(email, client_host):
 # Persistent signup-abuse throttle, scoped to the actual socket peer.
 # Do not trust client-supplied X-Forwarded-For headers here. Reverse proxies
 # must be configured and audited before non-staging signup is allowed.
-SIGNUP_MAX_ATTEMPTS = 10
+SIGNUP_MAX_ATTEMPTS = 50
 SIGNUP_WINDOW_SECONDS = 900
 
 
