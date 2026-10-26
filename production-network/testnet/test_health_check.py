@@ -31,6 +31,14 @@ class HealthCheckTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             check(nodes, 'privi-testnet-1')
 
+    def test_missing_node_identity_rejected(self):
+        for missing in ('', '   ', None):
+            nodes = [{'node_id': str(n), 'network': 'privi-testnet-1', 'height': 100,
+                      'catching_up': False} for n in range(4)]
+            nodes[0]['node_id'] = missing
+            with self.subTest(missing=missing), self.assertRaisesRegex(ValueError, 'Missing'):
+                check(nodes, 'privi-testnet-1')
+
     def test_lag_rejected(self):
         nodes = [{'node_id': str(n), 'network': 'privi-testnet-1', 'height': 100+n*20,
                   'catching_up': False} for n in range(4)]
