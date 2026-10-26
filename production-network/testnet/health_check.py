@@ -14,10 +14,12 @@ def status(url):
         result = json.load(response)['result']
     info = result['node_info']
     sync = result['sync_info']
+    if type(sync.get('catching_up')) is not bool:
+        raise ValueError('Invalid CometBFT catching_up flag')
     return {
         'url': url, 'network': info['network'],
         'node_id': info['id'], 'height': int(sync['latest_block_height']),
-        'catching_up': bool(sync['catching_up']),
+        'catching_up': sync['catching_up'],
     }
 
 
@@ -36,6 +38,8 @@ def check(nodes, expected_chain):
     heights = [n['height'] for n in nodes]
     if min(heights) < 1 or max(heights) - min(heights) > 10:
         raise ValueError('Block heights are not synchronized')
+    if any(type(n.get('catching_up')) is not bool for n in nodes):
+        raise ValueError('Invalid CometBFT catching_up flag')
     if any(n['catching_up'] for n in nodes):
         raise ValueError('At least one node is catching up')
     return {'chain': next(iter(chains)), 'height_range': [min(heights), max(heights)], 'nodes': len(nodes)}
