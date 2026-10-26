@@ -146,6 +146,35 @@ def validate_database(conn):
         if orphan is not None:
             # Never expose a member ID, wallet, signed challenge or nonce.
             raise ValueError("Not a LIFE database; invalid wallet challenge ownership")
+    # Failed-login throttle state is security-sensitive: a malformed restore
+    # could silently drop lockouts or make future login attempts fail. Older
+    # core-only snapshots may omit this table, but if present it must match
+    # the current single-instance throttle contract. Never print key hashes.
+    if "login_throttle" in tables:
+        info = conn.execute('PRAGMA table_info("login_throttle")').fetchall()
+        columns = {row[1]: row for row in info}
+        required = {"key_hash", "failures", "window_started", "blocked_until"}
+        if required - columns.keys():
+            raise ValueError("Not a LIFE database; login throttle columns missing")
+        primary_key = tuple(
+            row[1] for row in sorted(info, key=lambda row: row[5]) if row[5] > 0
+        )
+        if primary_key != ("key_hash",):
+            raise ValueError("Not a LIFE database; login throttle primary key missing")
+        if not all(columns[name][3] for name in
+                   ("failures", "window_started", "blocked_until")):
+            raise ValueError("Not a LIFE database; login throttle required fields nullable")
+        invalid = conn.execute(
+            'SELECT 1 FROM "login_throttle" WHERE '
+            'key_hash IS NULL OR length(key_hash) != 64 '
+            "OR key_hash GLOB '*[^0-9a-f]*' "
+            "OR typeof(failures) != 'integer' OR failures < 1 "
+            "OR typeof(window_started) != 'integer' OR window_started < 0 "
+            "OR typeof(blocked_until) != 'integer' OR blocked_until < 0 "
+            "OR (blocked_until > 0 AND blocked_until < window_started) LIMIT 1"
+        ).fetchone()
+        if invalid is not None:
+            raise ValueError("Not a LIFE database; invalid login throttle state")
     # Optional AI collaboration tables exist in current LIFE deployments but
     # may be absent from earlier, core-only snapshots. When present, their
     # ownership links must survive restore even without declared foreign keys.
