@@ -397,6 +397,17 @@ def validate_database(conn):
         if orphan is not None:
             # Never print account IDs, file paths, session tokens or emails.
             raise ValueError(f"Not a LIFE database; orphaned {child} owner references")
+    # Session tokens are stored as lowercase SHA-256 hashes, never plaintext.
+    # A malformed token or expiry in a recovered database means session
+    # authentication state cannot be trusted after restore. Check only shape;
+    # do not print token hashes or account identifiers in error messages.
+    bad_session = conn.execute(
+        'SELECT 1 FROM "sessions" WHERE '
+        'length("token_hash") != 64 OR "token_hash" GLOB \'*[^0-9a-f]*\' '
+        'OR typeof("expires") != \'integer\' OR "expires" < 0 LIMIT 1'
+    ).fetchone()
+    if bad_session is not None:
+        raise ValueError("Not a LIFE database; invalid session authentication state")
     # Credit balances are used for authorization to consume paid AI services.
     # SQLite's dynamic typing can admit NULL, text or negative balances even
     # if a lookalike schema contains the expected columns. Reject these before
