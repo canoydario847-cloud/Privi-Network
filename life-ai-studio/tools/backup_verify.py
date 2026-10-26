@@ -146,6 +146,17 @@ def validate_database(conn):
         if orphan is not None:
             # Never expose a member ID, wallet, signed challenge or nonce.
             raise ValueError("Not a LIFE database; invalid wallet challenge ownership")
+        # Challenge nonces are persisted only as lowercase SHA-256 hashes.
+        # SQLite's dynamic typing can admit malformed hashes and expiration
+        # values; reject those before restoring wallet-link authentication.
+        invalid_challenge = conn.execute(
+            'SELECT 1 FROM "challenges" WHERE '
+            "typeof(nonce_hash) != 'text' OR length(nonce_hash) != 64 "
+            "OR nonce_hash GLOB '*[^0-9a-f]*' "
+            "OR typeof(expires) != 'integer' OR expires < 0 LIMIT 1"
+        ).fetchone()
+        if invalid_challenge is not None:
+            raise ValueError("Not a LIFE database; invalid wallet challenge state")
     # Failed-login throttle state is security-sensitive: a malformed restore
     # could silently drop lockouts or make future login attempts fail. Older
     # core-only snapshots may omit this table, but if present it must match
