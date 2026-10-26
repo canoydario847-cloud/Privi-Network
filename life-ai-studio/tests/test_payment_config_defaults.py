@@ -55,7 +55,8 @@ class PaymentDefaultSafetyTests(unittest.TestCase):
         self.assertEqual((getter.func.value.id, getter.func.attr), ("os", "getenv"))
         self.assertEqual([ast.literal_eval(arg) for arg in getter.args],
                          ["LIFE_STAGING_ONLY", "1"])
-        self.assertEqual([ast.literal_eval(arg) for arg in comparison.comparators], ["1"])
+        self.assertIsInstance(comparison.ops[0], ast.NotEq)
+        self.assertEqual([ast.literal_eval(arg) for arg in comparison.comparators], ["0"])
 
     def test_staging_flag_rejects_unsafe_examples(self):
         for text in ("LIFE_STAGING_ONLY=0", "LIFE_STAGING_ONLY=", "LIFE_STAGING_ONLY=1\\nLIFE_STAGING_ONLY=0", ""):
