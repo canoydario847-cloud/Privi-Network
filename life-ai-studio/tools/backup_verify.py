@@ -428,6 +428,20 @@ def validate_database(conn):
     ).fetchone()
     if invalid_balance is not None:
         raise ValueError("Not a LIFE database; invalid member credit balance")
+    # Credit and charge entries must retain integer amounts and the correct
+    # sign after restore. A corrupt ledger can otherwise misstate customer
+    # credit history even if the SQLite file itself passes integrity_check.
+    # Zero-cost charges are currently allowed by store.charge; credits are
+    # strictly positive. Never print financial or member row contents.
+    invalid_ledger_amount = conn.execute(
+        'SELECT 1 FROM "ledger" WHERE '
+        'typeof("amount") != \'integer\' '
+        'OR "kind" IS NULL OR "kind" NOT IN (\'credit\',\'charge\') '
+        'OR ("kind" = \'credit\' AND "amount" <= 0) '
+        'OR ("kind" = \'charge\' AND "amount" > 0) LIMIT 1'
+    ).fetchone()
+    if invalid_ledger_amount is not None:
+        raise ValueError("Not a LIFE database; invalid credit ledger amount or kind")
     return len(tables)
 
 
