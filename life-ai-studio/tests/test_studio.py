@@ -62,6 +62,25 @@ def test_private_api_never_cached_even_on_auth_and_origin_errors():
         assert browser.get("/health").headers.get("cache-control") != "no-store"
 
 
+def test_cross_site_fetch_metadata_blocks_writes_without_origin():
+    # A browser can sometimes omit Origin; Fetch Metadata still identifies
+    # a cross-site or same-site (different-origin) request.
+    with TestClient(app.app) as browser:
+        for site in ("cross-site", "same-site"):
+            denied = browser.post("/api/auth/logout", headers={"sec-fetch-site": site})
+            assert denied.status_code == 403
+            assert denied.headers["cache-control"] == "no-store"
+            assert denied.headers["x-frame-options"] == "DENY"
+        # Same-origin application requests continue to work.
+        same_origin = browser.post(
+            "/api/auth/logout", headers={"sec-fetch-site": "same-origin"})
+        assert same_origin.status_code == 200
+        # Server-to-server callbacks may omit browser Fetch Metadata entirely;
+        # they must still pass their own endpoint authentication/signatures.
+        no_metadata = browser.post("/api/auth/logout")
+        assert no_metadata.status_code == 200
+
+
 def test_login_throttle_is_persistent_and_temporarily_blocks_signins(monkeypatch):
     import store
     from fastapi.testclient import TestClient
