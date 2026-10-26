@@ -735,3 +735,28 @@ def test_restored_native_prvi_redemption_ownership(tmp_path, scenario, expected)
         with pytest.raises(ValueError, match=expected):
             backup.backup_and_verify(source, destination)
         assert not destination.exists(), "Broken native payment history must not publish a backup"
+
+
+@pytest.mark.parametrize(
+    "table,statement",
+    [
+        ("users", "INSERT INTO users VALUES (NULL,'null@example.test','hash',NULL,1,0)"),
+        ("sessions", "INSERT INTO sessions VALUES (NULL,'u1',100)"),
+        ("projects", "INSERT INTO projects VALUES (NULL,'u1','Untitled','code',100)"),
+        ("files", "INSERT INTO files VALUES ('p1',NULL,'private',1)"),
+        ("files", "INSERT INTO files VALUES (NULL,'notes.txt','private',1)"),
+        ("ledger", "INSERT INTO ledger VALUES (NULL,'u1','charge','agent',1,'idem',100)"),
+    ],
+)
+def test_backup_rejects_null_primary_key_data(tmp_path, table, statement):
+    """SQLite TEXT PRIMARY KEY allows NULL in rowid tables; fail closed."""
+    source = tmp_path / "null-identity.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute("INSERT INTO users VALUES ('u1','member@example.test','hash',NULL,1,0)")
+        db.execute("INSERT INTO projects VALUES ('p1','u1','Project','code',1)")
+        db.execute(statement)
+    destination = tmp_path / "vault" / "snapshot.sqlite3"
+    with pytest.raises(ValueError, match=rf"{table} primary key contains NULL"):
+        backup.backup_and_verify(source, destination)
+    assert not destination.exists(), "Do not publish backups with NULL identities"
