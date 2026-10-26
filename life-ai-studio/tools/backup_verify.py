@@ -99,6 +99,15 @@ def validate_database(conn):
             "Not a LIFE database; users UNIQUE constraint missing: "
             + ", ".join(", ".join(columns) for columns in sorted(required_user_uniques))
         )
+    # Account email is the login identifier. SQLite permits BLOB or blank
+    # values even in a UNIQUE NOT NULL column; a recovered account with one
+    # cannot reliably authenticate. Never print member email addresses.
+    invalid_email = conn.execute(
+        'SELECT 1 FROM "users" WHERE typeof("email") != \'text\' '
+        'OR length(trim("email")) = 0 LIMIT 1'
+    ).fetchone()
+    if invalid_email is not None:
+        raise ValueError("Not a LIFE database; invalid member email identity")
     # Idempotent LIFE credit charges rely on the composite uniqueness of
     # (user_id, idempotency). A restored database missing this constraint can
     # silently accept duplicate charges even when its columns and PKs match.
