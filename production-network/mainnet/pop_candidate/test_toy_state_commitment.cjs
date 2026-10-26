@@ -150,7 +150,7 @@ test("copying or dropping a signed certificate/block cannot reproduce state hist
   const missing=f.build();missing.blocks.pop();
   assert.throws(()=>f.verify(missing),/count mismatch/);
   const duplicate=f.build();duplicate.blocks[1]=missing.blocks[0];
-  assert.throws(()=>f.verify(duplicate),/candidate header|state root|operations root/);
+  assert.throws(()=>f.verify(duplicate),/candidate header|state root|operations root|replayed, missing or reordered operation nonce/);
 });
 test("a valid signed candidate hash for different toy state is not acceptable",()=>{
   const f=fixture();
