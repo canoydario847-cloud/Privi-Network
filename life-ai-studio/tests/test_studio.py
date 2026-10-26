@@ -81,6 +81,32 @@ def test_cross_site_fetch_metadata_blocks_writes_without_origin():
         assert no_metadata.status_code == 200
 
 
+def test_hsts_only_when_https_and_secure_cookies(monkeypatch):
+    # HSTS is appropriate only for an explicitly configured HTTPS service.
+    # Do not force it on local HTTP development or insecure-cookie instances.
+    for origin, secure, expected in (
+        ("http://localhost:8080", False, False),
+        ("https://life.example.test", False, False),
+        ("http://localhost:8080", True, False),
+        ("https://life.example.test", True, True),
+    ):
+        monkeypatch.setattr(app, "ORIGIN", origin)
+        monkeypatch.setattr(app, "COOKIE_SECURE", secure)
+        with TestClient(app.app) as browser:
+            healthy = browser.get("/health")
+            private = browser.get("/api/me")
+            rejected = browser.post(
+                "/api/auth/logout", headers={"origin": "https://other.example.test"})
+        assert (healthy.headers.get("strict-transport-security")
+                == ("max-age=31536000" if expected else None))
+        assert (private.headers.get("strict-transport-security")
+                == ("max-age=31536000" if expected else None))
+        assert (rejected.headers.get("strict-transport-security")
+                == ("max-age=31536000" if expected else None))
+        assert rejected.status_code == 403
+        assert private.headers["cache-control"] == "no-store"
+
+
 def test_login_throttle_is_persistent_and_temporarily_blocks_signins(monkeypatch):
     import store
     from fastapi.testclient import TestClient
