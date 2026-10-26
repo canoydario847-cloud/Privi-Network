@@ -93,6 +93,15 @@ def init():
           service TEXT NOT NULL, amount INTEGER NOT NULL, platform_fee_micros INTEGER NOT NULL DEFAULT 0,
           idempotency TEXT NOT NULL, created INTEGER NOT NULL, UNIQUE(user_id,idempotency)
         );
+        CREATE TABLE IF NOT EXISTS stripe_checkout_sessions (
+          session_id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          price_id TEXT NOT NULL,
+          credits INTEGER NOT NULL CHECK(credits=100),
+          amount_cents INTEGER NOT NULL CHECK(amount_cents=1000),
+          created INTEGER NOT NULL,
+          fulfilled_at INTEGER
+        );
         CREATE TABLE IF NOT EXISTS bnb_priv_quotes (
           id TEXT PRIMARY KEY,
           user_id TEXT NOT NULL,
