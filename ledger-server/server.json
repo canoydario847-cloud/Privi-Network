@@ -3,7 +3,7 @@
   "name": "io.github.canoydario847-cloud/privi-ledger",
   "title": "Privi Ledger",
   "description": "Privi Guard: stop prompt injection and data leaks in AI agents. guard_check scans what an agent reads and sends (allow/warn/block, redacted copy, signed on-chain receipt); 1,000 free checks a month, then 1 cent via x402. Privi Scan: free safety grades for every MCP server (mcp_server_check). Also tamper-evident audit logs, agent passports, spending mandates and a live kill switch. Hub: https://privi-hub.onrender.com",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "websiteUrl": "https://privi-discovery.onrender.com",
   "repository": {
     "url": "https://github.com/canoydario847-cloud/Privi-Network",

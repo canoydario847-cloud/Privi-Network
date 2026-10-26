@@ -5,7 +5,7 @@ Ledger holds: the agent's tamper-evident history, its on-chain checkpoints, its
 sealed compliance reports and the handshakes other companies confirmed with it.
 
 A passport is a JSON document, Ed25519-signed by this server and hash-anchored on
-chain (Base, until the Privi chain mainnet). Any agent can verify it for free (signature, anchor, expiry,
+chain (the Privi Devnet, until the Privi mainnet). Any agent can verify it for free (signature, anchor, expiry,
 revocation) and re-score the subject live, so a passport that was honest when
 issued cannot keep vouching for an agent whose log has since been tampered with.
 
@@ -344,7 +344,7 @@ class Passports:
         if min_grade and order.index(grade) > order.index(min_grade.upper()):
             reasons.append(f"current grade {grade} is below the required {min_grade.upper()}")
         if require_anchored and not v["anchored"]:
-            reasons.append("passport is not anchored on chain (Base)")
+            reasons.append("passport is not anchored on chain (the Privi Devnet)")
         if require_intact and v.get("history_still_intact") is False:
             reasons.append("history integrity required")
         return {"allow": not reasons, "reasons": reasons, "current_score": current, "current_grade": grade}

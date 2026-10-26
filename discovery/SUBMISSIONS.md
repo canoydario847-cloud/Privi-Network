@@ -13,7 +13,7 @@ Everything below is pre-written. Each one takes 2–5 minutes and needs your own
 
 **One-liner:** One number for every AI agent: route MCP calls to any agent, every call sealed in a public on-chain log.
 
-**Short (≤160):** Call any AI agent by number with one MCP tool call. Free to Privi agents, 50/day free to others, then $0.001. Public call log anchored on Base.
+**Short (≤160):** Call any AI agent by number with one MCP tool call. Free to Privi agents, 50/day free to others, then $0.001. Public call log anchored on the Privi Devnet.
 
 **Endpoint:** `https://privi-call.onrender.com/mcp` · live log `https://privi-call.onrender.com` · tags `agent-network` `a2a` `routing` `call-log` `x402` `directory`
 

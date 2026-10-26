@@ -80,7 +80,7 @@
       "registry_id": "io.github.canoydario847-cloud/privi-ledger",
       "url": "https://privi-ledger.onrender.com/mcp",
       "transport": "streamable-http",
-      "description": "Privi Fortress: post-quantum (ML-DSA-87 / FIPS 204) co-signatures, RFC 9162 transparency log with inclusion and consistency proofs, two-person integrity and air-gapped evidence bundles. Privi Mandates: signed proof that a human authorized an AI agent to spend (budget, per-payment cap, payees, expiry), checkable free by merchants and payment facilitators. Privi KYA (Know-Your-Agent): free check of whether a blockchain wallet is operated by an audited AI agent, with a Privi-signed attestation, for chains, DeFi protocols, exchanges and x402 facilitators. Privi Passport: signed, on-chain-anchored trust credentials for AI agents (0-1000 score; verify and gate counterparties for free) built on tamper-evident audit logs. Free tier: 500 entries/month via ledger_signup. Pro: $29 USDC / 30 days via x402. Sealed compliance reports (PDF), Privi Handshake cross-company records, Gov AI use-case inventories (OMB M-25-21), Quantum-Ready PQC migration plans (EO 14409). Every checkpoint anchored on Base (until the Privi chain mainnet).",
+      "description": "Privi Fortress: post-quantum (ML-DSA-87 / FIPS 204) co-signatures, RFC 9162 transparency log with inclusion and consistency proofs, two-person integrity and air-gapped evidence bundles. Privi Mandates: signed proof that a human authorized an AI agent to spend (budget, per-payment cap, payees, expiry), checkable free by merchants and payment facilitators. Privi KYA (Know-Your-Agent): free check of whether a blockchain wallet is operated by an audited AI agent, with a Privi-signed attestation, for chains, DeFi protocols, exchanges and x402 facilitators. Privi Passport: signed, on-chain-anchored trust credentials for AI agents (0-1000 score; verify and gate counterparties for free) built on tamper-evident audit logs. Free tier: 500 entries/month via ledger_signup. Pro: $29 USDC / 30 days via x402. Sealed compliance reports (PDF), Privi Handshake cross-company records, Gov AI use-case inventories (OMB M-25-21), Quantum-Ready PQC migration plans (EO 14409). Every checkpoint anchored on the Privi Devnet (until the Privi mainnet).",
       "pricing": "free tier + $29 USDC/30 days Pro + per-call x402 audits",
       "auth": "org API key (self-serve via ledger_signup)",
       "tools": [
@@ -186,7 +186,7 @@
       "registry_id": "io.github.canoydario847-cloud/privi-verify",
       "url": "https://privi-verify.onrender.com/mcp",
       "transport": "streamable-http",
-      "description": "Paid manufacturing lot verification and traceability for AI agents. Pay per call with USDC on Base (x402, Coinbase CDP facilitator). Lot fingerprints anchored on Base (until the Privi chain mainnet) every 5 minutes.",
+      "description": "Paid manufacturing lot verification and traceability for AI agents. Pay per call with USDC on Base (x402, Coinbase CDP facilitator). Lot fingerprints anchored on the Privi Devnet (until the Privi mainnet) every 5 minutes.",
       "pricing": "per-call x402, USDC on Base mainnet",
       "auth": "x402 payment (no account needed)",
       "tools": [
@@ -202,7 +202,7 @@
       "registry_id": "io.github.canoydario847-cloud/privi-anchor",
       "url": "https://privi-anchor.onrender.com/mcp",
       "transport": "streamable-http",
-      "description": "Hash anchoring / proof-of-existence on Base (chain id 8453) until the Privi chain mainnet launches. Free with an API key.",
+      "description": "Hash anchoring / proof-of-existence on the Privi Devnet (EVM chain 772626, explorer privi-devnet.onrender.com) until the Privi mainnet launches; earlier Base anchors still verify. Free with an API key.",
       "pricing": "free (API key)",
       "auth": "API key",
       "tools": [
@@ -217,7 +217,7 @@
       "registry_id": "io.github.canoydario847-cloud/privi-quantum",
       "url": "https://privi-quantum.onrender.com/mcp",
       "transport": "streamable-http",
-      "description": "Quantum optimization (CVaR-QAOA, up to 16 qubits) for manufacturing decisions: balance production lines, pick lots to inspect, split conflicting jobs across shifts. Every result is checked against the proven optimum, signed with Ed25519 + ML-DSA-87 (NIST FIPS 204), and anchored on Base (until the Privi chain mainnet); circuits export as OpenQASM for IBM, Braket and Azure hardware. Also scans code for quantum-vulnerable cryptography.",
+      "description": "Quantum optimization (CVaR-QAOA, up to 16 qubits) for manufacturing decisions: balance production lines, pick lots to inspect, split conflicting jobs across shifts. Every result is checked against the proven optimum, signed with Ed25519 + ML-DSA-87 (NIST FIPS 204), and anchored on the Privi Devnet (until the Privi mainnet); circuits export as OpenQASM for IBM, Braket and Azure hardware. Also scans code for quantum-vulnerable cryptography.",
       "pricing": "free",
       "auth": "none",
       "tools": [
@@ -251,10 +251,12 @@
     }
   ],
   "chain": {
-    "name": "Base",
-    "chain_id": 8453,
-    "currency": "ETH",
-    "note": "Privi runs on Base (Ethereum L2) until the Privi chain mainnet launches; the Privi EVM Devnet (chain 262144) remains for testing."
+    "name": "Privi Devnet",
+    "chain_id": 772626,
+    "currency": "TEST (valueless gas)",
+    "rpc_url": "https://privi-devnet.onrender.com",
+    "explorer": "https://privi-devnet.onrender.com",
+    "note": "Every Privi checkpoint (Ledger, Verify, Quantum, Call) is anchored on the Privi Devnet, Privi's own chain, until the Privi mainnet launches. Payments still settle in USDC on Base (chain 8453) via x402. Anchors made on Base before the move still verify."
   },
   "token": {
     "name": "Jose Coin",

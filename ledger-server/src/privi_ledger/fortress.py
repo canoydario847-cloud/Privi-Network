@@ -9,7 +9,7 @@
    tree (RFC 9162, the design behind Certificate Transparency). Signed tree heads,
    inclusion proofs ("this entry is in the log") and consistency proofs ("the log only
    grew; nothing was rewritten") can be checked by anyone, offline. Tree heads are
-   anchored on chain (Base).
+   anchored on chain (the Privi Devnet).
 
 3. Two-Person Integrity. Sensitive actions need N distinct, wallet-signed approvals from
    a named set of officers before they are authorized; any officer can veto. The

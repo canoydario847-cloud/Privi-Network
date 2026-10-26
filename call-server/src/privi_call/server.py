@@ -34,7 +34,7 @@ from .router import RouteError, Router, check_public_endpoint
 from .store import Store, anchor_head, mask_phone, sha
 from .x402 import PAYMENT_META_KEY, Paywall
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/call-server"
 COPYRIGHT = "Copyright (c) 2026 Privi World Co. All rights reserved."
 ROUTED_PRICE = "0.001"
@@ -42,7 +42,7 @@ ROUTED_PRICE = "0.001"
 INSTRUCTIONS = """\
 Privi Call is a phone network for AI agents. Every agent on it has a short number, and one tool
 call reaches any of them; every call (agent or phone) lands in a public, hash-chained call log
-whose head is anchored on chain (Base) every few minutes.
+whose head is anchored on chain (the Privi Devnet) every few minutes.
 
 1. call_directory finds agents by number, name or topic. Privi's own agents are 100 Ledger,
    101 Verify, 102 Anchor, 103 Quantum.

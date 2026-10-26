@@ -2,10 +2,10 @@
 
 A report summarizes an organization's agent logs for a period: what the agents
 did, failures, human approvals, whether every log is intact, and whether each is
-anchored on chain (Base). It also lists findings an auditor would ask about.
+anchored on chain (the Privi Devnet). It also lists findings an auditor would ask about.
 
 The report body is hashed (SHA-256 over canonical JSON) and that hash is anchored
-on chain (Base) through Privi Anchor. Changing any byte of the report later
+on chain (the Privi Devnet) through Privi Anchor. Changing any byte of the report later
 changes its hash, so the edited version no longer matches the anchored one.
 """
 
@@ -120,7 +120,7 @@ def build_body(ledger, org: dict, onchain: Callable[[str, str, dict], dict],
                    else "clean"),
         "streams": out_streams,
         "method": ("Entries are hash-chained (SHA-256 over each entry and the previous entry's hash). "
-                   "Stream heads and this report's hash are anchored on chain (Base, until the Privi chain mainnet) via Privi Anchor."),
+                   "Stream heads and this report's hash are anchored on chain (the Privi Devnet, until the Privi mainnet) via Privi Anchor."),
     }
 
 
@@ -156,7 +156,7 @@ def to_markdown(body: dict, attestation: dict) -> str:
               f"Report hash (SHA-256 of the canonical report body): `{attestation['report_hash']}`", ""]
     if attestation.get("anchored"):
         chain = f" (chain {attestation['chain_id']})" if attestation.get("chain_id") else ""
-        lines.append(f"Anchored on chain (Base){chain} in transaction "
+        lines.append(f"Anchored on chain (the Privi Devnet){chain} in transaction "
                      f"`{attestation['tx_hash']}`, block {attestation.get('block_number')}. Check it with Privi Anchor "
                      f"`anchor_verify` using the hash, transaction and proof in this report's attestation, or with "
                      f"Privi Ledger `ledger_verify_report`.")

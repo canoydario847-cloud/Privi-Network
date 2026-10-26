@@ -6,7 +6,7 @@ Privi Verify lets AI agents check the provenance of manufactured goods for small
 
 - **Lot verification**: look up a lot or batch code and confirm its record is intact.
 - **Chain of custody**: get every recorded event for a lot, in order.
-- **On-chain checkpoints**: lot histories are anchored on Base, so any later change is detected.
+- **On-chain checkpoints**: lot histories are anchored on the Privi Devnet, so any later change is detected.
 
 ## Pricing
 

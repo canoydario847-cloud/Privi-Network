@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Privi World Co. All rights reserved.
 # Privi Quantum - https://priviflow.us - dariocanoy@priviflow.us
 """Privi Quantum MCP server: quantum optimization for factories, sealed with
-post-quantum signatures and anchored on chain (Base).
+post-quantum signatures and anchored on chain (the Privi Devnet).
 
 Free:  quantum_status, quantum_problems, quantum_optimize, quantum_verify, pqc_scan_code
 """
@@ -28,7 +28,7 @@ from . import qaoa, scanner
 from .anchoring import AnchorError, HttpAnchorClient, anchor_pending
 from .attest import PQ_ALG, Attestor
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/quantum-server"
 PUBLIC_URL = os.getenv("QUANTUM_PUBLIC_URL", "https://privi-quantum.onrender.com").rstrip("/")
 COPYRIGHT = "Copyright (c) 2026 Privi World Co. All rights reserved."
@@ -119,7 +119,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     mcp = MCPServer(
         name="privi-quantum", title="Privi Quantum",
         description="Quantum optimization (CVaR-QAOA) for manufacturing decisions, with post-quantum "
-                    "signed results anchored on chain (Base, until the Privi chain mainnet), plus a quantum-vulnerability scanner.",
+                    "signed results anchored on chain (the Privi Devnet, until the Privi mainnet), plus a quantum-vulnerability scanner.",
         instructions=INSTRUCTIONS, website_url=SOURCE, version=__version__,
     )
 
@@ -135,7 +135,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
                 "backends": {"local-statevector": "live", "hardware": "export OpenQASM 2.0 (include_qasm=true) "
                              "and submit to IBM Quantum, Amazon Braket or Azure Quantum"},
                 "signatures": f"Ed25519 + {PQ_ALG}", "signing_key_id": keys["key_id"],
-                "anchoring": {"enabled": anchor_client is not None, "chain": "Base via Privi Anchor (until the Privi chain mainnet)",
+                "anchoring": {"enabled": anchor_client is not None, "chain": "Privi Devnet via Privi Anchor (until the Privi mainnet)",
                               "interval_seconds": settings.anchor_interval},
                 "attestations_issued": attestor.count(), "public_keys_url": f"{PUBLIC_URL}/keys"}
 
@@ -161,7 +161,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     ) -> CallToolResult:
         """Solve a factory decision with the Quantum Approximate Optimization Algorithm. Returns the decision in
         plain terms, how close it is to the proven optimum, and a post-quantum signed attestation (Ed25519 +
-        ML-DSA-87) that is anchored on chain (Base). Free."""
+        ML-DSA-87) that is anchored on chain (the Privi Devnet). Free."""
         if not limiter.allow(_who(ctx)):
             return _result({"error": f"rate limit: {settings.rate_per_min} optimizations per minute"}, is_error=True)
         try:
@@ -190,7 +190,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
             "quantum_run": {k: r[k] for k in ("algorithm", "qubits", "shots", "angles", "top_samples",
                                                "objective_evaluations", "runtime_ms")},
             "attestation": {"id": att["id"], "body_sha256": att["body_sha256"], "signatures": f"Ed25519 + {PQ_ALG}",
-                            "anchoring": "queued for anchoring on Base" if anchor_client else "anchoring not configured",
+                            "anchoring": "queued for anchoring on the Privi Devnet" if anchor_client else "anchoring not configured",
                             **links(att["id"])},
             "note": "Exact simulation; at this size classical solvers match it. The same circuit runs on quantum "
                     "hardware via the OpenQASM export.",
@@ -293,7 +293,7 @@ a{{color:#3451b2}}@media (prefers-color-scheme:dark){{body{{color:#e8eaee;backgr
 <h1>Privi Quantum</h1>
 <p>Quantum optimization for factory decisions (CVaR-QAOA, up to {qubits} qubits): balance production lines, choose which lots to inspect,
 split conflicting jobs across shifts. Every answer is checked against the proven classical optimum, signed with Ed25519 + ML-DSA-87
-(NIST FIPS 204) so not even a quantum computer can forge it, and anchored on chain (Base, until the Privi chain mainnet). The trained circuit exports as
+(NIST FIPS 204) so not even a quantum computer can forge it, and anchored on chain (the Privi Devnet, until the Privi mainnet). The trained circuit exports as
 OpenQASM for IBM, Amazon Braket and Azure quantum hardware.</p>
 <p>Connect your AI agent (MCP, streamable HTTP, free):</p>
 <pre>{{ "mcpServers": {{ "privi-quantum": {{ "url": "{url}/mcp" }} }} }}</pre>
@@ -310,7 +310,7 @@ def _anchor_loop(attestor: Attestor, client, interval: int) -> None:
         try:
             n = anchor_pending(attestor, client)
             if n:
-                print(f"[privi-quantum] anchored {n} attestations on chain (Base)", flush=True)
+                print(f"[privi-quantum] anchored {n} attestations on chain (the Privi Devnet)", flush=True)
         except Exception as e:  # keep serving; retry next round
             print(f"[privi-quantum] anchoring failed, will retry: {e}", flush=True)
 

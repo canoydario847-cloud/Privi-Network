@@ -26,7 +26,7 @@ from .x402 import Facilitator, Paywall
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor.onrender.com/mcp"
 
-__version__ = "0.3.2"
+__version__ = "0.3.3"
 
 INSTRUCTIONS = """\
 Privi Verify checks where a manufactured lot came from and whether its records
@@ -91,7 +91,7 @@ def build_server(
         info = describe(cp, store.hash_at(lot_code, cp["seq"]) if cp else None, anchor_url)
         if cp and not info["matches_current_record"]:
             integrity.update(valid=False, broken_at_seq=cp["seq"],
-                             reason="history differs from the version anchored on chain (Base)")
+                             reason="history differs from the version anchored on chain (the Privi Devnet)")
         return info
 
     mcp = MCPServer(
