@@ -4,6 +4,8 @@ import tempfile
 from pathlib import Path
 
 os.environ["LIFE_DB_PATH"] = str(Path(tempfile.mkdtemp()) / "test.sqlite3")
+# Integration tests intentionally exercise non-sandbox account flows with valueless credits.
+os.environ["LIFE_STAGING_ONLY"] = "0"
 os.environ["LIFE_COOKIE_SECURE"] = "0"
 os.environ["LIFE_DEV_TRIAL_CREDITS"] = "10"
 os.environ["OPENAI_API_KEY"] = "mock-not-a-real-key"
