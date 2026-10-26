@@ -49,22 +49,33 @@ jobs:
           name = urllib.parse.quote(record["name"], safe="")
           version = urllib.parse.quote(record["version"], safe="")
           url = f"https://registry.modelcontextprotocol.io/v0/servers/{name}/versions/{version}"
-          try:
-              with urllib.request.urlopen(
-                  urllib.request.Request(url, headers={"Accept": "application/json"}),
-                  timeout=20,
-              ) as response:
-                  if response.status != 200:
-                      raise RuntimeError(f"Unexpected registry status {response.status}")
-                  data = json.load(response)
-              listed = data.get("server", data)
-              if listed.get("name") != record["name"] or listed.get("version") != record["version"]:
-                  raise RuntimeError("Registry returned mismatched name/version; not skipping")
-              found = True
-          except urllib.error.HTTPError as error:
-              if error.code != 404:
-                  raise
-              found = False
+          import time
+          found = None
+          for attempt in range(1, 5):          # the registry sometimes times out on lookups
+              try:
+                  with urllib.request.urlopen(
+                      urllib.request.Request(url, headers={"Accept": "application/json"}),
+                      timeout=60,
+                  ) as response:
+                      if response.status != 200:
+                          raise RuntimeError(f"Unexpected registry status {response.status}")
+                      data = json.load(response)
+                  listed = data.get("server", data)
+                  if listed.get("name") != record["name"] or listed.get("version") != record["version"]:
+                      raise RuntimeError("Registry returned mismatched name/version; not skipping")
+                  found = True
+                  break
+              except urllib.error.HTTPError as error:
+                  if error.code == 404:
+                      found = False
+                      break
+                  if error.code < 500 or attempt == 4:
+                      raise
+              except (TimeoutError, urllib.error.URLError, ConnectionError) as error:
+                  if attempt == 4:
+                      raise
+                  print(f"registry lookup failed ({error}); retry {attempt}/3 in {15 * attempt}s")
+              time.sleep(15 * attempt)
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write(f"already_published={str(found).lower()}\n")
           print(f"Official MCP Registry: {'already published' if found else 'new version to publish'}")
