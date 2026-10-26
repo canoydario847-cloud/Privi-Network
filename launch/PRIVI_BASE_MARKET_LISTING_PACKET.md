@@ -4,6 +4,18 @@
 
 **Status: listing preparation, not a market launch.** This file does not establish that a pool exists, a swap is fillable, an exchange approved the asset, or that token sales are authorized in any jurisdiction.
 
+## Verified Base state at block 53,127,005 (2026-10-26 19:35 UTC)
+
+A public Base JSON-RPC read-only CI run at [this GitHub Actions execution](https://github.com/canoydario847-cloud/Privi-Network/actions/runs/40388159271) returned **success** and confirmed the following **at that block only**:
+
+- Bytecode present: PRIVI ERC-20 and the reported PRIVI/USDC swap desk.
+- On-chain ERC-20 name **Privi**, symbol **PRIVI**, decimals **18**, total supply **1,000,000,000 PRIVI** (not verified circulating supply).
+- Swap desk base token and USDC quote match the proposed pair; paused = false.
+- Both the swap desk's available PRIVI and its USDC reserve were **zero**. Its configured price is **1 USDC per PRIVI**, but this is NOT a market price and cannot be filled at the observed reserves.
+- No Uniswap v3 or Aerodrome **classic** pool returned for the examined PRIVI/USDC and PRIVI/WETH pairs. **Uniswap v4, Aerodrome Slipstream, and other market types were not scanned**; this is not proof no market exists anywhere.
+
+These observations are a dated snapshot. All reserves, listings, circulating supply, and any eventual trading activity must be checked again before public sale or venue application. No price/availability is guaranteed.
+
 ## Identity from the Privi-Network source code
 
 | Field | Project-declared value or validation |
