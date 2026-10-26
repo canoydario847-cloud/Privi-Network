@@ -47,6 +47,14 @@ class HealthCheckTest(unittest.TestCase):
             with self.subTest(height=height), self.assertRaisesRegex(ValueError, 'Invalid'):
                 check(nodes, 'privi-testnet-1')
 
+    def test_malformed_sync_flags_rejected(self):
+        for flag in (None, 0, 1, 'false', 'true', ''):
+            nodes = [{'node_id': str(n), 'network': 'privi-testnet-1',
+                      'height': 100, 'catching_up': False} for n in range(4)]
+            nodes[0]['catching_up'] = flag
+            with self.subTest(flag=flag), self.assertRaisesRegex(ValueError, 'Invalid'):
+                check(nodes, 'privi-testnet-1')
+
     def test_lag_rejected(self):
         nodes = [{'node_id': str(n), 'network': 'privi-testnet-1', 'height': 100+n*20,
                   'catching_up': False} for n in range(4)]
