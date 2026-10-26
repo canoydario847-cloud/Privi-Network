@@ -1,0 +1,31 @@
+name: Compile Remix PRIVI Base 1-to-1 pool template
+
+on:
+  push:
+    branches: [remix-privi-usdc-one-to-one-template-20261026]
+    paths:
+      - "contracts/PriviBaseOneToOnePool.sol"
+      - ".github/workflows/privi-base-pool-compile.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Compile only (NEVER deploy or sign)
+        run: |
+          npx --yes solc@0.8.24 --version
+          npx --yes solc@0.8.24 --bin --abi --output-dir /tmp/privi-pool-artifacts contracts/PriviBaseOneToOnePool.sol
+      - name: Keep ABI / bytecode for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: privi-base-one-to-one-compile
+          path: /tmp/privi-pool-artifacts
