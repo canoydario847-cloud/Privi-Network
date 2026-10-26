@@ -69,6 +69,17 @@ def validate_database(conn):
         actual = tuple(row[1] for row in sorted(columns, key=lambda row: row[5]) if row[5] > 0)
         if actual != expected:
             raise ValueError(f"Not a LIFE database; table {table} primary key mismatch")
+    # SQLite rowid tables permit NULL values in non-INTEGER PRIMARY KEY
+    # columns, even when the schema declares TEXT PRIMARY KEY. A snapshot
+    # containing NULL account, session, project, file or ledger identities
+    # cannot be safely restored for authentication and ownership lookups.
+    # Check the data as well as the schema; do not expose private row values.
+    for table, keys in required_primary_keys.items():
+        null_predicate = " OR ".join(f'"{key}" IS NULL' for key in keys)
+        if conn.execute(
+            f'SELECT 1 FROM "{table}" WHERE {null_predicate} LIMIT 1'
+        ).fetchone() is not None:
+            raise ValueError(f"Not a LIFE database; {table} primary key contains NULL")
     # Restored account identity must retain the same uniqueness constraints as
     # the live store. Without these, two accounts could share an email or a
     # wallet and login / ownership lookups become ambiguous.
