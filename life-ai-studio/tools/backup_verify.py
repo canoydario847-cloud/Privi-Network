@@ -108,6 +108,16 @@ def validate_database(conn):
     ).fetchone()
     if invalid_email is not None:
         raise ValueError("Not a LIFE database; invalid member email identity")
+    # Membership timestamps are used for account history and onboarding.
+    # SQLite INTEGER affinity can still contain NULL, REAL or nonnumeric text;
+    # accepting those in a restore would make membership records unreliable.
+    # Never include private account identifiers in diagnostic output.
+    invalid_member_since = conn.execute(
+        'SELECT 1 FROM "users" WHERE typeof("member_since") != \'integer\' '
+        'OR "member_since" < 0 LIMIT 1'
+    ).fetchone()
+    if invalid_member_since is not None:
+        raise ValueError("Not a LIFE database; invalid membership timestamp")
     # A linked wallet is an optional account identifier. SQLite permits empty
     # strings and BLOB values in a UNIQUE TEXT column; restoring either could
     # break wallet-based ownership checks. Keep NULL for unlinked members and
