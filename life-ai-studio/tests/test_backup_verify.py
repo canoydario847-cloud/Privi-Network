@@ -59,6 +59,32 @@ def test_restored_account_requires_nonblank_text_password_hash(tmp_path, passwor
         assert not destination.exists(), "Malformed authentication state must not publish a backup"
 
 
+@pytest.mark.parametrize("balance, valid", [
+    (0, True),
+    (42, True),
+    (None, False),
+    (-1, False),
+    ("invalid", False),
+    (1.5, False),
+])
+def test_restored_member_credit_balance_is_nonnegative_integer(tmp_path, balance, valid):
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute(
+            "INSERT INTO users (id,email,pwdhash,wallet,member_since,credits) "
+            "VALUES (?,?,?,?,?,?)",
+            ("u1", "member@example.test", "synthetic-hash", None, 1, balance),
+        )
+    destination = tmp_path / "vault" / "backup.sqlite3"
+    if valid:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        with pytest.raises(ValueError, match="invalid member credit balance"):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Invalid balances must not publish a backup"
+
+
 @pytest.mark.parametrize("value, expected", [
     (1, None),
     (None, "invalid membership timestamp"),
