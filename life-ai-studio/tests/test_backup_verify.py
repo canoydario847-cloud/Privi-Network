@@ -986,3 +986,34 @@ def test_restore_rejects_malformed_session_authentication_state(tmp_path, scenar
         with pytest.raises(ValueError, match="invalid session authentication state"):
             backup.backup_and_verify(source, destination)
         assert not destination.exists(), "Unsafe session state must not publish a snapshot"
+
+
+@pytest.mark.parametrize("version,accepted", [
+    (1, True),
+    (3, True),
+    (0, False),
+    (-1, False),
+    ("corrupt", False),
+    (None, False),
+])
+def test_backup_rejects_invalid_private_file_versions(tmp_path, version, accepted):
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute(
+            "INSERT INTO users VALUES ('u1','member@example.test','hash',NULL,1,0)"
+        )
+        db.execute(
+            "INSERT INTO projects VALUES ('p1','u1','private','code',100)"
+        )
+        db.execute(
+            "INSERT INTO files VALUES ('p1','notes.txt','private content',?)",
+            (version,),
+        )
+    destination = tmp_path / "vault" / "snapshot.sqlite3"
+    if accepted:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        with pytest.raises(ValueError, match="invalid project file version"):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Invalid private files must not publish a backup"
