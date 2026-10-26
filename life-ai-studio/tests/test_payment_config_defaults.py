@@ -3,6 +3,7 @@
 This is a static regression guard, not a runtime financial safety audit.
 """
 from pathlib import Path
+import ast
 import unittest
 
 ENV = Path(__file__).resolve().parents[1] / ".env.example"
@@ -34,6 +35,27 @@ class PaymentDefaultSafetyTests(unittest.TestCase):
         values = [line.partition("=")[2].strip() for line in ENV.read_text(encoding="utf-8").splitlines() if line.strip().startswith(STAGING_SWITCH + "=")]
         self.assertEqual(len(values), 1)
         self.assertEqual(values[0], "1", "sample config must default to disposable staging")
+
+    def test_runtime_defaults_to_staging_if_flag_is_missing(self):
+        app_path = ENV.parent / "app.py"
+        tree = ast.parse(app_path.read_text(encoding="utf-8"))
+        staging_assignments = [
+            node.value for node in tree.body
+            if isinstance(node, ast.Assign)
+            and any(isinstance(target, ast.Name) and target.id == "STAGING_MODE"
+                    for target in node.targets)
+        ]
+        self.assertEqual(len(staging_assignments), 1)
+        comparison = staging_assignments[0]
+        self.assertIsInstance(comparison, ast.Compare)
+        getter = comparison.left
+        self.assertIsInstance(getter, ast.Call)
+        self.assertIsInstance(getter.func, ast.Attribute)
+        self.assertIsInstance(getter.func.value, ast.Name)
+        self.assertEqual((getter.func.value.id, getter.func.attr), ("os", "getenv"))
+        self.assertEqual([ast.literal_eval(arg) for arg in getter.args],
+                         ["LIFE_STAGING_ONLY", "1"])
+        self.assertEqual([ast.literal_eval(arg) for arg in comparison.comparators], ["1"])
 
     def test_staging_flag_rejects_unsafe_examples(self):
         for text in ("LIFE_STAGING_ONLY=0", "LIFE_STAGING_ONLY=", "LIFE_STAGING_ONLY=1\\nLIFE_STAGING_ONLY=0", ""):
