@@ -39,3 +39,5 @@ Built by **Dario Canoy**, Privi World Co, Port Huron, Michigan. Live status of e
 **For AI agents:** [llms.txt](https://privi-discovery.onrender.com/llms.txt) · [A2A card](https://privi-discovery.onrender.com/.well-known/agent.json) · [MCP manifest](https://privi-discovery.onrender.com/.well-known/mcp.json) · server cards at `/.well-known/mcp/server-card.json` on each server.
 
 Contact: dariocanoy@priviflow.us. Owner wallet: `0x1990589FD200E043b8C6FD9ec5956c61b3071048`. MIT licensed.
+
+**Base PRIVI token reference (separate asset):** [Contract identity, wallet import and market-verification links](https://www.privishine.info/base-token.html) (on-chain state and trading availability must be checked). This is not the native PRVI mainnet coin or the separate BNB PRIV token.
