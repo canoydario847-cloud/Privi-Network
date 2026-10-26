@@ -1094,3 +1094,43 @@ def test_restore_rejects_invalid_credit_ledger_timestamps(tmp_path, created, acc
         with pytest.raises(ValueError, match="invalid credit ledger timestamp"):
             backup.backup_and_verify(source, destination)
         assert not destination.exists(), "Malformed audit history must not publish a backup"
+
+
+@pytest.mark.parametrize("table", ["cog_wallets", "cog_claim_challenges"])
+@pytest.mark.parametrize("scenario,accepted", [
+    ("valid", True),
+    ("orphan_user", False),
+    ("orphan_project", False),
+    ("cross_account_project", False),
+    ("missing_user_column", False),
+    ("missing_project_column", False),
+])
+def test_restore_rejects_cogvative_wallet_link_ownership(tmp_path, table, scenario, accepted):
+    """Private wallet and claim records must belong to the project's owner."""
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute("INSERT INTO users VALUES ('u1','owner@example.invalid','hash',NULL,1,0)")
+        db.execute("INSERT INTO users VALUES ('u2','other@example.invalid','hash',NULL,1,0)")
+        db.execute("INSERT INTO projects VALUES ('p1','u1','Project','code',1)")
+        columns = ["user_id TEXT", "project_id TEXT"]
+        if scenario == "missing_user_column":
+            columns.remove("user_id TEXT")
+        if scenario == "missing_project_column":
+            columns.remove("project_id TEXT")
+        db.execute(f'CREATE TABLE "{table}" (' + ", ".join(columns) + ")")
+        if scenario not in ("missing_user_column", "missing_project_column"):
+            user_id = "missing" if scenario == "orphan_user" else (
+                "u2" if scenario == "cross_account_project" else "u1"
+            )
+            project_id = "missing" if scenario == "orphan_project" else "p1"
+            db.execute(f'INSERT INTO "{table}" VALUES (?,?)', (user_id, project_id))
+    destination = tmp_path / "vault" / "snapshot.sqlite3"
+    if accepted:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        expected = ("ownership columns missing" if scenario.startswith("missing_")
+                    else "ownership mismatch")
+        with pytest.raises(ValueError, match=expected):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Do not publish cross-account wallet links"
