@@ -1,8 +1,25 @@
 import unittest
-from health_check import check
+from health_check import check, status
+from unittest.mock import patch
+import urllib.request
 
 
 class HealthCheckTest(unittest.TestCase):
+    def test_rpc_url_rejects_credentials_and_unexpected_paths(self):
+        invalid = (
+            'http://user:password@localhost:26657',
+            'http://localhost:26657/private',
+            'http://localhost:26657/?token=secret',
+            'http://localhost:26657/#fragment',
+            'file:///etc/passwd',
+            'localhost:26657',
+        )
+        with patch.object(urllib.request, 'urlopen') as urlopen:
+            for url in invalid:
+                with self.subTest(url=url), self.assertRaises(ValueError):
+                    status(url)
+            urlopen.assert_not_called()
+
     def test_good(self):
         nodes = [{'node_id': str(n), 'network': 'privi-testnet-1', 'height': 100+n,
                   'catching_up': False} for n in range(4)]
