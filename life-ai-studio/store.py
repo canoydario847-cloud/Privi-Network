@@ -53,7 +53,18 @@ def obj(row):
     return dict(row) if row is not None else None
 
 def init():
-    Path(DB).parent.mkdir(parents=True, exist_ok=True)
+    # LIFE stores password verifiers, session hashes and private project files.
+    # SQLite's default creation mode follows the process umask (often 0644).
+    # Create a new database with owner-only permissions before SQLite opens it.
+    # Never chmod an existing database: its access policy needs operator review.
+    db_path = Path(DB)
+    db_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        fd = os.open(db_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        pass
+    else:
+        os.close(fd)
     with transaction() as db:
         db.executescript("""
         CREATE TABLE IF NOT EXISTS users (
