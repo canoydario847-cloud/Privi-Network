@@ -30,7 +30,11 @@ def assess(manifest, genesis_path):
     validators = manifest.get("validators", [])
     require(isinstance(validators, list) and len(validators) >= 4, "at least four validators required")
     if isinstance(validators, list):
-        # Reject malformed entries before inspecting attributes; never allow\n        # untrusted evidence JSON to crash verification with TypeError.\n        require(all(isinstance(v, dict) for v in validators),\n                "each validator must be a JSON object")\n        for attr in ("operator_id", "consensus_pubkey", "fault_domain"):
+        # Reject malformed entries before inspecting attributes; never allow
+        # untrusted evidence JSON to crash verification with TypeError.
+        require(all(isinstance(v, dict) for v in validators),
+                "each validator must be a JSON object")
+        for attr in ("operator_id", "consensus_pubkey", "fault_domain"):
             values = [v.get(attr) for v in validators if isinstance(v, dict)]
             require(len(values) == len(validators) and all(isinstance(x, str) and x.strip() for x in values) and len(set(values)) == len(values),
                     "validator " + attr + " must be present and unique")
