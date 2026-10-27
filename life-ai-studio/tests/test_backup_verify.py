@@ -121,6 +121,12 @@ def test_restored_membership_timestamp_is_integer_nonnegative(tmp_path, value, e
     ("uppercase_nonce", "invalid wallet challenge state"),
     ("text_expiry", "invalid wallet challenge state"),
     ("negative_expiry", "invalid wallet challenge state"),
+    ("blank_wallet", "invalid wallet challenge state"),
+    ("short_wallet", "invalid wallet challenge state"),
+    ("uppercase_wallet", "invalid wallet challenge state"),
+    ("binary_wallet", "invalid wallet challenge state"),
+    ("blank_message", "invalid wallet challenge state"),
+    ("binary_message", "invalid wallet challenge state"),
 ])
 def test_restored_wallet_challenge_ownership(tmp_path, scenario, expected):
     source = tmp_path / "life.sqlite3"
@@ -148,7 +154,14 @@ def test_restored_wallet_challenge_ownership(tmp_path, scenario, expected):
                      "short" if scenario == "short_nonce" else
                      "A" * 64 if scenario == "uppercase_nonce" else "a" * 64),
                     "absent" if scenario == "orphan" else "u1",
-                    "0x" + "a" * 40, "synthetic-test-challenge",
+                    ("" if scenario == "blank_wallet" else
+                     "0x" + "a" * 39 if scenario == "short_wallet" else
+                     "0x" + "A" * 40 if scenario == "uppercase_wallet" else
+                     b"binary-wallet" if scenario == "binary_wallet" else
+                     "0x" + "a" * 40),
+                    ("" if scenario == "blank_message" else
+                     b"binary-message" if scenario == "binary_message" else
+                     "synthetic-test-challenge"),
                     "tomorrow" if scenario == "text_expiry" else
                     -1 if scenario == "negative_expiry" else 123456,
                 ),
