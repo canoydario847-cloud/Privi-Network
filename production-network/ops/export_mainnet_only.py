@@ -31,7 +31,7 @@ def main():
         names = [member.name for member in members]
         if not names:
             raise RuntimeError("Unexpected empty archive")
-        if any(not any(name == p or name.startswith(p + "/") for p in ALLOWED) for name in names):
+        if any(not (name.rstrip("/") == "production-network" and member.isdir())\n               and not any(name.rstrip("/") == p or name.startswith(p + "/") for p in ALLOWED)\n               for name, member in zip(names, members)):
             output.unlink(missing_ok=True)
             raise RuntimeError("Export contained a path outside the mainnet allowlist")
         if any(member.issym() or member.islnk() or not (member.isfile() or member.isdir()) for member in members):
