@@ -12,4 +12,8 @@ This document is a **test plan, not evidence of a completed restore**. Keep all 
 6. Compare synthetic row counts and ownership relationships to the source. Corrupt a *separate synthetic* snapshot, confirm restore verification fails closed, and check that monitoring detects the failure.
 7. Document actual recovery time and recovery point; have an independent reviewer approve RTO/RPO, retention, encryption, access controls and deletion procedures.
 
+## Failure-injection acceptance (synthetic data only)
+
+Use a separate copy of the restored staging snapshot, not the source or the valid recovery artifact. Change one byte in that copy, retain the original trusted SHA-256 digest outside the repository, and run the same `--verify-copy` command against the corrupted copy. **Expected:** nonzero exit status, no `restore_drill: passed` result, and an operator-visible alert. Do not print snapshot contents or private identifiers in logs. Then rerun verification against the untouched restored copy to demonstrate recovery still succeeds. Record both exit statuses, UTC times, and alert evidence in the private operations record. Never weaken the checksum or turn off the verifier to make a drill pass.
+
 **Pass condition:** All seven steps have dated, redacted evidence and independent sign-off. A passing CI suite alone does not meet this gate. Until then, no production customer data, live payments, token deposits, or launch.
