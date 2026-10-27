@@ -515,6 +515,18 @@ def validate_database(conn):
     ).fetchone()
     if invalid_project_kind is not None:
         raise ValueError("Not a LIFE database; invalid project workspace kind")
+    # Project titles appear in private workspace and recovery displays. A
+    # malformed restored title (NULL, BLOB, blank or beyond the API limit)
+    # can break navigation even if its ownership and kind are valid. Never
+    # include private titles in verifier errors.
+    invalid_project_title = conn.execute(
+        'SELECT 1 FROM "projects" WHERE typeof("title") != \'text\' '
+        'OR length("title") > 100 OR '
+        'length(trim("title", char(9) || char(10) || char(11) || '
+        "char(12) || char(13) || ' ')) = 0 LIMIT 1"
+    ).fetchone()
+    if invalid_project_title is not None:
+        raise ValueError("Not a LIFE database; invalid project title")
     # Session tokens are stored as lowercase SHA-256 hashes, never plaintext.
     # A malformed token or expiry in a recovered database means session
     # authentication state cannot be trusted after restore. Check only shape;
