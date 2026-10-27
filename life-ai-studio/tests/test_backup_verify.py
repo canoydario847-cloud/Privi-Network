@@ -1452,3 +1452,36 @@ def test_backup_rejects_invalid_credit_ledger_service_identity(tmp_path, service
         with pytest.raises(ValueError, match="invalid credit ledger service identity"):
             backup.backup_and_verify(source, destination)
         assert not destination.exists(), "Malformed financial audit data must not publish a backup"
+
+
+@pytest.mark.parametrize("kind,accepted", [
+    ("code", True),
+    ("research", True),
+    ("business", True),
+    ("design", True),
+    ("writing", True),
+    ("automation", True),
+    ("unknown", False),
+    ("", False),
+    (None, False),
+    (b"binary-kind", False),
+])
+def test_backup_rejects_invalid_project_workspace_kind(tmp_path, kind, accepted):
+    """Only workspace types accepted by LIFE's creation API may be restored."""
+    source = tmp_path / "workspace-kind.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute(
+            "INSERT INTO users VALUES ('u1','member@example.test','synthetic-hash',NULL,1,0)"
+        )
+        db.execute(
+            "INSERT INTO projects (id,owner_id,title,kind,created) VALUES (?,?,?,?,?)",
+            ("p1", "u1", "Synthetic project", kind, 1),
+        )
+    destination = tmp_path / "vault" / "snapshot.sqlite3"
+    if accepted:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        with pytest.raises(ValueError, match="invalid project workspace kind"):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Invalid workspace metadata must not publish a backup"
