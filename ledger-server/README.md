@@ -1,6 +1,8 @@
-# Privi Ledger MCP
+# Privi Quantum Ledger MCP
 
-**Tamper-evident audit logs for AI agents.** Every company running agents needs to prove what those agents did: what data they touched, what they paid for, what they changed, and that nobody rewrote the record afterwards. Privi Ledger gives any MCP-capable agent a place to log each action, and gives auditors a way to verify the log, paid per check in USDC on Base via [x402](https://github.com/x402-foundation/x402).
+*(formerly Privi Ledger)*
+
+**Quantum-sealed, tamper-evident audit logs for AI agents.** Every company running agents needs to prove what those agents did: what data they touched, what they paid for, what they changed, and that nobody rewrote the record afterwards. Privi Ledger gives any MCP-capable agent a place to log each action, and gives auditors a way to verify the log, paid per check in USDC on Base via [x402](https://github.com/x402-foundation/x402).
 
 Works with Claude, ChatGPT, Cursor, VS Code and custom agents. Built by [Privi World Co](https://github.com/canoydario847-cloud) on the same record technology as [Privi Verify](../mcp-server).
 
@@ -127,6 +129,19 @@ As AI agents become the main senders of on-chain transactions, every chain, DeFi
 - Public: `GET /kya/<address>` (JSON verdict + attestation; `?min_score=&min_grade=&require_signed=`), `GET /kya/<address>/badge.svg`.
 
 Integration pattern for a chain or protocol: before accepting an agent transaction, `GET /kya/<from>`; require `allow: true` (and optionally `proof: "signature"`); keep the `attestation` + `signature` as your compliance record.
+
+## Privi Quantum Ledger (quantum-sealed blocks, fused with the Privi Foundation chain)
+
+The whole log is sealed into a chain of **quantum blocks** every few minutes (`LEDGER_QBLOCK_INTERVAL`, default 300 s):
+
+- Each block commits to the previous block, the signed tree head of the transparency log (size + Merkle root) and a SHA3-512 root of the entries it adds.
+- Blocks are hashed with **SHA3-512** (FIPS 202; 256-bit security even against Grover's quantum search) and co-signed with **ML-DSA-87** (FIPS 204, CNSA 2.0) and Ed25519, the same keys as Privi Fortress.
+- Consecutive blocks are linked by RFC 9162 consistency proofs, so the log provably only grew.
+- **Fused with the Privi Foundation chain** (Cosmos SDK + CometBFT + Cosmos EVM, [production-network/](../production-network)): every block names the Foundation chain IDs (`PRIVI_FOUNDATION_COSMOS_CHAIN_ID`, `PRIVI_FOUNDATION_EVM_CHAIN_ID`) and, when `PRIVI_FOUNDATION_RPC_URL` points at a Foundation node, carries a witness of its latest block (height + hash). Until the Foundation mainnet launches, each block settles on **Base** through Privi Anchor.
+
+Tools (all free except sealing): `qledger_status`, `qledger_block`, `qledger_verify_chain` (anyone can re-verify the entire chain), `qledger_entry_proof` (prove a receipt is sealed in a block, without revealing contents), `qledger_seal` (organization key; seal now). Public JSON: `GET /quantum-ledger`, `GET /quantum-ledger/blocks/<height>`.
+
+Engineering controls, not a certification (FIPS 140-3, FedRAMP, DoD IL).
 
 ## Privi Fortress (defense-grade integrity controls)
 
