@@ -63,17 +63,32 @@ def init():
     # Create a new database with owner-only permissions before SQLite opens it.
     # Never chmod an existing database: its access policy needs operator review.
     db_path = Path(DB)
-    db_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    try:
-        fd = os.open(db_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    except FileExistsError:
-        # Do not follow a pre-existing symlink or open a special file as the
-        # member database. Existing regular databases retain their permissions
-        # for operator review; this check makes no filesystem changes.
-        if not stat.S_ISREG(db_path.lstat().st_mode):
-            raise ValueError("LIFE database path must be an existing regular file")
+    if os.getenv("LIFE_REQUIRE_EXISTING_DB") == "1":
+        # Operator opt-in for durable deployments: never bootstrap an empty
+        # customer database if a mounted volume is missing or uninitialized.
+        # Do not create even the parent directory in this mode.
+        try:
+            regular = stat.S_ISREG(db_path.lstat().st_mode)
+        except FileNotFoundError:
+            regular = False
+        if not regular or not database_readable():
+            raise RuntimeError(
+                "LIFE startup requires an existing initialized database; "
+                "check the persistent volume and recovery procedure"
+            )
+        # transaction() uses SQLite mode=rw: if the file disappears after
+        # this check, it still cannot be recreated by the startup process.
     else:
-        os.close(fd)
+        # Disposable staging/local development may create a new private DB.
+        db_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        try:
+            fd = os.open(db_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            # Do not follow symlinks or open special files as member databases.
+            if not stat.S_ISREG(db_path.lstat().st_mode):
+                raise ValueError("LIFE database path must be an existing regular file")
+        else:
+            os.close(fd)
     with transaction() as db:
         db.executescript("""
         CREATE TABLE IF NOT EXISTS users (
