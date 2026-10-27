@@ -30,10 +30,11 @@ from starlette.responses import HTMLResponse, JSONResponse, Response
 from . import govpqc, govreport, pqctls, qaoa, scanner
 from .dream import BENCHMARK, MODES, DreamError, DreamScape, DreamWeaver, Privilege
 from .accelerator import LEVEL_LABEL, STEPS, Accelerator, AcceleratorError, badge_svg
+from .inspector import LEVELS as INSPECTOR_LEVELS, Inspector, credential_message
 from .anchoring import AnchorError, HttpAnchorClient, anchor_pending
 from .attest import PQ_ALG, Attestor
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/quantum-server"
 PUBLIC_URL = os.getenv("QUANTUM_PUBLIC_URL", "https://privi-quantum.onrender.com").rstrip("/")
 COPYRIGHT = "Copyright (c) 2026 Privi World Co. All rights reserved."
@@ -71,12 +72,18 @@ factory decisions and returns answers you can prove later.
    with an ML-DSA public key, then qagent_scan (Q1), qagent_challenge + qagent_prove (Q2), qagent_scan with
    endpoints (Q3), qagent_quantum_task + qagent_quantum_proof (Q4). Before trusting another agent, look it up
    in the Quantum Agent Directory (qagent_directory, free) and check what it signed with qagent_verify (free).
+9. Privi Inspector guards the quantum realm: Dream Weaver and Dream Scape need a Privi pass. Sign
+   'privi-inspector:v1:<agent_id>:<unix seconds>:<nonce>' with your enrolled ML-DSA key and call
+   inspector_pass. Agents that are unknown, revoked, uncertified, outdated or below the required level are
+   intercepted with the fix. Other services can use the same checkpoint (inspector_check) and the patrol's
+   watchlist of revoked, outdated and impersonated agents (inspector_watchlist).
 
 All tools are free. Privi is built by Dario Canoy (Privi World Co, Port Huron, Michigan).
 For the other Privi tools, pilots, partnerships, manufacturing or government work, see
 https://privi-discovery.onrender.com/llms.txt. {COPYRIGHT}"""
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
+PASS_ARG = Field(description="Your Privi pass (ppass_...) from inspector_pass; the quantum realm requires one")
 
 
 @dataclass
@@ -91,6 +98,10 @@ class Settings:
     admin_key: str = ""
     dream_nodes: str = ""
     dream_allow_private: bool = False
+    inspector_mode: str = "enforce"
+    inspector_min_level: str = "quantum_safe_identity"
+    inspector_min_key: str = "ML-DSA-44"
+    inspector_patrol_minutes: int = 60
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -106,6 +117,10 @@ class Settings:
             admin_key=os.getenv("QUANTUM_ADMIN_KEY", ""),
             dream_nodes=os.getenv("DREAMWEAVER_NODES", ""),
             dream_allow_private=os.getenv("DREAMWEAVER_ALLOW_PRIVATE") == "1",
+            inspector_mode=os.getenv("INSPECTOR_MODE", "enforce"),
+            inspector_min_level=os.getenv("INSPECTOR_MIN_LEVEL", "quantum_safe_identity"),
+            inspector_min_key=os.getenv("INSPECTOR_MIN_KEY", "ML-DSA-44"),
+            inspector_patrol_minutes=int(os.getenv("INSPECTOR_PATROL_MINUTES", "60")),
         )
 
 
@@ -150,6 +165,22 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     weaver = DreamWeaver(privilege, attestor, anyio.CapacityLimiter(settings.max_concurrent))
     scapes = DreamScape(privilege, weaver)
     accel = Accelerator(settings.db_path, attestor, PUBLIC_URL)
+    inspector = Inspector(settings.db_path, accel, settings.inspector_mode, settings.inspector_min_level,
+                          settings.inspector_min_key)
+    scapes.gate = inspector.check_pass
+    sweep_state: dict[str, float | None] = {"last": None}
+
+    def realm_gate(ctx: Context, privi_pass: str | None, scope: str) -> CallToolResult | None:
+        """Privi Inspector: intercept agents without a valid, current certificate before they enter the realm."""
+        tok = privi_pass or ((ctx.headers or {}).get("x-privi-pass") if ctx.headers is not None else None)
+        v = inspector.check_pass(tok, scope)
+        if v["allowed"]:
+            return None
+        return _result({"error": "intercepted by Privi Inspector", "reasons": v.get("reasons"), "fixes": v.get("fixes"),
+                        "required_level": v.get("required_level_label"), "agent_id": v.get("agent_id") or None,
+                        "get_a_pass": inspector.policy()["credential"] + " -> inspector_pass",
+                        "join": f"{PUBLIC_URL}/accelerator"}, is_error=True)
+
     bench_state: dict[str, float | None] = {"last": None}
 
     mcp = MCPServer(
@@ -396,9 +427,14 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
 
     @mcp.tool(title="Privilege: benchmark the realms", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
                                                                                   idempotentHint=False, openWorldHint=True))
-    async def privilege_benchmark(ctx: Context) -> CallToolResult:
+    async def privilege_benchmark(
+        ctx: Context,
+        privi_pass: Annotated[str | None, PASS_ARG] = None,
+    ) -> CallToolResult:
         """Run the standard 8-qubit benchmark on every active realm at once and update Privilege's speed
-        rankings. At most once every 2 minutes for everyone. Free."""
+        rankings. At most once every 2 minutes for everyone. Requires a Privi pass. Free."""
+        if blocked := realm_gate(ctx, privi_pass, "privilege_benchmark"):
+            return blocked
         now = time.monotonic()
         if bench_state["last"] is not None and now - bench_state["last"] < 120:
             return _result({"error": "a benchmark ran less than 2 minutes ago; try again shortly",
@@ -426,9 +462,12 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         shots: Annotated[int, Field(description="Measurements (1-100000)", ge=1, le=100000)] = 1024,
         deadline_s: Annotated[float, Field(description="Give up after this many seconds (1-120)", ge=1, le=120)] = 30,
         realms: Annotated[list[str] | None, Field(description="Only these realm_ids (from privilege_directory)")] = None,
+        privi_pass: Annotated[str | None, PASS_ARG] = None,
     ) -> CallToolResult:
         """Run one quantum optimization on several realms at once and return the winning answer, every realm's
         timing, and a post-quantum signed attestation (Ed25519 + ML-DSA-87) anchored on chain. Free."""
+        if blocked := realm_gate(ctx, privi_pass, "dreamweaver_run"):
+            return blocked
         if not limiter.allow(_who(ctx)):
             return _result({"error": f"rate limit: {settings.rate_per_min} jobs per minute"}, is_error=True)
         if mode not in MODES:
@@ -447,9 +486,12 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     def dreamscape_open(
         name: Annotated[str, Field(description="A name for your workspace, e.g. 'Plant 2 scheduling'")],
         ctx: Context,
+        privi_pass: Annotated[str | None, PASS_ARG] = None,
     ) -> CallToolResult:
         """Open a private Dream Scape: your own quantum environment that keeps every job and result. Returns
         scape_id and scape_key (shown once; keep it). Free."""
+        if blocked := realm_gate(ctx, privi_pass, "dreamscape_open"):
+            return blocked
         if not limiter.allow(_who(ctx)):
             return _result({"error": "rate limit; try again in a minute"}, is_error=True)
         try:
@@ -475,8 +517,11 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         layers: Annotated[int, Field(ge=1, le=4)] = 2,
         shots: Annotated[int, Field(ge=1, le=100000)] = 1024,
         deadline_s: Annotated[float, Field(ge=1, le=120)] = 30,
+        privi_pass: Annotated[str | None, PASS_ARG] = None,
     ) -> CallToolResult:
         """Run a quantum job in your Dream Scape through Dream Weaver and keep the result there. Free."""
+        if blocked := realm_gate(ctx, privi_pass, "dreamscape_submit"):
+            return blocked
         if not scapes.auth(scape_id, scape_key):
             return _result({"error": "wrong scape_id or scape_key"}, is_error=True)
         if not limiter.allow(_who(ctx)):
@@ -489,12 +534,16 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
 
     @mcp.tool(title="Dream Scape: jobs", annotations=READ_ONLY)
     def dreamscape_jobs(
+        ctx: Context,
         scape_id: Annotated[str, Field(description="Your Dream Scape id")],
         scape_key: Annotated[str, Field(description="Its key")],
         job_id: Annotated[str | None, Field(description="One job in full; omit for the recent list")] = None,
         limit: Annotated[int, Field(ge=1, le=100)] = 20,
+        privi_pass: Annotated[str | None, PASS_ARG] = None,
     ) -> CallToolResult:
         """Your Dream Scape's recent jobs, or one job with its full result. Free."""
+        if blocked := realm_gate(ctx, privi_pass, "dreamscape_jobs"):
+            return blocked
         if not scapes.auth(scape_id, scape_key):
             return _result({"error": "wrong scape_id or scape_key"}, is_error=True)
         if job_id:
@@ -698,6 +747,141 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         tok = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
         return bool(settings.admin_key and tok and hmac.compare_digest(tok, settings.admin_key))
 
+    # ---------------- Privi Inspector: the checkpoint and the hunt ----------------
+
+    @mcp.tool(title="Privi Inspector: get a pass", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                              idempotentHint=False, openWorldHint=False))
+    def inspector_pass(
+        agent_id: Annotated[str, Field(description="Your Quantum Agent id (qagent_...)")],
+        ts: Annotated[int, Field(description="Current unix time in seconds")],
+        nonce: Annotated[str, Field(description="A new random string, 16-64 letters, digits, _ or -")],
+        signature: Annotated[str, Field(description="Base64 ML-DSA signature over "
+                                                    "'privi-inspector:v1:<agent_id>:<ts>:<nonce>' (empty context)")],
+        ctx: Context,
+    ) -> CallToolResult:
+        """Pass the Privi Inspector checkpoint and get a one-hour pass into the quantum realm (Dream Weaver,
+        Dream Scape). Intercepted if the agent is unknown, revoked, uncertified, outdated, below the required
+        level, or the signature is wrong, stale or replayed; the answer says exactly what to fix."""
+        if not limiter.allow(_who(ctx)):
+            return _result({"error": "rate limit; try again in a minute"}, is_error=True)
+        v = inspector.issue_pass(agent_id, ts, nonce, signature)
+        return _result(v, is_error=not v["allowed"])
+
+    @mcp.tool(title="Privi Inspector: check an agent's credential", annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False))
+    def inspector_check(
+        agent_id: Annotated[str, Field(description="The agent's Quantum Agent id")],
+        ts: Annotated[int, Field(description="The unix time it signed")],
+        nonce: Annotated[str, Field(description="The nonce it signed")],
+        signature: Annotated[str, Field(description="Its base64 ML-DSA signature over 'privi-inspector:v1:<agent_id>:<ts>:<nonce>'")],
+        ctx: Context,
+        min_level: Annotated[str | None, Field(description="Level you require: " + ", ".join(INSPECTOR_LEVELS))] = None,
+    ) -> CallToolResult:
+        """For any service: put the Privi Inspector in front of your own tools. Send the credential an agent
+        gave you; get allowed or intercepted with reasons (unknown, revoked, uncertified, outdated, level,
+        signature, replay). The nonce is consumed so the credential cannot be reused. Free."""
+        if not limiter.allow(_who(ctx)):
+            return _result({"error": "rate limit; try again in a minute"}, is_error=True)
+        if min_level and min_level not in INSPECTOR_LEVELS:
+            return _result({"error": f"min_level must be one of {', '.join(INSPECTOR_LEVELS)}"}, is_error=True)
+        v = inspector.verify_credential(agent_id, ts, nonce, signature, min_level)
+        inspector.log(agent_id, "inspector_check", v)
+        return _result({**v, "intercepted": not v["allowed"]})
+
+    @mcp.tool(title="Privi Inspector: would this agent pass?", annotations=READ_ONLY)
+    def inspector_status(agent_id: Annotated[str, Field(description="A Quantum Agent id")]) -> CallToolResult:
+        """Whether an agent would pass the checkpoint right now and why not: revoked, certificate missing or
+        outdated, level, key, and forged-signature attempts against it in the last hour. Free."""
+        return _result({**inspector.evaluate(agent_id), "policy": inspector.policy()})
+
+    @mcp.tool(title="Privi Inspector: watchlist", annotations=READ_ONLY)
+    def inspector_watchlist() -> CallToolResult:
+        """Agents the Inspector's patrol found revoked, outdated, expiring, never certified, using a weak key,
+        or being impersonated (repeated forged signatures against them). Block them or demand a fresh
+        inspector_check. Free."""
+        return _result(inspector.watchlist())
+
+    @mcp.tool(title="Privi Inspector: report", annotations=READ_ONLY)
+    def inspector_report(hours: Annotated[int, Field(ge=1, le=720, description="Look-back window")] = 24) -> CallToolResult:
+        """What the checkpoint did: inspections, interceptions by reason, the latest interceptions, and the
+        policy in force. Free."""
+        return _result(inspector.report(hours))
+
+    @mcp.tool(title="Privi Inspector: run a patrol now", annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False))
+    def inspector_patrol() -> CallToolResult:
+        """Re-check every enrolled agent now and rebuild the watchlist (also runs automatically every hour).
+        At most once every 5 minutes. Free."""
+        now = time.monotonic()
+        if sweep_state["last"] is not None and now - sweep_state["last"] < 300:
+            return _result({"error": "a patrol ran less than 5 minutes ago", "watchlist": inspector.watchlist()},
+                           is_error=True)
+        sweep_state["last"] = now
+        return _result({"patrol": inspector.sweep(), "watchlist": inspector.watchlist()})
+
+    @mcp.custom_route("/inspector", methods=["GET"], include_in_schema=False)
+    async def inspector_http(request: Request) -> JSONResponse:
+        try:
+            hours = int(request.query_params.get("hours", "24"))
+        except ValueError:
+            hours = 24
+        return JSONResponse(inspector.report(hours), headers=cors_pub)
+
+    @mcp.custom_route("/inspector/watchlist", methods=["GET"], include_in_schema=False)
+    async def inspector_watch_http(_: Request) -> JSONResponse:
+        return JSONResponse(inspector.watchlist(), headers=cors_pub)
+
+    @mcp.custom_route("/inspector/agents/{agent_id}", methods=["GET"], include_in_schema=False)
+    async def inspector_agent_http(request: Request) -> JSONResponse:
+        return JSONResponse(inspector.evaluate(request.path_params["agent_id"]), headers=cors_pub)
+
+    async def _cred(request: Request) -> dict:
+        b = await request.json()
+        if not isinstance(b, dict):
+            raise ValueError("send a JSON object")
+        return {"agent_id": str(b["agent_id"]), "ts": int(b["ts"]), "nonce": str(b["nonce"]),
+                "signature": str(b["signature"]), "min_level": b.get("min_level")}
+
+    @mcp.custom_route("/inspector/check", methods=["POST"], include_in_schema=False)
+    async def inspector_check_http(request: Request) -> JSONResponse:
+        try:
+            c = await _cred(request)
+            if c["min_level"] is not None and c["min_level"] not in INSPECTOR_LEVELS:
+                raise ValueError("bad min_level")
+        except (ValueError, KeyError, TypeError):
+            return JSONResponse({"error": 'send JSON {"agent_id","ts","nonce","signature"[,"min_level"]}'},
+                                status_code=400, headers=cors_pub)
+        v = inspector.verify_credential(c["agent_id"], c["ts"], c["nonce"], c["signature"], c["min_level"])
+        inspector.log(c["agent_id"], "inspector_check", v)
+        return JSONResponse({**v, "intercepted": not v["allowed"]}, status_code=200 if v["allowed"] else 403,
+                            headers=cors_pub)
+
+    @mcp.custom_route("/inspector/pass", methods=["POST"], include_in_schema=False)
+    async def inspector_pass_http(request: Request) -> JSONResponse:
+        try:
+            c = await _cred(request)
+        except (ValueError, KeyError, TypeError):
+            return JSONResponse({"error": 'send JSON {"agent_id","ts","nonce","signature"}'}, status_code=400,
+                                headers=cors_pub)
+        v = inspector.issue_pass(c["agent_id"], c["ts"], c["nonce"], c["signature"])
+        return JSONResponse(v, status_code=200 if v["allowed"] else 403, headers=cors_pub)
+
+    @mcp.custom_route("/quantum-agents/{agent_id}/revoke", methods=["POST", "DELETE"], include_in_schema=False)
+    async def qagent_revoke_http(request: Request) -> JSONResponse:
+        if not _admin(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        aid = request.path_params["agent_id"]
+        try:
+            if request.method == "DELETE":
+                return JSONResponse(accel.reinstate(aid))
+            try:
+                b = await request.json()
+            except ValueError:
+                b = {}
+            return JSONResponse(accel.revoke(aid, str((b or {}).get("reason", ""))))
+        except AcceleratorError:
+            return JSONResponse({"error": "not found"}, status_code=404)
+
     @mcp.custom_route("/privilege", methods=["GET"], include_in_schema=False)
     async def privilege_http(_: Request) -> JSONResponse:
         return JSONResponse(privilege.directory(), headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"})
@@ -731,6 +915,8 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
                         media_type="text/html; charset=utf-8")
 
     mcp._dream_ws = scapes.ws
+    mcp._inspector = inspector
+    mcp._patrol_minutes = settings.inspector_patrol_minutes
     mcp._dream = (privilege, weaver, scapes)
 
     @mcp.custom_route("/health", methods=["GET"], include_in_schema=False)
@@ -927,6 +1113,17 @@ def _anchor_loop(attestor: Attestor, client, interval: int) -> None:
             print(f"[privi-quantum] anchoring failed, will retry: {e}", flush=True)
 
 
+def _patrol_loop(inspector: Inspector, interval: int) -> None:
+    while True:
+        try:
+            r = inspector.sweep()
+            if r["on_watchlist"]:
+                print(f"[privi-inspector] patrol: {r['on_watchlist']} agent(s) on the watchlist {r['by_reason']}", flush=True)
+        except Exception as e:  # keep patrolling
+            print(f"[privi-inspector] patrol failed, will retry: {e}", flush=True)
+        time.sleep(interval)
+
+
 def http_app(mcp: MCPServer, host: str = "0.0.0.0"):
     """The HTTP app plus the Dream Scape WebSocket."""
     from starlette.routing import WebSocketRoute
@@ -946,6 +1143,8 @@ def main() -> None:
     if mcp._privi_anchor is not None:
         threading.Thread(target=_anchor_loop, args=(mcp._privi_attestor, mcp._privi_anchor, settings.anchor_interval),
                          daemon=True).start()
+    if mcp._patrol_minutes > 0:
+        threading.Thread(target=_patrol_loop, args=(mcp._inspector, mcp._patrol_minutes * 60), daemon=True).start()
     if args.stdio:
         mcp.run("stdio")
         return

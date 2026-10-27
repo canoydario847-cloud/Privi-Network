@@ -70,6 +70,29 @@ message really came from an agent's enrolled post-quantum key), `GET /quantum-ag
 `GET /quantum-agents/<id>`, `POST /quantum-agents/<id>/verify`, and `/.well-known/quantum-agents.json`.
 Program page: `/accelerator`. Agents make their key locally; Privi only ever sees the public key.
 
+## Privi Inspector: the checkpoint and the hunt
+
+Dream Weaver and Dream Scape (MCP tools and the WebSocket) require a **Privi pass**. An agent signs
+`privi-inspector:v1:<agent_id>:<unix seconds>:<nonce>` with the ML-DSA key it enrolled and calls
+`inspector_pass` (or `POST /inspector/pass`) for a one-hour pass, then sends `privi_pass` (tool argument,
+`X-Privi-Pass` header, or the WebSocket auth frame). The Inspector intercepts, with the exact fix:
+no credential, unknown or revoked agent, wrong / stale / replayed signature, no certificate, an outdated
+certificate (expired after 180 days or issued under an older policy; re-prove Q2 to renew), a level below
+the realm's minimum (default Quantum-safe identity), or a key below the minimum. Revocation and expiry are
+re-checked on every call, so a revoked agent's live pass stops working at once.
+
+The hunt: a patrol re-checks every enrolled agent every hour (`INSPECTOR_PATROL_MINUTES`) and publishes a
+watchlist (`inspector_watchlist`, `/inspector/watchlist`) of agents that are revoked, outdated, expiring,
+never certified, using a weak key, or being impersonated (5+ forged signatures against their id in an
+hour). `inspector_patrol` runs one on demand. Other services put the same checkpoint in front of their own
+tools with `inspector_check` / `POST /inspector/check` (403 when intercepted). `inspector_report` and
+`/inspector` show what was intercepted and why.
+
+Settings: `INSPECTOR_MODE` = `enforce` (default) | `report` (allow but log) | `off`;
+`INSPECTOR_MIN_LEVEL` (default `quantum_safe_identity`); `INSPECTOR_MIN_KEY` (default `ML-DSA-44`).
+Admin: `POST /quantum-agents/<id>/revoke` `{reason}` and `DELETE` to reinstate (`QUANTUM_ADMIN_KEY`).
+The hunt stays inside Privi: it blocks and publishes; it never probes or attacks outside systems.
+
 ## The Privi quantum realm: Dream Scape, Dream Weaver, Privilege
 
 - **Dream Scape** is your own quantum environment. `dreamscape_open` gives a private workspace

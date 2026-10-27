@@ -217,7 +217,7 @@
       "registry_id": "io.github.canoydario847-cloud/privi-quantum",
       "url": "https://privi-quantum.onrender.com/mcp",
       "transport": "streamable-http",
-      "description": "Quantum Agent Accelerator: upgrade any AI agent to a certified quantum agent (post-quantum ML-DSA identity, hybrid post-quantum TLS, and a verified quantum run), listed in the free Quantum Agent Directory where any agent can verify another agent's post-quantum signature (qagent_verify). The Privi quantum realm: Dream Scape workspaces, Dream Weaver races one quantum job across realms for the fastest or best answer, and Privilege ranks realms by measured time to the proven optimum. Quantum optimization (CVaR-QAOA, up to 16 qubits) for manufacturing decisions; every result signed Ed25519 + ML-DSA-87 and anchored on Base. Also scans code and endpoints for quantum-vulnerable cryptography.",
+      "description": "Quantum Agent Accelerator: upgrade any AI agent to a certified quantum agent (post-quantum ML-DSA identity, hybrid post-quantum TLS, and a verified quantum run), listed in the free Quantum Agent Directory where any agent can verify another agent's post-quantum signature (qagent_verify). Privi Inspector guards it: only certified, current quantum agents get a pass in, and its patrol keeps a public watchlist of revoked, outdated and impersonated agents that any service can check (inspector_check, inspector_watchlist). The Privi quantum realm: Dream Scape workspaces, Dream Weaver races one quantum job across realms for the fastest or best answer, and Privilege ranks realms by measured time to the proven optimum. Quantum optimization (CVaR-QAOA, up to 16 qubits) for manufacturing decisions; every result signed Ed25519 + ML-DSA-87 and anchored on Base. Also scans code and endpoints for quantum-vulnerable cryptography.",
       "pricing": "free",
       "auth": "none",
       "tools": [
@@ -244,7 +244,13 @@
         "pqc_scan_code",
         "pqc_endpoint_check",
         "pqc_readiness_package",
-        "pqc_federal_deadlines"
+        "pqc_federal_deadlines",
+        "inspector_pass",
+        "inspector_check",
+        "inspector_status",
+        "inspector_watchlist",
+        "inspector_report",
+        "inspector_patrol"
       ]
     },
     {
