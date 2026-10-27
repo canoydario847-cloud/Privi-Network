@@ -21,7 +21,8 @@ ADMIN = "adm_test_key"
 
 def make_server(tmp_path, name="d.db"):
     db = str(tmp_path / name)
-    return build_server(Settings(db_path=db, admin_key=ADMIN, dream_allow_private=True, rate_per_min=1000),
+    return build_server(Settings(db_path=db, admin_key=ADMIN, dream_allow_private=True, rate_per_min=1000,
+                                 inspector_mode="off"),   # the Inspector itself is tested in test_inspector.py
                         Attestor(db))
 
 

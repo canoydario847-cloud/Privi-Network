@@ -474,6 +474,7 @@ class DreamScape:
 
     def __init__(self, privilege: Privilege, weaver: DreamWeaver):
         self.privilege, self.weaver = privilege, weaver
+        self.gate: Callable[[str | None, str], dict] | None = None     # Privi Inspector, set by the server
         self._db, self._lock = privilege.db, privilege._lock
 
     def open(self, name: str) -> dict:
@@ -569,7 +570,7 @@ class DreamScape:
                     await send({"ref": ref, "type": "job.failed", "error": "internal error"})
 
         await send({"type": "hello", "service": "Privi Dream Scape",
-                    "send": {"auth": {"type": "auth", "scape_id": "scape_...", "key": "dsk_..."},
+                    "send": {"auth": {"type": "auth", "scape_id": "scape_...", "key": "dsk_...", "privi_pass": "ppass_..."},
                              "weave": {"type": "weave", "ref": "your-id", "problem": "balance_lines", "data": {},
                                        "mode": "first|best", "fanout": 3, "hedge_ms": 0}}})
         try:
@@ -587,6 +588,13 @@ class DreamScape:
                             await send({"type": "error", "error": "send JSON objects"})
                             continue
                         if m.get("type") == "auth":
+                            if self.gate:
+                                g = self.gate(m.get("privi_pass"), "dreamscape_ws")
+                                if not g["allowed"]:
+                                    state["scape"] = None
+                                    await send({"type": "auth", "ok": False, "error": "intercepted by Privi Inspector",
+                                                "reasons": g.get("reasons"), "fixes": g.get("fixes")})
+                                    continue
                             ok = self.auth(str(m.get("scape_id", "")), str(m.get("key", "")))
                             state["scape"] = str(m["scape_id"]) if ok else None
                             await send({"type": "auth", "ok": ok, **({} if ok else {"error": "wrong scape_id or key"})})

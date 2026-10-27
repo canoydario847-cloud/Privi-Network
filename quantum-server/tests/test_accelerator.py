@@ -58,13 +58,22 @@ def test_agent_upgrades_to_quantum_agent_plus(tmp_path):
                                           "signature": sign(ch["message"])})
             assert q2["level"] == "quantum_safe_identity"
 
-            # Q4: a run of some other problem is refused; the assigned task passes
-            other = await t("dreamweaver_run", {"problem": "balance_lines", "data": {"jobs": [
+            # Q4 needs a Privi pass from the Inspector (Q2 done, so the agent qualifies)
+            import secrets, time as _t
+            ts, nonce = int(_t.time()), secrets.token_hex(12)
+            p = await t("inspector_pass", {"agent_id": aid, "ts": ts, "nonce": nonce,
+                                           "signature": sign(f"privi-inspector:v1:{aid}:{ts}:{nonce}")})
+            pp = p["privi_pass"]
+            await t("dreamweaver_run", {"problem": "balance_lines", "data": {"jobs": [{"name": "a", "minutes": 1},
+                    {"name": "b", "minutes": 2}]}}, ok=False)                                   # no pass: intercepted
+            # a run of some other problem is refused; the assigned task passes
+            other = await t("dreamweaver_run", {"problem": "balance_lines", "privi_pass": pp, "data": {"jobs": [
                 {"name": n, "minutes": m} for n, m in zip("ABCDE", [3, 5, 7, 2, 4])]}, "fanout": 1})
             await t("qagent_quantum_proof", {"agent_id": aid, "agent_token": tok,
                                              "attestation_id": other["attestation"]["id"]}, ok=False)
             task = await t("qagent_quantum_task", {"agent_id": aid, "agent_token": tok})
-            run = await t("dreamweaver_run", {"problem": task["problem"], "data": task["data"], "fanout": 2})
+            run = await t("dreamweaver_run", {"problem": task["problem"], "data": task["data"], "fanout": 2,
+                                              "privi_pass": pp})
             q4 = await t("qagent_quantum_proof", {"agent_id": aid, "agent_token": tok,
                                                   "attestation_id": run["attestation"]["id"]})
             assert q4["level"] == "quantum_agent" and q4["level_changed"]

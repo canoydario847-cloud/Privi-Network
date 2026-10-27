@@ -26,6 +26,7 @@ import secrets
 import sqlite3
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from cryptography.exceptions import InvalidSignature
@@ -43,6 +44,9 @@ STEPS = {
     "q4_quantum": "Quantum-capable: completed an assigned quantum job through Dream Weaver",
 }
 CHALLENGE_TTL = 600
+POLICY_VERSION = 1          # raise when the certification rules change; older certificates become outdated
+CERT_DAYS = 180             # a certificate is valid this long; re-prove Q2 to renew
+RENEW_WITHIN_DAYS = 30      # re-proving Q2 within this window of expiry (or after) issues a fresh certificate
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._@/-]{1,79}$")
 
 SCHEMA = """
@@ -125,7 +129,41 @@ class Accelerator:
         self._db.row_factory = sqlite3.Row
         with self._lock:
             self._db.executescript(SCHEMA)
+            cols = {r[1] for r in self._db.execute("PRAGMA table_info(qa_agents)").fetchall()}
+            if "revoked_at" not in cols:
+                self._db.execute("ALTER TABLE qa_agents ADD COLUMN revoked_at TEXT")
+                self._db.execute("ALTER TABLE qa_agents ADD COLUMN revoke_reason TEXT NOT NULL DEFAULT ''")
             self._db.commit()
+
+    # ---------------- certificates and revocation ----------------
+
+    def certificate(self, a: dict) -> dict | None:
+        if not a.get("certificate_id"):
+            return None
+        att = self.attestor.get(a["certificate_id"])
+        if not att:
+            return None
+        b = att["body"]
+        issued = b.get("issued_at", "")
+        until = b.get("valid_until") or (datetime.fromisoformat(issued) + timedelta(days=CERT_DAYS)).isoformat(timespec="seconds")
+        return {"id": att["id"], "issued_at": issued, "valid_until": until, "policy_version": b.get("policy_version", 0),
+                "level": b.get("level"), "key_fingerprint": b.get("key_fingerprint")}
+
+    def revoke(self, agent_id: str, reason: str) -> dict:
+        self._row(agent_id)
+        with self._lock:
+            self._db.execute("UPDATE qa_agents SET revoked_at=?, revoke_reason=?, updated_at=? WHERE agent_id=?",
+                             (now_iso(), (reason or "revoked by Privi")[:300], now_iso(), agent_id))
+            self._db.commit()
+        return {"agent_id": agent_id, "revoked": True}
+
+    def reinstate(self, agent_id: str) -> dict:
+        self._row(agent_id)
+        with self._lock:
+            self._db.execute("UPDATE qa_agents SET revoked_at=NULL, revoke_reason='', updated_at=? WHERE agent_id=?",
+                             (now_iso(), agent_id))
+            self._db.commit()
+        return {"agent_id": agent_id, "revoked": False}
 
     # ---------------- enrollment ----------------
 
@@ -169,13 +207,21 @@ class Accelerator:
         tools = {"q1_scan": "qagent_scan (send your code or config)",
                  "q2_identity": "qagent_challenge, sign the message with your ML-DSA key, then qagent_prove",
                  "q3_transport": "qagent_scan with your public endpoints (all must use X25519MLKEM768)",
-                 "q4_quantum": "qagent_quantum_task, run it with dreamweaver_run or dreamscape_submit, then qagent_quantum_proof"}
+                 "q4_quantum": "after Q2: qagent_quantum_task, get a Privi pass (inspector_pass), run the task with "
+                               "dreamweaver_run or dreamscape_submit, then qagent_quantum_proof"}
         return [{"step": k, "what": v, "how": tools[k], "passed": bool(a["steps"].get(k, {}).get("passed"))}
                 for k, v in STEPS.items()]
 
     # ---------------- steps ----------------
 
-    def _record(self, a: dict, step: str, passed: bool, evidence: dict) -> dict:
+    def _needs_renewal(self, a: dict) -> bool:
+        c = self.certificate(a)
+        if not c:
+            return False
+        soon = (datetime.now(timezone.utc) + timedelta(days=RENEW_WITHIN_DAYS)).isoformat(timespec="seconds")
+        return c["policy_version"] < POLICY_VERSION or c["valid_until"] <= soon
+
+    def _record(self, a: dict, step: str, passed: bool, evidence: dict, renew: bool = False) -> dict:
         steps = dict(a["steps"])
         prev = steps.get(step, {})
         if prev.get("passed") and not passed and step != "q3_transport":
@@ -184,20 +230,24 @@ class Accelerator:
         steps[step] = {"passed": passed, "at": now_iso(), "evidence": evidence}
         old_level, new_level = a["level"], level_of(steps)
         cert = a["certificate_id"]
-        if new_level != old_level and new_level != "enrolled":
+        renewed = renew and new_level == old_level and new_level != "enrolled" and self._needs_renewal(a)
+        if (new_level != old_level and new_level != "enrolled") or renewed:
             cert = self._certify(a, steps, new_level)["id"]
         with self._lock:
             self._db.execute("UPDATE qa_agents SET steps=?, level=?, certificate_id=?, updated_at=? WHERE agent_id=?",
                              (json.dumps(steps), new_level, cert, now_iso(), a["agent_id"]))
             self._db.commit()
         return {"step": step, "passed": passed, "level": new_level, "level_label": LEVEL_LABEL[new_level],
-                "level_changed": new_level != old_level, "certificate_id": cert, "plan": self.plan(a["agent_id"])}
+                "level_changed": new_level != old_level, "certificate_renewed": renewed, "certificate_id": cert,
+                "plan": self.plan(a["agent_id"])}
 
     def _certify(self, a: dict, steps: dict, level: str) -> dict:
         body = {"agent_id": a["agent_id"], "name": a["name"], "operator": a["operator"], "level": level,
                 "level_label": LEVEL_LABEL[level], "key_alg": a["key_alg"], "key_fingerprint": a["key_fingerprint"],
                 "steps_passed": sorted(k for k, v in steps.items() if v.get("passed")),
-                "profile_url": f"{self.public_url}/quantum-agents/{a['agent_id']}"}
+                "profile_url": f"{self.public_url}/quantum-agents/{a['agent_id']}",
+                "policy_version": POLICY_VERSION,
+                "valid_until": (datetime.now(timezone.utc) + timedelta(days=CERT_DAYS)).isoformat(timespec="seconds")}
         return self.attestor.issue("quantum_agent_certificate", body)
 
     def record_scan(self, agent_id: str, token: str, code_report: dict | None, endpoint_report: dict | None) -> dict:
@@ -241,7 +291,7 @@ class Accelerator:
             self._db.commit()
         if not self._verify(a, r["message"].encode(), signature_b64):
             raise AcceleratorError("signature does not verify with your enrolled ML-DSA public key")
-        return self._record(a, "q2_identity", True, {"challenge_id": challenge_id, "key_alg": a["key_alg"]})
+        return self._record(a, "q2_identity", True, {"challenge_id": challenge_id, "key_alg": a["key_alg"]}, renew=True)
 
     def task(self, agent_id: str, token: str) -> dict:
         self.auth(agent_id, token)
@@ -290,7 +340,8 @@ class Accelerator:
                "level": a["level"], "level_label": LEVEL_LABEL[a["level"]], "key_alg": a["key_alg"],
                "key_fingerprint": a["key_fingerprint"],
                "steps": {k: {"passed": bool(v.get("passed")), "at": v.get("at")} for k, v in a["steps"].items()},
-               "certificate_id": a["certificate_id"],
+               "certificate_id": a["certificate_id"], "certificate": self.certificate(a),
+               "revoked": bool(a.get("revoked_at")), "revoke_reason": a.get("revoke_reason") or None,
                "certificate_url": f"{self.public_url}/attestations/{a['certificate_id']}" if a["certificate_id"] else None,
                "badge": f"{self.public_url}/quantum-agents/{a['agent_id']}/badge.svg",
                "enrolled_at": a["created_at"], "updated_at": a["updated_at"]}
