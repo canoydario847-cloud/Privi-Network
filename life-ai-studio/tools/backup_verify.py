@@ -475,6 +475,16 @@ def validate_database(conn):
         if orphan is not None:
             # Never print account IDs, file paths, session tokens or emails.
             raise ValueError(f"Not a LIFE database; orphaned {child} owner references")
+    # Project creation times anchor ownership and audit history. SQLite's
+    # dynamic typing can admit NULL, text, REAL, or negative timestamps even
+    # in a schema that otherwise passes integrity checks. Reject malformed
+    # project metadata without exposing private titles or identifiers.
+    invalid_project_timestamp = conn.execute(
+        'SELECT 1 FROM "projects" WHERE typeof("created") != \'integer\' '
+        'OR "created" < 0 LIMIT 1'
+    ).fetchone()
+    if invalid_project_timestamp is not None:
+        raise ValueError("Not a LIFE database; invalid project creation timestamp")
     # Session tokens are stored as lowercase SHA-256 hashes, never plaintext.
     # A malformed token or expiry in a recovered database means session
     # authentication state cannot be trusted after restore. Check only shape;
