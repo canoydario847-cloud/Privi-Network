@@ -31,10 +31,11 @@ from . import govpqc, govreport, pqctls, qaoa, scanner
 from .dream import BENCHMARK, MODES, DreamError, DreamScape, DreamWeaver, Privilege
 from .accelerator import LEVEL_LABEL, STEPS, Accelerator, AcceleratorError, badge_svg
 from .inspector import LEVELS as INSPECTOR_LEVELS, Inspector, credential_message
+from .humans import HumanError, HumanRegistry
 from .anchoring import AnchorError, HttpAnchorClient, anchor_pending
 from .attest import PQ_ALG, Attestor
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/quantum-server"
 PUBLIC_URL = os.getenv("QUANTUM_PUBLIC_URL", "https://privi-quantum.onrender.com").rstrip("/")
 COPYRIGHT = "Copyright (c) 2026 Privi World Co. All rights reserved."
@@ -77,12 +78,22 @@ factory decisions and returns answers you can prove later.
    inspector_pass. Agents that are unknown, revoked, uncertified, outdated or below the required level are
    intercepted with the fix. Other services can use the same checkpoint (inspector_check) and the patrol's
    watchlist of revoked, outdated and impersonated agents (inspector_watchlist).
+10. Human trust: the quantum realm also requires that a real person approved the agent with a passkey
+   (biometric or screen lock on their own device; Privi never receives biometric data) and verified a
+   government ID (Stripe Identity with a live selfie). qagent_human_request gives the agent a link for its
+   human. inspector_grade shows any agent's Privi grade (A+ to F) and what is missing.
 
 All tools are free. Privi is built by Dario Canoy (Privi World Co, Port Huron, Michigan).
 For the other Privi tools, pilots, partnerships, manufacturing or government work, see
 https://privi-discovery.onrender.com/llms.txt. {COPYRIGHT}"""
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
+
+
+def _h(text: str) -> str:
+    import html
+    return html.escape(str(text), quote=True)
+
 PASS_ARG = Field(description="Your Privi pass (ppass_...) from inspector_pass; the quantum realm requires one")
 
 
@@ -102,6 +113,12 @@ class Settings:
     inspector_min_level: str = "quantum_safe_identity"
     inspector_min_key: str = "ML-DSA-44"
     inspector_patrol_minutes: int = 60
+    inspector_require_human: bool = True
+    inspector_require_id: bool = True
+    inspector_min_grade: str = "B"
+    webauthn_rp_id: str = ""
+    stripe_secret_key: str = ""
+    stripe_identity_webhook_secret: str = ""
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -121,6 +138,12 @@ class Settings:
             inspector_min_level=os.getenv("INSPECTOR_MIN_LEVEL", "quantum_safe_identity"),
             inspector_min_key=os.getenv("INSPECTOR_MIN_KEY", "ML-DSA-44"),
             inspector_patrol_minutes=int(os.getenv("INSPECTOR_PATROL_MINUTES", "60")),
+            inspector_require_human=os.getenv("INSPECTOR_REQUIRE_HUMAN", "1") != "0",
+            inspector_require_id=os.getenv("INSPECTOR_REQUIRE_ID", "1") != "0",
+            inspector_min_grade=os.getenv("INSPECTOR_MIN_GRADE", "B"),
+            webauthn_rp_id=os.getenv("WEBAUTHN_RP_ID", ""),
+            stripe_secret_key=os.getenv("STRIPE_SECRET_KEY", ""),
+            stripe_identity_webhook_secret=os.getenv("STRIPE_IDENTITY_WEBHOOK_SECRET", ""),
         )
 
 
@@ -165,8 +188,12 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     weaver = DreamWeaver(privilege, attestor, anyio.CapacityLimiter(settings.max_concurrent))
     scapes = DreamScape(privilege, weaver)
     accel = Accelerator(settings.db_path, attestor, PUBLIC_URL)
+    humans = HumanRegistry(settings.db_path, PUBLIC_URL, settings.webauthn_rp_id, settings.stripe_secret_key,
+                           settings.stripe_identity_webhook_secret)
     inspector = Inspector(settings.db_path, accel, settings.inspector_mode, settings.inspector_min_level,
-                          settings.inspector_min_key)
+                          settings.inspector_min_key, humans, settings.inspector_require_human,
+                          settings.inspector_require_id, settings.inspector_min_grade)
+    accel.grader = inspector.grade_row
     scapes.gate = inspector.check_pass
     sweep_state: dict[str, float | None] = {"last": None}
 
@@ -882,6 +909,127 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         except AcceleratorError:
             return JSONResponse({"error": "not found"}, status_code=404)
 
+    # ---------------- human trust: biometric approval (passkeys) + ID verification ----------------
+
+    @mcp.tool(title="Quantum Agent: ask your human to approve you", annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False))
+    def qagent_human_request(
+        agent_id: Annotated[str, Field(description="Your agent_id")],
+        agent_token: Annotated[str, Field(description="Your agent_token")],
+    ) -> CallToolResult:
+        """Get a one-time link (valid 30 minutes) for the person accountable for this agent. They open it, approve the
+        agent with a passkey (Face ID, Touch ID, Windows Hello or screen lock; the biometric never leaves their
+        device) and verify a government ID with a live selfie. Both are required for the quantum realm."""
+        try:
+            a = accel.auth(agent_id, agent_token)
+        except AcceleratorError as e:
+            return _result({"error": str(e)}, is_error=True)
+        r = humans.new_request(a["agent_id"])
+        return _result({**r, "send_to": "the person accountable for this agent",
+                        "id_verification_available": humans.stripe_ready})
+
+    @mcp.tool(title="Privi Inspector: an agent's grade", annotations=READ_ONLY)
+    def inspector_grade(agent_id: Annotated[str, Field(description="A Quantum Agent id")]) -> CallToolResult:
+        """An agent's Privi trust grade (A+ to F, 0-100): quantum level, passkey approval by a verified human, ID
+        verification, current certificate, key strength and clean record, minus penalties for revocation and
+        impersonation. Shows what is missing and what the quantum realm requires. Free."""
+        g = inspector.grade(agent_id)
+        return _result(g, is_error="error" in g)
+
+    @mcp.custom_route("/humans/approve/{request_id}", methods=["GET"], include_in_schema=False)
+    async def human_page(request: Request) -> Response:
+        rid = request.path_params["request_id"]
+        try:
+            req = humans.request(rid)
+            a = accel._row(req["agent_id"])
+        except (HumanError, AcceleratorError) as e:
+            return Response(HUMAN_DONE.format(title="Link not valid", body=_h(str(e))), status_code=404,
+                            media_type="text/html; charset=utf-8")
+        return Response(HUMAN_PAGE.format(rid=_h(rid), name=_h(a["name"]), operator=_h(a["operator"]),
+                                          agent_id=_h(a["agent_id"]), fp=_h(a["key_fingerprint"][:16]),
+                                          level=_h(LEVEL_LABEL[a["level"]]), alg=_h(a["key_alg"]),
+                                          idready="true" if humans.stripe_ready else "false"),
+                        media_type="text/html; charset=utf-8",
+                        headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+
+    @mcp.custom_route("/humans/approve/{request_id}/options", methods=["GET"], include_in_schema=False)
+    async def human_options(request: Request) -> JSONResponse:
+        rid = request.path_params["request_id"]
+        try:
+            req = humans.request(rid)
+            a = accel._row(req["agent_id"])
+            return JSONResponse(humans.options(rid, a["key_fingerprint"], a["name"]), headers={"Cache-Control": "no-store"})
+        except (HumanError, AcceleratorError) as e:
+            return JSONResponse({"error": str(e)}, status_code=404)
+
+    @mcp.custom_route("/humans/approve/{request_id}/finish", methods=["POST"], include_in_schema=False)
+    async def human_finish(request: Request) -> JSONResponse:
+        rid = request.path_params["request_id"]
+        try:
+            req = humans.request(rid)
+            a = accel._row(req["agent_id"])
+            cred = await request.json()
+            if not isinstance(cred, dict):
+                raise HumanError("send the passkey response as JSON")
+            out = humans.finish(rid, a["agent_id"], a["key_fingerprint"], cred)
+        except (HumanError, AcceleratorError, ValueError, KeyError, TypeError) as e:
+            return JSONResponse({"error": str(e) or "could not verify the passkey"}, status_code=400)
+        return JSONResponse({**out, "agent": a["name"], "id_verification_available": humans.stripe_ready},
+                            headers={"Cache-Control": "no-store"})
+
+    @mcp.custom_route("/humans/id/start", methods=["POST"], include_in_schema=False)
+    async def human_id_start(request: Request) -> JSONResponse:
+        try:
+            b = await request.json()
+            out = await anyio.to_thread.run_sync(humans.start_id, str((b or {}).get("human_session", "")))
+        except (HumanError, ValueError, KeyError, TypeError) as e:
+            return JSONResponse({"error": str(e) or "could not start ID verification"}, status_code=400)
+        return JSONResponse(out, headers={"Cache-Control": "no-store"})
+
+    @mcp.custom_route("/humans/id/return", methods=["GET"], include_in_schema=False)
+    async def human_id_return(request: Request) -> Response:
+        try:
+            st = await anyio.to_thread.run_sync(humans.refresh_id, request.query_params.get("human", ""))
+        except HumanError as e:
+            return Response(HUMAN_DONE.format(title="Not found", body=_h(str(e))), status_code=404,
+                            media_type="text/html; charset=utf-8")
+        msg = {"verified": "Your ID is verified. Your approved agents can now use the Privi quantum realm.",
+               "pending": "Stripe is still checking your ID. This page will say verified once it is done; you can close it.",
+               "failed": "The ID check did not complete. Ask the agent for a new approval link to try again."}
+        return Response(HUMAN_DONE.format(title="ID verification", body=_h(msg.get(st["id_status"], "Status: " + st["id_status"]))),
+                        media_type="text/html; charset=utf-8")
+
+    @mcp.custom_route("/humans/stripe-webhook", methods=["POST"], include_in_schema=False)
+    async def human_stripe_webhook(request: Request) -> JSONResponse:
+        try:
+            out = humans.stripe_webhook(await request.body(), request.headers.get("stripe-signature", ""))
+        except HumanError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        except ValueError:
+            return JSONResponse({"error": "bad payload"}, status_code=400)
+        return JSONResponse(out)
+
+    @mcp.custom_route("/humans/{human_id}/id-verified", methods=["POST", "DELETE"], include_in_schema=False)
+    async def human_manual_id(request: Request) -> JSONResponse:
+        if not _admin(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        hid = request.path_params["human_id"]
+        try:
+            if request.method == "DELETE":
+                return JSONResponse(humans.revoke_id(hid))
+            try:
+                b = await request.json()
+            except ValueError:
+                b = {}
+            return JSONResponse(humans.manual_verify(hid, str((b or {}).get("note", ""))))
+        except HumanError:
+            return JSONResponse({"error": "not found"}, status_code=404)
+
+    @mcp.custom_route("/inspector/grade/{agent_id}", methods=["GET"], include_in_schema=False)
+    async def inspector_grade_http(request: Request) -> JSONResponse:
+        g = inspector.grade(request.path_params["agent_id"])
+        return JSONResponse(g, status_code=404 if "error" in g else 200, headers=cors_pub)
+
     @mcp.custom_route("/privilege", methods=["GET"], include_in_schema=False)
     async def privilege_http(_: Request) -> JSONResponse:
         return JSONResponse(privilege.directory(), headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"})
@@ -916,6 +1064,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
 
     mcp._dream_ws = scapes.ws
     mcp._inspector = inspector
+    mcp._humans = humans
     mcp._patrol_minutes = settings.inspector_patrol_minutes
     mcp._dream = (privilege, weaver, scapes)
 
@@ -1049,6 +1198,63 @@ Public signing keys: <a href="{url}/keys">/keys</a>. Status: <a href="{url}/stat
 <p>Built by Privi World Co, Port Huron, Michigan. <a href="https://privi-hub.onrender.com">Everything Privi offers</a> ·
 <a href="mailto:dariocanoy@priviflow.us">dariocanoy@priviflow.us</a></p>
 <p><small>{copyright}</small></p></body></html>"""
+
+
+HUMAN_PAGE = r"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Approve an AI agent - Privi</title><style>body{{font:16px/1.55 system-ui,sans-serif;max-width:560px;margin:40px auto;padding:0 16px;color:#16181d;background:#f7f8fa}}
+.card{{background:#fff;border:1px solid #d9dce3;border-radius:12px;padding:16px 18px;margin:16px 0}}dt{{color:#5b6170;font-size:13px}}dd{{margin:0 0 8px}}
+button{{font:600 16px system-ui,sans-serif;padding:12px 16px;border-radius:10px;border:0;background:#5b3fd6;color:#fff;width:100%;margin:6px 0;cursor:pointer}}
+button.alt{{background:#e7e3fb;color:#2d1f73}}button:disabled{{opacity:.5}}#msg{{min-height:24px;margin-top:10px}}.ok{{color:#1f7a45}}.bad{{color:#b23a2e}}small{{color:#5b6170}}
+@media (prefers-color-scheme:dark){{body{{color:#e8eaee;background:#0f1115}}.card{{background:#171a21;border-color:#2a2f3a}}button.alt{{background:#2a2450;color:#e4ddff}}}}</style></head><body>
+<h1>Approve this AI agent?</h1>
+<p>An AI agent wants your approval to use the Privi quantum realm. Only approve an agent you run or are accountable for.</p>
+<div class="card"><dl><dt>Agent</dt><dd><b>{name}</b> ({agent_id})</dd><dt>Operator</dt><dd>{operator}</dd>
+<dt>Level</dt><dd>{level}</dd><dt>Post-quantum key</dt><dd>{alg}, fingerprint {fp}...</dd></dl></div>
+<button id="get">Approve with my Privi passkey</button>
+<button id="create" class="alt">First time? Create a passkey and approve</button>
+<div id="idbox" hidden><p>Last step: verify your government ID with a live selfie (Stripe Identity). Privi never sees your ID or photo.</p>
+<button id="id">Verify my ID</button></div>
+<div id="msg"></div>
+<p><small>Your phone or computer checks your face, fingerprint or screen lock. That check stays on your device: Privi receives only
+a signature that says a verified person approved this exact agent and key. Privi World Co, Port Huron, Michigan.</small></p>
+<script>
+const rid="{rid}", idReady={idready};
+const b64u=b=>btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+const unb=s=>Uint8Array.from(atob(s.replace(/-/g,"+").replace(/_/g,"/")+"===".slice((s.length+3)%4)),c=>c.charCodeAt(0));
+const msg=(t,c)=>{{const m=document.getElementById("msg");m.textContent=t;m.className=c||"";}};
+let session="";
+async function go(mode){{
+  if(!window.PublicKeyCredential){{msg("This browser does not support passkeys. Open the link on a phone or a recent browser.","bad");return;}}
+  document.querySelectorAll("button").forEach(b=>b.disabled=true);
+  try{{
+    const o=await (await fetch(`/humans/approve/${{rid}}/options`)).json();
+    if(o.error) throw new Error(o.error);
+    let cred;
+    if(mode==="create"){{const p=o.create;p.challenge=unb(p.challenge);p.user.id=unb(p.user.id);cred=await navigator.credentials.create({{publicKey:p}});}}
+    else{{const p=o.get;p.challenge=unb(p.challenge);cred=await navigator.credentials.get({{publicKey:p}});}}
+    const r=cred.response, body={{id:cred.id,rawId:b64u(cred.rawId),type:cred.type,response:{{clientDataJSON:b64u(r.clientDataJSON)}}}};
+    if(r.attestationObject) body.response.attestationObject=b64u(r.attestationObject);
+    if(r.authenticatorData){{body.response.authenticatorData=b64u(r.authenticatorData);body.response.signature=b64u(r.signature);}}
+    const res=await (await fetch(`/humans/approve/${{rid}}/finish`,{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify(body)}})).json();
+    if(res.error) throw new Error(res.error);
+    session=res.human_session;
+    if(res.id_verified){{msg("Approved. Your ID is already verified, so this agent can use the quantum realm.","ok");}}
+    else if(idReady){{msg("Approved with your passkey.","ok");document.getElementById("idbox").hidden=false;document.getElementById("id").disabled=false;}}
+    else{{msg("Approved with your passkey. ID verification is not open yet; Privi will switch it on soon.","ok");}}
+  }}catch(e){{msg(e.name==="NotAllowedError"?"Cancelled or timed out. Try again.":(e.message||"Something went wrong."),"bad");
+    document.querySelectorAll("#get,#create").forEach(b=>b.disabled=false);}}
+}}
+document.getElementById("get").onclick=()=>go("get");
+document.getElementById("create").onclick=()=>go("create");
+document.getElementById("id").onclick=async()=>{{
+  const r=await (await fetch("/humans/id/start",{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{human_session:session}})}})).json();
+  if(r.verify_url) location.href=r.verify_url; else if(r.id_status==="verified") msg("Your ID is already verified.","ok"); else msg(r.error||"Could not start.","bad");
+}};
+</script></body></html>"""
+
+HUMAN_DONE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{title} - Privi</title><style>body{{font:16px/1.55 system-ui,sans-serif;max-width:560px;margin:40px auto;padding:0 16px;color:#16181d;background:#f7f8fa}}
+@media (prefers-color-scheme:dark){{body{{color:#e8eaee;background:#0f1115}}}}</style></head><body><h1>{title}</h1><p>{body}</p></body></html>"""
 
 
 KEY_SNIPPET = """from cryptography.hazmat.primitives.asymmetric import mldsa   # cryptography >= 47

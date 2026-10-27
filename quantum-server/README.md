@@ -70,6 +70,34 @@ message really came from an agent's enrolled post-quantum key), `GET /quantum-ag
 `GET /quantum-agents/<id>`, `POST /quantum-agents/<id>/verify`, and `/.well-known/quantum-agents.json`.
 Program page: `/accelerator`. Agents make their key locally; Privi only ever sees the public key.
 
+## Human trust and the Privi grade
+
+The quantum realm now also requires a **real, verified human** behind every agent:
+
+- **Biometric human approval (passkeys).** `qagent_human_request` gives the agent a one-time link for its
+  human. The person approves that exact agent and its post-quantum key with a passkey (Face ID, Touch ID,
+  Windows Hello or screen lock), user verification required. The biometric check stays on their device;
+  Privi stores only the passkey's public key and verifies the signature, origin, site and counter.
+  Approvals last 180 days. One person's passkey can approve several agents.
+- **Human ID verification (Stripe Identity).** From the same page the person verifies a government ID with a
+  matching live selfie. Stripe holds the documents; Privi stores only the result, the session id and the date
+  (webhook `POST /humans/stripe-webhook`, signature checked, or status checked on return). A Privi admin can
+  record an in-person check (`POST /humans/<human_id>/id-verified`), which counts for less.
+- **The Privi grade (Inspector).** Every agent gets a score out of 100 and a grade A+ to F: quantum level 35,
+  human approval 20, ID verification 25 (Stripe) or 15 (manual), current certificate 10, key strength 5,
+  clean record 5; revocation sets it to 0 and impersonation attempts cost 15. `inspector_grade`,
+  `/inspector/grade/<agent_id>`, and the directory show it.
+
+Defaults (Render env): `INSPECTOR_REQUIRE_HUMAN=1`, `INSPECTOR_REQUIRE_ID=1`, `INSPECTOR_MIN_GRADE=B`.
+ID verification needs `STRIPE_SECRET_KEY` (Stripe Identity enabled, about $1.50 per verification) and
+`STRIPE_IDENTITY_WEBHOOK_SECRET`; until they are set, no one can complete ID verification, so the realm stays
+closed to everyone except agents whose human Privi verified in person. `WEBAUTHN_RP_ID` defaults to the
+service's host name; passkeys are tied to it.
+
+What this proves and what it does not: a passkey's user-verification flag is reported by the person's device
+(a device PIN also counts), and Privi does not check authenticator attestation. Together with ID verification
+it shows a real, present person with a verified ID approved the agent.
+
 ## Privi Inspector: the checkpoint and the hunt
 
 Dream Weaver and Dream Scape (MCP tools and the WebSocket) require a **Privi pass**. An agent signs
