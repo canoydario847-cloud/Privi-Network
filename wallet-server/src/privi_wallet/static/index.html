@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privi Wallet</title>
+<meta name="description" content="Sign up, create a PRIVI wallet on Base, send and receive PRIVI, USDC and ETH, and check the Privi Quantum Ledger.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--paper:#F7F8FA;--surface:#FFFFFF;--ink:#0E1B33;--steel:#5A6B85;--seal:#2F5BEA;--on-seal:#FFFFFF;--verified:#0F8A5F;--warn:#A4460C;--rule:#DCE1EA;--code:#EEF1F6}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--paper:#0D1626;--surface:#122036;--ink:#E7ECF4;--steel:#93A3BB;--seal:#7FA2FF;--on-seal:#0D1626;--verified:#3CCB94;--warn:#F2A365;--rule:#22314A;--code:#16263F}}
+*{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.6 "IBM Plex Sans",system-ui,sans-serif}
+a{color:var(--seal);text-underline-offset:3px}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--seal);outline-offset:2px}
+.wrap{max-width:1080px;margin:0 auto;padding:0 16px}
+header{border-bottom:1px solid var(--rule);background:var(--surface)}
+.bar{display:flex;align-items:center;gap:20px;min-height:60px;flex-wrap:wrap}
+.mark{font:600 20px "IBM Plex Sans Condensed",sans-serif;color:var(--ink);text-decoration:none;display:flex;align-items:center;gap:10px}
+.mark svg{width:26px;height:26px}
+nav{display:flex;gap:4px 18px;flex-wrap:wrap;font-size:15px;margin-left:auto}nav a{color:var(--steel);text-decoration:none}nav a:hover{color:var(--ink)}
+h1{font:600 clamp(32px,5vw,52px)/1.05 "IBM Plex Sans Condensed",sans-serif;margin:0 0 16px;max-width:15ch}
+h2{font:600 24px/1.2 "IBM Plex Sans Condensed",sans-serif;margin:0 0 12px}
+h3{font:600 18px/1.3 "IBM Plex Sans Condensed",sans-serif;margin:0 0 6px}
+.lede{font-size:19px;color:var(--steel);max-width:34em;margin:0 0 20px}
+.hero{display:grid;grid-template-columns:1.1fr .9fr;gap:40px;padding:56px 0 40px;align-items:start}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:20px}
+section{padding:40px 0;border-top:1px solid var(--rule)}
+.muted{color:var(--steel)}.small{font-size:14px}
+.ok{color:var(--verified);font-weight:600}.warn{color:var(--warn)}
+.mono{font:14px/1.5 "IBM Plex Mono",monospace;word-break:break-all}
+label{display:block;font-size:14px;color:var(--steel);margin:12px 0 4px}
+input,select{width:100%;padding:10px 12px;border:1px solid var(--rule);border-radius:8px;background:var(--paper);color:var(--ink);font:inherit}
+button{padding:10px 18px;border-radius:8px;border:0;background:var(--seal);color:var(--on-seal);font:600 15px "IBM Plex Sans",sans-serif;cursor:pointer;margin-top:14px}
+button.alt{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--rule)}
+button:disabled{opacity:.55;cursor:wait}
+.tabs{display:flex;gap:6px;margin-bottom:6px}.tabs button{margin:0}
+.tabs button[aria-selected=false]{background:transparent;color:var(--steel);box-shadow:inset 0 0 0 1.5px var(--rule)}
+.msg{min-height:1.4em;margin-top:10px;font-size:14px}.msg.bad{color:var(--warn)}.msg.good{color:var(--verified)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.bal{display:grid;grid-template-columns:auto 1fr;gap:2px 14px;margin:10px 0;font-size:15px}.bal dt{color:var(--steel)}.bal dd{margin:0;font-variant-numeric:tabular-nums}
+.tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:99px;background:var(--code);color:var(--steel);margin-left:6px;vertical-align:2px}
+details{margin-top:10px}summary{cursor:pointer;color:var(--seal);font-weight:600}
+dl.facts{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:0;font-size:15px}dl.facts dt{color:var(--steel)}dl.facts dd{margin:0}
+ol.feed{list-style:none;padding:0;margin:0}ol.feed li{padding:10px 0;border-bottom:1px solid var(--rule)}
+.notice{border-left:3px solid var(--warn);padding:10px 14px;background:var(--surface);margin:14px 0;font-size:14px}
+.key{background:var(--code);padding:10px;border-radius:8px;margin-top:8px}
+footer{border-top:1px solid var(--rule);padding:28px 0 40px;font-size:14px;color:var(--steel)}
+[hidden]{display:none!important}
+@media (max-width:780px){.hero{grid-template-columns:1fr;gap:24px;padding:36px 0 28px}nav{margin-left:0}}
+</style>
+</head>
+<body>
+<header><div class="wrap bar">
+  <a class="mark" href="/"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="7" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M11 22V10h6a4 4 0 0 1 0 8h-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>Privi Wallet</a>
+  <nav><a href="#token">PRIVI token</a><a href="#ledger">Quantum Ledger</a><a href="https://www.privishine.info">Privi</a><a href="#" id="signout" hidden>Sign out</a></nav>
+</div></header>
+
+<main class="wrap">
+  <div class="hero">
+    <div>
+      <h1>Your PRIVI wallet on Base</h1>
+      <p class="lede">Sign up with your email, create a wallet, and send or receive PRIVI, USDC and ETH. Every action on your account is written to a hash-linked record you can check.</p>
+      <p class="muted small">PRIVI is the token Privi's services accept as payment. Nothing here is investment advice. Token prices can fall to zero.</p>
+    </div>
+
+    <div class="card" id="auth">
+      <div class="tabs" role="tablist">
+        <button role="tab" id="tab-signup" aria-selected="true">Create account</button>
+        <button role="tab" id="tab-login" aria-selected="false">Sign in</button>
+      </div>
+      <form id="auth-form">
+        <label for="email">Email</label><input id="email" type="email" autocomplete="email" required>
+        <label for="password">Password <span id="pw-hint">(10 characters or more)</span></label>
+        <input id="password" type="password" autocomplete="new-password" minlength="10" required>
+        <button type="submit" id="auth-btn">Create account</button>
+        <div class="msg" id="auth-msg" role="status"></div>
+      </form>
+    </div>
+
+    <div class="card" id="hello" hidden>
+      <h2>Signed in</h2>
+      <p class="mono" id="me-email"></p>
+      <p class="muted small" id="custody-note"></p>
+    </div>
+  </div>
+
+  <section id="dash" hidden>
+    <h2>Your wallets</h2>
+    <div class="grid" id="wallets"></div>
+    <div class="grid" style="margin-top:16px">
+      <div class="card" id="create-card">
+        <h3>Create a Privi wallet</h3>
+        <p class="muted small">Privi World Co keeps this wallet's key, encrypted. You can export the key at any time and move it to your own app.</p>
+        <label for="new-label">Name</label><input id="new-label" maxlength="40" placeholder="My Privi wallet">
+        <button id="create-btn">Create wallet</button>
+        <div class="msg" id="create-msg" role="status"></div>
+      </div>
+      <div class="card">
+        <h3>Watch a wallet you already own</h3>
+        <p class="muted small">Add the address from Coinbase Wallet, MetaMask or any Base wallet to see its PRIVI balance here. Privi never sees that key.</p>
+        <label for="watch-addr">Address</label><input id="watch-addr" class="mono" placeholder="0x…" autocomplete="off">
+        <label for="watch-label">Name</label><input id="watch-label" maxlength="40" placeholder="My wallet">
+        <button class="alt" id="watch-btn">Add wallet</button>
+        <div class="msg" id="watch-msg" role="status"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="activity-sec" hidden>
+    <h2>Account record</h2>
+    <p class="muted small" id="chain-check"></p>
+    <ol class="feed" id="feed"></ol>
+  </section>
+
+  <section id="token">
+    <h2>PRIVI token</h2>
+    <dl class="facts">
+      <dt>Network</dt><dd>Base (chain 8453)</dd>
+      <dt>Contract</dt><dd class="mono" id="token-addr"></dd>
+      <dt>Decimals</dt><dd>18</dd>
+      <dt>Check it</dt><dd><a id="token-link" href="#">View on Basescan</a> · <a href="https://www.privishine.info/base-token.html">Contract identity and wallet import</a></dd>
+    </dl>
+    <p class="muted small">To pay network fees, a wallet needs a little ETH on Base. Send it to your wallet's address before you send PRIVI.</p>
+  </section>
+
+  <section id="ledger">
+    <h2>Privi Quantum Ledger</h2>
+    <p class="muted" style="max-width:44em">Privi's audit log is sealed into blocks hashed with SHA3-512 and co-signed with ML-DSA-87 (a NIST post-quantum signature) and Ed25519. Anyone can check each block in Quantum Scan.</p>
+    <div class="card" style="max-width:640px"><dl class="facts" id="ql"><dt>Status</dt><dd class="muted">Loading…</dd></dl>
+      <p class="small" style="margin:12px 0 0"><a id="ql-link" href="https://privi-ledger.onrender.com/quantum-scan">Open Quantum Scan</a></p></div>
+  </section>
+</main>
+
+<footer><div class="wrap">
+  <p>Privi World Co, 1920 24th St, Port Huron, MI 48060 · <a href="mailto:dariocanoy@priviflow.us">dariocanoy@priviflow.us</a> · 313-413-8532</p>
+  <p>Privi-held wallets: Privi World Co holds the encrypted keys. Keep only amounts you are comfortable with, and export your key to move funds to a wallet you control. Transfers on Base can't be reversed.</p>
+</div></footer>
+
+<template id="wallet-tpl">
+  <div class="card">
+    <h3><span class="w-label"></span><span class="tag w-kind"></span></h3>
+    <p class="mono small w-addr"></p>
+    <dl class="bal w-bal"></dl>
+    <p class="small"><a class="w-explorer" href="#">Basescan</a> · <a href="#" class="w-copy">Copy address</a></p>
+    <details class="w-send"><summary>Send</summary>
+      <form>
+        <label>Asset</label><select name="asset"><option>PRIVI</option><option>USDC</option><option>ETH</option></select>
+        <label>To address</label><input name="to" class="mono" placeholder="0x…" autocomplete="off" required>
+        <label>Amount</label><input name="amount" inputmode="decimal" required>
+        <label>Your password</label><input name="password" type="password" autocomplete="current-password" required>
+        <button type="submit">Send</button>
+        <div class="msg" role="status"></div>
+      </form>
+    </details>
+    <details class="w-export"><summary>Export private key</summary>
+      <form>
+        <p class="small warn">Anyone with this key controls the wallet. Never share it or paste it into a website.</p>
+        <label>Your password</label><input name="password" type="password" autocomplete="current-password" required>
+        <button type="submit" class="alt">Show key</button>
+        <div class="msg" role="status"></div>
+      </form>
+    </details>
+  </div>
+</template>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+let cfg = null, mode = "signup";
+
+async function api(path, body) {
+  const opt = body === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json", "X-Privi-Wallet": "1"}, body: JSON.stringify(body)};
+  const r = await fetch(path, opt);
+  let data = {};
+  try { data = await r.json(); } catch (_) {}
+  if (!r.ok) throw Object.assign(new Error(data.error || ("Request failed (" + r.status + ")")), {status: r.status});
+  return data;
+}
+function say(el, text, good) { el.textContent = text || ""; el.className = "msg " + (good ? "good" : "bad"); }
+function setMode(m) {
+  mode = m;
+  $("tab-signup").setAttribute("aria-selected", m === "signup");
+  $("tab-login").setAttribute("aria-selected", m === "login");
+  $("auth-btn").textContent = m === "signup" ? "Create account" : "Sign in";
+  $("pw-hint").hidden = m !== "signup";
+  $("password").autocomplete = m === "signup" ? "new-password" : "current-password";
+  say($("auth-msg"), "");
+}
+$("tab-signup").onclick = () => setMode("signup");
+$("tab-login").onclick = () => setMode("login");
+
+$("auth-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const btn = $("auth-btn"); btn.disabled = true;
+  try {
+    await api(mode === "signup" ? "/api/signup" : "/api/login", {email: $("email").value, password: $("password").value});
+    $("password").value = "";
+    await load();
+  } catch (err) { say($("auth-msg"), err.message); }
+  btn.disabled = false;
+};
+$("signout").onclick = async (e) => { e.preventDefault(); await api("/api/logout", {}); location.reload(); };
+
+function walletCard(w) {
+  const node = $("wallet-tpl").content.firstElementChild.cloneNode(true);
+  node.querySelector(".w-label").textContent = w.label;
+  node.querySelector(".w-kind").textContent = w.kind === "privi" ? "Privi-held" : "Watch only";
+  node.querySelector(".w-addr").textContent = w.address;
+  node.querySelector(".w-explorer").href = w.explorer;
+  node.querySelector(".w-copy").onclick = (e) => { e.preventDefault(); navigator.clipboard && navigator.clipboard.writeText(w.address); e.target.textContent = "Copied"; };
+  const bal = node.querySelector(".w-bal");
+  if (w.balances) {
+    for (const a of ["PRIVI", "USDC", "ETH"]) {
+      const dt = document.createElement("dt"); dt.textContent = a;
+      const dd = document.createElement("dd"); dd.textContent = w.balances[a];
+      bal.append(dt, dd);
+    }
+  } else {
+    const dd = document.createElement("dd"); dd.className = "muted small"; dd.textContent = "Balances unavailable right now.";
+    bal.append(dd);
+  }
+  if (w.kind !== "privi" || !cfg.custody) { node.querySelector(".w-send").remove(); node.querySelector(".w-export").remove(); return node; }
+  const sendForm = node.querySelector(".w-send form");
+  sendForm.onsubmit = async (e) => {
+    e.preventDefault();
+    const f = new FormData(sendForm), msg = sendForm.querySelector(".msg"), btn = sendForm.querySelector("button");
+    const summary = "Send " + f.get("amount") + " " + f.get("asset") + " to " + f.get("to") + "? Transfers can't be reversed.";
+    if (!confirm(summary)) return;
+    btn.disabled = true;
+    try {
+      const r = await api("/api/wallets/" + w.address + "/send", {asset: f.get("asset"), to: f.get("to"), amount: f.get("amount"), password: f.get("password")});
+      sendForm.reset();
+      msg.className = "msg good"; msg.textContent = "Sent. ";
+      const a = document.createElement("a"); a.href = r.explorer; a.textContent = "View transaction"; msg.append(a);
+      loadActivity();
+    } catch (err) { say(msg, err.message); }
+    btn.disabled = false;
+  };
+  const expForm = node.querySelector(".w-export form");
+  expForm.onsubmit = async (e) => {
+    e.preventDefault();
+    const msg = expForm.querySelector(".msg");
+    try {
+      const r = await api("/api/wallets/" + w.address + "/export", {password: new FormData(expForm).get("password")});
+      expForm.reset(); msg.className = "msg";
+      const k = document.createElement("div"); k.className = "key mono"; k.textContent = r.private_key;
+      msg.replaceChildren(k);
+      loadActivity();
+    } catch (err) { say(msg, err.message); }
+  };
+  return node;
+}
+
+async function loadActivity() {
+  try {
+    const r = await api("/api/activity");
+    const c = r.check;
+    $("chain-check").textContent = c.valid ? ("Record intact: " + c.entries + " entries, each linked to the one before by a SHA3-512 hash.") : "Record check failed at entry " + c.broken_at + ". Contact Privi.";
+    $("chain-check").className = "small " + (c.valid ? "ok" : "warn");
+    const feed = $("feed"); feed.replaceChildren();
+    const names = {account_created: "Account created", signed_in: "Signed in", wallet_created: "Wallet created", wallet_watched: "Wallet added (watch only)", sent: "Sent", key_exported: "Private key exported", password_check_failed: "Wrong password entered"};
+    for (const e of r.entries) {
+      const li = document.createElement("li");
+      const t = document.createElement("div"); t.textContent = (names[e.kind] || e.kind) + " · " + e.at.replace("T", " ").replace("+00:00", " UTC");
+      const d = e.detail;
+      const sub = document.createElement("div"); sub.className = "small muted mono";
+      sub.textContent = e.kind === "sent" ? (d.amount + " " + d.asset + " to " + d.to + " · tx " + d.tx_hash) : (d.address || d.email || "");
+      const h = document.createElement("div"); h.className = "small muted mono"; h.textContent = "hash " + e.hash.slice(0, 32) + "…";
+      li.append(t, sub, h); feed.append(li);
+    }
+    $("activity-sec").hidden = false;
+  } catch (_) {}
+}
+
+async function load() {
+  let me;
+  try { me = await api("/api/me"); } catch (err) { if (err.status !== 401) say($("auth-msg"), err.message); return; }
+  $("auth").hidden = true; $("hello").hidden = false; $("dash").hidden = false; $("signout").hidden = false;
+  $("me-email").textContent = me.email;
+  $("custody-note").textContent = me.custody ? ("Daily send limits: " + cfg.limits_24h.PRIVI + " PRIVI, " + cfg.limits_24h.USDC + " USDC, " + cfg.limits_24h.ETH + " ETH.") : "Privi-held wallets open soon. For now you can watch wallets you already own.";
+  $("create-card").hidden = !me.custody;
+  const box = $("wallets"); box.replaceChildren();
+  if (!me.wallets.length) { const p = document.createElement("p"); p.className = "muted"; p.textContent = "No wallets yet."; box.append(p); }
+  for (const w of me.wallets) box.append(walletCard(w));
+  loadActivity();
+}
+
+$("create-btn").onclick = async () => {
+  const btn = $("create-btn"); btn.disabled = true;
+  try { await api("/api/wallets", {label: $("new-label").value}); $("new-label").value = ""; say($("create-msg"), "Wallet created.", true); await load(); }
+  catch (err) { say($("create-msg"), err.message); }
+  btn.disabled = false;
+};
+$("watch-btn").onclick = async () => {
+  try { await api("/api/wallets/watch", {address: $("watch-addr").value.trim(), label: $("watch-label").value}); $("watch-addr").value = ""; say($("watch-msg"), "Wallet added.", true); await load(); }
+  catch (err) { say($("watch-msg"), err.message); }
+};
+
+async function loadLedger() {
+  const dl = $("ql");
+  try {
+    const r = await api("/api/quantum-ledger");
+    $("ql-link").href = r.explorer;
+    dl.replaceChildren();
+    const rows = [];
+    if (!r.available) rows.push(["Status", "Ledger is waking up. Try again in a minute."]);
+    else {
+      const st = r.status || {};
+      rows.push(["Status", "Online"]);
+      rows.push(["Blocks sealed", String(st.blocks)]);
+      if (st.latest_height !== null && st.latest_height !== undefined) rows.push(["Latest block", "#" + st.latest_height + (st.latest_time ? " · " + st.latest_time.replace("T", " ").replace("+00:00", " UTC") : "")]);
+      if (st.entries !== null && st.entries !== undefined) rows.push(["Log entries sealed", String(st.entries)]);
+      if (st.latest_hash) rows.push(["Block hash", st.latest_hash.slice(0, 48) + "…"]);
+    }
+    for (const [k, v] of rows) { const dt = document.createElement("dt"); dt.textContent = k; const dd = document.createElement("dd"); dd.textContent = v; if (k === "Block hash") dd.className = "mono"; dl.append(dt, dd); }
+  } catch (_) { dl.replaceChildren(); const dd = document.createElement("dd"); dd.textContent = "Unavailable right now."; dl.append(dd); }
+}
+
+(async () => {
+  cfg = await api("/api/config");
+  $("token-addr").textContent = cfg.privi_token;
+  $("token-link").href = cfg.explorer + "/token/" + cfg.privi_token;
+  setMode("signup");
+  load(); loadLedger();
+})();
+</script>
+</body>
+</html>

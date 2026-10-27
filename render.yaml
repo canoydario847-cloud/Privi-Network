@@ -235,3 +235,40 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY          # optional: answers questions the phone script does not cover
         sync: false
+
+  # ------------------------------------------------------------------ Privi Wallet
+  # Accounts and Privi-held PRIVI wallets on Base. Custodial wallets stay OFF until WALLET_CUSTODY is set to 1.
+  - type: web
+    name: privi-wallet
+    runtime: docker
+    plan: starter
+    region: virginia
+    dockerfilePath: ./wallet-server/Dockerfile
+    dockerContext: ./wallet-server
+    buildFilter:
+      paths: ["wallet-server/**"]
+    healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: privi-wallet-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: WALLET_DB_PATH
+        value: /data/wallet.db
+      - key: WALLET_PUBLIC_URL
+        value: https://privi-wallet.onrender.com
+      - key: WALLET_CUSTODY             # 0 = sign up + watch-only wallets; 1 = Privi creates and holds wallet keys
+        value: "0"
+      - key: WALLET_MASTER_KEY          # 32+ random characters; encrypts every wallet key. KEEP A COPY OFFLINE:
+        sync: false                     # if it is lost, every Privi-held wallet is lost with it.
+      - key: WALLET_RPC_URL
+        value: https://mainnet.base.org
+      - key: WALLET_MAX_SEND_PRIVI_24H
+        value: "100000"
+      - key: WALLET_MAX_SEND_USDC_24H
+        value: "500"
+      - key: WALLET_MAX_SEND_ETH_24H
+        value: "0.1"
+      - key: WALLET_LEDGER_URL
+        value: https://privi-ledger.onrender.com
