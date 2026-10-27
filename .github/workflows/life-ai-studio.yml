@@ -28,6 +28,8 @@ jobs:
       - run: pytest -q
       - name: Package standalone repo source
         run: cd .. && zip -qr life-ai-studio-source.zip life-ai-studio -x 'life-ai-studio/data/*' 'life-ai-studio/**/__pycache__/*'
+      - name: Reject private data and unsafe entries in source artifact
+        run: python tools/check_source_archive.py ../life-ai-studio-source.zip
       - uses: actions/upload-artifact@v4
         with:
           name: privi-life-ai-network-source
