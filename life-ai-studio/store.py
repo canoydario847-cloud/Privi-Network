@@ -42,6 +42,24 @@ def database_readable():
                 "SELECT id,user_id,amount,idempotency FROM ledger LIMIT 0",
             ):
                 conn.execute(query).fetchall()
+            # Core identity keys must survive a restore. Matching column names
+            # alone can mask a lookalike database that permits duplicate member
+            # IDs, sessions, projects, files or ledger entries. PRAGMA reads only
+            # schema metadata and does not expose customer records.
+            for table, expected in (
+                ("users", ("id",)),
+                ("sessions", ("token_hash",)),
+                ("projects", ("id",)),
+                ("files", ("project_id", "path")),
+                ("ledger", ("id",)),
+            ):
+                info = conn.execute(f'PRAGMA table_info("{table}")').fetchall()
+                actual = tuple(
+                    row[1] for row in sorted(info, key=lambda row: row[5])
+                    if row[5] > 0
+                )
+                if actual != expected:
+                    return False
         return True
     except (OSError, sqlite3.Error):
         return False
