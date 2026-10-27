@@ -1337,3 +1337,31 @@ def test_restore_rejects_orphaned_credit_ledger(tmp_path):
         backup.backup_and_verify(source, destination)
     assert not destination.exists(), "Orphaned customer charges must not publish a backup"
 
+@pytest.mark.parametrize("path,content,valid", [
+    ("notes.txt", "hello", True),
+    ("unicode-🌌.txt", "", True),
+    ("", "text", False),
+    ("  \\t\\n ", "text", False),
+    (b"binary-path", "text", False),
+    ("notes.txt", b"binary-content", False),
+    ("notes.txt", None, False),
+])
+def test_backup_rejects_malformed_private_project_file_text(tmp_path, path, content, valid):
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute(
+            "INSERT INTO users VALUES ('u1','member@example.test','hash',NULL,1,0)"
+        )
+        db.execute("INSERT INTO projects VALUES ('p1','u1','Title','code',1)")
+        db.execute(
+            "INSERT INTO files (project_id,path,content,version) VALUES (?,?,?,1)",
+            ("p1", path, content),
+        )
+    destination = tmp_path / "vault" / "snapshot.sqlite3"
+    if valid:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        with pytest.raises(ValueError, match="invalid private project file text"):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Malformed project data must not publish a backup"
