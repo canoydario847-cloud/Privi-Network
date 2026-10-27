@@ -17,16 +17,15 @@ This is an evidence checklist, not a launch authorization. The local Cosmos EVM 
 | 7. Legal and communications | Review of token launch obligations and published user disclosures; claims accurately distinguish PRVI, TEST, BNB PRIV | BLOCKED |
 | 8. Final approval | Named reviewers sign off on immutable binary + genesis hashes; published UTC activation plan and rollback/stop policy | BLOCKED |
 
-## Latest CI evidence (2026-10-27; build-only, NOT launch approval)
+## Latest CI evidence (verified 2026-10-27; build-only, NOT launch approval)
 
-The following GitHub Actions runs passed on source commit
-`e888abfb65716c73c11440f5d0b11366eeb98c8f`:
+Both workflows passed for the current reviewed source commit
+`7fbbe2c6b4c8cbdc9376363bbe3033f70d1f8a1d`:
 
-- [Native mainnet safety checks](https://github.com/canoydario847-cloud/Privi-Network/actions/runs/40438384662):
-  offline supply/evidence regressions and SDK bank persistence/cap checks.
-- [Four-validator smoke test](https://github.com/canoydario847-cloud/Privi-Network/actions/runs/40438384652):
-  custom app compilation, SDK-backed cap keeper tests, mint-route scan,
-  and four **ephemeral** EVM validators.
+- [Native mainnet safety checks](https://github.com/canoydario847-cloud/Privi-Network/actions/runs/40448201355):
+  completed successfully.
+- [Four-validator smoke test](https://github.com/canoydario847-cloud/Privi-Network/actions/runs/40448201422):
+  completed successfully with ephemeral test validators.
 
 **Evidence boundary:** Passing ephemeral CI does not demonstrate four
 independently operated production validators, audited production binaries,
