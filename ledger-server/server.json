@@ -1,9 +1,9 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.canoydario847-cloud/privi-ledger",
-  "title": "Privi Ledger",
-  "description": "Privi Guard stops prompt injection and data leaks in AI agents, plus audit logs and trust passports.",
-  "version": "0.11.0",
+  "title": "Privi Quantum Ledger",
+  "description": "Quantum-sealed audit logs for AI agents (ML-DSA-87, SHA3-512), plus Privi Guard and trust passports.",
+  "version": "0.12.0",
   "websiteUrl": "https://privi-discovery.onrender.com",
   "repository": {
     "url": "https://github.com/canoydario847-cloud/Privi-Network",

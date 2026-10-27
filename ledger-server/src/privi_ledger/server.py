@@ -39,6 +39,7 @@ from . import privi_token
 from .kya import KYA, KYAError, checksum as eth_checksum
 from .mandate import MandateError, Mandates
 from .fortress import Fortress, FortressError
+from .quantum_ledger import QuantumLedger, QuantumLedgerError
 from .live import LiveService, TrustWatcher, mount_ws
 from .gateway import Gateways
 from .rooms import Rooms
@@ -54,11 +55,11 @@ from .passport import PASSPORT_VERSION as PASSPORT_VERSION_HTTP, PassportError, 
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor.onrender.com/mcp"
 
-__version__ = "0.11.0"
+__version__ = "0.12.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/ledger-server"
 
 INSTRUCTIONS = """\
-Privi Ledger keeps a tamper-evident record of what AI agents do. Each action is
+Privi Quantum Ledger (formerly Privi Ledger) keeps a tamper-evident, quantum-sealed record of what AI agents do. Each action is
 appended to a stream (usually one per agent) and linked to the previous one by a
 SHA-256 fingerprint, so any later edit, deletion or reordering is detectable.
 
@@ -73,6 +74,11 @@ Blockchain wallets: Privi KYA (Know-Your-Agent) tells any chain, protocol, excha
 facilitator whether a wallet is operated by an audited agent: kya_check <address> is free and
 returns allow/deny with the live Passport score. Bind your agents' wallets with kya_challenge +
 kya_bind_wallet (signed with the wallet) so your transactions pass KYA checks everywhere.
+
+Quantum Ledger: the whole log is sealed into a chain of blocks hashed with SHA3-512 and co-signed with
+ML-DSA-87 + Ed25519, linked by RFC 9162 consistency proofs, and fused with the Privi Foundation chain
+(Cosmos SDK + CometBFT + Cosmos EVM); blocks settle on Base until the Foundation mainnet launches.
+qledger_status, qledger_block, qledger_verify_chain and qledger_entry_proof are free.
 
 Defense-grade controls (Privi Fortress): every attestation is co-signed with ML-DSA-87 (FIPS 204,
 CNSA 2.0) as well as Ed25519; all entries form an RFC 9162 transparency log (ledger_tree_head,
@@ -188,8 +194,8 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         return info
 
     mcp = MCPServer(
-        name="privi-ledger", title="Privi Ledger",
-        description="Tamper-evident audit logs for AI agents; auditors verify integrity, paid per call via x402.",
+        name="privi-ledger", title="Privi Quantum Ledger",
+        description="Quantum-sealed, tamper-evident audit logs for AI agents, fused with the Privi Foundation chain; auditors verify integrity, paid per call via x402.",
         instructions=INSTRUCTIONS, website_url=SOURCE, version=__version__,
     )
 
@@ -200,6 +206,8 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     mandates = Mandates(ledger._db, ledger._lock, passports, public_url)
     fortress = Fortress(ledger, passports, public_url, os.getenv("LEDGER_PQ_SIGNING_KEY", ""))
     mcp.privi_fortress = fortress  # used by the tree-head anchoring loop in main()
+    qledger = QuantumLedger(ledger, fortress)
+    mcp.privi_qledger = qledger  # sealed and settled by the block loop in main()
     live = LiveService(ledger, plans, passports, kya, mandates, fortress, public_url)
     ledger.on_record = live.on_record
     gateways = Gateways(live, allow_private=bool(os.getenv("GW_ALLOW_PRIVATE")))
@@ -272,6 +280,8 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
                 "ledger_consistency_proof": "free", "fortress_tpi_status": "free",
                 "fortress_tpi_policy": "organization API key", "fortress_tpi_request": "organization API key",
                 "fortress_tpi_execute": "organization API key", "fortress_tpi_list": "organization API key",
+                "qledger_status": "free", "qledger_block": "free", "qledger_verify_chain": "free",
+                "qledger_entry_proof": "free", "qledger_seal": "organization API key",
                 "ledger_evidence_bundle": "organization API key",
                 "guard_check": f"1,000 free per month with an organization key, then credits or ${settings.prices_usd['guard_check']} per check (x402)",
                 "guard_check_many": "organization key (free allowance or credits)", "guard_receipt": "free",
@@ -1341,6 +1351,53 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         except FortressError as e:
             return _result({"error": str(e)}, is_error=True)
 
+    # ---------------- Privi Quantum Ledger ----------------
+
+    @mcp.tool(title="Quantum Ledger status", annotations=READ_ONLY)
+    def qledger_status() -> CallToolResult:
+        """Privi Quantum Ledger: latest quantum-sealed block (SHA3-512, ML-DSA-87 + Ed25519), entries waiting for the
+        next block, the Privi Foundation chain it is fused with, and signing keys. Free."""
+        return _result(qledger.status())
+
+    @mcp.tool(title="Quantum Ledger block", annotations=READ_ONLY)
+    def qledger_block(height: Annotated[int, Field(ge=0, description="Block height (0 = genesis)")]) -> CallToolResult:
+        """One quantum-sealed block with its signatures, settlement on chain and a validity check. Free."""
+        rec = qledger.block(height)
+        if not rec:
+            return _result({"error": "no block at that height"}, is_error=True)
+        problems = qledger.check_block(rec, qledger.block(height - 1) if height else None)
+        return _result({**rec, "valid": not problems, "problems": problems})
+
+    @mcp.tool(title="Verify the Quantum Ledger", annotations=READ_ONLY)
+    def qledger_verify_chain(
+        deep_last: Annotated[int, Field(ge=0, le=500, description="Re-derive log roots and consistency proofs "
+                                        "for this many most recent blocks")] = 50,
+    ) -> CallToolResult:
+        """Verify the whole Quantum Ledger: SHA3-512 block hashes, hash links, both signatures on every block, and for
+        recent blocks the log roots, entry roots and RFC 9162 consistency proofs. Free; anyone can run it."""
+        return _result(qledger.verify_chain(deep_last))
+
+    @mcp.tool(title="Quantum proof for an entry", annotations=READ_ONLY)
+    def qledger_entry_proof(entry_hash: Annotated[str, Field(description="entry_hash from ledger_record_action")]) -> CallToolResult:
+        """Prove an entry (by its receipt hash) is sealed in a quantum block: the block, its post-quantum signatures,
+        its on-chain settlement and the Merkle inclusion proof. Reveals no entry contents. Free."""
+        try:
+            return _result(qledger.entry_proof(entry_hash))
+        except (QuantumLedgerError, FortressError) as e:
+            return _result({"error": str(e)}, is_error=True)
+
+    @mcp.tool(title="Seal a quantum block now", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                              idempotentHint=True, openWorldHint=False))
+    def qledger_seal(ctx: Context) -> CallToolResult:
+        """Seal your newest entries into a quantum block now instead of waiting for the next scheduled block (every
+        few minutes). Does nothing if no entries are waiting. Requires the organization API key."""
+        org = org_from(ctx)
+        if not org:
+            return unauthorized
+        rec = qledger.seal(force=qledger.height() < 0)
+        return _result({"sealed": bool(rec), "block": rec or qledger.latest(),
+                        "note": None if rec else "no new entries since the latest block"})
+
     @mcp.tool(title="List two-person requests", annotations=READ_ONLY)
     def fortress_tpi_list(ctx: Context) -> CallToolResult:
         """Your organization's two-person requests. Requires the organization API key."""
@@ -1394,6 +1451,17 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     seals = ContentSeals(ledger, public_url)
     musthave_tools.register(mcp, ledger, aiact=aiact, suppliers=suppliers, seals=seals, anchor_many=_anchor_many,
                             org_from=org_from, result=_result, unauthorized=unauthorized, over_limit=over_limit)
+    async def _qledger_http(request):
+        from starlette.responses import JSONResponse
+        hdr = {"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"}
+        h = request.path_params.get("height")
+        if h is None:
+            return JSONResponse(qledger.status(), headers=hdr)
+        rec = qledger.block(int(h)) if str(h).isdigit() else None
+        return JSONResponse(rec or {"error": "no block at that height"}, status_code=200 if rec else 404, headers=hdr)
+
+    mcp.custom_route("/quantum-ledger", methods=["GET"], include_in_schema=False)(_qledger_http)
+    mcp.custom_route("/quantum-ledger/blocks/{height}", methods=["GET"], include_in_schema=False)(_qledger_http)
     for _path, _methods, _handler in (live.http_routes() + gateways.http_routes() + rooms.http_routes()
                                       + scan_tools.http_routes(scanner) + guard_tools.http_routes(guard, paywall, ledger, settings, plans.signup)
                                       + musthave_tools.http_routes(suppliers, seals)):
@@ -1801,6 +1869,27 @@ def main() -> None:
         start_loop(anchor_tree_head, float(os.getenv("LEDGER_STH_INTERVAL", "900")), "privi-ledger-sth")
         start_loop(lambda: cps.run_once(ledger.heads(), client, "privi-ledger"),
                    float(os.getenv("LEDGER_ANCHOR_INTERVAL", "300")), "privi-ledger")
+    qlg = mcp.privi_qledger
+    qclient = client if key else None
+
+    def seal_and_settle() -> int:
+        rec = qlg.seal(force=qlg.height() < 0)
+        if rec:
+            print(f"privi-ledger: sealed quantum block {rec['block']['height']} size={rec['block']['tree_size']}", flush=True)
+            mcp.privi_live.emit_trust("qledger.block", {"height": rec["block"]["height"], "block_hash": rec["block_hash"],
+                                                        "tree_size": rec["block"]["tree_size"]})
+        if qclient:
+            for b in qlg.unsettled(5):
+                r = qclient.anchor([b["signing_digest"]], f"privi quantum block {b['block']['height']}")
+                rc = next(x for x in r["receipts"] if x["hash"] == b["signing_digest"])
+                qlg.set_settlement(b["block"]["height"], {"chain": "Base (until the Privi Foundation mainnet)",
+                                                          "tx_hash": r["tx_hash"], "proof": rc["proof"],
+                                                          "block_number": r.get("block_number"),
+                                                          "chain_id": r.get("chain_id"),
+                                                          "anchored_hash": b["signing_digest"]})
+        return 1 if rec else 0
+
+    start_loop(seal_and_settle, float(os.getenv("LEDGER_QBLOCK_INTERVAL", "300")), "privi-quantum-ledger")
     start_loop(mcp.privi_trust.run_once, float(os.getenv("LIVE_TRUST_INTERVAL", "120")), "privi-trust-watch")
     mcp.privi_guard.start(float(os.getenv("GUARD_BATCH_INTERVAL", "300")))
     if os.getenv("SCAN_ENABLED", "1") != "0":
@@ -1817,7 +1906,7 @@ def main() -> None:
     inner = mcp.streamable_http_app(host=args.host, stateless_http=True, json_response=True)
     mount_ws(inner, mcp.privi_ws_routes)
     from .front import QuickGet
-    app = QuickGet(UsageMiddleware(inner, ledger._db, ledger._lock, "privi-ledger"), "Privi Ledger", "privi-ledger",
+    app = QuickGet(UsageMiddleware(inner, ledger._db, ledger._lock, "privi-ledger"), "Privi Quantum Ledger", "privi-ledger",
                    os.getenv("LEDGER_PUBLIC_URL", "https://privi-ledger.onrender.com"))
     uvicorn.run(app, host=args.host, port=args.port)
 
