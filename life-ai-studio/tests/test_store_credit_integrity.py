@@ -129,3 +129,32 @@ def test_initialization_does_not_repermission_existing_database(tmp_path, monkey
     monkeypatch.setattr(store, "DB", str(path))
     store.init()
     assert path.stat().st_mode & 0o777 == 0o644
+
+
+def test_initialization_rejects_symlinked_database_without_touching_target(
+    tmp_path, monkeypatch
+):
+    """A symlink must not redirect LIFE account initialization into another file."""
+    target = tmp_path / "unrelated-private-file"
+    target.write_bytes(b"must-remain-unchanged")
+    alias = tmp_path / "life.sqlite3"
+    alias.symlink_to(target)
+    monkeypatch.setattr(store, "DB", str(alias))
+
+    with pytest.raises(ValueError, match="existing regular file"):
+        store.init()
+
+    assert alias.is_symlink()
+    assert target.read_bytes() == b"must-remain-unchanged"
+
+
+def test_initialization_rejects_directory_as_database(tmp_path, monkeypatch):
+    """A non-regular existing path must fail before attempting SQL operations."""
+    directory = tmp_path / "life.sqlite3"
+    directory.mkdir()
+    monkeypatch.setattr(store, "DB", str(directory))
+
+    with pytest.raises(ValueError, match="existing regular file"):
+        store.init()
+
+    assert directory.is_dir()
