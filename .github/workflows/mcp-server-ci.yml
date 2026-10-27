@@ -23,4 +23,12 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
-      - run: pytest -q
+      - name: pytest
+        shell: bash
+        run: |
+          set -o pipefail
+          pytest -q -rfE --tb=line 2>&1 | tee pytest.log
+      - name: Show test failures as annotations
+        if: failure()
+        shell: bash
+        run: grep -E "^(FAILED|ERROR) |^E +|\.py:[0-9]+: " pytest.log | head -40 | sed 's/^/::error::/' || true
