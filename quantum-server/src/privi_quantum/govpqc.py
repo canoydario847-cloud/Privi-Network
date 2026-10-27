@@ -98,6 +98,7 @@ _SYMMETRIC = [(r"AES[-_ ]?256|AES256", "AES-256", "ae", 5), (r"AES[-_ ]?192", "A
               (r"HMAC", "HMAC", "mac", 2)]
 _BROKEN = [(_L + r"MD5" + _R, "MD5"), (_L + r"SHA[-_ ]?1(?![0-9])", "SHA-1"), (_L + r"(3DES|TripleDES|DES-EDE3|DES)" + _R, "3DES/DES"), (_L + r"RC4" + _R, "RC4")]
 
+PROFILES = ("agency", "contractor", "nss_vendor", "company")
 USAGES = ("key_establishment", "signature", "encryption", "tls", "ssh", "vpn", "code_signing", "certificate", "hash", "other")
 IMPACTS = ("high", "moderate", "low", "unknown")
 
@@ -194,6 +195,11 @@ def assess_asset(asset: dict, profile: str = "agency", today: date | None = None
                                                      "web" if usage == "tls" else "networking" if usage == "vpn" else "custom"))
             pref, excl, label = CNSA2.get(cat, CNSA2["custom"])
             deadlines.append({"date": f"{excl}-12-31", "rule": f"NSA CNSA 2.0, {label}: support/prefer by {pref}, exclusively by {excl}"})
+        elif profile == "company":
+            deadlines.append({"date": "2030-12-31" if priority_system else "2035-12-31",
+                              "rule": "NIST IR 8547 (draft): quantum-vulnerable public-key algorithms deprecated after 2030 "
+                                      "(112-bit) and disallowed after 2035" if priority_system else
+                                      "NIST IR 8547 (draft): quantum-vulnerable public-key algorithms disallowed after 2035"})
         elif priority_system:
             if kind == "signature":
                 deadlines.append({"date": SIGNATURE_DEADLINE, "rule": "EO 14409 / M-26-15 Phase 4: PQC digital signatures on HVAs and high-impact systems"})
@@ -201,7 +207,7 @@ def assess_asset(asset: dict, profile: str = "agency", today: date | None = None
                 deadlines.append({"date": KEY_ESTABLISHMENT_DEADLINE, "rule": "EO 14409 / M-26-15 Phase 3: PQC key establishment on HVAs and high-impact systems"})
         else:
             deadlines.append({"date": "2035-12-31", "rule": "M-26-15 Phase 5 (remaining systems); NIST IR 8547 draft disallows after 2035"})
-        if c["class"] == "quantum_vulnerable" and profile != "nss_vendor":
+        if c["class"] == "quantum_vulnerable" and profile not in ("nss_vendor", "company"):
             deadlines.append({"date": "2030-12-31", "rule": "NIST IR 8547 (draft): 112-bit quantum-vulnerable algorithms deprecated after 2030"})
         if profile == "contractor":
             deadlines.append({"date": "2030-12-31", "rule": "EO 14409 FAR rule (proposed): covered contractors comply with NIST FIPS incl. PQC"})
@@ -344,7 +350,7 @@ def cbom(assessed: list[dict], org_name: str, serial: str | None = None, generat
 
 def build_package(org: dict, assets: list[dict], profile: str = "agency", scan: dict | None = None,
                   today: date | None = None) -> dict[str, Any]:
-    profile = profile if profile in ("agency", "contractor", "nss_vendor") else "agency"
+    profile = profile if profile in PROFILES else "agency"
     today = today or datetime.now(timezone.utc).date()
     assessed = [assess_asset(a, profile, today) for a in assets[:1000]]
     order = {"P1": 0, "P2": 1, "P3": 2, "P4 done": 3}
@@ -357,7 +363,8 @@ def build_package(org: dict, assets: list[dict], profile: str = "agency", scan: 
     org_name = str(org.get("name") or "Organization")[:160]
     generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     bom = cbom(assessed, org_name, generated_at=generated_at)
-    milestones = [t for t in TIMELINE if t["date"] >= today.isoformat()] if profile != "nss_vendor" else \
+    milestones = [t for t in TIMELINE if t["date"] >= today.isoformat() and (profile != "company" or "NIST" in t["source"])] \
+        if profile != "nss_vendor" else \
         [{"date": f"{v[1]}-12-31", "source": "NSA CNSA 2.0", "item": f"{v[2]}: exclusively CNSA 2.0 (support and prefer by {v[0]})"}
          for v in CNSA2.values()]
     pkg: dict[str, Any] = {
@@ -379,7 +386,9 @@ def build_package(org: dict, assets: list[dict], profile: str = "agency", scan: 
         "caveats": ["Deadlines follow EO 14409, OMB M-26-15, the NIST IR 8547 initial public draft and NSA CNSA 2.0 as of "
                     "October 2026; confirm against the official texts.",
                     "Code scanning is heuristic: it shows where to look, not proof of absence.",
-                    "M-26-15 does not apply to national security systems (use profile nss_vendor for CNSA 2.0)."],
+                    "M-26-15 does not apply to national security systems (use profile nss_vendor for CNSA 2.0)." if profile != "company" else
+                    "Profile company: deadlines follow NIST IR 8547 (draft); federal agency dates do not bind private companies "
+                    "but customers, insurers and regulators increasingly ask for the same evidence."],
     }
     if profile == "contractor":
         pkg["contractor_readiness"] = [

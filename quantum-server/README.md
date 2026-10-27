@@ -39,6 +39,11 @@ Privi Quantum joins three things into one pipeline:
 | `pqc_readiness_package` | Signed EO 14409 / OMB M-26-15 package from code, an asset inventory and/or live `endpoints`: prioritized deadlines, the nine plan elements, CycloneDX 1.6 CBOM |
 | `pqc_federal_deadlines` | The federal post-quantum timeline with sources |
 | `quantum_status` | Algorithm, limits, backends, signing key, anchoring |
+| `quantum_advantage_receipt` | Races the quantum answer against classical baselines and seals the verdict, whichever side wins |
+| `quantum_backends` | IonQ, IBM Quantum, Amazon Braket and local backends with price, measured turnaround and budget |
+| `quantum_run_hardware` / `quantum_hardware_job` | Routes a trained circuit to real hardware by price or speed; the finished run is sealed with an advantage receipt |
+| `pqc_crypto_inventory` | One CBOM for a company from its domains and public GitHub repos: every quantum-vulnerable algorithm, where it is, dated plan |
+| `vault_keygen` / `vault_seal` / `vault_open` / `vault_receipt` | Privi Vault: re-wrap long-lived data under hybrid X25519 + ML-KEM against "harvest now, decrypt later" |
 
 ### Ready-made problems
 
@@ -143,12 +148,51 @@ depth 1, short training, fastest) plus any other Privi Quantum node. Add a node 
 Racing picks the fastest realm; it does not make any processor or network faster than it is. Realms run
 on exact simulators today; quantum hardware joins Privilege as a realm once a provider account is connected.
 
+## v0.6: proof, real hardware, inventory, vault
+
+**Quantum Advantage Receipts.** Every receipt runs two classical baselines on the same problem,
+exhaustive search (the proven optimum) and simulated annealing, and records cost and time for each
+side with a verdict: `quantum_won`, `classical_won` or `tie` (lower cost wins; on equal cost the
+faster side wins). Receipts are signed (Ed25519 + ML-DSA-87), anchored on chain and published at
+`/receipts/<id>`, whichever side wins. At today's sizes expect classical to win or tie; the point is
+that any future quantum win is provable, and any claim of one can be checked.
+
+**Real hardware routing.** Circuit angles are trained classically, then the trained circuit is
+sampled on a backend chosen by policy (`cheapest`, `fastest`, `hardware` = real QPUs only):
+
+| Backend | Turn on with | Notes |
+|---|---|---|
+| `local` | always on | exact statevector sampler on this server |
+| `ionq:simulator`, `ionq:qpu.forte-1` | `IONQ_API_KEY`, `IONQ_TARGETS` | IonQ REST API v0.4; the simulator is free |
+| `ibm:<backend>` | `IBM_QUANTUM_TOKEN`, `IBM_QUANTUM_BACKENDS`, optional `IBM_QUANTUM_INSTANCE` | needs the `hardware` extra (qiskit-ibm-runtime) |
+| `braket:<name>` | AWS credentials, `BRAKET_DEVICES="name=arn,..."`, `BRAKET_S3_BUCKET` | needs the `hardware` extra (boto3) |
+
+Money guard: a backend that costs money runs only when its price is set in `HARDWARE_PRICES`
+(JSON, USD per task and per shot) and the estimate fits `HARDWARE_DAILY_BUDGET_USD` (default 0 =
+paid hardware off). Open jobs are polled every `HARDWARE_POLL_SECONDS` (60) and sealed when done.
+
+**Crypto Inventory (CBOM).** `pqc_crypto_inventory` takes domains (live TLS 1.3 / hybrid ML-KEM
+check) and up to 5 public GitHub repos (downloaded as a tarball and scanned in memory, nothing kept)
+and returns the readiness package with profile `company` (NIST IR 8547 dates) or a federal profile,
+including a CycloneDX 1.6 CBOM and a public report page.
+
+**Privi Vault.** Hybrid X25519 + ML-KEM-768 (or ML-KEM-1024) key encapsulation, HKDF-SHA256, AES-256-GCM.
+The server never keeps plaintext or private keys. To keep data on your own machine:
+
+```
+python -m privi_quantum.vault keygen --out key.json > pub.json
+python -m privi_quantum.vault seal contract.pdf --public-key pub.json > contract.vault.json
+python -m privi_quantum.vault open contract.vault.json --private-key key.json --out contract.pdf
+```
+
+then send only the envelope's SHA-256 to `vault_receipt` for a signed, anchored protection receipt.
+
 ## Honest limits
 
 - At 16 qubits a classical computer solves these exactly, which is how the service grades
   itself. This is a working path to quantum hardware, not a claim of quantum advantage today.
-- Hardware runs are by export (OpenQASM); live submission to a provider needs that
-  provider's account and API key.
+- Live hardware runs need the provider's account and key (see v0.6 above); without them the
+  router uses this server's simulator and says so. IonQ, IBM and Braket queue times can be hours.
 - The Privi chain transaction itself is signed with the chain's ECDSA key. The ML-DSA-87
   signature is what keeps each result unforgeable after quantum computers arrive.
 
@@ -157,7 +201,7 @@ on exact simulators today; quantum hardware joins Privilege as a realm once a pr
 ```
 pip install .
 QUANTUM_DB_PATH=./quantum.db privi-quantum-mcp      # http://localhost:8000/mcp
-pytest                                              # 8 tests
+pytest                                              # 52 tests
 ```
 
 Environment: `QUANTUM_DB_PATH`, `QUANTUM_PUBLIC_URL`, `QUANTUM_SIGNING_SEED` (optional, 128 hex),

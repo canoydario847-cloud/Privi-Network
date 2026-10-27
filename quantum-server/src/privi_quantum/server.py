@@ -5,7 +5,9 @@ post-quantum signatures and anchored on chain (Base).
 
 Free:  quantum_status, quantum_problems, quantum_optimize, quantum_verify, pqc_scan_code,
        pqc_endpoint_check, pqc_readiness_package, pqc_federal_deadlines
-       (government / contractor post-quantum readiness)
+       (government / contractor post-quantum readiness), quantum_advantage_receipt,
+       quantum_backends, quantum_run_hardware, quantum_hardware_job, pqc_crypto_inventory,
+       vault_keygen, vault_seal, vault_open, vault_receipt
 """
 from __future__ import annotations
 
@@ -27,7 +29,8 @@ from pydantic import Field
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 
-from . import govpqc, govreport, pqctls, qaoa, scanner
+from . import advantage, govpqc, govreport, inventory, pqctls, qaoa, scanner, vault
+from .hardware import HardwareError, HardwareRouter, backends_from_env
 from .dream import BENCHMARK, MODES, DreamError, DreamScape, DreamWeaver, Privilege
 from .accelerator import LEVEL_LABEL, STEPS, Accelerator, AcceleratorError, badge_svg
 from .inspector import LEVELS as INSPECTOR_LEVELS, Inspector, credential_message
@@ -35,7 +38,7 @@ from .humans import HumanError, HumanRegistry
 from .anchoring import AnchorError, HttpAnchorClient, anchor_pending
 from .attest import PQ_ALG, Attestor
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/quantum-server"
 PUBLIC_URL = os.getenv("QUANTUM_PUBLIC_URL", "https://privi-quantum.onrender.com").rstrip("/")
 COPYRIGHT = "Copyright (c) 2026 Privi World Co. All rights reserved."
@@ -83,6 +86,19 @@ factory decisions and returns answers you can prove later.
    government ID (Stripe Identity with a live selfie). qagent_human_request gives the agent a link for its
    human. inspector_grade shows any agent's Privi grade (A+ to F) and what is missing.
 
+11. Quantum Advantage Receipts: quantum_advantage_receipt races the quantum answer against classical baselines
+   (exhaustive search for the proven optimum, simulated annealing) and seals quality, time and a verdict
+   (quantum_won / classical_won / tie) on chain, whichever side wins. Public page: /receipts/<id>.
+12. Real hardware: quantum_backends lists IonQ, IBM Quantum, Amazon Braket and the local simulator with price and
+   measured turnaround. quantum_run_hardware trains the circuit, routes it (policy cheapest | fastest | hardware) and
+   returns a job; quantum_hardware_job returns the answer plus a signed run attestation and an advantage receipt.
+   Paid QPUs run only within the operator's daily budget.
+13. Crypto inventory: pqc_crypto_inventory takes a company's domains and public GitHub repos and returns one CBOM:
+   every quantum-vulnerable algorithm, where it is, a dated migration plan and a CycloneDX 1.6 file, signed and anchored.
+14. Privi Vault (harvest now, decrypt later): vault_keygen, vault_seal and vault_open wrap long-lived data under hybrid
+   X25519 + ML-KEM encryption; vault_receipt gives a signed, anchored protection receipt for envelopes sealed locally
+   (python -m privi_quantum.vault), so the data never has to leave your machine.
+
 All tools are free. Privi is built by Dario Canoy (Privi World Co, Port Huron, Michigan).
 For the other Privi tools, pilots, partnerships, manufacturing or government work, see
 https://privi-discovery.onrender.com/llms.txt. {COPYRIGHT}"""
@@ -119,6 +135,8 @@ class Settings:
     webauthn_rp_id: str = ""
     stripe_secret_key: str = ""
     stripe_identity_webhook_secret: str = ""
+    hardware_daily_budget_usd: float = 0.0
+    hardware_poll_seconds: int = 60
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -144,6 +162,8 @@ class Settings:
             webauthn_rp_id=os.getenv("WEBAUTHN_RP_ID", ""),
             stripe_secret_key=os.getenv("STRIPE_SECRET_KEY", ""),
             stripe_identity_webhook_secret=os.getenv("STRIPE_IDENTITY_WEBHOOK_SECRET", ""),
+            hardware_daily_budget_usd=float(os.getenv("HARDWARE_DAILY_BUDGET_USD", "0") or 0),
+            hardware_poll_seconds=int(os.getenv("HARDWARE_POLL_SECONDS", "60")),
         )
 
 
@@ -175,7 +195,8 @@ def _who(ctx: Context) -> str:
 
 
 def build_server(settings: Settings | None = None, attestor: Attestor | None = None,
-                 anchor_client=None, endpoint_checker=None) -> MCPServer:
+                 anchor_client=None, endpoint_checker=None, hardware_router: HardwareRouter | None = None,
+                 repo_scanner=None) -> MCPServer:
     settings = settings or Settings.from_env()
     attestor = attestor or Attestor(settings.db_path, settings.signing_seed)
     if anchor_client is None and settings.anchor_api_key:
@@ -196,6 +217,8 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     accel.grader = inspector.grade_row
     scapes.gate = inspector.check_pass
     sweep_state: dict[str, float | None] = {"last": None}
+    router = hardware_router or HardwareRouter(settings.db_path, backends_from_env(), settings.hardware_daily_budget_usd)
+    scan_repo = repo_scanner or inventory.scan_repo
 
     def realm_gate(ctx: Context, privi_pass: str | None, scope: str) -> CallToolResult | None:
         """Privi Inspector: intercept agents without a valid, current certificate before they enter the realm."""
@@ -226,8 +249,9 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         return {"service": "privi-quantum", "version": __version__, "copyright": COPYRIGHT,
                 "algorithm": "CVaR-QAOA with INTERP layer schedule (exact statevector simulation)",
                 "max_qubits": qaoa.MAX_QUBITS, "max_layers": qaoa.MAX_LAYERS,
-                "backends": {"local-statevector": "live", "hardware": "export OpenQASM 2.0 (include_qasm=true) "
-                             "and submit to IBM Quantum, Amazon Braket or Azure Quantum"},
+                "backends": {b["id"]: ("ready" if b["usable_now"] else b["status"] if not b["available"] else b["money_guard"])
+                             for b in router.directory()},
+                "hardware_budget_usd": {"daily": router.daily_budget, "spent_today": round(router.spent_today(), 4)},
                 "signatures": f"Ed25519 + {PQ_ALG}", "signing_key_id": keys["key_id"],
                 "anchoring": {"enabled": anchor_client is not None, "chain": "Base via Privi Anchor (until the Privi chain mainnet)",
                               "interval_seconds": settings.anchor_interval},
@@ -337,8 +361,9 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
 
     def make_package(organization: str, assets: list[dict] | None, files: list[dict] | None, profile: str,
                      pqc_lead: str = "", system_name: str = "", impact: str = "unknown", hva: bool = False,
-                     endpoints: list[str] | None = None) -> dict[str, Any]:
+                     endpoints: list[str] | None = None, repos: list[str] | None = None) -> dict[str, Any]:
         assets = list(assets or [])
+        repo_summary = []
         endpoint_summary = None
         if endpoints:
             if len(endpoints) > pqctls.MAX_HOSTS:
@@ -365,8 +390,21 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
             merged["readiness_score"] = max(0, round(100 - pen * 100 / (pen + 40))) if pen else 100
             scan = merged
             assets += govpqc.assets_from_scan(scan, system_name or "Scanned code", impact, hva)
+        if repos:
+            if len(repos) > inventory.MAX_REPOS:
+                raise ValueError(f"scan at most {inventory.MAX_REPOS} repositories per call")
+            for ref in repos:
+                rs = scan_repo(str(ref))
+                repo_summary.append({"repository": rs["root"], "files_scanned": rs["files_scanned"],
+                                     "readiness_score": rs["readiness_score"], "counts": rs["counts"],
+                                     "truncated": rs.get("truncated", False)})
+                assets += govpqc.assets_from_scan(rs, rs["root"], impact, hva)
+                scan = scan or {"findings": [], "files_scanned": 0, "readiness_score": 100}
+                scan = {"findings": scan["findings"] + rs["findings"], "files_scanned": scan["files_scanned"] + rs["files_scanned"]}
+                pen = sum(scanner.WEIGHT[x["severity"]] for x in scan["findings"])
+                scan["readiness_score"] = max(0, round(100 - pen * 100 / (pen + 40))) if pen else 100
         if not assets:
-            raise ValueError("give code files to scan, public endpoints to check and/or a list of cryptographic assets")
+            raise ValueError("give repositories or code files to scan, public endpoints to check and/or a list of cryptographic assets")
         if len(assets) > 1000:
             raise ValueError("at most 1000 assets per package")
         pkg = govpqc.build_package({"name": organization, "pqc_lead": pqc_lead}, assets, profile, scan)
@@ -380,6 +418,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
                 "plan_elements": [{k: x[k] for k in ("element", "name", "status")} for x in pkg["plan_elements"]] if pkg["plan_elements"] else None,
                 "contractor_readiness": pkg.get("contractor_readiness"),
                 "endpoint_check": endpoint_summary,
+                **({"repositories": repo_summary} if repos else {}),
                 "report_url": f"{PUBLIC_URL}/reports/{aid}", "cbom_url": f"{PUBLIC_URL}/reports/{aid}.cbom.json",
                 "signed_package_url": f"{PUBLIC_URL}/reports/{aid}.json", "cbom_sha256": pkg["cbom_sha256"],
                 "signatures": f"Ed25519 + {PQ_ALG}",
@@ -436,6 +475,307 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         """The U.S. federal post-quantum timeline (EO 14409, OMB M-26-15, NIST IR 8547 draft, NSA CNSA 2.0), the
         approved replacement algorithms, and links to the sources. Free."""
         return govpqc.deadlines_reference()
+
+    # ---------------- Quantum Advantage Receipts, hardware routing, crypto inventory, vault ----------------
+
+    def _psha(problem: str, data: dict) -> str:
+        return hashlib.sha256(json.dumps({"problem": problem, "data": data}, sort_keys=True, default=str).encode()).hexdigest()
+
+    def _receipt_links(aid: str) -> dict[str, str]:
+        return {"receipt_url": f"{PUBLIC_URL}/receipts/{aid}", "receipt_json": f"{PUBLIC_URL}/receipts/{aid}.json"}
+
+    def _receipt_summary(att: dict) -> dict[str, Any]:
+        b = att["body"]
+        return {"receipt_id": att["id"], "verdict": b["verdict"], "why": b["why"],
+                "quantum": {k: b["quantum"].get(k) for k in ("backend", "backend_kind", "cost", "found_optimum", "runtime_ms")},
+                "classical": [{k: c[k] for k in ("method", "cost", "runtime_ms")} for c in b["classical"]],
+                "timing_note": b["timing_note"], "signatures": f"Ed25519 + {PQ_ALG}",
+                "anchoring": "queued for anchoring on Base" if anchor_client else "anchoring not configured",
+                **_receipt_links(att["id"])}
+
+    finalize_lock = threading.Lock()
+
+    def finalize_hw(jid: str) -> dict | None:
+        """Poll a hardware job; when it is done, decode the answer and seal a run attestation + advantage receipt once."""
+        with finalize_lock:
+            j = router.refresh(jid)
+            if not j or j["status"] != "done" or j.get("receipt_id"):
+                return j
+            qubo, decode = qaoa.build(j["problem"], j["data"])
+            meas = advantage.best_from_counts(qubo, j["counts"])
+            b = router.backends.get(j["backend_id"])
+            kind = b.kind if b else "unknown"
+            exact = advantage.exhaustive(qubo)
+            classical = [exact, advantage.simulated_annealing(qubo)]
+            psha = _psha(j["problem"], j["data"])
+            quantum = {"method": f"CVaR-QAOA p={j['layers']} (angles trained classically)", "backend": j["backend_id"],
+                       "backend_kind": kind, "provider_job_id": j["provider_job_id"], "shots": j["shots"],
+                       "cost": meas["cost"], "found_optimum": meas["found_optimum"],
+                       "optimum_frequency": meas["optimum_frequency"], "runtime_ms": round((j["turnaround_s"] or 0) * 1000, 3)}
+            run = attestor.issue("quantum_hardware_run", {
+                "problem": j["problem"], "problem_sha256": psha, "qubits": j["qubits"], "backend": j["backend_id"],
+                "backend_kind": kind, "provider_job_id": j["provider_job_id"], "shots": j["shots"],
+                "decision": decode(meas["solution"]), "cost": meas["cost"], "found_optimum": meas["found_optimum"],
+                "exact_optimum_cost": exact["cost"], "circuit_sha256": hashlib.sha256(j["qasm"].encode()).hexdigest(),
+                "estimated_cost_usd": j["est_cost_usd"]})
+            rc = attestor.issue("advantage_receipt", advantage.receipt_body(j["problem"], psha, qubo, quantum, classical))
+            result = {"decision": decode(meas["solution"]), "measurement": meas, "attestation_id": run["id"],
+                      "exact_optimum_cost": exact["cost"]}
+            router.save_result(jid, result, run["id"], rc["id"])
+            return router.get(jid)
+
+    def finalize_open() -> int:
+        n = 0
+        for jid in router.open_jobs():
+            j = finalize_hw(jid)
+            n += bool(j and j.get("receipt_id"))
+        return n
+
+    def hw_view(j: dict) -> dict[str, Any]:
+        out = {"job_id": j["job_id"], "status": j["status"], "backend": j["backend_id"], "provider_job_id": j["provider_job_id"],
+               "problem": j["problem"], "qubits": j["qubits"], "shots": j["shots"], "estimated_cost_usd": j["est_cost_usd"],
+               "submitted_at": j["submitted_at"], "finished_at": j.get("finished_at"), "turnaround_s": j.get("turnaround_s")}
+        if j.get("error"):
+            out["error"] = j["error"]
+        if j.get("poll_error"):
+            out["poll_error"] = j["poll_error"]
+        if j.get("result"):
+            out["decision"] = j["result"]["decision"]
+            out["measurement"] = j["result"]["measurement"]
+            out["attestation"] = {"id": j["attestation_id"], **links(j["attestation_id"])}
+            rc = attestor.get(j["receipt_id"])
+            if rc:
+                out["advantage_receipt"] = _receipt_summary(rc)
+        elif j["status"] not in ("done", "failed", "canceled"):
+            out["next"] = "call quantum_hardware_job again later; the server also checks open jobs every minute"
+        return out
+
+    @mcp.tool(title="Quantum Advantage Receipt", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                              idempotentHint=False, openWorldHint=True))
+    async def quantum_advantage_receipt(
+        problem: Annotated[str, Field(description="balance_lines | select_lots | split_conflicts | qubo (see quantum_problems)")],
+        data: Annotated[dict[str, Any], Field(description="Problem data in the shape quantum_problems describes")],
+        ctx: Context,
+        layers: Annotated[int, Field(description="QAOA depth p (1-4)", ge=1, le=4)] = 2,
+        shots: Annotated[int, Field(description="Measurements from the trained circuit (1-100000)", ge=1, le=100000)] = 1024,
+    ) -> CallToolResult:
+        """Race the quantum answer against classical baselines (exhaustive search = proven optimum, and simulated
+        annealing) on the same problem and seal the result as a signed, chain-anchored Quantum Advantage Receipt:
+        answer quality and time for each side and a verdict (quantum_won / classical_won / tie), published whichever
+        side wins. For a real-hardware receipt use quantum_run_hardware. Free."""
+        if not limiter.allow(_who(ctx)):
+            return _result({"error": f"rate limit: {settings.rate_per_min} calls per minute"}, is_error=True)
+        try:
+            qubo, decode = qaoa.build(problem, data)
+
+            def work():
+                r = qaoa.solve(qubo, layers=layers, shots=shots)
+                return r, [advantage.exhaustive(qubo), advantage.simulated_annealing(qubo)]
+            r, classical = await anyio.to_thread.run_sync(work, limiter=cpu)
+        except qaoa.ProblemError as e:
+            return _result({"error": str(e)}, is_error=True)
+        quantum = {"method": r["algorithm"], "backend": "local", "backend_kind": "simulator", "shots": shots,
+                   "cost": r["cost"], "found_optimum": r["found_optimum"],
+                   "optimum_frequency": r["probability_of_optimum"], "runtime_ms": float(r["runtime_ms"])}
+        body = advantage.receipt_body(problem, _psha(problem, data), qubo, quantum, classical)
+        att = await anyio.to_thread.run_sync(attestor.issue, "advantage_receipt", body)
+        return _result({**_receipt_summary(att), "quantum_decision": decode(r["solution"]), "copyright": COPYRIGHT})
+
+    @mcp.tool(title="Quantum hardware backends", annotations=READ_ONLY)
+    def quantum_backends() -> dict[str, Any]:
+        """Every quantum backend this server can route to (local simulator, IonQ, IBM Quantum, Amazon Braket),
+        whether it is usable now, its estimated price, measured turnaround, and the hardware budget. Free."""
+        return {"backends": router.directory(), "policies": {
+                    "cheapest": "lowest estimated price, real providers before this server's simulator, then fastest",
+                    "fastest": "lowest measured submission-to-result turnaround",
+                    "hardware": "real quantum processors (QPUs) only, cheapest first"},
+                "budget_usd": {"daily": router.daily_budget, "spent_today": round(router.spent_today(), 4)},
+                "money_guard": "paid backends run only when their price is configured and fits today's budget",
+                "how_it_runs": "circuit angles are trained classically on the exact simulator, then the trained "
+                               "CVaR-QAOA circuit is sampled on the chosen backend"}
+
+    @mcp.tool(title="Run on quantum hardware", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                            idempotentHint=False, openWorldHint=True))
+    async def quantum_run_hardware(
+        problem: Annotated[str, Field(description="balance_lines | select_lots | split_conflicts | qubo (see quantum_problems)")],
+        data: Annotated[dict[str, Any], Field(description="Problem data in the shape quantum_problems describes")],
+        ctx: Context,
+        backend: Annotated[str, Field(description="'auto' or a backend id from quantum_backends (e.g. ionq:simulator, ionq:qpu.forte-1, ibm:ibm_brisbane)")] = "auto",
+        policy: Annotated[str, Field(description="With backend='auto': cheapest | fastest | hardware (real QPUs only)")] = "cheapest",
+        layers: Annotated[int, Field(description="QAOA depth p (1-4)", ge=1, le=4)] = 1,
+        shots: Annotated[int, Field(description="Shots on the backend (1-10000)", ge=1, le=10000)] = 1000,
+        max_cost_usd: Annotated[float | None, Field(description="Refuse if the estimated price is above this", ge=0)] = None,
+    ) -> CallToolResult:
+        """Train the CVaR-QAOA circuit, route it to a quantum backend (IonQ, IBM Quantum, Amazon Braket or this
+        server's simulator) by price or speed, and return a job id. When the run finishes, the answer is sealed with a
+        post-quantum signed attestation and a Quantum Advantage Receipt against classical baselines. Poll with
+        quantum_hardware_job. Free to call; paid QPUs run only within the operator's configured budget."""
+        if not limiter.allow(_who(ctx)):
+            return _result({"error": f"rate limit: {settings.rate_per_min} calls per minute"}, is_error=True)
+        try:
+            qubo, _ = qaoa.build(problem, data)
+            r = await anyio.to_thread.run_sync(lambda: qaoa.solve(qubo, layers=layers, shots=256), limiter=cpu)
+            qasm = qaoa.to_qasm(qubo, r["angles"]["gamma"], r["angles"]["beta"], r["cost_normalization"]["min"],
+                                r["cost_normalization"]["span"])
+            sub = await anyio.to_thread.run_sync(lambda: router.submit(
+                problem, data, qasm, shots, layers, {"angles": r["angles"], "algorithm": r["algorithm"]},
+                backend, policy, max_cost_usd, _who(ctx)))
+        except (qaoa.ProblemError, HardwareError) as e:
+            return _result({"error": str(e), "backends": "see quantum_backends"}, is_error=True)
+        j = await anyio.to_thread.run_sync(finalize_hw, sub["job_id"])
+        return _result({**hw_view(j), "routing": sub["routing"], "copyright": COPYRIGHT})
+
+    @mcp.tool(title="Quantum hardware job", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                         idempotentHint=True, openWorldHint=True))
+    async def quantum_hardware_job(
+        job_id: Annotated[str, Field(description="hw_... id from quantum_run_hardware")],
+    ) -> CallToolResult:
+        """Status of a quantum hardware job; once done, the decision, measurement statistics, the signed attestation and
+        the Quantum Advantage Receipt. Free."""
+        j = await anyio.to_thread.run_sync(finalize_hw, job_id)
+        if not j:
+            return _result({"error": "unknown job_id"}, is_error=True)
+        return _result(hw_view(j))
+
+    @mcp.tool(title="Crypto inventory (CBOM) for a company", annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True))
+    async def pqc_crypto_inventory(
+        organization: Annotated[str, Field(description="Company or agency name")],
+        ctx: Context,
+        domains: Annotated[list[str] | None, Field(description="Public hostnames to test live for TLS 1.3 and hybrid post-quantum key exchange (up to 20)")] = None,
+        repos: Annotated[list[str] | None, Field(description="Public GitHub repositories to scan, e.g. ['https://github.com/acme/api', 'acme/web'] (up to 5)")] = None,
+        files: Annotated[list[dict[str, str]] | None, Field(description="Extra code or config files: [{name, content}] (up to 50 files, 1 MB)")] = None,
+        assets: Annotated[list[dict[str, Any]] | None, Field(description="Known cryptographic assets (same shape as pqc_readiness_package)")] = None,
+        profile: Annotated[str, Field(description="company (NIST IR 8547 dates) | agency | contractor | nss_vendor")] = "company",
+        long_lived_data: Annotated[bool, Field(description="Do these systems protect data that must stay secret past 2030? Raises priority (harvest now, decrypt later)")] = False,
+    ) -> CallToolResult:
+        """Point Privi at a company's domains and GitHub repositories and get one cryptographic bill of materials: every
+        algorithm quantum computers will break, where it is, a prioritized migration plan with dates, a CycloneDX 1.6
+        CBOM and a public report page, signed with ML-DSA-87 and anchored on chain. Repos are scanned in memory and not
+        kept. Free."""
+        if not limiter.allow(_who(ctx)):
+            return _result({"error": f"rate limit: {settings.rate_per_min} calls per minute"}, is_error=True)
+        if not (domains or repos or files or assets):
+            return _result({"error": "give domains, repos, files and/or assets"}, is_error=True)
+        prof = profile if profile in govpqc.PROFILES else "company"
+        extra = [{**a, "sensitive_past_2030": a.get("sensitive_past_2030", long_lived_data)} for a in (assets or [])]
+        try:
+            out = await anyio.to_thread.run_sync(lambda: make_package(
+                organization, extra, files, prof, "", "Submitted files", "high" if long_lived_data else "unknown", False,
+                domains, repos))
+        except (ValueError, inventory.InventoryError) as ex:
+            return _result({"error": str(ex)}, is_error=True)
+        out["next_step"] = ("quantum_run_hardware / quantum_advantage_receipt for optimization; vault_seal to re-wrap "
+                            "long-lived data under hybrid ML-KEM now")
+        return _result(out)
+
+    def _vault_receipt(env_info: dict, label: str, structure_checked: bool) -> dict[str, Any]:
+        att = attestor.issue("vault_protection", {"envelope_sha256": env_info["envelope_sha256"], "suite": env_info.get("suite"),
+                                                  "recipient_key_id": env_info.get("recipient_key_id"),
+                                                  "ciphertext_bytes": env_info.get("ciphertext_bytes"), "label": label[:200],
+                                                  "structure_checked": structure_checked,
+                                                  "statement": "This envelope existed, under this hybrid post-quantum "
+                                                               "suite, no later than the anchored time."})
+        return {"receipt_id": att["id"], "envelope_sha256": env_info["envelope_sha256"], "signatures": f"Ed25519 + {PQ_ALG}",
+                "anchoring": "queued for anchoring on Base" if anchor_client else "anchoring not configured", **links(att["id"])}
+
+    @mcp.tool(title="Privi Vault: new hybrid post-quantum key", annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False, idempotentHint=False, openWorldHint=False))
+    def vault_keygen(
+        suite: Annotated[str, Field(description="X25519+ML-KEM-768 (default) | X25519+ML-KEM-1024 (CNSA 2.0 KEM level)")] = vault.DEFAULT_SUITE,
+    ) -> CallToolResult:
+        """Create a hybrid X25519 + ML-KEM (FIPS 203) key pair for Privi Vault. The private key is returned once and not
+        stored here; for the strongest setup generate it locally with `python -m privi_quantum.vault keygen`. Free."""
+        try:
+            kp = vault.keygen(suite)
+        except vault.VaultError as e:
+            return _result({"error": str(e)}, is_error=True)
+        return _result({**kp, "keep_private_key_safe": "Privi does not keep it; lose it and the data cannot be opened",
+                        "local_tool": "pip install the Privi Quantum package and run python -m privi_quantum.vault keygen --out key.json"})
+
+    @mcp.tool(title="Privi Vault: seal data (harvest-now-decrypt-later protection)", annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False))
+    async def vault_seal(
+        public_key: Annotated[dict[str, Any], Field(description="Recipient public key from vault_keygen")],
+        ctx: Context,
+        text: Annotated[str | None, Field(description="Text to protect")] = None,
+        data_base64: Annotated[str | None, Field(description="Or bytes to protect, base64 (up to 5 MB)")] = None,
+        label: Annotated[str, Field(description="What this is, e.g. 'supplier contract 2026' (kept in the envelope and receipt)")] = "",
+    ) -> CallToolResult:
+        """Re-wrap long-lived sensitive data under hybrid post-quantum encryption (X25519 + ML-KEM, AES-256-GCM) so data
+        recorded today can't be decrypted by a future quantum computer. Returns the envelope and a signed protection
+        receipt anchored on chain. Plaintext is not stored. Free."""
+        if not limiter.allow(_who(ctx)):
+            return _result({"error": f"rate limit: {settings.rate_per_min} calls per minute"}, is_error=True)
+        if (text is None) == (data_base64 is None):
+            return _result({"error": "give exactly one of text or data_base64"}, is_error=True)
+        try:
+            raw = text.encode() if text is not None else vault.b64d(data_base64, "data_base64")
+            env = vault.seal(raw, public_key, label)
+            info = vault.check_envelope(env)
+        except vault.VaultError as e:
+            return _result({"error": str(e)}, is_error=True)
+        rc = await anyio.to_thread.run_sync(lambda: _vault_receipt(info, label, True))
+        return _result({"envelope": env, "protection_receipt": rc, "suite": env["suite"],
+                        "note": "Store the envelope anywhere; only the matching private key opens it."})
+
+    @mcp.tool(title="Privi Vault: open an envelope", annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False))
+    def vault_open(
+        envelope: Annotated[dict[str, Any], Field(description="A Privi Vault envelope")],
+        private_key: Annotated[dict[str, Any], Field(description="The recipient private key from vault_keygen")],
+    ) -> CallToolResult:
+        """Decrypt a Privi Vault envelope. Nothing is stored; for sensitive data prefer opening locally with
+        `python -m privi_quantum.vault open`. Free."""
+        try:
+            pt = vault.open_(envelope, private_key)
+        except vault.VaultError as e:
+            return _result({"error": str(e)}, is_error=True)
+        try:
+            return _result({"text": pt.decode("utf-8"), "bytes": len(pt)})
+        except UnicodeDecodeError:
+            return _result({"data_base64": vault.b64e(pt), "bytes": len(pt)})
+
+    @mcp.tool(title="Privi Vault: receipt for a locally sealed envelope", annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False))
+    async def vault_receipt(
+        ctx: Context,
+        envelope: Annotated[dict[str, Any] | None, Field(description="An envelope sealed locally (checked for structure; nothing is decrypted)")] = None,
+        envelope_sha256: Annotated[str | None, Field(description="Or only the envelope's SHA-256, so the envelope never leaves your machine")] = None,
+        label: Annotated[str, Field(description="What this protects")] = "",
+    ) -> CallToolResult:
+        """Get a signed, chain-anchored protection receipt proving data was under hybrid post-quantum encryption by a
+        given time, for envelopes sealed with the local Privi Vault tool. Free."""
+        if not limiter.allow(_who(ctx)):
+            return _result({"error": f"rate limit: {settings.rate_per_min} calls per minute"}, is_error=True)
+        try:
+            if envelope is not None:
+                info, checked = vault.check_envelope(envelope), True
+            elif envelope_sha256 and len(envelope_sha256) == 64 and all(c in "0123456789abcdef" for c in envelope_sha256.lower()):
+                info, checked = {"envelope_sha256": envelope_sha256.lower()}, False
+            else:
+                return _result({"error": "give an envelope or its 64-character SHA-256"}, is_error=True)
+        except vault.VaultError as e:
+            return _result({"error": str(e)}, is_error=True)
+        return _result(await anyio.to_thread.run_sync(lambda: _vault_receipt(info, label, checked)))
+
+    @mcp.custom_route("/receipts/{aid}.json", methods=["GET"], include_in_schema=False)
+    async def receipt_json(request: Request) -> JSONResponse:
+        att = attestor.get(request.path_params["aid"])
+        if not att or att["body"].get("kind") != "advantage_receipt":
+            return JSONResponse({"error": "not found"}, status_code=404, headers=cors)
+        return JSONResponse(att, headers=cors)
+
+    @mcp.custom_route("/receipts/{aid}", methods=["GET"], include_in_schema=False)
+    async def receipt_page(request: Request) -> Response:
+        att = attestor.get(request.path_params["aid"])
+        if not att or att["body"].get("kind") != "advantage_receipt":
+            return HTMLResponse("<h1>Receipt not found</h1>", status_code=404)
+        v = Attestor.verify(att, keys["ed25519"], keys["ml_dsa_87"])
+        return HTMLResponse(render_receipt(att, v), headers={"Cache-Control": "no-store"})
+
+    mcp._privi_finalize_open = finalize_open
+    mcp._hw_poll_seconds = settings.hardware_poll_seconds
 
     # ---------------- http ----------------
 
@@ -1308,6 +1648,41 @@ today; quantum hardware joins Privilege as a realm once a provider account is co
 <p><small>{copyright}</small></p></body></html>"""
 
 
+def render_receipt(att: dict, v: dict) -> str:
+    """Public page for a Quantum Advantage Receipt."""
+    b = att["body"]
+    q = b["quantum"]
+    color = {"quantum_won": "#0a7d4f", "classical_won": "#8a5a00", "tie": "#44546a"}.get(b["verdict"], "#44546a")
+    rows = "".join(f"<tr><td>{_h(c['method'])}</td><td>{_h(c['cost'])}</td><td>{_h(c['runtime_ms'])} ms</td>"
+                   f"<td>{_h(c['about'])}</td></tr>" for c in b["classical"])
+    anc = att.get("anchor")
+    anchor = (f"Anchored on chain {_h(anc.get('chain_id'))}, tx <code>{_h(anc.get('tx_hash'))}</code>" if anc
+              else "Waiting for the next on-chain anchor batch (every few minutes)")
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quantum Advantage Receipt</title><style>
+:root{{--bg:#f7f8fa;--fg:#14181f;--card:#fff;--line:#dde2ea;--muted:#5b6575}}
+@media (prefers-color-scheme:dark){{:root{{--bg:#0f1217;--fg:#e8ecf2;--card:#171b22;--line:#2a313c;--muted:#9aa5b5}}}}
+body{{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}}
+main{{max-width:820px;margin:0 auto;padding:24px 16px}}.card{{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin:14px 0}}
+.v{{display:inline-block;padding:4px 10px;border-radius:999px;color:#fff;background:{color};font-weight:600}}
+table{{width:100%;border-collapse:collapse}}td,th{{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}}
+.muted{{color:var(--muted)}}code{{word-break:break-all}}.t{{overflow-x:auto}}</style></head><body><main>
+<div class="muted">Privi Quantum · Quantum Advantage Receipt · {_h(att['id'])}</div>
+<h1>{_h(b['problem'])} · {_h(b['qubits'])} qubits</h1>
+<p><span class="v">{_h(b['verdict'].replace('_', ' '))}</span> {_h(b['why'])}</p>
+<section class="card"><h2>Quantum</h2><div class="t"><table>
+<tr><th>Backend</th><td>{_h(q.get('backend'))} ({_h(q.get('backend_kind'))})</td></tr>
+<tr><th>Method</th><td>{_h(q.get('method'))}</td></tr><tr><th>Best cost</th><td>{_h(q.get('cost'))}</td></tr>
+<tr><th>Found the proven optimum</th><td>{_h(q.get('found_optimum'))} (in {_h(q.get('optimum_frequency'))} of shots)</td></tr>
+<tr><th>Time</th><td>{_h(q.get('runtime_ms'))} ms</td></tr></table></div></section>
+<section class="card"><h2>Classical baselines</h2><div class="t"><table><tr><th>Method</th><th>Best cost</th><th>Time</th><th>How</th></tr>{rows}</table></div></section>
+<section class="card"><h2>Proof</h2><p>Signatures Ed25519 + ML-DSA-87: <b>{'valid' if v.get('valid') else 'INVALID'}</b>. {anchor}.</p>
+<p class="muted">{_h(b['timing_note'])}. {_h(b['honesty'])}</p>
+<p class="muted">Issued {_h(b['issued_at'])} · <a href="{PUBLIC_URL}/receipts/{_h(att['id'])}.json">signed JSON</a> ·
+<a href="{PUBLIC_URL}/keys">public keys</a></p></section>
+<p class="muted"><small>{COPYRIGHT}</small></p></main></body></html>"""
+
+
 def _anchor_loop(attestor: Attestor, client, interval: int) -> None:
     while True:
         time.sleep(interval)
@@ -1328,6 +1703,17 @@ def _patrol_loop(inspector: Inspector, interval: int) -> None:
         except Exception as e:  # keep patrolling
             print(f"[privi-inspector] patrol failed, will retry: {e}", flush=True)
         time.sleep(interval)
+
+
+def _hardware_loop(finalize_open, interval: int) -> None:
+    while True:
+        time.sleep(interval)
+        try:
+            n = finalize_open()
+            if n:
+                print(f"[privi-quantum] sealed {n} finished quantum hardware job(s)", flush=True)
+        except Exception as e:  # keep polling
+            print(f"[privi-quantum] hardware poll failed, will retry: {e}", flush=True)
 
 
 def http_app(mcp: MCPServer, host: str = "0.0.0.0"):
@@ -1351,6 +1737,8 @@ def main() -> None:
                          daemon=True).start()
     if mcp._patrol_minutes > 0:
         threading.Thread(target=_patrol_loop, args=(mcp._inspector, mcp._patrol_minutes * 60), daemon=True).start()
+    if mcp._hw_poll_seconds > 0:
+        threading.Thread(target=_hardware_loop, args=(mcp._privi_finalize_open, mcp._hw_poll_seconds), daemon=True).start()
     if args.stdio:
         mcp.run("stdio")
         return
