@@ -308,8 +308,12 @@ def session_user(token):
 
 def charge(user_id, service, amount, key, fee_bps=1000):
     """Atomic, idempotent debit. Returns bool; no partial charges."""
-    if not isinstance(amount, int) or amount < 0 or not key or len(key) > 180:
+    # Reject bool (an int subclass), fractional quantities and malformed keys
+    # before opening a transaction. Charge retries must use stable text keys.
+    if type(amount) is not int or amount < 0:
         raise ValueError("Invalid charge")
+    if not isinstance(key, str) or not key.strip() or len(key) > 180:
+        raise ValueError("Invalid charge idempotency key")
     with transaction() as db:
         old = db.execute("SELECT amount,service FROM ledger WHERE user_id=? AND idempotency=?",
                          (user_id, key)).fetchone()
