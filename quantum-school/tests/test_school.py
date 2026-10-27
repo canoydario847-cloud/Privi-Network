@@ -10,6 +10,7 @@ def post(c,path,data,token=TOKEN):
 def test_security_and_workflow(tmp_path):
  with api(tmp_path) as c:
   assert c.get("/health").status_code==200
+  assert "Every agent" in c.get("/").text
   assert len(c.get("/courses").json()["courses"])==4
   assert post(c,"/agents",{"name":"Jose","operator":"Privi"},"bad").status_code==401
   aid=post(c,"/agents",{"name":"Jose","operator":"Privi"}).json()["agent_id"]

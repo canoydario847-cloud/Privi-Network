@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, create_engine, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
@@ -159,6 +160,63 @@ def create_app(database_url=None,admin_token=None):
   c=COURSES[cid]
   return {"id":cid,"title":c["title"],"lessons":c["lessons"],
    "questions":[{"prompt":q,"choices":choices} for q,choices,_ in c["quiz"]]}
+ @api.get("/",response_class=HTMLResponse)
+ def school_landing():
+  cards="".join(
+   '<article><span>COURSE '+str(i+1).zfill(2)+'</span><h3>'+course["title"]+
+   '</h3><p>'+course["lessons"][0]+'</p><small>Three-question assessment · Agent prerequisite</small></article>'
+   for i,course in enumerate(COURSES.values()))
+  return HTMLResponse("""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privi Quantum School</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#050a1c;
+color:#eaf1ff;font:16px system-ui,-apple-system,Segoe UI,sans-serif;
+background-image:radial-gradient(circle at 80% 0%,#20367a 0%,transparent 36%),
+radial-gradient(circle at 0% 60%,#14314d 0%,transparent 35%)}
+main{max-width:1160px;margin:0 auto;padding:30px 24px 85px}
+header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:18px}
+.brand{font-weight:800;letter-spacing:.15em;font-size:14px}.brand em{color:#50e0e6;font-style:normal}
+nav a{color:#bccdfd;text-decoration:none;margin-left:22px;font-size:13px}
+.hero{padding:90px 0 60px;max-width:900px}.eyebrow{color:#55e4d6;letter-spacing:.25em;
+text-transform:uppercase;font-size:12px;font-weight:700}
+h1{font-size:clamp(46px,8vw,96px);line-height:1.0;letter-spacing:-.055em;margin:18px 0}
+h1 strong{color:#64e7e9}p{color:#b1bdd7;line-height:1.65}
+.lead{font-size:clamp(17px,2vw,22px);max-width:720px}
+a.primary{display:inline-block;background:#71eeee;color:#031325;border-radius:11px;
+padding:14px 21px;text-decoration:none;font-weight:800;margin-top:16px}
+.notice{margin:0 0 45px;border:1px solid #506180;border-radius:12px;
+padding:18px 20px;background:#0d1831;color:#bac8e7;font-size:14px}
+h2{font-size:30px;letter-spacing:-.03em;margin:0 0 22px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+article{border:1px solid #314666;border-radius:16px;background:#101d36cc;
+padding:26px;min-height:230px}article span{font-size:11px;color:#5de4df;
+letter-spacing:.16em;font-weight:700}article h3{font-size:22px;margin:22px 0 8px}
+article p{font-size:14px;line-height:1.5}article small{color:#89a1ce}
+section{margin:48px 0}.capabilities{display:flex;flex-wrap:wrap;gap:10px}
+.capabilities span{border:1px solid #435475;border-radius:50px;padding:9px 14px;
+background:#0e1b35;color:#e2ebff;font-size:13px}
+footer{margin-top:62px;border-top:1px solid #2a3d5a;padding-top:24px;font-size:12px;
+color:#97aaca}
+</style></head><body><main><header><div class="brand">PRIVI <em>WORLD</em> / QUANTUM</div>
+<nav><a href="/courses">Course Catalog API</a><a href="/docs">Developer API</a><a href="/health">System Health</a></nav></header>
+<div class="hero"><div class="eyebrow">The agent training and compute registry</div>
+<h1>Every agent<br>starts at <strong>School.</strong></h1>
+<p class="lead">Learn quantum foundations, register training evidence, evaluate models,
+and request guarded cloud deployments from one connected workspace.</p>
+<a class="primary" href="/docs">Open Developer Console</a></div>
+<div class="notice"><b>Phase 1: Registry mode.</b> School does not currently run quantum chips,
+rent cloud GPUs, train models, or deploy software. Provider integrations, verified execution
+receipts, and enterprise isolation require further engineering.</div>
+<section><div class="eyebrow">School Curriculum</div><h2>Four essential courses</h2>
+<div class="grid">""" + cards + """</div></section>
+<section><div class="eyebrow">Cloud & AI</div><h2>Built for a verifiable AI future</h2>
+<div class="capabilities"><span>Model registry</span><span>Dataset lineage</span>
+<span>Agent transcripts</span><span>GPU / HPC / QPU catalog</span>
+<span>Training job requests</span><span>Evaluation gates</span>
+<span>Human-controlled release approvals</span></div></section>
+<footer>Copyright © 2026 Privi World Corp. All rights reserved.
+No quantum speedup or production certification claimed.</footer></main></body></html>""")
  @api.get("/health")
  def health(db:Session=Depends(db_dep)):
   db.execute(text("SELECT 1"))

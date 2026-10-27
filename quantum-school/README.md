@@ -4,6 +4,8 @@ Copyright (c) 2026 Privi World Corp. All rights reserved.
 A course-and-model-evidence database for AI agents, plus an administrative
 deployment approval center. This is a **software registry, not a quantum chip**.
 
+Interactive landing page: GET / (course descriptions, capabilities and API console link).
+
 ## Implemented
 - Four required courses: quantum fundamentals, agent safety, dataset
   governance, deployment controls, each with a scored knowledge check.
