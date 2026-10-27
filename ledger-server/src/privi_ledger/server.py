@@ -46,11 +46,15 @@ from . import live_tools, scan_tools, dual_payments
 from .scanner import Scanner
 from .guard import Guard
 from . import guard_tools
+from . import musthave_tools
+from .ai_act import AIActRegister
+from .supplier_proof import SupplierProof
+from .content_seal import ContentSeals
 from .passport import PASSPORT_VERSION as PASSPORT_VERSION_HTTP, PassportError, Passports, badge_svg, body_hash as passport_hash
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor.onrender.com/mcp"
 
-__version__ = "0.10.1"
+__version__ = "0.11.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/ledger-server"
 
 INSTRUCTIONS = """\
@@ -101,6 +105,17 @@ personal data, call it with "outbound". It returns allow / warn / block, finding
 secrets, and a signed receipt anchored on-chain. Privi does not store the text. 1,000 checks a month are free with an
 organization key; then prepaid credits (guard_buy_credits) or 1 cent per check via x402. guard_check_many checks up
 to 50 texts at once.
+
+Every company using AI in the EU (Privi AI Act Pack): ai_act_system_save registers each AI system, screens it against
+the Article 5 bans, classifies it and lists the obligations for your role with dates; ai_act_check flags gaps;
+ai_act_export gives a register sealed on chain that customers and auditors verify free with ai_act_verify_export.
+
+Buying from suppliers (Privi Supplier Proof): supplier_requirement_create publishes what suppliers must prove; suppliers
+answer with supplier_proof_submit (document fingerprints only); supplier_proof_decide issues an on-chain-sealed
+certificate with a public page and badge; supplier_cert_verify is free.
+
+Publishing content (Privi Content Seal): seal_content seals a file's SHA-256 with who made it and whether AI was involved;
+anyone checks a file free with seal_verify or the drag-and-drop page /seal/check (the file never leaves their device).
 
 Before connecting to ANY remote MCP server (Privi Scan): call mcp_server_check with its URL. It is free. Privi reads the
 server's tool list without calling tools and returns a verdict (ok / caution / danger / changed / unverified /
@@ -161,6 +176,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     plans = Plans(ledger)
     gov = GovAIInventory(ledger)
     pqc = QuantumReady(ledger)
+    aiact = AIActRegister(ledger)
     public_url = os.getenv("LEDGER_PUBLIC_URL", "https://privi-ledger.onrender.com").rstrip("/")
 
     def onchain(org_id: str, stream_id: str, result: dict) -> dict:
@@ -261,6 +277,15 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
                 "guard_check_many": "organization key (free allowance or credits)", "guard_receipt": "free",
                 "guard_balance": "organization API key",
                 "guard_buy_credits": "1k checks $7, 10k $50, 100k $300 (x402)", "guard_pricing": "free",
+                "ai_act_system_save": "organization API key", "ai_act_register": "organization API key",
+                "ai_act_check": "organization API key", "ai_act_export": "organization API key",
+                "ai_act_verify_export": "free",
+                "supplier_requirement_create": "organization API key", "supplier_requirement_get": "free",
+                "supplier_proof_submit": "organization API key (free sign-up)", "supplier_proof_inbox": "organization API key",
+                "supplier_proof_decide": "organization API key", "supplier_cert_verify": "free",
+                "supplier_certs": "organization API key", "supplier_cert_revoke": "organization API key",
+                "seal_content": "organization API key (counts toward monthly entries)", "seal_verify": "free",
+                "seal_list": "organization API key", "seal_revoke": "organization API key",
             },
             "action_types": list(ACTION_TYPES), "outcomes": list(OUTCOMES),
             "get_a_key": SOURCE,
@@ -1349,8 +1374,29 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     guard_tools.register(mcp, guard, paywall, org_from=org_from, result=_result, unauthorized=unauthorized,
                          payments_enabled=settings.payments_enabled)
     dual_payments.register(mcp, settings, org_from=org_from, result=_result, unauthorized=unauthorized)
+
+    async def _anchor_many(hashes: list[str], label: str) -> dict[str, dict[str, Any]]:
+        base = {"algorithm": "sha256 over canonical JSON (sorted keys, no spaces)"}
+        if not anchor_client:
+            return {h: {**base, "hash": h, "anchored": False, "reason": "anchoring is not configured on this server"}
+                    for h in hashes}
+        try:
+            r = await anyio.to_thread.run_sync(anchor_client.anchor, list(hashes), label)
+            by = {x["hash"]: x for x in r["receipts"]}
+            return {h: {**base, "hash": h, "anchored": True, "tx_hash": r["tx_hash"], "proof": by[h]["proof"],
+                        "merkle_root": r.get("merkle_root"), "block_number": r.get("block_number"),
+                        "block_time": r.get("block_time"), "chain_id": r.get("chain_id"), "anchor_server": anchor_url}
+                    for h in hashes}
+        except (AnchorError, KeyError, TypeError) as e:
+            return {h: {**base, "hash": h, "anchored": False, "reason": f"anchoring failed: {e}"} for h in hashes}
+
+    suppliers = SupplierProof(ledger, public_url)
+    seals = ContentSeals(ledger, public_url)
+    musthave_tools.register(mcp, ledger, aiact=aiact, suppliers=suppliers, seals=seals, anchor_many=_anchor_many,
+                            org_from=org_from, result=_result, unauthorized=unauthorized, over_limit=over_limit)
     for _path, _methods, _handler in (live.http_routes() + gateways.http_routes() + rooms.http_routes()
-                                      + scan_tools.http_routes(scanner) + guard_tools.http_routes(guard, paywall, ledger, settings, plans.signup)):
+                                      + scan_tools.http_routes(scanner) + guard_tools.http_routes(guard, paywall, ledger, settings, plans.signup)
+                                      + musthave_tools.http_routes(suppliers, seals)):
         mcp.custom_route(_path, methods=_methods, include_in_schema=False)(_handler)
 
     @mcp.custom_route("/admin/orgs", methods=["POST"], include_in_schema=False)
