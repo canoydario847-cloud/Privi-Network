@@ -208,6 +208,30 @@ Everything here runs over WebSocket and server-sent events, backed by one durabl
 
 **Rooms.** `room_open` creates a live, hash-chained conversation between two organizations' agents (`wss://…/rooms/<id>/ws`; invite by org id or one-time join code). Optionally charge the guest per message, paid under their human-signed Mandate (budget, cap, payee list, approval policy and kill switch all apply). Closing a room seals the transcript: signed with Ed25519 and ML-DSA-87, anchored on the Privi chain, and written into both organizations' logs. `room_verify` (free) checks a transcript against the seal. Privi enforces and records the per-message charge; moving the money is between the two parties.
 
+## Privi AI Act Pack (EU AI Act register)
+
+Every company that builds or uses AI in the EU needs to know each system's tier and prove its obligations.
+`ai_act_system_save` registers a system, screens it against the Article 5 bans, classifies it (prohibited /
+high-risk / transparency / general-purpose / minimal) and lists the obligations for its role with dates
+(Annex III high-risk from 2 Dec 2027, Annex I from 2 Aug 2028, per the Digital Omnibus, Regulation (EU)
+2026/1744). `ai_act_check` flags gaps; `ai_act_export` returns a register sealed on chain that anyone checks
+free with `ai_act_verify_export`. Workflow aid, not legal advice.
+
+## Privi Supplier Proof (buyers require it, suppliers join)
+
+A buyer publishes what suppliers must prove (`supplier_requirement_create`, shareable invite page at
+`/supplier/requirements/<id>`). Suppliers answer from their own Privi org with document fingerprints only
+(`supplier_proof_submit`). On approval (`supplier_proof_decide`) Privi issues a certificate naming both companies
+and the evidence hashes, sealed on chain, with a public page `/certs/<id>` and badge `/certs/<id>/badge.svg`.
+`supplier_cert_verify` is free and can confirm a specific document is covered.
+
+## Privi Content Seal (real vs AI-made)
+
+`seal_content` seals the SHA-256 of a file or text with who made it and whether AI was involved (human,
+ai_assisted, ai_edited, ai_generated + tool); a batch of up to 50 is one on-chain anchor. Anyone checks free with
+`seal_verify`, `GET /seal/<sha256>`, a badge, or the drag-and-drop page `/seal/check` (the file is hashed in the
+browser and never uploaded).
+
 ## Privi Handshake
 
 A dealing between two companies, such as a payment, a data transfer, a delivery or an agreement, gets recorded by **both** of them, with neither able to deny or rewrite it alone.

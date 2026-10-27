@@ -3,7 +3,7 @@
   "name": "io.github.canoydario847-cloud/privi-ledger",
   "title": "Privi Ledger",
   "description": "Privi Guard stops prompt injection and data leaks in AI agents, plus audit logs and trust passports.",
-  "version": "0.10.2",
+  "version": "0.11.0",
   "websiteUrl": "https://privi-discovery.onrender.com",
   "repository": {
     "url": "https://github.com/canoydario847-cloud/Privi-Network",
