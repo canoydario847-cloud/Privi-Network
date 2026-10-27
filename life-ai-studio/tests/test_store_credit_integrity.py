@@ -219,3 +219,40 @@ def test_durable_startup_requires_preexisting_initialized_database(tmp_path, mon
     with pytest.raises(RuntimeError, match="existing initialized database"):
         store.init()
     assert not path.exists(), "Guarded restart must not recreate a lost database"
+
+
+@pytest.mark.parametrize("scenario", ["users_only", "missing_ledger_idempotency"])
+def test_durable_startup_and_readiness_reject_incomplete_core_schema(
+    tmp_path, monkeypatch, scenario
+):
+    """A lookalike/partial SQLite restore must not report healthy or self-heal."""
+    import sqlite3
+
+    path = tmp_path / "partial-life.sqlite3"
+    with sqlite3.connect(path) as db:
+        db.execute(
+            "CREATE TABLE users (id TEXT, email TEXT, pwdhash TEXT, "
+            "member_since INTEGER, credits INTEGER)"
+        )
+        if scenario == "missing_ledger_idempotency":
+            db.executescript(
+                "CREATE TABLE sessions (token_hash TEXT, user_id TEXT, expires INTEGER);"
+                "CREATE TABLE projects (id TEXT, owner_id TEXT, title TEXT);"
+                "CREATE TABLE files (project_id TEXT, path TEXT, content TEXT, version INTEGER);"
+                "CREATE TABLE ledger (id TEXT, user_id TEXT, amount INTEGER);"
+            )
+        before = {row[0] for row in db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )}
+
+    monkeypatch.setattr(store, "DB", str(path))
+    monkeypatch.setenv("LIFE_REQUIRE_EXISTING_DB", "1")
+    assert store.database_readable() is False
+    with pytest.raises(RuntimeError, match="existing initialized database"):
+        store.init()
+
+    with sqlite3.connect(path) as db:
+        after = {row[0] for row in db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )}
+    assert after == before, "Guarded startup must not mutate a partial restore"
