@@ -327,8 +327,13 @@ def charge(user_id, service, amount, key, fee_bps=1000):
         return True
 
 def credit(user_id, amount, service, key):
-    if not isinstance(amount, int) or amount <= 0 or amount > 1000000:
+    # An absent/blank idempotency key must never reach SQLite: UNIQUE permits
+    # repeated NULL values, which could otherwise grant duplicate credits.
+    # bool is an int subclass but is not a valid credit quantity.
+    if type(amount) is not int or amount <= 0 or amount > 1000000:
         raise ValueError("Invalid credit")
+    if not isinstance(key, str) or not key.strip() or len(key) > 180:
+        raise ValueError("Invalid credit idempotency key")
     with transaction() as db:
         existing = db.execute("SELECT amount,service FROM ledger WHERE user_id=? AND idempotency=?",
                               (user_id, key)).fetchone()
