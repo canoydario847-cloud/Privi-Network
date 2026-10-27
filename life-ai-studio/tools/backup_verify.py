@@ -569,6 +569,17 @@ def validate_database(conn):
     ).fetchone()
     if invalid_balance is not None:
         raise ValueError("Not a LIFE database; invalid member credit balance")
+    # Service names are part of the idempotent credit/charge retry contract.
+    # SQLite permits NULL, blank strings and BLOBs in older ledger schemas;
+    # these make restored charge history unreliable. Never log service names.
+    invalid_ledger_service = conn.execute(
+        'SELECT 1 FROM "ledger" WHERE typeof("service") != \'text\' '
+        'OR length(trim("service", '
+        "char(9) || char(10) || char(11) || char(12) || char(13) || ' '"
+        ')) = 0 LIMIT 1'
+    ).fetchone()
+    if invalid_ledger_service is not None:
+        raise ValueError("Not a LIFE database; invalid credit ledger service identity")
     # Credit and charge entries must retain integer amounts and the correct
     # sign after restore. A corrupt ledger can otherwise misstate customer
     # credit history even if the SQLite file itself passes integrity_check.
