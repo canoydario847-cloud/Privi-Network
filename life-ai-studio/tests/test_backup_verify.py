@@ -1305,7 +1305,7 @@ def test_restore_rejects_orphaned_credit_ledger(tmp_path):
             ("l1", "missing-user", "debit", "synthetic", 1, "test-1", 1),
         )
     destination = tmp_path / "vault" / "backup.sqlite3"
-    with pytest.raises(ValueError, match="orphaned credit ledger entries"):
+    with pytest.raises(ValueError, match="orphaned ledger owner references"):
         backup.backup_and_verify(source, destination)
     assert not destination.exists(), "Orphaned customer charges must not publish a backup"
 
