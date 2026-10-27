@@ -208,13 +208,20 @@ def validate_database(conn):
             # Never expose a member ID, wallet, signed challenge or nonce.
             raise ValueError("Not a LIFE database; invalid wallet challenge ownership")
         # Challenge nonces are persisted only as lowercase SHA-256 hashes.
+        # Wallets must retain the lowercase EVM address and nonblank signed
+        # message that the live wallet-link flow writes; never log either.
         # SQLite's dynamic typing can admit malformed hashes and expiration
         # values; reject those before restoring wallet-link authentication.
         invalid_challenge = conn.execute(
             'SELECT 1 FROM "challenges" WHERE '
             "typeof(nonce_hash) != 'text' OR length(nonce_hash) != 64 "
             "OR nonce_hash GLOB '*[^0-9a-f]*' "
-            "OR typeof(expires) != 'integer' OR expires < 0 LIMIT 1"
+            "OR typeof(expires) != 'integer' OR expires < 0 "
+            "OR typeof(wallet) != 'text' OR length(wallet) != 42 "
+            "OR substr(wallet, 1, 2) != '0x' "
+            "OR substr(wallet, 3) GLOB '*[^0-9a-f]*' "
+            "OR typeof(message) != 'text' OR length(trim(message)) = 0 "
+            "LIMIT 1"
         ).fetchone()
         if invalid_challenge is not None:
             raise ValueError("Not a LIFE database; invalid wallet challenge state")
