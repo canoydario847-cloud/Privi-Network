@@ -170,6 +170,15 @@ def validate_database(conn):
             break
     if not has_idempotency_guard:
         raise ValueError("Not a LIFE database; ledger idempotency UNIQUE constraint missing")
+    # The ledger is customer credit history. Without declared foreign keys,
+    # a structurally valid backup can contain charges for deleted accounts.
+    # Refuse to publish such a snapshot; do not reveal member identifiers.
+    orphan_ledger = conn.execute(
+        'SELECT 1 FROM "ledger" l LEFT JOIN "users" u '
+        'ON l.user_id = u.id WHERE u.id IS NULL LIMIT 1'
+    ).fetchone()
+    if orphan_ledger is not None:
+        raise ValueError("Not a LIFE database; orphaned credit ledger entries")
     # Wallet-link challenges are authentication state. Older snapshots may not
     # have this table, but a present table must preserve one-time nonce identity
     # and account ownership. The current LIFE schema has no foreign key here.
