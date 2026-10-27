@@ -4,6 +4,8 @@ WORKDIR /app
 COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
 RUN pip install --no-cache-dir .
+# IBM Quantum + Amazon Braket clients; IonQ needs nothing extra. A failure here never blocks the deploy.
+RUN pip install --no-cache-dir ".[hardware]" || echo "hardware extra not installed; IonQ and local still work"
 
 ENV PORT=8000 QUANTUM_DB_PATH=/data/quantum.db
 RUN mkdir -p /data

@@ -183,6 +183,18 @@ services:
         value: "300"
       - key: QUANTUM_RATE_PER_MIN
         value: "20"
+      - key: HARDWARE_DAILY_BUDGET_USD    # paid quantum hardware is off at 0; set a daily cap to turn it on
+        value: "0"
+      - key: HARDWARE_PRICES              # JSON USD prices per backend, e.g. {"ionq:qpu.forte-1":{"per_task":0.3,"per_shot":0.08}}
+        sync: false
+      - key: IONQ_API_KEY                 # IonQ Quantum Cloud; the IonQ simulator target is free
+        sync: false
+      - key: IONQ_TARGETS
+        value: simulator
+      - key: IBM_QUANTUM_TOKEN            # optional: IBM Quantum (also set IBM_QUANTUM_BACKENDS, e.g. ibm_brisbane)
+        sync: false
+      - key: GITHUB_TOKEN                 # optional: higher GitHub limits for crypto inventory repo scans
+        sync: false
 
   # ------------------------------------------------------------------ Privi Call
   - type: web
