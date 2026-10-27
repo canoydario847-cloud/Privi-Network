@@ -65,3 +65,39 @@ def test_invalid_credit_request_never_changes_balance_or_ledger(
             "SELECT credits FROM users WHERE id=?", ("synthetic-member",)
         ).fetchone()[0] == 0
         assert db.execute("SELECT COUNT(*) FROM ledger").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize(
+    ("amount", "key"),
+    [
+        (True, "boolean-debit"),
+        (1.5, "fractional-debit"),
+        (-1, "negative-debit"),
+        (1, None),
+        (1, ""),
+        (1, "   "),
+        (1, "x" * 181),
+        (1, 123),
+    ],
+)
+def test_invalid_charge_request_never_changes_balance_or_ledger(
+    tmp_path, monkeypatch, amount, key
+):
+    monkeypatch.setattr(store, "DB", str(tmp_path / "life.sqlite3"))
+    store.init()
+    with store.transaction() as db:
+        db.execute(
+            "INSERT INTO users (id,email,pwdhash,wallet,member_since,credits) "
+            "VALUES (?,?,?,?,?,?)",
+            ("synthetic-member", "synthetic@example.invalid",
+             "not-a-real-hash", "0x" + "a" * 40, 1, 10),
+        )
+
+    with pytest.raises(ValueError, match="Invalid charge"):
+        store.charge("synthetic-member", "synthetic-test", amount, key)
+
+    with store.transaction() as db:
+        assert db.execute(
+            "SELECT credits FROM users WHERE id=?", ("synthetic-member",)
+        ).fetchone()[0] == 10
+        assert db.execute("SELECT COUNT(*) FROM ledger").fetchone()[0] == 0
