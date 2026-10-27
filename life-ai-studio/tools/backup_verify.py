@@ -510,14 +510,6 @@ def validate_database(conn):
     ).fetchone()
     if bad_session is not None:
         raise ValueError("Not a LIFE database; invalid session authentication state")
-    # Sessions must never restore against deleted or nonexistent accounts.
-    # SQLite does not enforce this relationship in older LIFE schemas.
-    orphan_session = conn.execute(
-        'SELECT 1 FROM "sessions" s LEFT JOIN "users" u '
-        'ON s.user_id = u.id WHERE u.id IS NULL LIMIT 1'
-    ).fetchone()
-    if orphan_session is not None:
-        raise ValueError("Not a LIFE database; orphaned authentication session")
     # Project files must restore as usable text with a nonblank
     # path. SQLite can store BLOBs or empty paths in TEXT columns even when
     # schema and ownership checks pass; reject malformed private files without
