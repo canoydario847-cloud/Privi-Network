@@ -37,7 +37,11 @@ def database_readable():
 
 @contextmanager
 def transaction():
-    conn = sqlite3.connect(DB, timeout=30)
+    # Never let a request silently create a fresh, empty SQLite database if
+    # the mounted LIFE volume disappears. init() is the only creation path.
+    # URI mode=rw opens an existing file for writes but refuses to create one.
+    uri = Path(DB).absolute().as_uri() + "?mode=rw"
+    conn = sqlite3.connect(uri, uri=True, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("BEGIN IMMEDIATE")
