@@ -180,3 +180,42 @@ def test_transaction_never_recreates_missing_member_database(tmp_path, monkeypat
         with store.transaction() as db:
             db.execute("SELECT 1")
     assert not path.exists(), "A request must not recreate a lost LIFE database"
+
+
+def test_durable_startup_requires_preexisting_initialized_database(tmp_path, monkeypatch):
+    """Missing/empty storage must not become a fresh customer database."""
+    path = tmp_path / "durable-volume" / "life.sqlite3"
+    monkeypatch.setattr(store, "DB", str(path))
+    monkeypatch.setenv("LIFE_REQUIRE_EXISTING_DB", "1")
+
+    with pytest.raises(RuntimeError, match="existing initialized database"):
+        store.init()
+    assert not path.exists()
+    assert not path.parent.exists(), "Guarded startup must not create a fake volume"
+
+    path.parent.mkdir()
+    path.touch()
+    with pytest.raises(RuntimeError, match="existing initialized database"):
+        store.init()
+    assert path.stat().st_size == 0, "Guarded startup must not initialize an empty file"
+
+    path.unlink()
+    monkeypatch.setenv("LIFE_REQUIRE_EXISTING_DB", "0")
+    store.init()  # Explicit staging bootstrap, not a production restore.
+    with store.transaction() as db:
+        db.execute(
+            "INSERT INTO users (id,email,pwdhash,member_since) VALUES (?,?,?,?)",
+            ("existing-member", "existing@example.invalid", "synthetic-hash", 1),
+        )
+
+    monkeypatch.setenv("LIFE_REQUIRE_EXISTING_DB", "1")
+    store.init()
+    with store.transaction() as db:
+        assert db.execute(
+            "SELECT COUNT(*) FROM users WHERE id='existing-member'"
+        ).fetchone()[0] == 1
+
+    path.unlink()
+    with pytest.raises(RuntimeError, match="existing initialized database"):
+        store.init()
+    assert not path.exists(), "Guarded restart must not recreate a lost database"
