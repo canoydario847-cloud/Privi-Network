@@ -1294,3 +1294,18 @@ def test_restore_rejects_invalid_project_creation_timestamps(tmp_path, created, 
         with pytest.raises(ValueError, match="invalid project creation timestamp"):
             backup.backup_and_verify(source, destination)
         assert not destination.exists(), "Malformed project history must not publish a backup"
+
+def test_restore_rejects_orphaned_credit_ledger(tmp_path):
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute(
+            "INSERT INTO ledger (id,user_id,kind,service,amount,idempotency,created) "
+            "VALUES (?,?,?,?,?,?,?)",
+            ("l1", "missing-user", "debit", "synthetic", 1, "test-1", 1),
+        )
+    destination = tmp_path / "vault" / "backup.sqlite3"
+    with pytest.raises(ValueError, match="orphaned credit ledger entries"):
+        backup.backup_and_verify(source, destination)
+    assert not destination.exists(), "Orphaned customer charges must not publish a backup"
+
