@@ -1418,3 +1418,33 @@ def test_backup_rejects_session_owned_by_missing_account(tmp_path):
         backup.backup_and_verify(source, dest)
     assert not dest.exists(), "Invalid authentication state must not publish a backup"
 
+
+
+@pytest.mark.parametrize("service,valid", [
+    ("ai-inference", True),
+    ("collaboration-🌌", True),
+    (None, False),
+    ("", False),
+    (" \t\n ", False),
+    (b"binary-service", False),
+])
+def test_backup_rejects_invalid_credit_ledger_service_identity(tmp_path, service, valid):
+    """A recovered idempotent charge must retain a usable service identifier."""
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute(
+            "INSERT INTO users VALUES ('u1','member@example.test','synthetic-hash',NULL,1,5)"
+        )
+        db.execute(
+            "INSERT INTO ledger (id,user_id,kind,service,amount,idempotency,created) "
+            "VALUES (?,?,?,?,?,?,?)",
+            ("l1", "u1", "credit", service, 5, "synthetic-credit-1", 1),
+        )
+    destination = tmp_path / "vault" / "snapshot.sqlite3"
+    if valid:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        with pytest.raises(ValueError, match="invalid credit ledger service identity"):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Malformed financial audit data must not publish a backup"
