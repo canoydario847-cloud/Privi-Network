@@ -12,6 +12,16 @@ checker = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(checker)
 
 class MainnetEvidenceTest(unittest.TestCase):
+    def test_malformed_validator_entries_fail_closed(self):
+        for validators in ([None] * 4, ["operator"] * 4, [42] * 4):
+            problems = checker.assess(
+                {"validators": validators}, Path("/definitely/missing-genesis.json")
+            )
+            self.assertTrue(
+                any("each validator must be a JSON object" in p for p in problems),
+                "malformed validator entry must be rejected explicitly",
+            )
+
     def test_missing_genesis_fails(self):
         problems = checker.assess({}, Path("/this/does/not/exist/privi-genesis.json"))
         self.assertTrue(any("genesis file missing" in p for p in problems))
