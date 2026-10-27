@@ -327,8 +327,8 @@ def charge(user_id, service, amount, key, fee_bps=1000):
         return True
 
 def credit(user_id, amount, service, key):
-    # An absent/blank idempotency key must never reach SQLite: UNIQUE permits
-    # repeated NULL values, which could otherwise grant duplicate credits.
+    # Validate idempotency keys before writes instead of relying on the
+    # ledger's NOT NULL/UNIQUE constraints to reject invalid requests.
     # bool is an int subclass but is not a valid credit quantity.
     if type(amount) is not int or amount <= 0 or amount > 1000000:
         raise ValueError("Invalid credit")
