@@ -302,3 +302,44 @@ def test_durable_startup_rejects_core_tables_without_identity_primary_keys(
             (table,),
         ).fetchone()[0]
     assert after == before, "Guarded startup must not repair a broken restore"
+
+
+@pytest.mark.parametrize("partial_index", [False, True])
+def test_durable_readiness_rejects_missing_ledger_idempotency_guard(
+    tmp_path, monkeypatch, partial_index
+):
+    """Core columns and PKs alone must not permit duplicate financial events."""
+    import sqlite3
+
+    path = tmp_path / "unsafe-ledger.sqlite3"
+    monkeypatch.setattr(store, "DB", str(path))
+    store.init()
+    with sqlite3.connect(path) as db:
+        db.execute("DROP TABLE ledger")
+        db.execute(
+            "CREATE TABLE ledger (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, "
+            "kind TEXT NOT NULL, service TEXT NOT NULL, amount INTEGER NOT NULL, "
+            "platform_fee_micros INTEGER NOT NULL DEFAULT 0, "
+            "idempotency TEXT NOT NULL, created INTEGER NOT NULL)"
+        )
+        if partial_index:
+            db.execute(
+                "CREATE UNIQUE INDEX ledger_partial_idem "
+                "ON ledger(user_id,idempotency) WHERE kind='credit'"
+            )
+        schema_before = tuple(db.execute(
+            "SELECT type,name,sql FROM sqlite_master "
+            "WHERE tbl_name='ledger' ORDER BY name"
+        ).fetchall())
+
+    monkeypatch.setenv("LIFE_REQUIRE_EXISTING_DB", "1")
+    assert store.database_readable() is False
+    with pytest.raises(RuntimeError, match="existing initialized database"):
+        store.init()
+
+    with sqlite3.connect(path) as db:
+        schema_after = tuple(db.execute(
+            "SELECT type,name,sql FROM sqlite_master "
+            "WHERE tbl_name='ledger' ORDER BY name"
+        ).fetchall())
+    assert schema_after == schema_before, "Guarded startup must not alter a bad restore"
