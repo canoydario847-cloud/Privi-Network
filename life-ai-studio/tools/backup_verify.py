@@ -519,6 +519,7 @@ def validate_database(conn):
         "typeof(\"path\") != 'text' OR "
         "length(trim(\"path\", char(9) || char(10) || char(11) || "
         "char(12) || char(13) || ' ')) = 0 OR "
+        "instr(\"path\", char(0)) > 0 OR "
         "typeof(\"content\") != 'text' LIMIT 1"
     ).fetchone()
     if invalid_file_text is not None:
