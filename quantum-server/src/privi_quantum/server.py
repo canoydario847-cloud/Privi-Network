@@ -150,7 +150,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     weaver = DreamWeaver(privilege, attestor, anyio.CapacityLimiter(settings.max_concurrent))
     scapes = DreamScape(privilege, weaver)
     accel = Accelerator(settings.db_path, attestor, PUBLIC_URL)
-    bench_state = {"last": 0.0}
+    bench_state: dict[str, float | None] = {"last": None}
 
     mcp = MCPServer(
         name="privi-quantum", title="Privi Quantum",
@@ -400,7 +400,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         """Run the standard 8-qubit benchmark on every active realm at once and update Privilege's speed
         rankings. At most once every 2 minutes for everyone. Free."""
         now = time.monotonic()
-        if now - bench_state["last"] < 120:
+        if bench_state["last"] is not None and now - bench_state["last"] < 120:
             return _result({"error": "a benchmark ran less than 2 minutes ago; try again shortly",
                             "directory": privilege.directory()}, is_error=True)
         bench_state["last"] = now
