@@ -524,15 +524,15 @@ def validate_database(conn):
     ).fetchone()
     if invalid_file_text is not None:
         raise ValueError("Not a LIFE database; invalid private project file text")
-    # File writes pass through agents.safe_path(), which limits paths to
-    # canonical, relative ASCII names. A restored snapshot must enforce the
-    # same contract; otherwise malformed paths can reappear in private project
-    # listings or later export tools. Never log the private filenames.
+    # New writes use strict canonical names, but older snapshots can contain
+    # valid Unicode filenames. Preserve those while rejecting path traversal,
+    # hidden paths and noncanonical separators that can confuse export tools.
+    # Never log private filenames.
     for (stored_path,) in conn.execute('SELECT "path" FROM "files"'):
         parsed = PurePosixPath(stored_path)
         if (
             len(stored_path) > 180
-            or not re.fullmatch(r"[A-Za-z0-9_./-]+", stored_path)
+            or "\\" in stored_path
             or parsed.is_absolute()
             or ".." in parsed.parts
             or len(parsed.parts) > 8
