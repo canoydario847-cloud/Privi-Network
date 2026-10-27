@@ -2,6 +2,7 @@
 import hashlib
 import os
 import secrets
+import stat
 import sqlite3
 import time
 import uuid
@@ -62,7 +63,11 @@ def init():
     try:
         fd = os.open(db_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     except FileExistsError:
-        pass
+        # Do not follow a pre-existing symlink or open a special file as the
+        # member database. Existing regular databases retain their permissions
+        # for operator review; this check makes no filesystem changes.
+        if not stat.S_ISREG(db_path.lstat().st_mode):
+            raise ValueError("LIFE database path must be an existing regular file")
     else:
         os.close(fd)
     with transaction() as db:
