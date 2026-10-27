@@ -1341,7 +1341,7 @@ def test_restore_rejects_orphaned_credit_ledger(tmp_path):
     ("notes.txt", "hello", True),
     ("unicode-🌌.txt", "", True),
     ("", "text", False),
-    ("  \\t\\n ", "text", False),
+    ("  \t\n ", "text", False),
     (b"binary-path", "text", False),
     ("notes.txt", b"binary-content", False),
     ("notes.txt", None, False),
