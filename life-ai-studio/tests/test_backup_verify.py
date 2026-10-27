@@ -1265,3 +1265,32 @@ def test_backup_rejects_invalid_linked_wallet_identity(tmp_path, wallet, accepte
         with pytest.raises(ValueError, match="invalid linked wallet identity"):
             backup.backup_and_verify(source, destination)
         assert not destination.exists(), "Invalid wallet identity must not publish a backup"
+
+
+@pytest.mark.parametrize("created,accepted", [
+    (0, True),
+    (1700000000, True),
+    (None, False),
+    (-1, False),
+    ("unknown", False),
+    (1.5, False),
+])
+def test_restore_rejects_invalid_project_creation_timestamps(tmp_path, created, accepted):
+    """Malformed project audit times must not be published as recoverable data."""
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute(
+            "INSERT INTO users VALUES ('u1','synthetic@example.invalid','hash',NULL,1,0)"
+        )
+        db.execute(
+            "INSERT INTO projects (id,owner_id,title,kind,created) VALUES (?,?,?,?,?)",
+            ("p1", "u1", "Synthetic", "code", created),
+        )
+    destination = tmp_path / "vault" / "snapshot.sqlite3"
+    if accepted:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        with pytest.raises(ValueError, match="invalid project creation timestamp"):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Malformed project history must not publish a backup"
