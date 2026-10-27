@@ -1414,7 +1414,7 @@ def test_backup_rejects_session_owned_by_missing_account(tmp_path):
             ("a" * 64, "deleted-account", 123456),
         )
     dest = tmp_path / "vault" / "snapshot.sqlite3"
-    with pytest.raises(ValueError, match="orphaned authentication session"):
+    with pytest.raises(ValueError, match="orphaned sessions owner references"):
         backup.backup_and_verify(source, dest)
     assert not dest.exists(), "Invalid authentication state must not publish a backup"
 
