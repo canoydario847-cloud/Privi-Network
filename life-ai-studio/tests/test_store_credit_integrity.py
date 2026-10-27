@@ -101,3 +101,31 @@ def test_invalid_charge_request_never_changes_balance_or_ledger(
             "SELECT credits FROM users WHERE id=?", ("synthetic-member",)
         ).fetchone()[0] == 10
         assert db.execute("SELECT COUNT(*) FROM ledger").fetchone()[0] == 0
+
+
+def test_new_database_is_private_under_permissive_umask(tmp_path, monkeypatch):
+    """New LIFE member data must not be readable by other OS users."""
+    import os
+
+    path = tmp_path / "vault" / "life.sqlite3"
+    monkeypatch.setattr(store, "DB", str(path))
+    previous_umask = os.umask(0o000)
+    try:
+        store.init()
+    finally:
+        os.umask(previous_umask)
+
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert path.parent.stat().st_mode & 0o777 == 0o700
+
+
+def test_initialization_does_not_repermission_existing_database(tmp_path, monkeypatch):
+    """Changing permissions on existing volumes requires an operator review."""
+    import os
+
+    path = tmp_path / "existing.sqlite3"
+    path.touch(mode=0o644)
+    os.chmod(path, 0o644)
+    monkeypatch.setattr(store, "DB", str(path))
+    store.init()
+    assert path.stat().st_mode & 0o777 == 0o644
