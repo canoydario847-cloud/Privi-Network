@@ -14,7 +14,7 @@ import os
 import sqlite3
 import stat
 import tempfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 
 def readonly_connection(path: Path):
@@ -524,6 +524,23 @@ def validate_database(conn):
     ).fetchone()
     if invalid_file_text is not None:
         raise ValueError("Not a LIFE database; invalid private project file text")
+    # File writes pass through agents.safe_path(), which limits paths to
+    # canonical, relative ASCII names. A restored snapshot must enforce the
+    # same contract; otherwise malformed paths can reappear in private project
+    # listings or later export tools. Never log the private filenames.
+    for (stored_path,) in conn.execute('SELECT "path" FROM "files"'):
+        parsed = PurePosixPath(stored_path)
+        if (
+            len(stored_path) > 180
+            or not re.fullmatch(r"[A-Za-z0-9_./-]+", stored_path)
+            or parsed.is_absolute()
+            or ".." in parsed.parts
+            or len(parsed.parts) > 8
+            or not parsed.parts
+            or any(part.startswith(".") for part in parsed.parts)
+            or str(parsed) != stored_path
+        ):
+            raise ValueError("Not a LIFE database; unsafe private project file path")
     # File versions are optimistic-concurrency counters for private project
     # edits. SQLite's dynamic typing permits invalid values in older or
     # lookalike schemas; restoring them could bypass version conflict checks.
