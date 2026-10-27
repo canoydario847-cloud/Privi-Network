@@ -80,6 +80,7 @@ class Eval(Base):
  minimum:Mapped[float]=mapped_column(Float)
  evaluation_dataset_sha256:Mapped[str]=mapped_column(String(64))
  passed:Mapped[bool]=mapped_column(Boolean)
+ created:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now)
 class Release(Base):
  __tablename__="qschool_releases"
  id:Mapped[str]=mapped_column(String(32),primary_key=True)
@@ -303,7 +304,7 @@ No quantum speedup or production certification claimed.</footer></main></body></
  @api.post("/deployments",dependencies=[Depends(admin)])
  def request_release(body:ReleaseData,db:Session=Depends(db_dep)):
   model=required(db,Model,body.model_id)
-  evaluations=db.scalars(select(Eval).where(Eval.model==model.id).order_by(Eval.id)).all()
+  evaluations=db.scalars(select(Eval).where(Eval.model==model.id).order_by(Eval.created,Eval.id)).all()
   if not evaluations or not evaluations[-1].passed:
    raise HTTPException(409,"Passing evaluation required")
   run=required(db,Run,model.run)

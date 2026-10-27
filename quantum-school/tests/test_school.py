@@ -45,3 +45,7 @@ def test_security_and_workflow(tmp_path):
   assert approval.json()["state"]=="approved_not_deployed"
   prod=post(c,"/deployments",{"model_id":mid,"environment":"production"}).json()
   assert post(c,f"/deployments/{prod['deployment_id']}/approve",{"approver":"Owner"}).status_code==403
+  # A newer failing evaluation must invalidate previous passing results.
+  fail=post(c,f"/models/{mid}/evaluations",{"metric":"accuracy","score":0.2,"minimum":0.8,"dataset_sha256":SHA})
+  assert fail.json()["passed"] is False
+  assert post(c,"/deployments",{"model_id":mid,"environment":"staging"}).status_code==409
