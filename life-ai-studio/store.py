@@ -336,7 +336,12 @@ def credit(user_id, amount, service, key):
             if existing["amount"] != amount or existing["service"] != service:
                 raise ValueError("Conflicting idempotency key")
             return
-        db.execute("UPDATE users SET credits=credits+? WHERE id=?", (amount, user_id))
+        updated = db.execute("UPDATE users SET credits=credits+? WHERE id=?", (amount, user_id))
+        if updated.rowcount != 1:
+            # Do not create an orphan financial audit record when a member was
+            # deleted or an upstream caller supplied an unknown account ID.
+            # Raising rolls back the entire credit transaction.
+            raise ValueError("Unknown LIFE member for credit")
         db.execute("INSERT INTO ledger VALUES (?,?,?,?,?,?,?,?)",
                    (uid("led"), user_id, "credit", service, amount, 0, key, now()))
 
