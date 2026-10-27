@@ -498,6 +498,16 @@ def validate_database(conn):
     ).fetchone()
     if invalid_project_timestamp is not None:
         raise ValueError("Not a LIFE database; invalid project creation timestamp")
+    # Project kinds drive which LIFE workspace tools are available. A damaged
+    # snapshot must not restore a BLOB, NULL or unsupported workspace type that
+    # the live project-creation API would refuse. Keep titles and IDs private.
+    invalid_project_kind = conn.execute(
+        'SELECT 1 FROM "projects" WHERE typeof("kind") != \'text\' '
+        'OR "kind" NOT IN (\'code\', \'research\', \'business\', '
+        "\'design\', \'writing\', \'automation\') LIMIT 1"
+    ).fetchone()
+    if invalid_project_kind is not None:
+        raise ValueError("Not a LIFE database; invalid project workspace kind")
     # Session tokens are stored as lowercase SHA-256 hashes, never plaintext.
     # A malformed token or expiry in a recovered database means session
     # authentication state cannot be trusted after restore. Check only shape;
