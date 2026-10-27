@@ -42,6 +42,12 @@ def assess(manifest, genesis_path):
                 "each operator must explicitly attest independent control")
     sha = manifest.get("genesis_sha256")
     require(isinstance(sha, str) and HEX64.fullmatch(sha) is not None, "genesis_sha256 required")
+    # Avoid unbounded memory consumption from a malformed or hostile genesis.
+    # The verifier is an offline evidence tool, not a streaming parser.
+    MAX_GENESIS_BYTES = 64 * 1024 * 1024
+    if genesis_path.is_file() and genesis_path.stat().st_size > MAX_GENESIS_BYTES:
+        errors.append("genesis exceeds 64 MiB offline audit limit")
+        return errors
     require(genesis_path.is_file(), "genesis file missing")
     if genesis_path.is_file():
         actual = hashlib.sha256(genesis_path.read_bytes()).hexdigest()
