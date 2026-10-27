@@ -1367,3 +1367,39 @@ def test_backup_rejects_malformed_private_project_file_text(tmp_path, path, cont
         with pytest.raises(ValueError, match="invalid private project file text"):
             backup.backup_and_verify(source, destination)
         assert not destination.exists(), "Malformed project data must not publish a backup"
+
+
+@pytest.mark.parametrize("stored_path,valid", [
+    ("src/main.py", True),
+    ("tests/test_main.py", True),
+    ("../private.txt", False),
+    ("src/../../private.txt", False),
+    ("/absolute.txt", False),
+    (".env", False),
+    ("src/.private", False),
+    ("src\\escape.py", False),
+    ("src/file name.py", False),
+    ("src//main.py", False),
+    ("a/b/c/d/e/f/g/h/i.py", False),
+    ("a" * 181, False),
+])
+def test_backup_requires_canonical_safe_private_file_paths(tmp_path, stored_path, valid):
+    """Recovered project paths must obey the same constraints as new writes."""
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute(
+            "INSERT INTO users VALUES ('u1','member@example.test','synthetic-hash',NULL,1,0)"
+        )
+        db.execute("INSERT INTO projects VALUES ('p1','u1','Test','code',1)")
+        db.execute(
+            "INSERT INTO files VALUES (?,?,?,1)",
+            ("p1", stored_path, "synthetic private content"),
+        )
+    destination = tmp_path / "vault" / "safe-files.sqlite3"
+    if valid:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        with pytest.raises(ValueError, match="unsafe private project file path"):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Unsafe project paths must not publish a backup"
