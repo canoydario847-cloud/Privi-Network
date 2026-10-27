@@ -38,7 +38,7 @@ def test_credit_existing_member_remains_atomic_and_idempotent(tmp_path, monkeypa
 @pytest.mark.parametrize(
     ("amount", "key"),
     [
-        (100, None),       # SQLite UNIQUE would otherwise allow repeated NULLs.
+        (100, None),       # Reject before SQLite's NOT NULL constraint.
         (100, ""),
         (100, "   "),
         (100, "x" * 181),
