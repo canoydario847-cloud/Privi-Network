@@ -21,7 +21,9 @@ def database_readable():
     """Non-mutating availability check, not a production launch assertion.
 
     Read-only SQLite URI mode prevents a missing database from being created
-    by a monitoring probe. The core account table must also be queryable.
+    by a monitoring probe. Require the minimum LIFE account, session, project,
+    file and credit-ledger columns so an unrelated or partially restored SQLite
+    file cannot make the readiness probe (or guarded startup) appear healthy.
     """
     try:
         location = Path(DB).expanduser().resolve(strict=True)
@@ -29,7 +31,17 @@ def database_readable():
             return False
         uri = location.as_uri() + "?mode=ro"
         with closing(sqlite3.connect(uri, uri=True, timeout=2)) as conn:
-            conn.execute("SELECT 1 FROM users LIMIT 1").fetchone()
+            # LIMIT 0 checks the schema without loading private customer rows.
+            # Keep this lightweight: full integrity and restore validation is
+            # performed separately by the offline backup verifier.
+            for query in (
+                "SELECT id,email,pwdhash,member_since,credits FROM users LIMIT 0",
+                "SELECT token_hash,user_id,expires FROM sessions LIMIT 0",
+                "SELECT id,owner_id,title FROM projects LIMIT 0",
+                "SELECT project_id,path,content,version FROM files LIMIT 0",
+                "SELECT id,user_id,amount,idempotency FROM ledger LIMIT 0",
+            ):
+                conn.execute(query).fetchall()
         return True
     except (OSError, sqlite3.Error):
         return False
