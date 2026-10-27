@@ -14,6 +14,7 @@ import hashlib
 import hmac
 import json
 import os
+from pathlib import Path
 import time
 import threading
 from typing import Annotated, Any
@@ -55,7 +56,7 @@ from .passport import PASSPORT_VERSION as PASSPORT_VERSION_HTTP, PassportError, 
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor.onrender.com/mcp"
 
-__version__ = "0.12.0"
+__version__ = "0.12.1"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/ledger-server"
 
 INSTRUCTIONS = """\
@@ -1451,17 +1452,47 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     seals = ContentSeals(ledger, public_url)
     musthave_tools.register(mcp, ledger, aiact=aiact, suppliers=suppliers, seals=seals, anchor_many=_anchor_many,
                             org_from=org_from, result=_result, unauthorized=unauthorized, over_limit=over_limit)
-    async def _qledger_http(request):
+    def _qj(data, status: int = 200):
         from starlette.responses import JSONResponse
-        hdr = {"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"}
-        h = request.path_params.get("height")
-        if h is None:
-            return JSONResponse(qledger.status(), headers=hdr)
-        rec = qledger.block(int(h)) if str(h).isdigit() else None
-        return JSONResponse(rec or {"error": "no block at that height"}, status_code=200 if rec else 404, headers=hdr)
+        return JSONResponse(data, status_code=status, headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"})
 
-    mcp.custom_route("/quantum-ledger", methods=["GET"], include_in_schema=False)(_qledger_http)
-    mcp.custom_route("/quantum-ledger/blocks/{height}", methods=["GET"], include_in_schema=False)(_qledger_http)
+    def _qint(request, name: str, default=None):
+        v = request.query_params.get(name)
+        return int(v) if v is not None and v.lstrip("-").isdigit() else default
+
+    async def _qledger_status(request):
+        return _qj(qledger.status())
+
+    async def _qledger_stats(request):
+        return _qj(qledger.scan_stats())
+
+    async def _qledger_blocks(request):
+        return _qj(qledger.scan_blocks(_qint(request, "limit", 25), _qint(request, "before")))
+
+    async def _qledger_block(request):
+        h = request.path_params["height"]
+        rec = qledger.scan_block(int(h)) if str(h).isdigit() else None
+        return _qj(rec or {"error": "no block at that height"}, 200 if rec else 404)
+
+    async def _qledger_entries(request):
+        try:
+            return _qj(qledger.scan_entries(_qint(request, "limit", 50), _qint(request, "offset", 0), _qint(request, "block")))
+        except QuantumLedgerError as e:
+            return _qj({"error": str(e)}, 404)
+
+    async def _qledger_search(request):
+        return _qj(qledger.scan_search(request.query_params.get("q", "")[:140]))
+
+    async def _qscan_page(request):
+        from starlette.responses import Response
+        return Response((Path(__file__).parent / "quantum_scan.html").read_text(encoding="utf-8"),
+                        media_type="text/html; charset=utf-8", headers={"Cache-Control": "no-cache"})
+
+    for _p, _h in (("/quantum-ledger", _qledger_status), ("/quantum-ledger/stats", _qledger_stats),
+                   ("/quantum-ledger/blocks", _qledger_blocks), ("/quantum-ledger/blocks/{height}", _qledger_block),
+                   ("/quantum-ledger/entries", _qledger_entries), ("/quantum-ledger/search", _qledger_search),
+                   ("/quantum-scan", _qscan_page)):
+        mcp.custom_route(_p, methods=["GET"], include_in_schema=False)(_h)
     for _path, _methods, _handler in (live.http_routes() + gateways.http_routes() + rooms.http_routes()
                                       + scan_tools.http_routes(scanner) + guard_tools.http_routes(guard, paywall, ledger, settings, plans.signup)
                                       + musthave_tools.http_routes(suppliers, seals)):
