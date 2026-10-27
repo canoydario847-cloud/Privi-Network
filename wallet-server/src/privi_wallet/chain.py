@@ -56,6 +56,8 @@ def new_account() -> tuple[str, str]:
 
 def eth_account_signer(private_key: str, tx: dict) -> str:
     from eth_account import Account
+    from eth_utils import to_checksum_address   # installed with eth-account; it rejects lowercase "to" addresses
+    tx = {**tx, "to": to_checksum_address(tx["to"])}
     signed = Account.from_key(private_key).sign_transaction(tx)
     raw = getattr(signed, "raw_transaction", None) or getattr(signed, "rawTransaction")
     raw_hex = raw.hex() if isinstance(raw, (bytes, bytearray)) else str(raw)
