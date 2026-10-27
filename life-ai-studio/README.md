@@ -74,9 +74,10 @@ enrollment, MFA, fraud monitoring or an independent security review.
 For an operator-provisioned durable instance, set
 `LIFE_REQUIRE_EXISTING_DB=1` **only after** restoring or initializing the
 approved database on the mounted volume. With this opt-in guard, startup fails
-if the file is missing, not a regular file, or lacks the readable LIFE accounts
-table; it will not create a replacement database or even a missing parent
-directory. The default `0` retains disposable staging/local bootstrap. This
+if the file is missing, not a regular file, or lacks the minimum LIFE
+account, session, project, file and credit-ledger columns; it will not create
+a replacement database or even a missing parent directory. This is a
+lightweight schema/readiness check, not a full database integrity audit. The default `0` retains disposable staging/local bootstrap. This
 guard does **not** establish backup encryption, off-site retention, restore
 success, account security, or financial production approval.
 
