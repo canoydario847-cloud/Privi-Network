@@ -71,6 +71,15 @@ LIFE now persists failed-login throttling in SQLite (five incorrect attempts per
 email/client combination in a 15-minute window, then a 15-minute lockout);
 this is defense in depth, not a substitute for edge rate limits, verified
 enrollment, MFA, fraud monitoring or an independent security review.
+For an operator-provisioned durable instance, set
+`LIFE_REQUIRE_EXISTING_DB=1` **only after** restoring or initializing the
+approved database on the mounted volume. With this opt-in guard, startup fails
+if the file is missing, not a regular file, or lacks the readable LIFE accounts
+table; it will not create a replacement database or even a missing parent
+directory. The default `0` retains disposable staging/local bootstrap. This
+guard does **not** establish backup encryption, off-site retention, restore
+success, account security, or financial production approval.
+
 LIFE's SQLite architecture is still single-instance and requires a separately
 verified durable volume and backup/restore test. Horizontal production scale
 needs a database migration and multi-worker safe queues; these are explicit
