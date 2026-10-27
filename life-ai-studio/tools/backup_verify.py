@@ -526,12 +526,14 @@ def validate_database(conn):
         raise ValueError("Not a LIFE database; invalid private project file text")
     # New writes use strict canonical names, but older snapshots can contain
     # valid Unicode filenames. Preserve those while rejecting path traversal,
-    # hidden paths and noncanonical separators that can confuse export tools.
+    # hidden paths, noncanonical separators, and ASCII control characters that
+    # can corrupt file exports or conceal filenames in audit displays.
     # Never log private filenames.
     for (stored_path,) in conn.execute('SELECT "path" FROM "files"'):
         parsed = PurePosixPath(stored_path)
         if (
             len(stored_path) > 180
+            or any(ord(ch) < 32 or ord(ch) == 127 for ch in stored_path)
             or "\\" in stored_path
             or parsed.is_absolute()
             or ".." in parsed.parts
