@@ -60,6 +60,25 @@ def database_readable():
                 )
                 if actual != expected:
                     return False
+            # Idempotent debits/credits require a non-partial UNIQUE index on
+            # (user_id, idempotency). A partial restore may retain all columns
+            # and primary keys while losing this financial safety constraint.
+            ledger_info = {row[1]: row for row in conn.execute('PRAGMA table_info("ledger")')}
+            if not all(ledger_info[name][3] for name in ("user_id", "idempotency")):
+                return False
+            has_idempotency_guard = False
+            for index in conn.execute('PRAGMA index_list("ledger")'):
+                if not index[2] or (len(index) > 4 and index[4]):
+                    continue  # Not UNIQUE, or only protects a subset of rows.
+                index_name = index[1].replace('"', '""')
+                columns = tuple(row[2] for row in conn.execute(
+                    f'PRAGMA index_info("{index_name}")'
+                ))
+                if columns == ("user_id", "idempotency"):
+                    has_idempotency_guard = True
+                    break
+            if not has_idempotency_guard:
+                return False
         return True
     except (OSError, sqlite3.Error):
         return False
