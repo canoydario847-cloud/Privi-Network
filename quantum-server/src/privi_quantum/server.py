@@ -1428,6 +1428,44 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
             return JSONResponse({"error": "not found"}, status_code=404, headers=cors)
         return JSONResponse(att, headers=cors)
 
+    # ---------------- Privi Explorer feed (public, hashes only) ----------------
+
+    PUBLIC_PAGES = {"advantage_receipt": "/receipts/", "pqc_readiness": "/reports/"}
+
+    @mcp.custom_route("/explorer/recent", methods=["GET"], include_in_schema=False)
+    async def explorer_recent(request: Request) -> JSONResponse:
+        q = request.query_params
+        lim = int(q["limit"]) if q.get("limit", "").isdigit() else 25
+        before = int(q["before"]) if q.get("before", "").isdigit() else None
+        return JSONResponse({"total": attestor.count(), "by_kind": attestor.kind_counts(), "key_id": keys["key_id"],
+                             "attestations": attestor.recent(lim, before)},
+                            headers={**cors, "Cache-Control": "no-store"})
+
+    @mcp.custom_route("/explorer/lookup", methods=["GET"], include_in_schema=False)
+    async def explorer_lookup(request: Request) -> JSONResponse:
+        """Find one attestation by its id (qa_...) or its body SHA-256, and check both signatures.
+        A lookup by hash proves the record exists and is genuine but never reveals the id or contents."""
+        term = request.query_params.get("q", "").strip()[:80]
+        by_id = term.startswith("qa_")
+        att = attestor.get(term) if by_id else attestor.find_by_hash(term) if len(term) == 64 else None
+        if not att:
+            return JSONResponse({"found": False, "q": term}, status_code=404, headers={**cors, "Cache-Control": "no-store"})
+        v = Attestor.verify(att, keys["ed25519"], keys["ml_dsa_87"])
+        kind = att["body"].get("kind")
+        out: dict[str, Any] = {"found": True, "kind": kind, "issued_at": att["body"].get("issued_at"),
+                               "body_sha256": att["body_sha256"], "key_id": att["key_id"],
+                               "anchor": Attestor._public_anchor(json.dumps(att["anchor"]) if att["anchor"] else None),
+                               "signatures": {"ed25519": v.get("ed25519_valid"), "ml_dsa_87": v.get("ml_dsa_87_valid"),
+                                              "body_hash_matches": v.get("body_hash_matches"), "valid": v.get("valid")}}
+        if by_id:
+            out["id"] = att["id"]
+            out["json"] = f"{PUBLIC_URL}/attestations/{att['id']}"
+            if kind in PUBLIC_PAGES:
+                out["page"] = f"{PUBLIC_URL}{PUBLIC_PAGES[kind]}{att['id']}"
+            if kind == "advantage_receipt":
+                out["verdict"] = att["body"].get("verdict")
+        return JSONResponse(out, headers={**cors, "Cache-Control": "no-store"})
+
     @mcp.custom_route("/reports/{aid}.cbom.json", methods=["GET"], include_in_schema=False)
     async def report_cbom(request: Request) -> Response:
         att = attestor.get(request.path_params["aid"])

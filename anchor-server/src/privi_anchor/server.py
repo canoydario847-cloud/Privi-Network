@@ -154,28 +154,25 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
         """SHA-256 of a piece of text, ready to pass to anchor_hashes. Hashing happens here; nothing is stored."""
         return {"sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(), "bytes": str(len(text.encode("utf-8")))}
 
-    @mcp.tool(title="Verify an anchor", annotations=READ_ONLY)
-    async def anchor_verify(
-        hash: Annotated[str, Field(description="The 64-character hex SHA-256 that was anchored")],
-        tx_hash: Annotated[str | None, Field(description="Optional: transaction from the receipt, to verify without this server's index")] = None,
-        proof: Annotated[list[str] | None, Field(description="Optional: Merkle proof from the receipt")] = None,
-    ) -> CallToolResult:
-        """Check on the blockchain that a hash was anchored, by whom and when. Free.
-        With tx_hash and proof from a receipt, the check uses only chain data."""
+    async def verify_hash(hash: str, tx_hash: str | None = None, proof: list[str] | None = None) -> tuple[dict, bool]:
+        """Shared by the anchor_verify tool and the public /anchors/verify route."""
+        def _r(d: dict, is_error: bool = False) -> tuple[dict, bool]:
+            return d, is_error
+
         try:
             leaf = merkle.norm_hash(hash)
         except ValueError as e:
-            return _result({"error": str(e)}, is_error=True)
+            return _r({"error": str(e)}, is_error=True)
         if not chain:
-            return _result({"error": "chain access is not configured on this server"}, is_error=True)
+            return _r({"error": "chain access is not configured on this server"}, is_error=True)
         rec = None
         if not tx_hash:
             rec = store.find_leaf(leaf)
             if not rec or not rec.get("tx_hash"):
-                return _result({"hash": leaf, "verified": False, "reason": "no anchor found for this hash"})
+                return _r({"hash": leaf, "verified": False, "reason": "no anchor found for this hash"})
             if rec.get("chain_id") is not None and rec["chain_id"] != settings.chain_id:
                 net = "the Privi EVM Devnet" if rec["chain_id"] == AnchorStore.LEGACY_CHAIN_ID else f"chain {rec['chain_id']}"
-                return _result({"hash": leaf, "verified": None, "anchored_on_chain_id": rec["chain_id"], "tx_hash": rec["tx_hash"],
+                return _r({"hash": leaf, "verified": None, "anchored_on_chain_id": rec["chain_id"], "tx_hash": rec["tx_hash"],
                                 "proof": rec["proof"], "block_number": rec.get("block_number"), "block_time": rec.get("block_time"),
                                 "reason": f"anchored on {net} before Privi moved to Base; that transaction lives on that chain, "
                                           "not on Base. Re-anchor the hash to get a Base receipt."})
@@ -185,32 +182,43 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
             tx = await anyio.to_thread.run_sync(chain.transaction, tx_hash)
             rcpt = await anyio.to_thread.run_sync(chain.receipt, tx_hash)
         except RpcError as e:
-            return _result({"error": f"could not read the chain: {e}"}, is_error=True)
+            return _r({"error": f"could not read the chain: {e}"}, is_error=True)
         if not tx:
-            return _result({"hash": leaf, "verified": False, "tx_hash": tx_hash, "reason": "transaction not found on chain"})
+            return _r({"hash": leaf, "verified": False, "tx_hash": tx_hash, "reason": "transaction not found on chain"})
         onchain_root = merkle.root_from_calldata(tx.get("input") or tx.get("data") or "")
         try:
             computed = merkle.root_from_proof(leaf, proof)
         except ValueError as e:
-            return _result({"error": f"bad proof: {e}"}, is_error=True)
+            return _r({"error": f"bad proof: {e}"}, is_error=True)
         out: dict[str, Any] = {"hash": leaf, "tx_hash": tx_hash, "tx_link": tx_link(tx_hash),
                                "chain_id": settings.chain_id, "anchored_by": tx.get("from"),
                                "by_privi_anchor_service": bool(tx.get("from")) and tx["from"].lower() == chain.address.lower(),
                                "merkle_root": onchain_root, "proof": proof}
         if not onchain_root:
-            return _result({**out, "verified": False, "reason": "transaction is not a Privi anchor"})
+            return _r({**out, "verified": False, "reason": "transaction is not a Privi anchor"})
         if computed != onchain_root:
-            return _result({**out, "verified": False, "reason": "hash is not part of this anchor"})
+            return _r({**out, "verified": False, "reason": "hash is not part of this anchor"})
         if not rcpt:
-            return _result({**out, "verified": False, "status": "pending", "reason": "transaction not yet mined"})
+            return _r({**out, "verified": False, "status": "pending", "reason": "transaction not yet mined"})
         if int(rcpt.get("status", "0x0"), 16) != 1:
-            return _result({**out, "verified": False, "reason": "anchor transaction failed on chain"})
+            return _r({**out, "verified": False, "reason": "anchor transaction failed on chain"})
         block = int(rcpt["blockNumber"], 16)
         ts = await anyio.to_thread.run_sync(chain.block_timestamp, block)
         if rec and rec["status"] != "confirmed":
             store.update_batch(rec["batch_id"], status="confirmed", block_number=block, block_time=ts)
-        return _result({**out, "verified": True, "block_number": block, "block_time": ts,
+        return _r({**out, "verified": True, "block_number": block, "block_time": ts,
                         "block_time_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ts)) if ts else None})
+
+    @mcp.tool(title="Verify an anchor", annotations=READ_ONLY)
+    async def anchor_verify(
+        hash: Annotated[str, Field(description="The 64-character hex SHA-256 that was anchored")],
+        tx_hash: Annotated[str | None, Field(description="Optional: transaction from the receipt, to verify without this server's index")] = None,
+        proof: Annotated[list[str] | None, Field(description="Optional: Merkle proof from the receipt")] = None,
+    ) -> CallToolResult:
+        """Check on the blockchain that a hash was anchored, by whom and when. Free.
+        With tx_hash and proof from a receipt, the check uses only chain data."""
+        d, err = await verify_hash(hash, tx_hash, proof)
+        return _result(d, is_error=err)
 
     # ---------------- keyed ----------------
 
@@ -314,6 +322,30 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
             status_cache.clear()
             status_cache.update(at=now, info=info)
         return JSONResponse(status_cache["info"], headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"})
+
+    pub = {"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"}
+
+    @mcp.custom_route("/anchors/recent", methods=["GET"], include_in_schema=False)
+    async def anchors_recent(request: Request) -> JSONResponse:
+        """Public feed for Privi Explorer: newest anchor batches (root, tx, block, hash count). No labels or clients."""
+        q = request.query_params
+        lim = int(q["limit"]) if q.get("limit", "").isdigit() else 25
+        before = int(q["before"]) if q.get("before", "").isdigit() else None
+        rows = store.recent(lim, before)
+        for r in rows:
+            r["tx_link"] = tx_link(r["tx_hash"]) if r.get("chain_id") == settings.chain_id else None
+        return JSONResponse({"network": settings.network_name, "chain_id": settings.chain_id,
+                             "anchor_wallet": chain.address if chain else None, "batches": rows}, headers=pub)
+
+    @mcp.custom_route("/anchors/verify/{leaf}", methods=["GET"], include_in_schema=False)
+    async def anchors_verify(request: Request) -> JSONResponse:
+        """Public, free: the same on-chain check as the anchor_verify tool, for one hash."""
+        try:
+            leaf = merkle.norm_hash(request.path_params["leaf"][:80])
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=400, headers=pub)
+        d, err = await verify_hash(leaf)
+        return JSONResponse(d, status_code=503 if err else 200, headers=pub)
 
     @mcp.custom_route("/", methods=["GET"], include_in_schema=False)
     async def index(_: Request) -> JSONResponse:

@@ -276,3 +276,32 @@ def test_rpc_sends_user_agent(monkeypatch):
     c.rpc_url, c.timeout, c._id = "https://mainnet.base.org", 5, 0
     assert c.remote_chain_id() == 8453
     assert seen["ua"].startswith("privi-anchor/") and "Python-urllib" not in seen["ua"]
+
+
+def test_explorer_feed_and_public_verify(store, monkeypatch):
+    """Privi Explorer: /anchors/recent lists batches without labels or clients; /anchors/verify checks one hash."""
+    from starlette.testclient import TestClient
+    monkeypatch.setenv("ANCHOR_ALLOW_LOCAL", "1")
+    chain = FakeChain()
+    leaves = [h("explorer-a"), h("explorer-b")]
+
+    async def go():
+        async with Client(build_server(Settings(), chain, store, receipt_timeout=1)) as c:
+            r = await c.call_tool("anchor_hashes", {"hashes": leaves, "label": "secret customer label"})
+            assert not r.is_error
+    anyio.run(go)
+
+    s = build_server(Settings(), chain, store)
+    with TestClient(s.streamable_http_app(host="0.0.0.0", stateless_http=True, json_response=True)) as http:
+        feed = http.get("/anchors/recent")
+        assert feed.headers["access-control-allow-origin"] == "*"
+        body = feed.json()
+        assert body["chain_id"] == 8453 and len(body["batches"]) == 1
+        b = body["batches"][0]
+        assert b["hashes"] == 2 and b["tx_hash"] and b["tx_link"].startswith("https://basescan.org/tx/")
+        assert "label" not in b and "client" not in b and "secret customer label" not in feed.text
+        assert http.get("/anchors/recent", params={"before": b["batch_id"]}).json()["batches"] == []
+        v = http.get(f"/anchors/verify/{leaves[1]}").json()
+        assert v["verified"] is True and v["by_privi_anchor_service"] is True
+        assert http.get(f"/anchors/verify/{h('never anchored')}").json()["verified"] is False
+        assert http.get("/anchors/verify/not-a-hash").status_code == 400

@@ -84,6 +84,17 @@ class AnchorStore:
         d["proof"] = json.loads(d["proof"])
         return d
 
+    def recent(self, limit: int = 25, before: int | None = None) -> list[dict]:
+        """Newest anchor batches for the public explorer: roots, transactions and counts only.
+        Never the label or the client that asked for the anchor."""
+        limit = max(1, min(int(limit or 25), 100))
+        rows = self._db.execute(
+            """SELECT b.batch_id, b.root, b.tx_hash, b.status, b.block_number, b.block_time, b.chain_id, b.created_at,
+                      (SELECT COUNT(*) FROM leaves l WHERE l.batch_id=b.batch_id) AS hashes
+               FROM batches b WHERE (? IS NULL OR b.batch_id < ?) AND b.status != 'failed'
+               ORDER BY b.batch_id DESC LIMIT ?""", (before, before, limit)).fetchall()
+        return [dict(r) for r in rows]
+
     def sent_since(self, seconds: int) -> int:
         """Anchor transactions attempted on the current chain in the last `seconds` (gas budget)."""
         since = datetime.fromtimestamp(datetime.now(timezone.utc).timestamp() - seconds, timezone.utc).isoformat(timespec="seconds")

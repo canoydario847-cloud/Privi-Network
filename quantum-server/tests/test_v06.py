@@ -317,3 +317,35 @@ def test_mcp_receipts_hardware_and_vault(tmp_path):
         assert page.status_code == 200 and "Quantum Advantage Receipt" in page.text and "valid" in page.text
         assert http.get(f"/receipts/{receipt}.json").json()["id"] == receipt
         assert http.get("/receipts/qa_nope").status_code == 404
+
+
+def test_explorer_feed_hides_ids_and_bodies(tmp_path):
+    """Privi Explorer: the public feed shows kind, time and hash only; lookups by hash never reveal the id."""
+    from starlette.testclient import TestClient
+    db = str(tmp_path / "x.db")
+    att = Attestor(db)
+    server = build_server(Settings(db_path=db), att, FakeAnchor(), None, None)
+
+    async def go():
+        async with Client(server) as c:
+            r = (await c.call_tool("quantum_advantage_receipt", {"problem": "balance_lines", "data": JOBS})).structured_content
+            return r["receipt_id"]
+    rid = anyio.run(go)
+    full = att.get(rid)
+    att.set_anchor(rid, {"chain_id": 8453, "tx_hash": "0x" + "cd" * 32, "merkle_root": "11" * 32, "proof": ["22" * 32],
+                         "status": "confirmed", "block_number": 7, "block_time": 1, "network": "Base"})
+    app = server.streamable_http_app(host="0.0.0.0", stateless_http=True, json_response=True)
+    with TestClient(app) as http:
+        feed = http.get("/explorer/recent")
+        assert feed.headers["access-control-allow-origin"] == "*"
+        body = feed.json()
+        assert body["total"] >= 1 and body["by_kind"]["advantage_receipt"] >= 1
+        row = next(a for a in body["attestations"] if a["body_sha256"] == full["body_sha256"])
+        assert row["kind"] == "advantage_receipt" and row["anchor"]["tx_hash"] == "0x" + "cd" * 32
+        assert rid not in feed.text and "balance_lines" not in feed.text and "proof" not in row["anchor"]
+        by_hash = http.get("/explorer/lookup", params={"q": full["body_sha256"]}).json()
+        assert by_hash["found"] and by_hash["signatures"]["valid"] is True and rid not in json.dumps(by_hash)
+        by_id = http.get("/explorer/lookup", params={"q": rid}).json()
+        assert by_id["id"] == rid and by_id["page"].endswith(f"/receipts/{rid}") and by_id["verdict"] in advantage.VERDICTS
+        assert http.get("/explorer/lookup", params={"q": "qa_nope"}).status_code == 404
+        assert http.get("/explorer/lookup", params={"q": "zz"}).status_code == 404

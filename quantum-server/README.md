@@ -55,6 +55,7 @@ Privi Quantum joins three things into one pipeline:
 | `qubo` | Any binary optimization | `{Q: [[...]], offset}` |
 
 HTTP: `/health`, `/status`, `/keys`, `/attestations/<id>`, `/.well-known/mcp/server-card.json`.
+Privi Explorer feed (public, CORS): `/explorer/recent?limit&before` lists kind, time, body hash and anchor only, never ids or contents; `/explorer/lookup?q=` takes a `qa_` id (returns links) or a body SHA-256 (proves the record exists and checks both signatures, without revealing the id).
 
 ## Quantum Agent Accelerator and Quantum Agent Directory
 
