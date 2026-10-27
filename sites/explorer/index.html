@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privi Explorer</title>
+<meta name="description" content="Search everything Privi seals: Quantum Ledger blocks, Privi Quantum receipts and reports, anchors on Base, and the PRIVI token.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg viewBox='0 0 64 64' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='64' height='64' rx='14' fill='%230E1B33'/%3E%3Cpath d='M18 46V18h14a10 10 0 0 1 0 20h-6v8z' fill='none' stroke='%237FA2FF' stroke-width='5' stroke-linejoin='round'/%3E%3Ccircle cx='46' cy='44' r='4' fill='%233CCB94'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--paper:#F7F8FA;--surface:#FFFFFF;--ink:#0E1B33;--steel:#5A6B85;--seal:#2F5BEA;--on-seal:#FFFFFF;--verified:#0F8A5F;--warn:#A15C00;--bad:#B42318;--rule:#DCE1EA;--code:#EEF1F6;--ledger:#2F5BEA;--quantum:#7A3FD1;--anchor:#0F8A5F;--token:#B8590B}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--paper:#0D1626;--surface:#122036;--ink:#E7ECF4;--steel:#93A3BB;--seal:#7FA2FF;--on-seal:#0D1626;--verified:#3CCB94;--warn:#F0B35A;--bad:#FF8A80;--rule:#22314A;--code:#16263F;--ledger:#7FA2FF;--quantum:#B892FF;--anchor:#3CCB94;--token:#F0A35A}}
+:root[data-theme=dark]{--paper:#0D1626;--surface:#122036;--ink:#E7ECF4;--steel:#93A3BB;--seal:#7FA2FF;--on-seal:#0D1626;--verified:#3CCB94;--warn:#F0B35A;--bad:#FF8A80;--rule:#22314A;--code:#16263F;--ledger:#7FA2FF;--quantum:#B892FF;--anchor:#3CCB94;--token:#F0A35A}
+*{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.55 "IBM Plex Sans",system-ui,sans-serif}
+a{color:var(--seal);text-underline-offset:3px}
+a:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid var(--seal);outline-offset:2px}
+.wrap{max-width:1180px;margin:0 auto;padding:0 16px}
+header{border-bottom:1px solid var(--rule);background:var(--surface)}
+.bar{display:flex;align-items:center;gap:20px;min-height:60px;flex-wrap:wrap;justify-content:space-between}
+.mark{font:600 20px "IBM Plex Sans Condensed",sans-serif;color:var(--ink);text-decoration:none;display:flex;align-items:center;gap:10px}
+.mark svg{width:26px;height:26px}
+nav{display:flex;gap:4px 18px;flex-wrap:wrap;font-size:15px}nav a{color:var(--steel);text-decoration:none}nav a:hover{color:var(--ink)}
+.hero{padding:40px 0 24px}
+h1{font:600 clamp(30px,4.4vw,46px)/1.05 "IBM Plex Sans Condensed",sans-serif;margin:0 0 8px}
+h2{font:600 21px/1.2 "IBM Plex Sans Condensed",sans-serif;margin:0}
+.lede{color:var(--steel);margin:0 0 22px;max-width:46em}
+form.search{display:flex;gap:10px}
+form.search input{flex:1;min-width:0;padding:14px 14px;border:1.5px solid var(--rule);border-radius:10px;background:var(--surface);color:var(--ink);font:15px "IBM Plex Mono",monospace}
+form.search button{padding:0 22px;border:0;border-radius:10px;background:var(--seal);color:var(--on-seal);font:600 15px "IBM Plex Sans",sans-serif;cursor:pointer}
+.hints{font-size:14px;color:var(--steel);margin-top:10px;display:flex;flex-wrap:wrap;gap:6px 14px}
+.hints button{background:none;border:0;padding:0;color:var(--seal);font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:26px 0 8px}
+.stat{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:14px 16px;border-top:3px solid var(--c)}
+.stat .k{font-size:13px;color:var(--steel);display:flex;justify-content:space-between;gap:8px}
+.stat .v{font:600 26px/1.2 "IBM Plex Sans Condensed",sans-serif;margin-top:4px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.stat .s{font-size:13px;color:var(--steel);overflow-wrap:anywhere}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--steel);vertical-align:middle;margin-right:5px}
+.dot.up{background:var(--verified)}.dot.down{background:var(--bad)}
+#result{margin:18px 0 0}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:18px;margin:0 0 14px;min-width:0}
+.card h3{font:600 18px/1.3 "IBM Plex Sans Condensed",sans-serif;margin:0 0 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tag{font:600 12px/1 "IBM Plex Sans",sans-serif;letter-spacing:.03em;text-transform:uppercase;padding:4px 7px;border-radius:5px;color:var(--c);box-shadow:inset 0 0 0 1.5px var(--c)}
+.facts{display:grid;grid-template-columns:minmax(120px,190px) 1fr;gap:6px 16px;margin:0;font-size:15px}
+.facts dt{color:var(--steel)}.facts dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.mono,.hash{font:14px/1.5 "IBM Plex Mono",monospace;overflow-wrap:anywhere}
+.ok{color:var(--verified);font-weight:600}.no{color:var(--bad);font-weight:600}.meh{color:var(--warn);font-weight:600}.muted{color:var(--steel)}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:26px 0 40px}
+.feed{background:var(--surface);border:1px solid var(--rule);border-radius:12px;min-width:0;display:flex;flex-direction:column}
+.feed .head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--rule)}
+.feed .head h2{display:flex;align-items:center;gap:8px}
+.feed .head h2::before{content:"";width:10px;height:10px;border-radius:3px;background:var(--c)}
+.feed .head a{font-size:14px}
+.rows{list-style:none;margin:0;padding:0}
+.rows li{padding:10px 16px;border-bottom:1px solid var(--rule);display:grid;grid-template-columns:1fr auto;gap:2px 12px;font-size:14px}
+.rows li:last-child{border-bottom:0}
+.rows .t{color:var(--steel);font-size:13px;white-space:nowrap}
+.rows .h{font:13px/1.45 "IBM Plex Mono",monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;grid-column:1/-1}
+button[data-q]{background:none;border:0;padding:0;text-align:left;color:var(--seal);cursor:pointer;font:14px/1.5 "IBM Plex Mono",monospace;overflow-wrap:anywhere;text-decoration:underline;text-decoration-color:transparent}button[data-q]:hover{text-decoration-color:currentColor}
+.rows button.h{font-size:13px}.hints button[data-q]{font:inherit;text-decoration-color:currentColor}
+.rows .m{min-width:0}
+.empty{padding:18px 16px;color:var(--steel);font-size:14px}
+.more{padding:10px 16px;border-top:1px solid var(--rule);margin-top:auto}
+.more button{background:none;border:0;color:var(--seal);font:600 14px "IBM Plex Sans",sans-serif;cursor:pointer;padding:0}
+footer{border-top:1px solid var(--rule);padding:28px 0 40px;color:var(--steel);font-size:14px}
+footer p{margin:0 0 8px;max-width:60em}
+.skel{display:inline-block;width:5em;height:1em;border-radius:4px;background:var(--code)}
+@media (max-width:900px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:1fr}}
+@media (max-width:520px){form.search{flex-direction:column}form.search button{padding:12px}.facts{grid-template-columns:1fr;gap:0 0}.facts dd{margin-bottom:8px}.stat .v{font-size:22px}}
+</style>
+</head>
+<body>
+<header><div class="wrap bar">
+  <a class="mark" href="./"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#0E1B33"/><path d="M18 46V18h14a10 10 0 0 1 0 20h-6v8z" fill="none" stroke="#7FA2FF" stroke-width="5" stroke-linejoin="round"/><circle cx="46" cy="44" r="4" fill="#3CCB94"/></svg>Privi Explorer</a>
+  <nav><a href="https://www.privishine.info">Privi</a><a id="nav-scan" href="#">Quantum Scan</a><a id="nav-token" href="#">PRIVI on Basescan</a><a href="https://github.com/canoydario847-cloud/Privi-Network">Source</a></nav>
+</div></header>
+
+<main class="wrap">
+  <section class="hero">
+    <h1>Every seal Privi makes, in one place</h1>
+    <p class="lede">Search Quantum Ledger blocks, Privi Quantum receipts and reports, anchors on Base, wallets and the PRIVI token. Every record is checked live against its signatures or the chain. Contents stay private: the explorer shows hashes, never what was sealed.</p>
+    <form class="search" id="search" role="search">
+      <label for="q" class="muted" style="position:absolute;left:-9999px">Search</label>
+      <input id="q" name="q" autocomplete="off" spellcheck="false" placeholder="Block height, hash, 0x transaction, wallet address, qa_ receipt id">
+      <button type="submit">Search</button>
+    </form>
+    <div class="hints" id="hints"><span>Try:</span></div>
+    <div id="result" aria-live="polite"></div>
+
+    <div class="stats">
+      <div class="stat" style="--c:var(--ledger)"><div class="k"><span>Quantum Ledger</span><span id="st-ledger"><span class="dot"></span></span></div><div class="v" id="v-blocks"><span class="skel"></span></div><div class="s" id="s-blocks">blocks</div></div>
+      <div class="stat" style="--c:var(--quantum)"><div class="k"><span>Privi Quantum</span><span id="st-quantum"><span class="dot"></span></span></div><div class="v" id="v-att"><span class="skel"></span></div><div class="s" id="s-att">signed results</div></div>
+      <div class="stat" style="--c:var(--anchor)"><div class="k"><span>Anchors on Base</span><span id="st-anchor"><span class="dot"></span></span></div><div class="v" id="v-anc"><span class="skel"></span></div><div class="s" id="s-anc">batches</div></div>
+      <div class="stat" style="--c:var(--token)"><div class="k"><span>PRIVI token</span><span id="st-base"><span class="dot"></span></span></div><div class="v" id="v-sup"><span class="skel"></span></div><div class="s" id="s-sup">total supply</div></div>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="feed" style="--c:var(--ledger)" aria-labelledby="f1"><div class="head"><h2 id="f1">Latest Ledger blocks</h2><a id="more-scan" href="#">Quantum Scan</a></div><ul class="rows" id="feed-blocks"></ul><div class="more"><button data-more="blocks">Older blocks</button></div></section>
+    <section class="feed" style="--c:var(--quantum)" aria-labelledby="f2"><div class="head"><h2 id="f2">Latest Quantum seals</h2><a id="more-keys" href="#">Signing keys</a></div><ul class="rows" id="feed-att"></ul><div class="more"><button data-more="att">Older seals</button></div></section>
+    <section class="feed" style="--c:var(--anchor)" aria-labelledby="f3"><div class="head"><h2 id="f3">Latest anchors on Base</h2><a id="more-wallet" href="#">Anchor wallet</a></div><ul class="rows" id="feed-anc"></ul><div class="more"><button data-more="anc">Older anchors</button></div></section>
+    <section class="feed" style="--c:var(--token)" aria-labelledby="f4"><div class="head"><h2 id="f4">PRIVI transfers</h2><a id="more-token" href="#">All on Basescan</a></div><ul class="rows" id="feed-tok"></ul></section>
+  </div>
+</main>
+
+<footer><div class="wrap">
+  <p>Privi Explorer reads public data straight from Privi Ledger, Privi Quantum, Privi Anchor and the Base blockchain in your browser. Nothing is stored here.</p>
+  <p>Lookups by hash prove that a record exists and is genuine without revealing it. Only someone who already holds a receipt id can open the receipt.</p>
+  <p>© 2026 Privi World Co · <a href="mailto:dariocanoy@priviflow.us">dariocanoy@priviflow.us</a></p>
+</div></footer>
+
+<script>
+"use strict";
+// ---- configuration: change these if a service moves ----
+const CFG = {
+  ledger: "https://privi-ledger.onrender.com",
+  quantum: "https://privi-quantum.onrender.com",
+  anchor: "https://privi-anchor.onrender.com",
+  baseRpc: "https://mainnet.base.org",
+  basescan: "https://basescan.org",
+  token: "0xA11626baF87524e61B5697634C7Ec48D26279D6C",
+  chainId: 8453
+};
+const TRANSFER = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+const ANCHOR_PREFIX = "0x5052564101"; // 'PRVA' + version 1, then the 32-byte Merkle root
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const short = (h, n = 10) => h ? (h.length > 2 * n + 3 ? h.slice(0, n) + "…" + h.slice(-6) : h) : "";
+const isHex = (s, n) => new RegExp("^[0-9a-f]{" + n + "}$", "i").test(s);
+const tx = h => `${CFG.basescan}/tx/${h}`, addr = a => `${CFG.basescan}/address/${a}`;
+
+$("nav-scan").href = $("more-scan").href = CFG.ledger + "/quantum-scan";
+$("nav-token").href = `${CFG.basescan}/token/${CFG.token}`;
+$("more-token").href = `${CFG.basescan}/token/${CFG.token}`;
+$("more-keys").href = CFG.quantum + "/keys";
+
+async function getJSON(url, ms = 20000) {
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
+  try {
+    const r = await fetch(url, {signal: ctl.signal, cache: "no-store"});
+    const body = await r.json().catch(() => null);
+    return {ok: r.ok, status: r.status, body};
+  } finally { clearTimeout(t); }
+}
+let rpcId = 0;
+async function rpc(method, params) {
+  const r = await fetch(CFG.baseRpc, {method: "POST", headers: {"content-type": "application/json"},
+    body: JSON.stringify({jsonrpc: "2.0", id: ++rpcId, method, params})});
+  const j = await r.json();
+  if (j.error) throw new Error(j.error.message || "RPC error");
+  return j.result;
+}
+const call = (to, data) => rpc("eth_call", [{to, data}, "latest"]);
+function decodeString(hex) {
+  const b = hex.slice(2); if (b.length < 128) return "";
+  const len = parseInt(b.slice(64, 128), 16), raw = b.slice(128, 128 + len * 2);
+  return decodeURIComponent(raw.replace(/../g, "%$&"));
+}
+function units(raw, dec) {
+  const v = BigInt(raw), d = 10n ** BigInt(dec), whole = v / d, frac = (v % d).toString().padStart(dec, "0").slice(0, 4).replace(/0+$/, "");
+  return whole.toLocaleString("en-US") + (frac ? "." + frac : "");
+}
+function ago(t) {
+  const ms = typeof t === "number" ? (t < 1e12 ? t * 1000 : t) : Date.parse(t);
+  if (!ms) return "";
+  const s = Math.max(0, (Date.now() - ms) / 1000);
+  if (s < 60) return Math.floor(s) + "s ago"; if (s < 3600) return Math.floor(s / 60) + "m ago";
+  if (s < 86400) return Math.floor(s / 3600) + "h ago"; return Math.floor(s / 86400) + "d ago";
+}
+function when(t) {
+  const ms = typeof t === "number" ? (t < 1e12 ? t * 1000 : t) : Date.parse(t);
+  return ms ? new Date(ms).toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC") : "";
+}
+const setDot = (id, up) => $(id).innerHTML = `<span class="dot ${up ? "up" : "down"}"></span>${up ? "live" : "waking"}`;
+const KIND = {advantage_receipt: "Advantage receipt", pqc_readiness: "Crypto inventory", quantum_agent_certificate: "Agent certificate",
+  quantum_hardware_run: "Hardware run", vault_protection: "Vault protection", optimization: "Optimization"};
+const kindName = k => KIND[k] || String(k || "").replace(/_/g, " ");
+const searchBtn = (q, label) => `<button class="h" data-q="${esc(q)}">${esc(label || q)}</button>`;
+
+// ---------------- token ----------------
+let token = {symbol: "PRIVI", decimals: 18};
+async function loadToken() {
+  try {
+    const [n, s, d, ts] = await Promise.all([call(CFG.token, "0x06fdde03"), call(CFG.token, "0x95d89b41"),
+      call(CFG.token, "0x313ce567"), call(CFG.token, "0x18160ddd")]);
+    token = {name: decodeString(n), symbol: decodeString(s) || "PRIVI", decimals: parseInt(d, 16), supply: ts};
+    $("v-sup").textContent = units(ts, token.decimals);
+    $("s-sup").textContent = `${token.symbol} total supply · Base`;
+    setDot("st-base", true);
+  } catch (e) { $("v-sup").textContent = "—"; $("s-sup").textContent = "Base RPC unreachable"; setDot("st-base", false); }
+  loadTransfers();
+}
+async function loadTransfers() {
+  const ul = $("feed-tok");
+  try {
+    const head = parseInt(await rpc("eth_blockNumber", []), 16);
+    const found = [], step = 2000;
+    for (let i = 0; i < 12 && found.length < 12; i++) {
+      const to = head - i * step, from = to - step + 1;
+      const logs = await rpc("eth_getLogs", [{address: CFG.token, topics: [TRANSFER], fromBlock: "0x" + from.toString(16), toBlock: "0x" + to.toString(16)}]);
+      found.push(...logs.reverse());
+    }
+    const hours = Math.round(12 * step * 2 / 3600);
+    if (!found.length) { ul.innerHTML = `<li class="empty" style="display:block">No PRIVI transfers in the last ${hours} hours. <a href="${esc($("more-token").href)}">Full history on Basescan</a>.</li>`; return; }
+    ul.innerHTML = found.slice(0, 12).map(l => {
+      const f = "0x" + l.topics[1].slice(26), t = "0x" + l.topics[2].slice(26);
+      const lbl = f === "0x" + "0".repeat(40) ? "Minted to" : "Transfer";
+      return `<li><span class="m">${lbl} <b>${units(l.data, token.decimals)} ${esc(token.symbol)}</b></span><span class="t">block ${parseInt(l.blockNumber, 16).toLocaleString()}</span>
+        <span class="h">${lbl === "Transfer" ? searchBtn(f, short(f, 8)) + " → " : ""}${searchBtn(t, short(t, 8))} · <a href="${tx(l.transactionHash)}">tx</a></span></li>`;
+    }).join("");
+  } catch (e) { ul.innerHTML = `<li class="empty" style="display:block">Could not read Base right now. <a href="${esc($("more-token").href)}">See PRIVI on Basescan</a>.</li>`; }
+}
+
+// ---------------- feeds ----------------
+const cursor = {blocks: null, att: null, anc: null};
+async function loadBlocks(more) {
+  const ul = $("feed-blocks");
+  try {
+    const q = more && cursor.blocks != null ? `&before=${cursor.blocks}` : "";
+    const [st, bl] = await Promise.all([more ? null : getJSON(CFG.ledger + "/quantum-ledger/stats"), getJSON(`${CFG.ledger}/quantum-ledger/blocks?limit=8${q}`)]);
+    if (st && st.ok) {
+      $("v-blocks").textContent = (st.body.blocks || 0).toLocaleString();
+      $("s-blocks").textContent = `blocks · ${(st.body.entries || 0).toLocaleString()} entries · ${(st.body.settled_blocks || 0).toLocaleString()} settled on Base`;
+    }
+    setDot("st-ledger", bl.ok);
+    const rows = (bl.body && bl.body.blocks) || [];
+    cursor.blocks = bl.body && bl.body.next_before;
+    const html = rows.map(b => `<li><span class="m">Block ${searchBtn(String(b.height), "#" + b.height)} · ${b.new_entries} new entries${b.settled ? ' · <span class="ok">settled</span>' : ""}</span>
+      <span class="t">${ago(b.time)}</span><span class="h">${esc(b.block_hash)}</span></li>`).join("");
+    if (more) ul.insertAdjacentHTML("beforeend", html); else ul.innerHTML = html || `<li class="empty" style="display:block">No blocks yet.</li>`;
+    if (!cursor.blocks) document.querySelector('[data-more="blocks"]').hidden = true;
+  } catch (e) { setDot("st-ledger", false); if (!more) ul.innerHTML = `<li class="empty" style="display:block">Privi Ledger is not answering right now.</li>`; }
+}
+async function loadAtt(more) {
+  const ul = $("feed-att");
+  try {
+    const q = more && cursor.att != null ? `&before=${cursor.att}` : "";
+    const r = await getJSON(`${CFG.quantum}/explorer/recent?limit=8${q}`);
+    setDot("st-quantum", r.ok);
+    if (!r.ok) throw new Error();
+    const d = r.body;
+    if (!more) {
+      $("v-att").textContent = (d.total || 0).toLocaleString();
+      const top = Object.entries(d.by_kind || {}).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k, n]) => `${n} ${kindName(k).toLowerCase()}`);
+      $("s-att").textContent = "signed results" + (top.length ? " · " + top.join(" · ") : "");
+    }
+    const rows = d.attestations || [];
+    cursor.att = rows.length === 8 ? rows[rows.length - 1].seq : null;
+    const html = rows.map(a => `<li><span class="m">${esc(kindName(a.kind))}${a.anchor && a.anchor.tx_hash ? ' · <span class="ok">on Base</span>' : ' · <span class="muted">anchoring</span>'}</span>
+      <span class="t">${ago(a.issued_at)}</span><span class="h">${searchBtn(a.body_sha256)}</span></li>`).join("");
+    if (more) ul.insertAdjacentHTML("beforeend", html); else ul.innerHTML = html || `<li class="empty" style="display:block">No signed results yet.</li>`;
+    if (!cursor.att) document.querySelector('[data-more="att"]').hidden = true;
+  } catch (e) { setDot("st-quantum", false); if (!more) { $("v-att").textContent = "—"; ul.innerHTML = `<li class="empty" style="display:block">Privi Quantum is not answering right now.</li>`; } }
+}
+async function loadAnc(more) {
+  const ul = $("feed-anc");
+  try {
+    const q = more && cursor.anc != null ? `&before=${cursor.anc}` : "";
+    const [st, r] = await Promise.all([more ? null : getJSON(CFG.anchor + "/status"), getJSON(`${CFG.anchor}/anchors/recent?limit=8${q}`)]);
+    if (st && st.ok) {
+      $("v-anc").textContent = (st.body.confirmed_batches || 0).toLocaleString();
+      $("s-anc").textContent = `confirmed batches · ${(st.body.hashes || 0).toLocaleString()} hashes`;
+      if (st.body.anchor_wallet) $("more-wallet").href = addr(st.body.anchor_wallet);
+    }
+    setDot("st-anchor", r.ok);
+    if (!r.ok) throw new Error();
+    const rows = r.body.batches || [];
+    cursor.anc = rows.length === 8 ? rows[rows.length - 1].batch_id : null;
+    const html = rows.map(b => {
+      const net = b.chain_id === CFG.chainId ? "" : ' · <span class="muted">Privi devnet</span>';
+      const state = b.status === "confirmed" ? '<span class="ok">confirmed</span>' : `<span class="meh">${esc(b.status)}</span>`;
+      return `<li><span class="m">${b.hashes} hash${b.hashes === 1 ? "" : "es"} · ${state}${net}</span><span class="t">${ago(b.block_time || b.created_at)}</span>
+        <span class="h">${b.tx_hash && b.chain_id === CFG.chainId ? searchBtn(b.tx_hash) : esc(b.tx_hash || b.root)}</span></li>`;
+    }).join("");
+    if (more) ul.insertAdjacentHTML("beforeend", html); else ul.innerHTML = html || `<li class="empty" style="display:block">No anchors yet.</li>`;
+    if (!cursor.anc) document.querySelector('[data-more="anc"]').hidden = true;
+  } catch (e) { setDot("st-anchor", false); if (!more) { $("v-anc").textContent = "—"; ul.innerHTML = `<li class="empty" style="display:block">Privi Anchor is not answering right now.</li>`; } }
+}
+document.querySelectorAll("[data-more]").forEach(b => b.addEventListener("click", () =>
+  ({blocks: loadBlocks, att: loadAtt, anc: loadAnc})[b.dataset.more](true)));
+
+// ---------------- search ----------------
+const card = (tag, color, title, facts, extra = "") => `<div class="card"><h3><span class="tag" style="--c:var(--${color})">${esc(tag)}</span>${title}</h3>
+  <dl class="facts">${facts.filter(Boolean).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join("")}</dl>${extra}</div>`;
+const yes = (b, y = "valid", n = "invalid") => b === true ? `<span class="ok">${y}</span>` : b === false ? `<span class="no">${n}</span>` : '<span class="muted">unknown</span>';
+const mono = v => `<span class="mono">${esc(v)}</span>`;
+
+async function ledgerBlock(h) {
+  const r = await getJSON(`${CFG.ledger}/quantum-ledger/blocks/${h}`);
+  if (!r.ok) return "";
+  const b = r.body, blk = b.block || {}, st = b.settlement;
+  return card("Ledger block", "ledger", `Block #${esc(blk.height)}`, [
+    ["Integrity", b.valid ? '<span class="ok">hash chain and both signatures verified</span>' : `<span class="no">${esc((b.problems || []).join("; "))}</span>`],
+    ["Time", esc(when(blk.time))], ["Block hash", mono(b.block_hash)],
+    ["Previous block", blk.height > 0 ? searchBtn(String(blk.height - 1), "#" + (blk.height - 1) + " · " + short(blk.prev_block_hash, 12)) : "genesis"],
+    ["Entries", `${esc(blk.new_entries)} new · ${esc(b.first_entry_index)}–${esc(b.last_entry_index)} in the log`],
+    ["Log root", mono(blk.log_root)], ["Signatures", "Ed25519 + ML-DSA-87"],
+    ["Settled on Base", st && st.tx_hash ? `<a href="${tx(st.tx_hash)}">${esc(short(st.tx_hash, 12))}</a>${st.block_number ? " · block " + esc(st.block_number) : ""}` : '<span class="muted">not yet</span>']
+  ], `<p style="margin:12px 0 0"><a href="${CFG.ledger}/quantum-scan#block-${esc(blk.height)}">Every entry in this block on Quantum Scan</a></p>`);
+}
+async function ledgerSearch(q) {
+  const r = await getJSON(`${CFG.ledger}/quantum-ledger/search?q=${encodeURIComponent(q)}`);
+  const m = (r.ok && r.body && r.body.matches) || [];
+  const out = [];
+  const heights = [...new Set(m.filter(x => x.height != null && x.kind !== "entry_hash").map(x => x.height))];
+  for (const x of m.filter(x => x.kind === "entry_hash" || x.kind === "leaf_hash"))
+    out.push(card("Ledger entry", "ledger", "Recorded on the Quantum Ledger", [
+      ["Match", esc(x.kind.replace("_", " "))], x.index != null && ["Log position", esc(x.index)],
+      x.height != null ? ["Sealed in", searchBtn(String(x.height), "block #" + x.height)] : ["Sealed in", '<span class="muted">next block</span>'],
+      x.entry_hash && ["Entry hash", mono(x.entry_hash)]]));
+  for (const h of heights) {
+    const kinds = m.filter(x => x.height === h).map(x => x.kind.replace(/_/g, " "));
+    out.push(`<p class="muted" style="margin:0 0 6px">Matches the ${esc(kinds.join(", "))} of block #${esc(h)}:</p>` + await ledgerBlock(h));
+  }
+  return out.join("");
+}
+async function quantumLookup(q) {
+  const r = await getJSON(`${CFG.quantum}/explorer/lookup?q=${encodeURIComponent(q)}`);
+  if (!r.ok || !r.body || !r.body.found) return "";
+  const a = r.body, s = a.signatures || {}, an = a.anchor;
+  return card("Privi Quantum", "quantum", esc(kindName(a.kind)), [
+    ["Signatures", `${yes(s.ed25519, "Ed25519 valid")} · ${yes(s.ml_dsa_87, "ML-DSA-87 valid")} · ${yes(s.body_hash_matches, "hash matches", "hash mismatch")}`],
+    ["Issued", esc(when(a.issued_at))], a.verdict && ["Verdict", esc(a.verdict.replace(/_/g, " "))],
+    ["Body SHA-256", mono(a.body_sha256)], ["Signing key", mono(a.key_id)],
+    ["Anchored on Base", an && an.tx_hash ? `<a href="${tx(an.tx_hash)}">${esc(short(an.tx_hash, 12))}</a>${an.block_number ? " · block " + esc(an.block_number) : ""}` : '<span class="muted">queued, anchors within minutes</span>'],
+    a.page ? ["Open", `<a href="${esc(a.page)}">Full ${esc(kindName(a.kind).toLowerCase())}</a> · <a href="${esc(a.json)}">JSON</a>`] :
+      a.json ? ["Open", `<a href="${esc(a.json)}">Signed JSON</a>`] : ["Contents", '<span class="muted">private: open it with the receipt id</span>']
+  ]);
+}
+async function anchorVerify(h) {
+  const r = await getJSON(`${CFG.anchor}/anchors/verify/${h}`, 30000);
+  const v = r.body;
+  if (!v || v.error || v.verified === false && /no anchor found/.test(v.reason || "")) return "";
+  return card("Anchor", "anchor", v.verified ? "Anchored on Base" : v.verified === null ? "Anchored on the Privi devnet" : "Anchor check failed", [
+    ["Result", v.verified ? '<span class="ok">verified on chain</span>' : `<span class="${v.verified === null ? "meh" : "no"}">${esc(v.reason)}</span>`],
+    v.block_time && ["Time", esc(when(v.block_time))], v.block_number && ["Base block", esc(Number(v.block_number).toLocaleString())],
+    v.tx_hash && ["Transaction", v.tx_link ? `<a href="${esc(v.tx_link)}">${esc(short(v.tx_hash, 12))}</a>` : mono(v.tx_hash)],
+    v.merkle_root && ["Merkle root on chain", mono(v.merkle_root)],
+    v.proof && ["Proof", `${v.proof.length} step${v.proof.length === 1 ? "" : "s"}`],
+    v.by_privi_anchor_service != null && ["Signed by", v.by_privi_anchor_service ? '<span class="ok">Privi Anchor service wallet</span>' : '<span class="meh">another wallet</span>']
+  ]);
+}
+async function baseTx(h) {
+  const [t, rc] = await Promise.all([rpc("eth_getTransactionByHash", [h]), rpc("eth_getTransactionReceipt", [h])]);
+  if (!t) return "";
+  const isAnchor = (t.input || "").toLowerCase().startsWith(ANCHOR_PREFIX);
+  const ok = rc ? parseInt(rc.status, 16) === 1 : null;
+  let ts = null; if (rc) { const b = await rpc("eth_getBlockByNumber", [rc.blockNumber, false]); ts = b && parseInt(b.timestamp, 16); }
+  const privi = rc && rc.logs.filter(l => l.address.toLowerCase() === CFG.token.toLowerCase() && l.topics[0] === TRANSFER);
+  return card(isAnchor ? "Anchor tx" : "Base tx", isAnchor ? "anchor" : "token", isAnchor ? "Privi anchor transaction" : "Base transaction", [
+    ["Status", ok === null ? '<span class="meh">pending</span>' : yes(ok, "success", "failed")],
+    ts && ["Time", esc(when(ts))], rc && ["Block", esc(parseInt(rc.blockNumber, 16).toLocaleString())],
+    ["From", searchBtn(t.from)], t.to && ["To", t.to.toLowerCase() === CFG.token.toLowerCase() ? "PRIVI token contract" : searchBtn(t.to)],
+    isAnchor && ["Merkle root", mono("0x" + t.input.slice(ANCHOR_PREFIX.length, ANCHOR_PREFIX.length + 64))],
+    privi && privi.length && ["PRIVI moved", privi.map(l => `${units(l.data, token.decimals)} ${esc(token.symbol)}`).join(", ")],
+    ["Basescan", `<a href="${tx(h)}">${esc(short(h, 12))}</a>`]
+  ]);
+}
+async function wallet(a) {
+  const isToken = a.toLowerCase() === CFG.token.toLowerCase();
+  const data = "0x70a08231" + "0".repeat(24) + a.slice(2).toLowerCase();
+  const [bal, eth, kya] = await Promise.all([isToken ? null : call(CFG.token, data).catch(() => null),
+    rpc("eth_getBalance", [a, "latest"]).catch(() => null), isToken ? null : getJSON(`${CFG.ledger}/kya/${a}`).catch(() => null)]);
+  if (isToken) return card("Token", "token", esc(token.name || "PRIVI"), [
+    ["Symbol", esc(token.symbol)], ["Decimals", esc(token.decimals)], token.supply && ["Total supply", units(token.supply, token.decimals)],
+    ["Contract", `<a href="${CFG.basescan}/token/${CFG.token}">${esc(CFG.token)}</a>`], ["Network", "Base (chain 8453)"]]);
+  const k = kya && kya.ok && kya.body;
+  return card("Wallet", "token", mono(a), [
+    ["PRIVI balance", bal ? `${units(bal, token.decimals)} ${esc(token.symbol)}` : '<span class="muted">unavailable</span>'],
+    ["ETH on Base", eth ? units(eth, 18) + " ETH" : '<span class="muted">unavailable</span>'],
+    ["Know Your Agent", k ? (k.known ? `${k.allow ? '<span class="ok">trusted</span>' : '<span class="meh">bound, not cleared</span>'}${k.organization ? " · " + esc(k.organization) : ""}${k.current_grade ? " · grade " + esc(k.current_grade) : ""}` : '<span class="muted">not bound to a Privi Passport</span>') : '<span class="muted">unavailable</span>'],
+    k && k.passport_id && ["Passport", `<a href="${CFG.ledger}/passports/${esc(k.passport_id)}">${esc(k.passport_id)}</a>`],
+    ["Basescan", `<a href="${addr(a)}">all activity</a>`]
+  ]);
+}
+
+let searchSeq = 0;
+async function search(raw, push = true) {
+  const q = raw.trim(); if (!q) return;
+  const seq = ++searchSeq, out = $("result");
+  $("q").value = q;
+  if (push) history.replaceState(null, "", "?q=" + encodeURIComponent(q));
+  out.innerHTML = `<div class="card muted">Searching Privi Ledger, Privi Quantum, Privi Anchor and Base…</div>`;
+  const bare = q.toLowerCase().replace(/^0x/, "");
+  const jobs = [];
+  if (/^\d{1,9}$/.test(q)) jobs.push(ledgerBlock(q));
+  else if (/^qa_[0-9a-f]{8,32}$/i.test(q)) jobs.push(quantumLookup(q));
+  else if (/^pp_[0-9a-z]+$/i.test(q)) jobs.push(Promise.resolve(card("Passport", "ledger", esc(q), [["Open", `<a href="${CFG.ledger}/passports/${encodeURIComponent(q)}">Privi Passport ${esc(q)}</a>`]])));
+  else if (/^0x[0-9a-f]{40}$/i.test(q)) jobs.push(wallet(q));
+  else if (isHex(bare, 64)) {
+    if (q.startsWith("0x")) jobs.push(baseTx(q.toLowerCase()).catch(() => ""));
+    jobs.push(ledgerSearch(bare).catch(() => ""), quantumLookup(bare).catch(() => ""), anchorVerify(bare).catch(() => ""));
+  } else if (isHex(bare, 128)) jobs.push(ledgerSearch(bare).catch(() => ""));
+  const parts = (await Promise.allSettled(jobs)).map(p => p.status === "fulfilled" ? p.value : "").filter(Boolean);
+  if (seq !== searchSeq) return;
+  out.innerHTML = parts.length ? parts.join("") :
+    `<div class="card"><h3>Nothing found for ${mono(short(q, 18))}</h3><p class="muted" style="margin:0">Search takes a Ledger block height, a 64-character hash, a 0x Base transaction, a wallet address, a qa_ receipt id or a pp_ passport id. If a service is waking up, try again in a few seconds.</p></div>`;
+}
+$("search").addEventListener("submit", e => { e.preventDefault(); search($("q").value); });
+document.addEventListener("click", e => {
+  const b = e.target.closest("button[data-q]"); if (!b) return;
+  search(b.dataset.q); window.scrollTo({top: $("search").offsetTop - 16, behavior: "smooth"});
+});
+[["the PRIVI token", CFG.token], ["Ledger block 0", "0"]].forEach(([l, v]) =>
+  $("hints").insertAdjacentHTML("beforeend", `<button data-q="${esc(v)}">${esc(l)}</button>`));
+
+loadToken(); loadBlocks(); loadAtt(); loadAnc();
+const initial = new URLSearchParams(location.search).get("q"); if (initial) search(initial, false);
+</script>
+</body>
+</html>

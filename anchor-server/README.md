@@ -49,6 +49,10 @@ privi-anchor-mcp         # HTTP :8000, MCP at /mcp
 
 The anchor wallet is a hot key. Keep only a little ETH on Base in it for gas (about $5 lasts weeks at the default budget). `/status` shows its balance and `gas_ok`.
 
+## Public explorer feed
+
+For Privi Explorer (CORS open, free): `GET /anchors/recent?limit&before` lists anchor batches newest first (Merkle root, transaction, block, hash count; never the label or the client), and `GET /anchors/verify/<sha256>` runs the same on-chain check as `anchor_verify` for one hash.
+
 ## License
 
 MIT © 2026 Dario Canoy, Privi World Co

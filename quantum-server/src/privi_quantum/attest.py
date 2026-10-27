@@ -105,6 +105,30 @@ class Attestor:
                 "signatures": {"ed25519": r["ed25519"], "ml_dsa_87": r["ml_dsa_87"]},
                 "key_id": r["key_id"], "anchor": json.loads(r["anchor"]) if r["anchor"] else None}
 
+    @staticmethod
+    def _public_anchor(raw: str | None) -> dict | None:
+        if not raw:
+            return None
+        a = json.loads(raw)
+        return {k: a.get(k) for k in ("chain_id", "tx_hash", "merkle_root", "block_number", "block_time", "status")}
+
+    def recent(self, limit: int = 25, before: int | None = None) -> list[dict]:
+        """Public explorer feed: kind, time, body hash and anchor only. Never the id or the body,
+        so the feed cannot be used to open anyone's report or receipt."""
+        limit = max(1, min(int(limit or 25), 100))
+        rows = self._db.execute(
+            "SELECT rowid AS seq, kind, created_at, body_sha256, key_id, anchor FROM attestations "
+            "WHERE (? IS NULL OR rowid < ?) ORDER BY rowid DESC LIMIT ?", (before, before, limit)).fetchall()
+        return [{"seq": r["seq"], "kind": r["kind"], "issued_at": r["created_at"], "body_sha256": r["body_sha256"],
+                 "key_id": r["key_id"], "anchor": self._public_anchor(r["anchor"])} for r in rows]
+
+    def find_by_hash(self, body_sha256: str) -> dict | None:
+        r = self._db.execute("SELECT id FROM attestations WHERE body_sha256=?", (body_sha256.lower(),)).fetchone()
+        return self.get(r["id"]) if r else None
+
+    def kind_counts(self) -> dict[str, int]:
+        return {r[0]: r[1] for r in self._db.execute("SELECT kind, COUNT(*) FROM attestations GROUP BY kind")}
+
     def count(self) -> int:
         return self._db.execute("SELECT COUNT(*) FROM attestations").fetchone()[0]
 
