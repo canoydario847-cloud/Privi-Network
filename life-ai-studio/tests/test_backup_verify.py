@@ -34,6 +34,37 @@ def make_database(path):
         )
 
 
+@pytest.mark.parametrize("title, valid", [
+    ("Cosmic Studio", True),
+    ("Solar system 🪐", True),
+    ("X" * 100, True),
+    (None, False),
+    ("", False),
+    (" \t\n ", False),
+    (b"binary-title", False),
+    ("X" * 101, False),
+])
+def test_restore_rejects_invalid_project_title(tmp_path, title, valid):
+    """A snapshot must preserve usable private project names without logging them."""
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute(
+            "INSERT INTO users VALUES ('u1','member@example.test','hash',NULL,1,0)"
+        )
+        db.execute(
+            "INSERT INTO projects VALUES (?,?,?,?,?)",
+            ("p1", "u1", title, "code", 1),
+        )
+    destination = tmp_path / "vault" / "backup.sqlite3"
+    if valid:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        with pytest.raises(ValueError, match="invalid project title"):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Invalid project titles must not publish backups"
+
+
 @pytest.mark.parametrize("password_hash, valid", [
     ("synthetic-hash", True),
     (None, False),
