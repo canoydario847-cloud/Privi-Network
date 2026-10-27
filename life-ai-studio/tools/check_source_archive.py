@@ -27,7 +27,13 @@ def validate_archive(path):
         if not members:
             raise ValueError("Source archive is empty")
         seen = set()
+        total_uncompressed = 0
         for member in members:
+            if member.file_size > 20 * 1024 * 1024:
+                raise ValueError("Source archive contains an oversized entry")
+            total_uncompressed += member.file_size
+            if total_uncompressed > 100 * 1024 * 1024:
+                raise ValueError("Source archive exceeds uncompressed size limit")
             raw = member.filename
             parts = PurePosixPath(raw).parts
             if (raw.startswith("/") or "\\" in raw or ".." in parts
