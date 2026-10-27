@@ -256,3 +256,49 @@ def test_durable_startup_and_readiness_reject_incomplete_core_schema(
             "SELECT name FROM sqlite_master WHERE type='table'"
         )}
     assert after == before, "Guarded startup must not mutate a partial restore"
+
+
+@pytest.mark.parametrize(
+    ("table", "replacement"),
+    [
+        (
+            "users",
+            "CREATE TABLE users (id TEXT, email TEXT UNIQUE NOT NULL, "
+            "pwdhash TEXT NOT NULL, wallet TEXT UNIQUE, "
+            "member_since INTEGER NOT NULL, credits INTEGER NOT NULL DEFAULT 0)",
+        ),
+        (
+            "files",
+            "CREATE TABLE files (project_id TEXT NOT NULL, path TEXT NOT NULL, "
+            "content TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1)",
+        ),
+    ],
+)
+def test_durable_startup_rejects_core_tables_without_identity_primary_keys(
+    tmp_path, monkeypatch, table, replacement
+):
+    """A schema lookalike must not make a broken recovery appear healthy."""
+    import sqlite3
+
+    path = tmp_path / "identity-unsafe.sqlite3"
+    monkeypatch.setattr(store, "DB", str(path))
+    store.init()
+    with sqlite3.connect(path) as db:
+        db.execute(f'DROP TABLE "{table}"')
+        db.execute(replacement)
+        before = db.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+            (table,),
+        ).fetchone()[0]
+
+    monkeypatch.setenv("LIFE_REQUIRE_EXISTING_DB", "1")
+    assert store.database_readable() is False
+    with pytest.raises(RuntimeError, match="existing initialized database"):
+        store.init()
+
+    with sqlite3.connect(path) as db:
+        after = db.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+            (table,),
+        ).fetchone()[0]
+    assert after == before, "Guarded startup must not repair a broken restore"
