@@ -158,3 +158,25 @@ def test_initialization_rejects_directory_as_database(tmp_path, monkeypatch):
         store.init()
 
     assert directory.is_dir()
+
+
+def test_transaction_never_recreates_missing_member_database(tmp_path, monkeypatch):
+    """A lost or unmounted volume must fail, not silently reset customer state."""
+    import sqlite3
+
+    path = tmp_path / "lost-volume" / "life.sqlite3"
+    monkeypatch.setattr(store, "DB", str(path))
+
+    with pytest.raises(sqlite3.OperationalError):
+        with store.transaction() as db:
+            db.execute("CREATE TABLE should_not_exist (id INTEGER)")
+    assert not path.exists()
+    assert not path.parent.exists()
+
+    # Also fail closed when a previously initialized database disappears.
+    store.init()
+    path.unlink()
+    with pytest.raises(sqlite3.OperationalError):
+        with store.transaction() as db:
+            db.execute("SELECT 1")
+    assert not path.exists(), "A request must not recreate a lost LIFE database"
