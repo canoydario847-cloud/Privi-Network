@@ -447,6 +447,34 @@ def test_backup_accepts_consistent_account_project_and_ledger_ownership(tmp_path
     assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
 
 
+@pytest.mark.parametrize("key, valid", [
+    ("retry-123", True),
+    ("x" * 180, True),
+    ("", False),
+    ("  \t\n  ", False),
+    ("x" * 181, False),
+    (b"binary-key", False),
+])
+def test_backup_rejects_invalid_credit_ledger_retry_keys(tmp_path, key, valid):
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(str(source)) as db:
+        db.execute(
+            "INSERT INTO users VALUES ('u1','member@example.test','synthetic-hash',NULL,1,1)"
+        )
+        db.execute(
+            "INSERT INTO ledger VALUES (?,?,?,?,?,?,?)",
+            ("l1", "u1", "credit", "test", 1, key, 1),
+        )
+    destination = tmp_path / "vault" / "snapshot.sqlite3"
+    if valid:
+        assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
+    else:
+        with pytest.raises(ValueError, match="invalid credit ledger idempotency key"):
+            backup.backup_and_verify(source, destination)
+        assert not destination.exists(), "Malformed retry keys must not publish a backup"
+
+
 def test_matching_ledger_columns_without_unique_idempotency_are_rejected(tmp_path):
     source = tmp_path / "missing-ledger-unique.sqlite3"
     make_database(source)
