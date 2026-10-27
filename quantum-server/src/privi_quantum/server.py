@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import hmac
 import json
 import os
 import threading
@@ -27,10 +28,11 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 
 from . import govpqc, govreport, pqctls, qaoa, scanner
+from .dream import BENCHMARK, MODES, DreamError, DreamScape, DreamWeaver, Privilege
 from .anchoring import AnchorError, HttpAnchorClient, anchor_pending
 from .attest import PQ_ALG, Attestor
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/quantum-server"
 PUBLIC_URL = os.getenv("QUANTUM_PUBLIC_URL", "https://privi-quantum.onrender.com").rstrip("/")
 COPYRIGHT = "Copyright (c) 2026 Privi World Co. All rights reserved."
@@ -58,6 +60,12 @@ factory decisions and returns answers you can prove later.
 6. pqc_endpoint_check tests up to 20 public sites or services (e.g. www.agency.gov) for TLS 1.3 and
    hybrid post-quantum key exchange (X25519MLKEM768) and returns CBOM-ready assets; pass
    `endpoints` to pqc_readiness_package to check them and add them to the package in one call.
+7. The Privi quantum realm: privilege_directory lists every quantum realm (engines here and other
+   Privi Quantum nodes) ranked by measured speed to the proven optimum. dreamweaver_run races one
+   job across several realms: mode "first" returns the first valid answer, "best" the best one by
+   the deadline. dreamscape_open gives you a private Dream Scape workspace (scape_id + scape_key)
+   that keeps your jobs; dreamscape_submit runs a job there, and the WebSocket /dreamscape/ws runs
+   many jobs at once and streams each realm's progress.
 
 All tools are free. Privi is built by Dario Canoy (Privi World Co, Port Huron, Michigan).
 For the other Privi tools, pilots, partnerships, manufacturing or government work, see
@@ -75,6 +83,9 @@ class Settings:
     anchor_interval: int = 300
     rate_per_min: int = 20
     max_concurrent: int = 2
+    admin_key: str = ""
+    dream_nodes: str = ""
+    dream_allow_private: bool = False
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -87,6 +98,9 @@ class Settings:
             anchor_interval=int(os.getenv("QUANTUM_ANCHOR_INTERVAL", "300")),
             rate_per_min=int(os.getenv("QUANTUM_RATE_PER_MIN", "20")),
             max_concurrent=int(os.getenv("QUANTUM_MAX_CONCURRENT", "2")),
+            admin_key=os.getenv("QUANTUM_ADMIN_KEY", ""),
+            dream_nodes=os.getenv("DREAMWEAVER_NODES", ""),
+            dream_allow_private=os.getenv("DREAMWEAVER_ALLOW_PRIVATE") == "1",
         )
 
 
@@ -127,6 +141,10 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     check_endpoints = endpoint_checker or pqctls.check_endpoints
     cpu = anyio.CapacityLimiter(settings.max_concurrent)
     keys = attestor.public_keys()
+    privilege = Privilege(settings.db_path, settings.dream_nodes, settings.dream_allow_private)
+    weaver = DreamWeaver(privilege, attestor, anyio.CapacityLimiter(settings.max_concurrent))
+    scapes = DreamScape(privilege, weaver)
+    bench_state = {"last": 0.0}
 
     mcp = MCPServer(
         name="privi-quantum", title="Privi Quantum",
@@ -149,7 +167,10 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
                 "signatures": f"Ed25519 + {PQ_ALG}", "signing_key_id": keys["key_id"],
                 "anchoring": {"enabled": anchor_client is not None, "chain": "Base via Privi Anchor (until the Privi chain mainnet)",
                               "interval_seconds": settings.anchor_interval},
-                "attestations_issued": attestor.count(), "public_keys_url": f"{PUBLIC_URL}/keys"}
+                "attestations_issued": attestor.count(), "public_keys_url": f"{PUBLIC_URL}/keys",
+                "quantum_realm": {"dream_scape": f"{PUBLIC_URL}/dreamscape", "privilege": f"{PUBLIC_URL}/privilege",
+                                  "realms": len(privilege.active()),
+                                  "websocket": PUBLIC_URL.replace("https://", "wss://") + "/dreamscape/ws"}}
 
     @mcp.tool(title="List optimization problems", annotations=READ_ONLY)
     def quantum_problems() -> dict[str, Any]:
@@ -356,6 +377,165 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
 
     cors = {"Access-Control-Allow-Origin": "*"}
 
+    # ---------------- the Privi quantum realm: Privilege, Dream Weaver, Dream Scape ----------------
+
+    def _weave_err(e: Exception) -> CallToolResult:
+        return _result({"error": str(e)}, is_error=True)
+
+    @mcp.tool(title="Privilege: quantum realm directory", annotations=READ_ONLY)
+    def privilege_directory() -> CallToolResult:
+        """Every quantum realm Privi can run a job on (engines on this server and other Privi Quantum nodes),
+        ranked by expected time to the proven optimum, with latency, optimum rate, wins and status. Free."""
+        return _result(privilege.directory())
+
+    @mcp.tool(title="Privilege: benchmark the realms", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                                  idempotentHint=False, openWorldHint=True))
+    async def privilege_benchmark(ctx: Context) -> CallToolResult:
+        """Run the standard 8-qubit benchmark on every active realm at once and update Privilege's speed
+        rankings. At most once every 2 minutes for everyone. Free."""
+        now = time.monotonic()
+        if now - bench_state["last"] < 120:
+            return _result({"error": "a benchmark ran less than 2 minutes ago; try again shortly",
+                            "directory": privilege.directory()}, is_error=True)
+        bench_state["last"] = now
+        try:
+            r = await weaver.weave(BENCHMARK[0], BENCHMARK[1], layers=2, shots=512, mode="best",
+                                   fanout=8, deadline_s=60, benchmark=True)
+        except (DreamError, qaoa.ProblemError) as e:
+            return _weave_err(e)
+        return _result({"benchmark": {k: r.get(k) for k in ("ok", "total_ms", "attempts", "winner")},
+                        "directory": privilege.directory()})
+
+    @mcp.tool(title="Dream Weaver: race a quantum job across realms", annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True))
+    async def dreamweaver_run(
+        problem: Annotated[str, Field(description="balance_lines | select_lots | split_conflicts | qubo (see quantum_problems)")],
+        data: Annotated[dict[str, Any], Field(description="Problem data in the shape quantum_problems describes")],
+        ctx: Context,
+        mode: Annotated[str, Field(description="first = fastest valid answer wins; best = best answer by the deadline")] = "first",
+        fanout: Annotated[int, Field(description="How many realms to use (1-8), fastest first", ge=1, le=8)] = 3,
+        hedge_ms: Annotated[int, Field(description="first mode: start the top realm alone, add the others after this many ms "
+                                                   "(or as soon as one fails). 0 = all at once", ge=0, le=10000)] = 0,
+        layers: Annotated[int, Field(description="QAOA depth p (1-4)", ge=1, le=4)] = 2,
+        shots: Annotated[int, Field(description="Measurements (1-100000)", ge=1, le=100000)] = 1024,
+        deadline_s: Annotated[float, Field(description="Give up after this many seconds (1-120)", ge=1, le=120)] = 30,
+        realms: Annotated[list[str] | None, Field(description="Only these realm_ids (from privilege_directory)")] = None,
+    ) -> CallToolResult:
+        """Run one quantum optimization on several realms at once and return the winning answer, every realm's
+        timing, and a post-quantum signed attestation (Ed25519 + ML-DSA-87) anchored on chain. Free."""
+        if not limiter.allow(_who(ctx)):
+            return _result({"error": f"rate limit: {settings.rate_per_min} jobs per minute"}, is_error=True)
+        if mode not in MODES:
+            return _result({"error": "mode must be first or best"}, is_error=True)
+        try:
+            r = await weaver.weave(problem, data, layers=layers, shots=shots, mode=mode, fanout=fanout,
+                                   hedge_ms=hedge_ms, deadline_s=deadline_s, realms=realms)
+        except (DreamError, qaoa.ProblemError) as e:
+            return _weave_err(e)
+        if r.get("ok"):
+            r["attestation"].update(links(r["attestation"]["id"]))
+        return _result(r, is_error=not r.get("ok"))
+
+    @mcp.tool(title="Dream Scape: open a workspace", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                                idempotentHint=False, openWorldHint=False))
+    def dreamscape_open(
+        name: Annotated[str, Field(description="A name for your workspace, e.g. 'Plant 2 scheduling'")],
+        ctx: Context,
+    ) -> CallToolResult:
+        """Open a private Dream Scape: your own quantum environment that keeps every job and result. Returns
+        scape_id and scape_key (shown once; keep it). Free."""
+        if not limiter.allow(_who(ctx)):
+            return _result({"error": "rate limit; try again in a minute"}, is_error=True)
+        try:
+            sc = scapes.open(name)
+        except DreamError as e:
+            return _weave_err(e)
+        ws = PUBLIC_URL.replace("https://", "wss://").replace("http://", "ws://") + "/dreamscape/ws"
+        return _result({**sc, "websocket": ws,
+                        "next": "Call dreamscape_submit with scape_id and scape_key, or open the WebSocket and send "
+                                "{\"type\":\"auth\",\"scape_id\":...,\"key\":...} then weave frames."})
+
+    @mcp.tool(title="Dream Scape: run a job", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                         idempotentHint=False, openWorldHint=True))
+    async def dreamscape_submit(
+        scape_id: Annotated[str, Field(description="Your Dream Scape id (scape_...)")],
+        scape_key: Annotated[str, Field(description="Its key (dsk_...)")],
+        problem: Annotated[str, Field(description="balance_lines | select_lots | split_conflicts | qubo")],
+        data: Annotated[dict[str, Any], Field(description="Problem data (see quantum_problems)")],
+        ctx: Context,
+        mode: Annotated[str, Field(description="first or best")] = "first",
+        fanout: Annotated[int, Field(ge=1, le=8)] = 3,
+        hedge_ms: Annotated[int, Field(ge=0, le=10000)] = 0,
+        layers: Annotated[int, Field(ge=1, le=4)] = 2,
+        shots: Annotated[int, Field(ge=1, le=100000)] = 1024,
+        deadline_s: Annotated[float, Field(ge=1, le=120)] = 30,
+    ) -> CallToolResult:
+        """Run a quantum job in your Dream Scape through Dream Weaver and keep the result there. Free."""
+        if not scapes.auth(scape_id, scape_key):
+            return _result({"error": "wrong scape_id or scape_key"}, is_error=True)
+        if not limiter.allow(_who(ctx)):
+            return _result({"error": f"rate limit: {settings.rate_per_min} jobs per minute"}, is_error=True)
+        r = await scapes.submit(scape_id, {"problem": problem, "data": data, "mode": mode, "fanout": fanout,
+                                           "hedge_ms": hedge_ms, "layers": layers, "shots": shots, "deadline_s": deadline_s})
+        if r.get("attestation"):
+            r["attestation"].update(links(r["attestation"]["id"]))
+        return _result(r, is_error=r["status"] != "done")
+
+    @mcp.tool(title="Dream Scape: jobs", annotations=READ_ONLY)
+    def dreamscape_jobs(
+        scape_id: Annotated[str, Field(description="Your Dream Scape id")],
+        scape_key: Annotated[str, Field(description="Its key")],
+        job_id: Annotated[str | None, Field(description="One job in full; omit for the recent list")] = None,
+        limit: Annotated[int, Field(ge=1, le=100)] = 20,
+    ) -> CallToolResult:
+        """Your Dream Scape's recent jobs, or one job with its full result. Free."""
+        if not scapes.auth(scape_id, scape_key):
+            return _result({"error": "wrong scape_id or scape_key"}, is_error=True)
+        if job_id:
+            j = scapes.job(scape_id, job_id)
+            return _result(j) if j else _result({"error": "job not found"}, is_error=True)
+        return _result({"scape_id": scape_id, "jobs": scapes.jobs(scape_id, limit)})
+
+    def _admin(request: Request) -> bool:
+        auth = request.headers.get("authorization", "")
+        tok = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        return bool(settings.admin_key and tok and hmac.compare_digest(tok, settings.admin_key))
+
+    @mcp.custom_route("/privilege", methods=["GET"], include_in_schema=False)
+    async def privilege_http(_: Request) -> JSONResponse:
+        return JSONResponse(privilege.directory(), headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"})
+
+    @mcp.custom_route("/privilege/realms", methods=["POST"], include_in_schema=False)
+    async def privilege_add(request: Request) -> JSONResponse:
+        if not _admin(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        try:
+            b = await request.json()
+            realm = await anyio.to_thread.run_sync(lambda: privilege.add_node(str(b.get("name", "")), str(b.get("url", "")),
+                                                                             str(b.get("location", ""))))
+        except (DreamError, ValueError, AttributeError) as e:
+            return JSONResponse({"error": str(e) or 'send JSON like {"name": "Dream Scape EU", "url": "https://.../mcp"}'},
+                                status_code=400)
+        return JSONResponse(realm, status_code=201)
+
+    @mcp.custom_route("/privilege/realms/{realm_id}", methods=["DELETE"], include_in_schema=False)
+    async def privilege_remove(request: Request) -> JSONResponse:
+        if not _admin(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        try:
+            ok = privilege.remove(request.path_params["realm_id"])
+        except DreamError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        return JSONResponse({"removed": ok}, status_code=200 if ok else 404)
+
+    @mcp.custom_route("/dreamscape", methods=["GET"], include_in_schema=False)
+    async def dreamscape_page(_: Request) -> Response:
+        return Response(DREAM_PAGE.format(url=PUBLIC_URL, ws=PUBLIC_URL.replace("https://", "wss://"), copyright=COPYRIGHT),
+                        media_type="text/html; charset=utf-8")
+
+    mcp._dream_ws = scapes.ws
+    mcp._dream = (privilege, weaver, scapes)
+
     @mcp.custom_route("/health", methods=["GET"], include_in_schema=False)
     async def health(_: Request) -> JSONResponse:
         return JSONResponse({"ok": True, "service": "privi-quantum", "version": __version__}, headers=cors)
@@ -488,6 +668,26 @@ Public signing keys: <a href="{url}/keys">/keys</a>. Status: <a href="{url}/stat
 <p><small>{copyright}</small></p></body></html>"""
 
 
+DREAM_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privi Dream Scape</title><style>body{{font:16px/1.55 system-ui,sans-serif;max-width:680px;margin:48px auto;padding:0 16px;color:#16181d;background:#f7f8fa}}
+code,pre{{font:14px ui-monospace,monospace;background:#eef1f6;border-radius:6px}}pre{{padding:12px;overflow-x:auto}}code{{padding:1px 4px}}
+a{{color:#3451b2}}@media (prefers-color-scheme:dark){{body{{color:#e8eaee;background:#0f1115}}code,pre{{background:#1d222b}}a{{color:#8ea6ff}}}}</style></head><body>
+<h1>Privi Dream Scape</h1>
+<p>The Privi quantum realm. <b>Dream Scape</b> is your private quantum workspace. <b>Dream Weaver</b> runs each job on several
+quantum realms at once and returns the first valid answer (or the best one by a deadline). <b>Privilege</b> is the directory
+that measures every realm and ranks it by expected time to the proven optimum.</p>
+<p>Live directory: <a href="{url}/privilege">{url}/privilege</a></p>
+<p>Agents (MCP): <code>dreamscape_open</code>, <code>dreamscape_submit</code>, <code>dreamscape_jobs</code>,
+<code>dreamweaver_run</code>, <code>privilege_directory</code>, <code>privilege_benchmark</code> at <code>{url}/mcp</code>.</p>
+<p>Many jobs at once over one WebSocket:</p>
+<pre>{ws}/dreamscape/ws
+{{"type":"auth","scape_id":"scape_...","key":"dsk_..."}}
+{{"type":"weave","ref":"a1","problem":"balance_lines","data":{{"jobs":[...]}},"mode":"first","fanout":3}}</pre>
+<p>Every winning answer is signed with Ed25519 + ML-DSA-87 and anchored on chain. Realms run CVaR-QAOA on exact simulators
+today; quantum hardware joins Privilege as a realm once a provider account is connected.</p>
+<p><small>{copyright}</small></p></body></html>"""
+
+
 def _anchor_loop(attestor: Attestor, client, interval: int) -> None:
     while True:
         time.sleep(interval)
@@ -497,6 +697,14 @@ def _anchor_loop(attestor: Attestor, client, interval: int) -> None:
                 print(f"[privi-quantum] anchored {n} attestations on chain (Base)", flush=True)
         except Exception as e:  # keep serving; retry next round
             print(f"[privi-quantum] anchoring failed, will retry: {e}", flush=True)
+
+
+def http_app(mcp: MCPServer, host: str = "0.0.0.0"):
+    """The HTTP app plus the Dream Scape WebSocket."""
+    from starlette.routing import WebSocketRoute
+    app = mcp.streamable_http_app(host=host, stateless_http=True, json_response=True)
+    app.router.routes.append(WebSocketRoute("/dreamscape/ws", mcp._dream_ws))
+    return app
 
 
 def main() -> None:
@@ -515,8 +723,8 @@ def main() -> None:
         return
     import uvicorn
     from .front import QuickGet
-    uvicorn.run(QuickGet(mcp.streamable_http_app(host=args.host, stateless_http=True, json_response=True),
-                         "Privi Quantum", "privi-quantum", PUBLIC_URL), host=args.host, port=args.port)
+    uvicorn.run(QuickGet(http_app(mcp, host=args.host), "Privi Quantum", "privi-quantum", PUBLIC_URL),
+                host=args.host, port=args.port)
 
 
 if __name__ == "__main__":

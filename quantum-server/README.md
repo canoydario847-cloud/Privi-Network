@@ -51,6 +51,28 @@ Privi Quantum joins three things into one pipeline:
 
 HTTP: `/health`, `/status`, `/keys`, `/attestations/<id>`, `/.well-known/mcp/server-card.json`.
 
+## The Privi quantum realm: Dream Scape, Dream Weaver, Privilege
+
+- **Dream Scape** is your own quantum environment. `dreamscape_open` gives a private workspace
+  (`scape_id` + `scape_key`) that keeps every job and its signed result; `dreamscape_submit` runs a job,
+  `dreamscape_jobs` lists them. One WebSocket, `/dreamscape/ws`, runs up to 16 jobs at once and streams
+  each realm's progress (`job.accepted`, `realm.started`, `realm.result`, `weave.done`). Page: `/dreamscape`.
+- **Dream Weaver** runs one quantum job on several realms at once (`dreamweaver_run`). `mode: "first"`
+  returns the first valid answer and cancels the rest; `hedge_ms` starts the top realm alone and adds the
+  others after a delay or the moment one fails. `mode: "best"` keeps the best answer by the deadline. The
+  winner is signed (Ed25519 + ML-DSA-87) and anchored like every Privi Quantum result.
+- **Privilege** is the directory of quantum realms (`privilege_directory`, public JSON at `/privilege`).
+  It ranks realms by expected time to the proven optimum (measured latency divided by how often a realm
+  finds the optimum), from real jobs and the shared 8-qubit benchmark (`privilege_benchmark`).
+
+Realms today: two built-in engines (Dream Scape Exact: CVaR-QAOA at full depth; Dream Scape Swift:
+depth 1, short training, fastest) plus any other Privi Quantum node. Add a node with
+`DREAMWEAVER_NODES="Dream Scape EU=https://.../mcp;Dream Scape West=https://.../mcp"` or
+`POST /privilege/realms` (`Authorization: Bearer $QUANTUM_ADMIN_KEY`, body `{name, url, location}`).
+
+Racing picks the fastest realm; it does not make any processor or network faster than it is. Realms run
+on exact simulators today; quantum hardware joins Privilege as a realm once a provider account is connected.
+
 ## Honest limits
 
 - At 16 qubits a classical computer solves these exactly, which is how the service grades
