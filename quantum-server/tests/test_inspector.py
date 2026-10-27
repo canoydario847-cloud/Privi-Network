@@ -37,7 +37,9 @@ class Agent:
 
 def setup(tmp_path, mode="enforce"):
     db = str(tmp_path / "i.db")
-    return build_server(Settings(db_path=db, rate_per_min=1000, admin_key=ADMIN, inspector_mode=mode), Attestor(db)), db
+    return build_server(Settings(db_path=db, rate_per_min=1000, admin_key=ADMIN, inspector_mode=mode,
+                                 inspector_require_human=False, inspector_require_id=False, inspector_min_grade="F"),
+                        Attestor(db)), db      # human factors are tested in test_humans.py
 
 
 def test_checkpoint_intercepts_and_admits(tmp_path):

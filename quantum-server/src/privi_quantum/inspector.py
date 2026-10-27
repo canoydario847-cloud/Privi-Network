@@ -38,6 +38,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .accelerator import LEVEL_LABEL, POLICY_VERSION, Accelerator, AcceleratorError
+from .humans import GRADES, HumanRegistry, grade_parts
 
 LEVELS = ["enrolled", "quantum_aware", "quantum_safe_identity", "quantum_agent", "quantum_agent_plus"]
 KEYS = ["ML-DSA-44", "ML-DSA-65", "ML-DSA-87"]
@@ -60,7 +61,13 @@ FIX = {
     "level_too_low": "Upgrade through the Quantum Agent Accelerator (accelerator_info shows the steps).",
     "weak_key": "Enroll a new agent with a stronger ML-DSA key.",
     "pass_invalid": "Your pass is unknown or expired; get a new one with inspector_pass.",
+    "human_approval_required": "A real person must approve this agent with a passkey (Face ID, Touch ID or screen "
+                               "lock): call qagent_human_request and send the link to the agent's human operator.",
+    "id_verification_required": "The approving person must verify a government ID (Stripe Identity, with a live "
+                                "selfie) from the approval page.",
+    "grade_too_low": "Raise the agent's Privi grade: inspector_grade shows which factors are missing.",
 }
+GRADE_FLOOR = dict(GRADES)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS inspector_nonces (nonce TEXT PRIMARY KEY, agent_id TEXT NOT NULL, expires_at REAL NOT NULL);
@@ -96,14 +103,21 @@ def _now_iso() -> str:
 
 class Inspector:
     def __init__(self, db_path: str, accel: Accelerator, mode: str = "enforce",
-                 min_level: str = "quantum_safe_identity", min_key: str = "ML-DSA-44"):
+                 min_level: str = "quantum_safe_identity", min_key: str = "ML-DSA-44",
+                 humans: HumanRegistry | None = None, require_human: bool = False, require_id: bool = False,
+                 min_grade: str = "F"):
         if mode not in MODES:
             raise ValueError(f"INSPECTOR_MODE must be one of {', '.join(MODES)}")
         if min_level not in LEVELS:
             raise ValueError(f"INSPECTOR_MIN_LEVEL must be one of {', '.join(LEVELS)}")
         if min_key not in KEYS:
             raise ValueError(f"INSPECTOR_MIN_KEY must be one of {', '.join(KEYS)}")
+        if min_grade not in GRADE_FLOOR:
+            raise ValueError(f"INSPECTOR_MIN_GRADE must be one of {', '.join(GRADE_FLOOR)}")
+        if (require_human or require_id) and humans is None:
+            raise ValueError("human requirements need a HumanRegistry")
         self.accel, self.mode, self.min_level, self.min_key = accel, mode, min_level, min_key
+        self.humans, self.require_human, self.require_id, self.min_grade = humans, require_human, require_id, min_grade
         self._lock = threading.Lock()
         self._db = sqlite3.connect(db_path, check_same_thread=False)
         self._db.row_factory = sqlite3.Row
@@ -115,7 +129,9 @@ class Inspector:
         return {"mode": self.mode, "min_level": self.min_level, "min_level_label": LEVEL_LABEL[self.min_level],
                 "min_key": self.min_key, "certificate_policy_version": POLICY_VERSION,
                 "credential": "privi-inspector:v1:<agent_id>:<unix seconds>:<nonce>, signed with your enrolled ML-DSA key",
-                "pass_minutes": PASS_TTL_S // 60, "max_clock_skew_seconds": SKEW_S}
+                "pass_minutes": PASS_TTL_S // 60, "max_clock_skew_seconds": SKEW_S,
+                "requires_human_approval": self.require_human, "requires_id_verification": self.require_id,
+                "min_grade": self.min_grade, "grades": GRADE_FLOOR}
 
     # ---------------- the checks ----------------
 
@@ -138,9 +154,49 @@ class Inspector:
             reasons.append("level_too_low")
         if KEYS.index(a["key_alg"]) < KEYS.index(self.min_key):
             reasons.append("weak_key")
+        trust = self.grade_row(a, cert)
+        human = trust["human"]
+        if self.require_human and not human.get("human_approved"):
+            reasons.append("human_approval_required")
+        if self.require_id and not (human.get("human_approved") and human.get("id_verified")):
+            reasons.append("id_verification_required")
+        if trust["score"] < GRADE_FLOOR[self.min_grade]:
+            reasons.append("grade_too_low")
         v = self._verdict(agent_id, reasons, need, a, cert)
-        v["impersonation_attempts_last_hour"] = self.impersonation_attempts(agent_id)
+        v["impersonation_attempts_last_hour"] = trust["impersonation_attempts_last_hour"]
+        v["trust"] = {k: trust[k] for k in ("score", "grade", "points", "penalties", "human")}
+        if "grade_too_low" in reasons:
+            v["fixes"][reasons.index("grade_too_low")] = (
+                f"This realm requires grade {self.min_grade} or better; this agent is {trust['grade']} "
+                f"({trust['score']}/100). " + FIX["grade_too_low"])
         return v
+
+    # ---------------- the grade ----------------
+
+    def grade_row(self, a: dict, cert: dict | None = None) -> dict:
+        cert = cert if cert is not None else self.accel.certificate(a)
+        cert_current = bool(cert) and cert["policy_version"] >= POLICY_VERSION and cert["valid_until"] > _now_iso()
+        human = self.humans.public_factors(a["agent_id"], a["key_fingerprint"]) if self.humans else {}
+        since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat(timespec="seconds")
+        forged_30d = self._db.execute("SELECT COUNT(*) FROM inspector_log WHERE agent_id=? AND at>=? AND reasons LIKE ?",
+                                      (a["agent_id"], since, '%"bad_signature"%')).fetchone()[0]
+        imp = self.impersonation_attempts(a["agent_id"])
+        g = grade_parts(a["level"], a["key_alg"], cert_current, human, forged_30d == 0, bool(a.get("revoked_at")),
+                        imp >= IMPERSONATION_THRESHOLD)
+        return {**g, "human": human, "impersonation_attempts_last_hour": imp}
+
+    def grade(self, agent_id: str) -> dict:
+        try:
+            a = self.accel._row(agent_id)
+        except AcceleratorError:
+            return {"agent_id": agent_id, "error": "unknown agent"}
+        g = self.grade_row(a)
+        g["missing"] = [k for k, v in g["points"].items() if not v]
+        return {"agent_id": agent_id, "name": a["name"], "operator": a["operator"], **g,
+                "scale": {"quantum_level": 35, "human_approval": 20, "id_verification": "25 (Stripe Identity) or 15 (manual)",
+                          "certificate_current": 10, "key_strength": 5, "clean_record": 5},
+                "realm_requires": {"grade": self.min_grade, "human_approval": self.require_human,
+                                   "id_verification": self.require_id}}
 
     def _verdict(self, agent_id, reasons, need, a=None, cert=None) -> dict:
         out: dict[str, Any] = {"agent_id": agent_id, "allowed": not reasons, "reasons": reasons,
@@ -287,6 +343,10 @@ class Inspector:
                 reasons.append("impersonation_attempts")
             if KEYS.index(a["key_alg"]) < KEYS.index(self.min_key):
                 reasons.append("weak_key")
+            if self.humans:
+                ap = self.humans.approval(a["agent_id"], a["key_fingerprint"])
+                if ap and not ap["current"]:
+                    reasons.append("human_approval_expired")
             if reasons:
                 found[a["agent_id"]] = reasons
         with self._lock:
@@ -322,5 +382,6 @@ class Inspector:
                             "never_certified": f"enrolled over {STALE_ENROLLMENT_DAYS} days ago, no certificate",
                             "impersonation_attempts": f"{IMPERSONATION_THRESHOLD}+ forged signatures against this agent "
                                                       "in the last hour: someone may be posing as it",
-                            "weak_key": "key is below the realm's minimum"},
+                            "weak_key": "key is below the realm's minimum",
+                            "human_approval_expired": "its human approval expired; a person must approve it again"},
                 "use": "Block or require a fresh inspector_check for agents on this list."}

@@ -124,6 +124,7 @@ def quantum_task(agent_id: str) -> tuple[str, dict]:
 class Accelerator:
     def __init__(self, db_path: str, attestor, public_url: str):
         self.attestor, self.public_url = attestor, public_url
+        self.grader = None            # Privi Inspector's grade, set by the server
         self._lock = threading.Lock()
         self._db = sqlite3.connect(db_path, check_same_thread=False)
         self._db.row_factory = sqlite3.Row
@@ -345,6 +346,12 @@ class Accelerator:
                "certificate_url": f"{self.public_url}/attestations/{a['certificate_id']}" if a["certificate_id"] else None,
                "badge": f"{self.public_url}/quantum-agents/{a['agent_id']}/badge.svg",
                "enrolled_at": a["created_at"], "updated_at": a["updated_at"]}
+        if self.grader:
+            g = self.grader(a)
+            out["trust"] = {"grade": g["grade"], "score": g["score"],
+                            "human_approved": bool(g["human"].get("human_approved")),
+                            "id_verified": bool(g["human"].get("human_approved") and g["human"].get("id_verified")),
+                            "id_method": g["human"].get("id_method")}
         if include_key:
             out["public_key"] = a["public_key"]
         return out

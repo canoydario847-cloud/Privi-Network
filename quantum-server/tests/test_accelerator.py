@@ -20,7 +20,8 @@ def fake_checker(targets, *a, **k):
 def test_agent_upgrades_to_quantum_agent_plus(tmp_path):
     from starlette.testclient import TestClient
     db = str(tmp_path / "a.db")
-    srv = build_server(Settings(db_path=db, rate_per_min=1000), Attestor(db), None, fake_checker)
+    srv = build_server(Settings(db_path=db, rate_per_min=1000, inspector_require_human=False,
+                                inspector_require_id=False, inspector_min_grade="F"), Attestor(db), None, fake_checker)
     key = mldsa.MLDSA65PrivateKey.generate()
     pub = base64.b64encode(key.public_key().public_bytes_raw()).decode()
     sign = lambda m: base64.b64encode(key.sign(m.encode())).decode()
