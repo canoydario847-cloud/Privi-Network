@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privi Quantum Scan</title>
+<meta name="description" content="Every block, entry and settlement hash on the Privi Quantum Ledger. Search any hash and check it yourself.">
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--ink:#141a26;--mute:#5a6578;--line:#dde3ed;--acc:#3a4fd6;--acc-soft:#e8ebfb;--ok:#18794e;--ok-soft:#dff3e8;--bad:#b42323;--bad-soft:#fbe4e4;--warn:#946006;--warn-soft:#fbf0d9;--chip:#eef1f6;
+--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;--sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+@media (prefers-color-scheme:dark){:root{--bg:#0e121a;--card:#161c27;--ink:#e6ebf4;--mute:#97a3b6;--line:#273041;--acc:#8c9cff;--acc-soft:#1f2745;--ok:#6fd3a0;--ok-soft:#14302a;--bad:#ff8f8f;--bad-soft:#3a1c1f;--warn:#f0b867;--warn-soft:#38291a;--chip:#212a3a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans)}
+a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
+.wrap{max-width:1100px;margin:0 auto;padding:22px max(16px,env(safe-area-inset-right,0px)) 64px max(16px,env(safe-area-inset-left,0px))}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 16px}
+.brand{font-weight:700;font-size:19px;letter-spacing:-.01em}.brand span{color:var(--mute);font-weight:500}
+.net{font-size:12.5px;color:var(--mute)}
+form.search{display:flex;gap:8px;margin:16px 0 4px}
+input[type=search]{flex:1;min-width:0;font:inherit;font-family:var(--mono);font-size:14px;padding:11px 13px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
+button{font:inherit;font-weight:600;border:1px solid var(--acc);background:var(--acc);color:var(--bg);padding:10px 16px;border-radius:8px;cursor:pointer}
+button.ghost{background:var(--card);color:var(--ink);border-color:var(--line);font-weight:500;padding:7px 12px}
+button:focus-visible,input:focus-visible,a:focus-visible,[role=tab]:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.hint{color:var(--mute);font-size:13px;margin:0 0 14px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0 18px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px 14px;min-width:0}
+.stat small{display:block;color:var(--mute);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+.stat b{font-size:22px;font-variant-numeric:tabular-nums}
+.stat b.mono{font-size:13px;font-weight:500;word-break:break-all}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:14px}
+[role=tab]{background:none;border:0;border-bottom:2px solid transparent;color:var(--mute);padding:9px 14px;font-weight:600;border-radius:0;cursor:pointer}
+[role=tab][aria-selected=true]{color:var(--ink);border-bottom-color:var(--acc)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:0;overflow:hidden}
+.tbl{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:640px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);font-weight:600;background:var(--card)}
+tr:last-child td{border-bottom:0}
+tbody tr.click{cursor:pointer}tbody tr.click:hover{background:var(--acc-soft)}
+.num{font-variant-numeric:tabular-nums}
+.mono{font-family:var(--mono);font-size:12.5px}
+.hash{font-family:var(--mono);font-size:12.5px;word-break:break-all}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:2px 9px;border-radius:99px;white-space:nowrap}
+.p-ok{background:var(--ok-soft);color:var(--ok)}.p-wait{background:var(--warn-soft);color:var(--warn)}.p-bad{background:var(--bad-soft);color:var(--bad)}.p-info{background:var(--acc-soft);color:var(--acc)}
+.pager{display:flex;justify-content:center;gap:8px;padding:12px}
+.empty,.err{padding:22px;color:var(--mute)}.err{color:var(--bad)}
+.detail{padding:6px 18px 18px}
+.detail h2{font-size:20px;margin:16px 0 4px;letter-spacing:-.01em}
+.detail .sub{color:var(--mute);margin:0 0 6px;font-size:14px}
+dl{display:grid;grid-template-columns:minmax(150px,200px) 1fr;gap:0 18px;margin:8px 0}
+dt{color:var(--mute);font-size:13px;padding:9px 0;border-bottom:1px solid var(--line)}
+dd{margin:0;padding:8px 0;border-bottom:1px solid var(--line);min-width:0}
+dd .why{display:block;color:var(--mute);font-size:12.5px;font-family:var(--sans);margin-top:2px}
+.copy{margin-left:8px;font-size:12px;padding:1px 8px;background:var(--chip);border:1px solid var(--line);color:var(--mute);font-weight:500;border-radius:6px;cursor:pointer;vertical-align:baseline}
+.back{margin:14px 0 0}
+.sec{margin:20px 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);font-weight:600}
+.foot{color:var(--mute);font-size:12.5px;margin-top:26px;max-width:80ch}
+@media (max-width:640px){dl{grid-template-columns:1fr}dt{padding-bottom:0;border-bottom:0}}
+@media (prefers-reduced-motion:no-preference){tbody tr.click{transition:background .12s}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">Privi <span>Quantum Scan</span></div>
+    <div class="net" id="net">Loading ledger</div>
+  </header>
+
+  <form class="search" id="sf" role="search">
+    <input type="search" id="q" placeholder="Block height or any hash (block, entry, tree head, log root, transaction)" aria-label="Search a block height or hash" autocomplete="off" spellcheck="false">
+    <button type="submit">Search</button>
+  </form>
+  <p class="hint" id="shint">Every hash here is public and contains no company names or log contents.</p>
+
+  <div class="stats" id="stats"></div>
+
+  <div id="main">
+    <div class="tabs" role="tablist">
+      <button role="tab" id="t-blocks" aria-selected="true" aria-controls="panel">Blocks</button>
+      <button role="tab" id="t-entries" aria-selected="false" aria-controls="panel">Entry hashes</button>
+    </div>
+    <div id="panel" class="card" role="tabpanel"></div>
+  </div>
+  <div id="view" hidden></div>
+
+  <p class="foot">Each block is hashed with SHA3-512 and signed with Ed25519 and ML-DSA-87 (NIST FIPS 204). Its tree head hash is the signed head of the RFC 9162 transparency log, and settlement is the Base transaction that anchors the block's signing digest. Verify the whole chain with the <span class="mono">qledger_verify_chain</span> tool.</p>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { tab: "blocks", before: null, offset: 0 };
+
+  function el(tag, props, kids) {
+    var n = document.createElement(tag);
+    if (props) Object.keys(props).forEach(function (k) {
+      if (k === "class") n.className = props[k];
+      else if (k === "text") n.textContent = props[k];
+      else if (k.slice(0, 2) === "on") n.addEventListener(k.slice(2), props[k]);
+      else n.setAttribute(k, props[k]);
+    });
+    (kids || []).forEach(function (c) { if (c != null) n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return n;
+  }
+  function api(path) {
+    return fetch(path, { headers: { accept: "application/json" } }).then(function (r) {
+      return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+    });
+  }
+  function short(h, n) { n = n || 10; return h && h.length > n * 2 + 1 ? h.slice(0, n) + "…" + h.slice(-n) : h || ""; }
+  function when(t) { try { return new Date(t).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "medium" }); } catch (e) { return t; } }
+  function copyBtn(v) {
+    var b = el("button", { class: "copy", type: "button", text: "Copy", "aria-label": "Copy hash" });
+    b.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var done = function () { b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy"; }, 1200); };
+      try { navigator.clipboard.writeText(v).then(done, function () { b.textContent = "Select it"; }); } catch (err) { b.textContent = "Select it"; }
+    });
+    return b;
+  }
+  function hashRow(label, value, why, link) {
+    var v = link ? el("a", { class: "hash", href: link.href, target: link.ext ? "_blank" : null, rel: link.ext ? "noopener" : null, text: value }) : el("span", { class: "hash", text: value });
+    var dd = el("dd", null, [v, copyBtn(value)]);
+    if (why) dd.appendChild(el("span", { class: "why", text: why }));
+    return [el("dt", { text: label }), dd];
+  }
+  function pill(text, cls) { return el("span", { class: "pill " + cls, text: text }); }
+  function chainLink(tx, chainId) { return chainId === 8453 && tx ? { href: "https://basescan.org/tx/" + tx, ext: true } : null; }
+
+  function stats() {
+    return api("/quantum-ledger/stats").then(function (s) {
+      var box = $("stats"); box.textContent = "";
+      [["Blocks", s.blocks], ["Entry hashes", s.entries], ["Settled on Base", s.settled_blocks + " / " + s.blocks],
+       ["Sealed entries", s.sealed_entries]].forEach(function (x) {
+        box.appendChild(el("div", { class: "stat" }, [el("small", { text: x[0] }), el("b", { class: "num", text: String(x[1]) })]));
+      });
+      var hd = el("div", { class: "stat" }, [el("small", { text: "Latest block hash" }),
+        s.head_hash ? el("a", { class: "mono", href: "#block-" + s.head_height, text: short(s.head_hash, 12) }) : el("b", { text: "none yet" })]);
+      box.appendChild(hd);
+      $("net").textContent = s.foundation.name + " · " + s.foundation.stage + " · Cosmos chain " + s.foundation.cosmos_chain_id + " · EVM " + s.foundation.evm_chain_id;
+    });
+  }
+
+  function blocksTable(data, append) {
+    var panel = $("panel");
+    var wrap = panel.querySelector(".tbl"), tb;
+    if (!append || !wrap) {
+      panel.textContent = "";
+      if (!data.blocks.length) { panel.appendChild(el("div", { class: "empty", text: "No blocks sealed yet. The first block appears within a few minutes of the first logged action." })); return; }
+      tb = el("tbody");
+      wrap = el("div", { class: "tbl" }, [el("table", null, [
+        el("thead", null, [el("tr", null, ["Block", "Time", "Block hash (SHA3-512)", "Entries", "Settlement"].map(function (h) { return el("th", { text: h }); }))]), tb])]);
+      panel.appendChild(wrap);
+    } else tb = wrap.querySelector("tbody");
+    data.blocks.forEach(function (b) {
+      var tr = el("tr", { class: "click", tabindex: "0", onclick: function () { location.hash = "block-" + b.height; }, onkeydown: function (e) { if (e.key === "Enter") location.hash = "block-" + b.height; } }, [
+        el("td", { class: "num" }, [el("a", { href: "#block-" + b.height, text: "#" + b.height })]),
+        el("td", { text: when(b.time) }),
+        el("td", { class: "hash", text: short(b.block_hash, 14) }),
+        el("td", { class: "num", text: "+" + b.new_entries + " (" + b.tree_size + " total)" }),
+        el("td", null, [b.settled ? pill("On Base", "p-ok") : pill("Waiting", "p-wait")])]);
+      tb.appendChild(tr);
+    });
+    var old = panel.querySelector(".pager"); if (old) old.remove();
+    if (data.next_before != null) panel.appendChild(el("div", { class: "pager" }, [el("button", { class: "ghost", type: "button", text: "Older blocks", onclick: function () { state.before = data.next_before; loadBlocks(true); } })]));
+  }
+  function loadBlocks(append) {
+    api("/quantum-ledger/blocks?limit=25" + (append && state.before != null ? "&before=" + state.before : "")).then(function (d) { blocksTable(d, append); }).catch(showErr);
+  }
+
+  function entriesTable(data, append, block) {
+    var panel = $("panel"), tb;
+    var wrap = panel.querySelector(".tbl");
+    if (!append || !wrap) {
+      panel.textContent = "";
+      if (!data.entries.length) { panel.appendChild(el("div", { class: "empty", text: "No entry hashes yet." })); return; }
+      tb = el("tbody");
+      wrap = el("div", { class: "tbl" }, [el("table", null, [
+        el("thead", null, [el("tr", null, ["Log index", "Entry hash (SHA-256)", "Merkle leaf hash", "Block"].map(function (h) { return el("th", { text: h }); }))]), tb])]);
+      panel.appendChild(wrap);
+    } else tb = wrap.querySelector("tbody");
+    data.entries.forEach(function (e) {
+      tb.appendChild(el("tr", null, [
+        el("td", { class: "num", text: String(e.index) }),
+        el("td", { class: "hash" }, [el("a", { href: "#hash-" + e.entry_hash, text: short(e.entry_hash, 14) })]),
+        el("td", { class: "hash", text: short(e.leaf_hash, 10) }),
+        el("td", null, [e.block != null ? el("a", { href: "#block-" + e.block, text: "#" + e.block }) : pill("Next block", "p-wait")])]));
+    });
+    var old = panel.querySelector(".pager"); if (old) old.remove();
+    var shown = (append ? state.offset : 0) + data.entries.length;
+    if (shown < data.total) panel.appendChild(el("div", { class: "pager" }, [el("button", { class: "ghost", type: "button", text: "Older hashes (" + (data.total - shown) + " more)", onclick: function () { state.offset = shown; loadEntries(true, block); } })]));
+  }
+  function loadEntries(append, block) {
+    if (!append) state.offset = 0;
+    api("/quantum-ledger/entries?limit=50&offset=" + state.offset + (block != null ? "&block=" + block : "")).then(function (d) { entriesTable(d, append, block); }).catch(showErr);
+  }
+
+  function showErr(e) { var p = $("panel"); p.textContent = ""; p.appendChild(el("div", { class: "err", text: "Could not load: " + e.message })); }
+
+  function showBlock(h) {
+    $("main").hidden = true; var v = $("view"); v.hidden = false; v.textContent = "";
+    var card = el("div", { class: "card" }), d = el("div", { class: "detail" });
+    card.appendChild(d); v.appendChild(card);
+    d.appendChild(el("p", { class: "back" }, [el("a", { href: "#", text: "← All blocks" })]));
+    d.appendChild(el("div", { class: "empty", text: "Loading block " + h }));
+    api("/quantum-ledger/blocks/" + h).then(function (r) {
+      var b = r.block, st = r.settlement, dl = el("dl");
+      d.textContent = "";
+      d.appendChild(el("p", { class: "back" }, [el("a", { href: "#", text: "← All blocks" })]));
+      d.appendChild(el("h2", null, ["Block #" + b.height + " ", r.valid ? pill("Valid", "p-ok") : pill("Failed checks", "p-bad"), " ", st ? pill("Settled on Base", "p-ok") : pill("Waiting for settlement", "p-wait")]));
+      d.appendChild(el("p", { class: "sub", text: when(b.time) + " · adds " + b.new_entries + " entries (log indexes " + r.first_entry_index + " to " + r.last_entry_index + ")" }));
+      if (!r.valid) d.appendChild(el("div", { class: "err", text: r.problems.join("; ") }));
+      var rows = [
+        ["Block hash", r.block_hash, "SHA3-512 of the block's canonical JSON. This is the block's identity."],
+        ["Previous block hash", b.prev_block_hash, "Links this block to the one before it.", b.height > 0 ? { href: "#block-" + (b.height - 1) } : null],
+        ["Signing digest", r.signing_digest, "SHA-256 of the block hash. Both signatures cover this value, and Base anchors it."],
+        ["Tree head hash", b.tree_head_hash, "Signed head of the RFC 9162 transparency log at this block."],
+        ["Log root", b.log_root, "Merkle root over " + b.tree_size + " entries."],
+        ["Entries root", b.entries_root_sha3_512, "SHA3-512 over the entry hashes this block adds."]
+      ];
+      rows.forEach(function (x) { hashRow(x[0], x[1], x[2], x[3]).forEach(function (n) { dl.appendChild(n); }); });
+      if (st) {
+        hashRow("Settlement transaction", st.tx_hash, "Base block " + st.block_number + (st.chain_id ? ", chain " + st.chain_id : ""), chainLink(st.tx_hash, st.chain_id)).forEach(function (n) { dl.appendChild(n); });
+        hashRow("Anchored hash", st.anchored_hash, "Must equal the signing digest above.").forEach(function (n) { dl.appendChild(n); });
+        (st.proof || []).forEach(function (p, i) { hashRow("Anchor proof " + (i + 1), p, i === 0 ? "Merkle proof that links the anchored hash to the transaction." : "").forEach(function (n) { dl.appendChild(n); }); });
+      }
+      hashRow("Ed25519 signature", r.signatures.ed25519, "Classical signature, " + r.signature_sizes.ed25519_bytes + " bytes.").forEach(function (n) { dl.appendChild(n); });
+      var mlsig = r.signatures.ml_dsa_87;
+      hashRow("ML-DSA-87 signature", short(mlsig, 40), "Post-quantum signature, " + r.signature_sizes.ml_dsa_87_bytes + " bytes. Copy gives the full value.").forEach(function (n, i) { dl.appendChild(n); if (i === 1) { var c = n.querySelector(".copy"); if (c) c.replaceWith(copyBtn(mlsig)); } });
+      d.appendChild(dl);
+      d.appendChild(el("div", { class: "sec", text: "Entry hashes in this block" }));
+      var holder = el("div", { class: "card", id: "bpanel" }); d.appendChild(holder);
+      api("/quantum-ledger/entries?limit=100&block=" + h).then(function (e) {
+        holder.textContent = "";
+        if (!e.entries.length) { holder.appendChild(el("div", { class: "empty", text: "This block adds no new entries." })); return; }
+        var tb = el("tbody");
+        holder.appendChild(el("div", { class: "tbl" }, [el("table", null, [el("thead", null, [el("tr", null, ["Log index", "Entry hash"].map(function (x) { return el("th", { text: x }); }))]), tb])]));
+        e.entries.forEach(function (x) { tb.appendChild(el("tr", null, [el("td", { class: "num", text: String(x.index) }), el("td", { class: "hash" }, [el("a", { href: "#hash-" + x.entry_hash, text: x.entry_hash })])])); });
+        if (e.total > e.entries.length) holder.appendChild(el("div", { class: "empty", text: "Showing the newest " + e.entries.length + " of " + e.total + " entries in this block." }));
+      }).catch(function (er) { holder.textContent = ""; holder.appendChild(el("div", { class: "err", text: er.message })); });
+    }).catch(function (e) { d.textContent = ""; d.appendChild(el("p", { class: "back" }, [el("a", { href: "#", text: "← All blocks" })])); d.appendChild(el("div", { class: "err", text: "Block " + h + ": " + e.message })); });
+  }
+
+  function showHash(hex) {
+    $("main").hidden = true; var v = $("view"); v.hidden = false; v.textContent = "";
+    var card = el("div", { class: "card" }), d = el("div", { class: "detail" }); card.appendChild(d); v.appendChild(card);
+    d.appendChild(el("p", { class: "back" }, [el("a", { href: "#", text: "← All blocks" })]));
+    d.appendChild(el("h2", { text: "Hash search" }));
+    d.appendChild(el("p", { class: "hash", text: hex }));
+    api("/quantum-ledger/search?q=" + encodeURIComponent(hex)).then(function (r) {
+      if (!r.matches.length) { d.appendChild(el("div", { class: "empty", text: "No block, entry or transaction on this ledger has that hash." })); return; }
+      var names = { block_height: "Block height", block_hash: "Block hash", signing_digest: "Signing digest", tree_head_hash: "Tree head hash", log_root: "Log root",
+                    entries_root: "Entries root", previous_block_hash: "Previous block hash of", settlement_tx: "Settlement transaction", entry_hash: "Entry hash", leaf_hash: "Merkle leaf hash" };
+      r.matches.forEach(function (m) {
+        var line = el("p", null, [pill(names[m.kind] || m.kind, "p-info"), " "]);
+        if (m.kind === "leaf_hash") line.appendChild(el("a", { href: "#hash-" + m.entry_hash, text: "leaf of entry " + short(m.entry_hash, 10) }));
+        else if (m.height != null) line.appendChild(el("a", { href: "#block-" + m.height, text: (m.kind === "entry_hash" ? "log index " + m.index + ", sealed in block #" : "block #") + m.height }));
+        else line.appendChild(document.createTextNode("log index " + m.index + ", not sealed yet (it goes into the next block)"));
+        d.appendChild(line);
+      });
+    }).catch(function (e) { d.appendChild(el("div", { class: "err", text: e.message })); });
+  }
+
+  function route() {
+    var h = location.hash.replace(/^#/, ""), m;
+    if ((m = /^block-(\d+)$/.exec(h))) return showBlock(+m[1]);
+    if ((m = /^hash-([0-9a-fA-F]{64,128})$/.exec(h))) return showHash(m[1].toLowerCase());
+    $("view").hidden = true; $("main").hidden = false;
+    state.before = null; (state.tab === "blocks" ? loadBlocks(false) : loadEntries(false));
+  }
+  function tab(t) {
+    state.tab = t;
+    $("t-blocks").setAttribute("aria-selected", t === "blocks"); $("t-entries").setAttribute("aria-selected", t === "entries");
+    if (location.hash) { location.hash = ""; } else route();
+  }
+  $("t-blocks").addEventListener("click", function () { tab("blocks"); });
+  $("t-entries").addEventListener("click", function () { tab("entries"); });
+  $("sf").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var q = $("q").value.trim().toLowerCase().replace(/^0x/, "");
+    if (!q) return;
+    if (/^\d{1,9}$/.test(q)) location.hash = "block-" + q;
+    else if (/^[0-9a-f]{64}$|^[0-9a-f]{128}$/.test(q)) location.hash = "hash-" + q;
+    else $("shint").textContent = "Enter a block height or a 64 or 128 character hash.";
+  });
+  window.addEventListener("hashchange", route);
+  stats().catch(function (e) { $("net").textContent = "Ledger unreachable: " + e.message; });
+  route();
+  setInterval(function () { if (!location.hash) { stats().catch(function () {}); } }, 60000);
+})();
+</script>
+</body>
+</html>

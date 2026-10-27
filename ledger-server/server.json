@@ -3,7 +3,7 @@
   "name": "io.github.canoydario847-cloud/privi-ledger",
   "title": "Privi Quantum Ledger",
   "description": "Quantum-sealed audit logs for AI agents (ML-DSA-87, SHA3-512), plus Privi Guard and trust passports.",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "websiteUrl": "https://privi-discovery.onrender.com",
   "repository": {
     "url": "https://github.com/canoydario847-cloud/Privi-Network",

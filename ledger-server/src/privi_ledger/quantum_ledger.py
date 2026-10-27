@@ -29,7 +29,7 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Any
 
-from .fortress import Fortress, FortressError, canonical, sha256_hex
+from .fortress import Fortress, FortressError, canonical, leaf_hash, sha256_hex
 
 GENESIS_PREV = "0" * 128
 BLOCK_HASH_ALG = "SHA3-512 (FIPS 202) over canonical JSON (sorted keys, no spaces)"
@@ -255,3 +255,109 @@ class QuantumLedger:
                 "foundation": foundation_profile(),
                 "foundation_rpc_configured": bool(os.getenv("PRIVI_FOUNDATION_RPC_URL", "").strip()),
                 "keys": self.fortress.keys(), "block_hash_algorithm": BLOCK_HASH_ALG, "recent": self.recent(10)}
+
+    # ---------------- Privi Quantum Scan (public explorer data) ----------------
+    # Only hashes and counts are exposed here: never an organization, stream or entry content.
+
+    def _sizes(self) -> list[tuple[int, int]]:
+        rows = self._db.execute("SELECT height, json_extract(body,'$.tree_size') AS n FROM qblocks ORDER BY height").fetchall()
+        return [(r["height"], r["n"]) for r in rows]
+
+    @staticmethod
+    def _height_for_index(sizes: list[tuple[int, int]], index: int) -> int | None:
+        for h, n in sizes:
+            if index < n:
+                return h
+        return None
+
+    def scan_stats(self) -> dict[str, Any]:
+        head = self.latest()
+        settled = self._db.execute("SELECT COUNT(*) FROM qblocks WHERE anchor IS NOT NULL").fetchone()[0]
+        entries = self.fortress.size()
+        return {"blocks": self.height() + 1, "entries": entries, "settled_blocks": settled,
+                "sealed_entries": head["block"]["tree_size"] if head else 0,
+                "head_height": head["block"]["height"] if head else None,
+                "head_hash": head["block_hash"] if head else None, "head_time": head["block"]["time"] if head else None,
+                "foundation": foundation_profile(), "block_hash_algorithm": BLOCK_HASH_ALG,
+                "signatures": "Ed25519 + ML-DSA-87 (FIPS 204)", "keys": self.fortress.keys()}
+
+    def scan_blocks(self, limit: int = 25, before: int | None = None) -> dict[str, Any]:
+        """Newest-first block summaries; pass the last height shown as `before` for the next page."""
+        limit = max(1, min(int(limit), 100))
+        cond, args = ("WHERE height < ?", (int(before), limit)) if before is not None else ("", (limit,))
+        rows = self._db.execute(f"SELECT * FROM qblocks {cond} ORDER BY height DESC LIMIT ?", args).fetchall()
+        out = []
+        for r in rows:
+            b, st = json.loads(r["body"]), json.loads(r["anchor"]) if r["anchor"] else None
+            out.append({"height": r["height"], "block_hash": r["block_hash"], "prev_block_hash": b["prev_block_hash"],
+                        "time": b["time"], "tree_size": b["tree_size"], "new_entries": b["new_entries"],
+                        "log_root": b["log_root"], "tree_head_hash": b["tree_head_hash"],
+                        "entries_root_sha3_512": b["entries_root_sha3_512"], "signing_digest": r["signing_digest"],
+                        "settled": bool(st), "tx_hash": st["tx_hash"] if st else None,
+                        "settlement_block": st.get("block_number") if st else None})
+        nxt = out[-1]["height"] if len(out) == limit and out[-1]["height"] > 0 else None
+        return {"blocks": out, "next_before": nxt}
+
+    def scan_block(self, height: int) -> dict[str, Any] | None:
+        rec = self.block(height)
+        if not rec:
+            return None
+        prev = self.block(height - 1) if height else None
+        problems = self.check_block(rec, prev)
+        lo = prev["block"]["tree_size"] if prev else 0
+        return {**rec, "valid": not problems, "problems": problems, "first_entry_index": lo,
+                "last_entry_index": rec["block"]["tree_size"] - 1,
+                "signature_sizes": {"ed25519_bytes": len(rec["signatures"]["ed25519"]) // 2,
+                                    "ml_dsa_87_bytes": len(rec["signatures"]["ml_dsa_87"]) // 2}}
+
+    def scan_entries(self, limit: int = 50, offset: int = 0, block: int | None = None) -> dict[str, Any]:
+        """Entry receipt hashes in recording order (newest first unless a block is given). No contents, no org ids."""
+        limit = max(1, min(int(limit), 100))
+        sizes = self._sizes()
+        total = self.fortress.size()
+        if block is not None:
+            rec = self.block(int(block))
+            if not rec:
+                raise QuantumLedgerError("no block at that height")
+            prev = self.block(int(block) - 1) if block else None
+            lo, hi = (prev["block"]["tree_size"] if prev else 0), rec["block"]["tree_size"]
+        else:
+            lo, hi = 0, total
+        top = hi - max(0, int(offset))
+        start = max(lo, top - limit)
+        if top <= lo:
+            return {"entries": [], "total": hi - lo, "range": [lo, hi]}
+        rows = self._db.execute("SELECT entry_hash FROM entries ORDER BY id LIMIT ? OFFSET ?", (top - start, start)).fetchall()
+        out = [{"index": start + i, "entry_hash": r["entry_hash"], "leaf_hash": leaf_hash(r["entry_hash"]).hex(),
+                "block": self._height_for_index(sizes, start + i)} for i, r in enumerate(rows)]
+        out.reverse()
+        return {"entries": out, "total": hi - lo, "range": [lo, hi], "unsealed_from": sizes[-1][1] if sizes else 0}
+
+    def scan_search(self, q: str) -> dict[str, Any]:
+        """Find a block height or any hash this ledger holds."""
+        q = (q or "").strip().lower().removeprefix("0x")
+        if not q:
+            return {"matches": []}
+        m: list[dict[str, Any]] = []
+        if q.isdigit() and len(q) < 10:
+            if self.block(int(q)):
+                m.append({"kind": "block_height", "height": int(q)})
+        if len(q) in (64, 128) and all(c in "0123456789abcdef" for c in q):
+            for r in self._db.execute("SELECT height FROM qblocks WHERE block_hash=?", (q,)):
+                m.append({"kind": "block_hash", "height": r["height"]})
+            for col, kind in (("signing_digest", "signing_digest"), ("json_extract(body,'$.tree_head_hash')", "tree_head_hash"),
+                              ("json_extract(body,'$.log_root')", "log_root"),
+                              ("json_extract(body,'$.entries_root_sha3_512')", "entries_root"),
+                              ("json_extract(body,'$.prev_block_hash')", "previous_block_hash"),
+                              ("json_extract(anchor,'$.tx_hash')", "settlement_tx")):
+                for r in self._db.execute(f"SELECT height FROM qblocks WHERE {col}=? OR {col}=?", (q, "0x" + q)):
+                    m.append({"kind": kind, "height": r["height"]})
+            row = self._db.execute("SELECT id FROM entries WHERE entry_hash=?", (q,)).fetchone()
+            if row:
+                idx = self._db.execute("SELECT COUNT(*) FROM entries WHERE id < ?", (row["id"],)).fetchone()[0]
+                m.append({"kind": "entry_hash", "index": idx, "height": self._height_for_index(self._sizes(), idx)})
+            for r in (self._db.execute("SELECT entry_hash FROM entries") if len(q) == 64 else []):
+                if leaf_hash(r["entry_hash"]).hex() == q:
+                    m.append({"kind": "leaf_hash", "entry_hash": r["entry_hash"]})
+                    break
+        return {"query": q, "matches": m}

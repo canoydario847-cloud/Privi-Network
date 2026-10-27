@@ -104,3 +104,48 @@ def test_mcp_tools(tmp_path, monkeypatch):
             v = (await c.call_tool("qledger_verify_chain", {})).structured_content
             assert v["valid"]
     anyio.run(go)
+
+
+def test_scan_pages_and_search(tmp_path):
+    from starlette.testclient import TestClient
+    ledger = Ledger(str(tmp_path / "q.db"))
+    srv = _srv(ledger)
+    ql = _ql(srv)
+    org = ledger.create_org("Acme")["org_id"]
+    e1 = ledger.record(org, "secret-stream", "claude", "payment", "secret thing")["entry_hash"]
+    ledger.record(org, "secret-stream", "claude", "message", "another")
+    b0 = ql.seal(force=True)
+    e3 = ledger.record(org, "secret-stream", "claude", "data_access", "third")["entry_hash"]
+    b1 = ql.seal()
+    ql.set_settlement(1, {"tx_hash": "0x" + "ab" * 32, "proof": ["cd" * 32], "block_number": 7, "chain_id": 8453,
+                          "anchored_hash": b1["signing_digest"]})
+    c = TestClient(srv.streamable_http_app(host="0.0.0.0", stateless_http=True, json_response=True))
+
+    assert "Privi" in c.get("/quantum-scan").text and "Quantum Scan" in c.get("/quantum-scan").text
+    st = c.get("/quantum-ledger/stats").json()
+    assert st["blocks"] == 2 and st["entries"] == 3 and st["settled_blocks"] == 1 and st["head_height"] == 1
+
+    bl = c.get("/quantum-ledger/blocks?limit=1").json()
+    assert [b["height"] for b in bl["blocks"]] == [1] and bl["next_before"] == 1 and bl["blocks"][0]["tx_hash"].startswith("0x")
+    assert [b["height"] for b in c.get("/quantum-ledger/blocks?before=1").json()["blocks"]] == [0]
+
+    d = c.get("/quantum-ledger/blocks/1").json()
+    assert d["valid"] and d["first_entry_index"] == 2 and d["settlement"]["chain_id"] == 8453
+    assert c.get("/quantum-ledger/blocks/9").status_code == 404
+
+    ents = c.get("/quantum-ledger/entries").json()
+    assert [e["index"] for e in ents["entries"]] == [2, 1, 0] and ents["entries"][0]["block"] == 1
+    assert c.get("/quantum-ledger/entries?block=0").json()["total"] == 2
+    page = c.get("/quantum-ledger/entries?limit=1&offset=1").json()["entries"]
+    assert [e["index"] for e in page] == [1]
+    # nothing but hashes leaves the server: no org, stream or contents
+    raw = c.get("/quantum-ledger/entries").text + c.get("/quantum-ledger/blocks").text
+    assert org not in raw and "secret" not in raw
+
+    kinds = lambda q: {m["kind"] for m in c.get("/quantum-ledger/search", params={"q": q}).json()["matches"]}
+    assert kinds("1") == {"block_height"}
+    assert kinds(b1["block_hash"]) == {"block_hash"} and kinds(b1["signing_digest"]) == {"signing_digest"}
+    assert "entry_hash" in kinds(e1) and kinds(e3) == {"entry_hash"}
+    assert "settlement_tx" in kinds("0x" + "ab" * 32) and kinds(b1["block"]["log_root"]) == {"log_root"}
+    assert "previous_block_hash" in kinds(b0["block_hash"])
+    assert c.get("/quantum-ledger/search", params={"q": "zz"}).json()["matches"] == []
