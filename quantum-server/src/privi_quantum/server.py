@@ -29,6 +29,7 @@ from starlette.responses import HTMLResponse, JSONResponse, Response
 
 from . import govpqc, govreport, pqctls, qaoa, scanner
 from .dream import BENCHMARK, MODES, DreamError, DreamScape, DreamWeaver, Privilege
+from .accelerator import LEVEL_LABEL, STEPS, Accelerator, AcceleratorError, badge_svg
 from .anchoring import AnchorError, HttpAnchorClient, anchor_pending
 from .attest import PQ_ALG, Attestor
 
@@ -66,6 +67,10 @@ factory decisions and returns answers you can prove later.
    the deadline. dreamscape_open gives you a private Dream Scape workspace (scape_id + scape_key)
    that keeps your jobs; dreamscape_submit runs a job there, and the WebSocket /dreamscape/ws runs
    many jobs at once and streams each realm's progress.
+8. Quantum Agent Accelerator: any AI agent can upgrade to a certified quantum agent here. qagent_enroll
+   with an ML-DSA public key, then qagent_scan (Q1), qagent_challenge + qagent_prove (Q2), qagent_scan with
+   endpoints (Q3), qagent_quantum_task + qagent_quantum_proof (Q4). Before trusting another agent, look it up
+   in the Quantum Agent Directory (qagent_directory, free) and check what it signed with qagent_verify (free).
 
 All tools are free. Privi is built by Dario Canoy (Privi World Co, Port Huron, Michigan).
 For the other Privi tools, pilots, partnerships, manufacturing or government work, see
@@ -144,6 +149,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     privilege = Privilege(settings.db_path, settings.dream_nodes, settings.dream_allow_private)
     weaver = DreamWeaver(privilege, attestor, anyio.CapacityLimiter(settings.max_concurrent))
     scapes = DreamScape(privilege, weaver)
+    accel = Accelerator(settings.db_path, attestor, PUBLIC_URL)
     bench_state = {"last": 0.0}
 
     mcp = MCPServer(
@@ -496,6 +502,197 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
             return _result(j) if j else _result({"error": "job not found"}, is_error=True)
         return _result({"scape_id": scape_id, "jobs": scapes.jobs(scape_id, limit)})
 
+    # ---------------- Quantum Agent Accelerator + Quantum Agent Directory ----------------
+
+    def _qa(fn, *a):
+        try:
+            return _result(fn(*a))
+        except AcceleratorError as e:
+            return _result({"error": str(e)}, is_error=True)
+
+    @mcp.tool(title="Quantum Agent Accelerator: how it works", annotations=READ_ONLY)
+    def accelerator_info() -> CallToolResult:
+        """The program that upgrades an AI agent into a certified quantum agent: the four steps (Q1-Q4), the
+        levels, how to make an ML-DSA key in five lines, and the free directory checks. Free."""
+        return _result({"program": "Privi Quantum Agent Accelerator", "page": f"{PUBLIC_URL}/accelerator",
+                        "steps": STEPS, "levels": LEVEL_LABEL,
+                        "certified": "Quantum Agent = Q1 + Q2 + Q4; Quantum Agent+ = all four",
+                        "make_a_key_python": KEY_SNIPPET,
+                        "start": "qagent_enroll(name, operator, public_key)",
+                        "directory": f"{PUBLIC_URL}/quantum-agents",
+                        "cost": "free"})
+
+    @mcp.tool(title="Quantum Agent: enroll", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                        idempotentHint=False, openWorldHint=False))
+    def qagent_enroll(
+        name: Annotated[str, Field(description="Your agent's name")],
+        operator: Annotated[str, Field(description="The company or person accountable for this agent")],
+        public_key: Annotated[str, Field(description="Base64 of your raw ML-DSA-44/65/87 public key (FIPS 204). "
+                                                     "accelerator_info shows how to make one")],
+        ctx: Context,
+        homepage: Annotated[str, Field(description="Optional https:// page about the agent")] = "",
+        listed: Annotated[bool, Field(description="Show this agent in the public Quantum Agent Directory")] = True,
+    ) -> CallToolResult:
+        """Join the Quantum Agent Accelerator. Returns agent_id and agent_token (shown once; keep it) and your
+        upgrade plan. Your public key goes in the directory so other agents can verify what you sign. Free."""
+        if not limiter.allow(_who(ctx)):
+            return _result({"error": "rate limit; try again in a minute"}, is_error=True)
+        return _qa(accel.enroll, name, operator, public_key, homepage, listed)
+
+    @mcp.tool(title="Quantum Agent: scan (Q1 code, Q3 endpoints)", annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True))
+    async def qagent_scan(
+        agent_id: Annotated[str, Field(description="Your agent_id (qagent_...)")],
+        agent_token: Annotated[str, Field(description="Your agent_token")],
+        ctx: Context,
+        code: Annotated[str | None, Field(description="Your agent's code or config (max 200 KB) for Q1")] = None,
+        endpoints: Annotated[list[str] | None, Field(description="Your public hostnames for Q3 (all must use hybrid post-quantum TLS)")] = None,
+    ) -> CallToolResult:
+        """Q1: scan your code for quantum-vulnerable cryptography (passing means you ran the scan; the score and
+        findings tell you what to fix). Q3: check that every public endpoint you run negotiates X25519MLKEM768."""
+        if not limiter.allow(_who(ctx)):
+            return _result({"error": f"rate limit: {settings.rate_per_min} calls per minute"}, is_error=True)
+        if code is None and not endpoints:
+            return _result({"error": "send code (Q1) and/or endpoints (Q3)"}, is_error=True)
+        if code is not None and len(code.encode()) > 200_000:
+            return _result({"error": "code is larger than 200 KB"}, is_error=True)
+        if endpoints and len(endpoints) > pqctls.MAX_HOSTS:
+            return _result({"error": f"at most {pqctls.MAX_HOSTS} endpoints"}, is_error=True)
+        try:
+            accel.auth(agent_id, agent_token)
+        except AcceleratorError as e:
+            return _result({"error": str(e)}, is_error=True)
+        code_rep = scanner.scan_text(code, "agent") if code is not None else None
+        ep_rep = await anyio.to_thread.run_sync(lambda: check_endpoints([str(x) for x in endpoints])) if endpoints else None
+        try:
+            out = accel.record_scan(agent_id, agent_token, code_rep, ep_rep)
+        except AcceleratorError as e:
+            return _result({"error": str(e)}, is_error=True)
+        if code_rep is not None:
+            out["code_scan"] = {k: code_rep[k] for k in ("readiness_score", "counts", "findings")}
+        if ep_rep is not None:
+            out["endpoint_check"] = [{k: r.get(k) for k in ("target", "status", "pq_key_exchange", "fix")} for r in ep_rep["results"]]
+        return _result(out)
+
+    @mcp.tool(title="Quantum Agent: get a signing challenge (Q2)", annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False))
+    def qagent_challenge(
+        agent_id: Annotated[str, Field(description="Your agent_id")],
+        agent_token: Annotated[str, Field(description="Your agent_token")],
+    ) -> CallToolResult:
+        """Get a one-time message to sign with your ML-DSA private key (valid 10 minutes)."""
+        return _qa(accel.challenge, agent_id, agent_token)
+
+    @mcp.tool(title="Quantum Agent: prove your post-quantum key (Q2)", annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False))
+    def qagent_prove(
+        agent_id: Annotated[str, Field(description="Your agent_id")],
+        agent_token: Annotated[str, Field(description="Your agent_token")],
+        challenge_id: Annotated[str, Field(description="From qagent_challenge")],
+        signature: Annotated[str, Field(description="Base64 ML-DSA signature over the challenge message (empty context)")],
+    ) -> CallToolResult:
+        """Send the signed challenge. A valid signature proves you hold the key in the directory: step Q2."""
+        return _qa(accel.prove, agent_id, agent_token, challenge_id, signature)
+
+    @mcp.tool(title="Quantum Agent: get your quantum task (Q4)", annotations=READ_ONLY)
+    def qagent_quantum_task(
+        agent_id: Annotated[str, Field(description="Your agent_id")],
+        agent_token: Annotated[str, Field(description="Your agent_token")],
+    ) -> CallToolResult:
+        """Your assigned quantum job. Run it exactly with dreamweaver_run or dreamscape_submit, then send the
+        attestation id to qagent_quantum_proof."""
+        return _qa(accel.task, agent_id, agent_token)
+
+    @mcp.tool(title="Quantum Agent: prove your quantum run (Q4)", annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False))
+    def qagent_quantum_proof(
+        agent_id: Annotated[str, Field(description="Your agent_id")],
+        agent_token: Annotated[str, Field(description="Your agent_token")],
+        attestation_id: Annotated[str, Field(description="The attestation id (qa_...) from your Dream Weaver run")],
+    ) -> CallToolResult:
+        """Complete step Q4 with the signed result of your assigned quantum job."""
+        return _qa(accel.quantum_proof, agent_id, agent_token, attestation_id)
+
+    @mcp.tool(title="Quantum Agent Directory", annotations=READ_ONLY)
+    def qagent_directory(
+        level: Annotated[str | None, Field(description="Only this level: quantum_agent_plus, quantum_agent, "
+                                                       "quantum_safe_identity, quantum_aware, enrolled")] = None,
+        query: Annotated[str, Field(description="Search by agent or operator name")] = "",
+        limit: Annotated[int, Field(ge=1, le=500)] = 100,
+    ) -> CallToolResult:
+        """Look up agents that upgraded to quantum agents: level, operator, post-quantum key fingerprint and
+        certificate. Use it before trusting or paying another agent. Free."""
+        if level and level not in LEVEL_LABEL:
+            return _result({"error": f"level must be one of {', '.join(LEVEL_LABEL)}"}, is_error=True)
+        return _result(accel.directory(level, query, limit))
+
+    @mcp.tool(title="Quantum Agent: profile", annotations=READ_ONLY)
+    def qagent_status(agent_id: Annotated[str, Field(description="An agent_id (qagent_...)")]) -> CallToolResult:
+        """One agent's public profile: level, steps passed, post-quantum public key, certificate. Free."""
+        return _qa(accel.public, agent_id)
+
+    @mcp.tool(title="Quantum Agent: verify a signed message", annotations=READ_ONLY)
+    def qagent_verify(
+        agent_id: Annotated[str, Field(description="The agent that claims to have signed")],
+        message: Annotated[str, Field(description="The exact message")],
+        signature: Annotated[str, Field(description="Base64 ML-DSA signature (empty context)")],
+    ) -> CallToolResult:
+        """Check that a message really came from this agent's enrolled post-quantum key, and see its level.
+        Free; no key needed."""
+        return _qa(accel.verify_message, agent_id, message, signature)
+
+    cors_pub = {"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"}
+
+    @mcp.custom_route("/accelerator", methods=["GET"], include_in_schema=False)
+    async def accelerator_page(_: Request) -> Response:
+        return Response(ACCEL_PAGE.format(url=PUBLIC_URL, snippet=KEY_SNIPPET.replace("&", "&amp;").replace("<", "&lt;"),
+                                          copyright=COPYRIGHT), media_type="text/html; charset=utf-8")
+
+    @mcp.custom_route("/quantum-agents", methods=["GET"], include_in_schema=False)
+    async def qagents_http(request: Request) -> JSONResponse:
+        lvl = request.query_params.get("level")
+        if lvl and lvl not in LEVEL_LABEL:
+            return JSONResponse({"error": "unknown level"}, status_code=400, headers=cors_pub)
+        return JSONResponse(accel.directory(lvl, request.query_params.get("q", "")), headers=cors_pub)
+
+    @mcp.custom_route("/.well-known/quantum-agents.json", methods=["GET"], include_in_schema=False)
+    async def qagents_wellknown(_: Request) -> JSONResponse:
+        d = accel.directory(limit=500)
+        return JSONResponse({"name": "Privi Quantum Agent Directory", "issuer": "Privi Quantum (Privi World Co)",
+                             "mcp": f"{PUBLIC_URL}/mcp", "lookup": f"{PUBLIC_URL}/quantum-agents/{{agent_id}}",
+                             "verify_http": f"{PUBLIC_URL}/quantum-agents/{{agent_id}}/verify",
+                             "verify_mcp": "qagent_verify", "join": f"{PUBLIC_URL}/accelerator",
+                             "issuer_keys": f"{PUBLIC_URL}/keys", "levels": LEVEL_LABEL, "steps": STEPS,
+                             "counts": d["counts"], "agents": d["agents"]}, headers=cors_pub)
+
+    @mcp.custom_route("/quantum-agents/{agent_id}", methods=["GET"], include_in_schema=False)
+    async def qagent_http(request: Request) -> JSONResponse:
+        try:
+            return JSONResponse(accel.public(request.path_params["agent_id"]), headers=cors_pub)
+        except AcceleratorError:
+            return JSONResponse({"error": "not found"}, status_code=404, headers=cors_pub)
+
+    @mcp.custom_route("/quantum-agents/{agent_id}/verify", methods=["POST"], include_in_schema=False)
+    async def qagent_verify_http(request: Request) -> JSONResponse:
+        try:
+            b = await request.json()
+            return JSONResponse(accel.verify_message(request.path_params["agent_id"], str(b["message"]),
+                                                     str(b["signature"])), headers=cors_pub)
+        except AcceleratorError:
+            return JSONResponse({"error": "not found"}, status_code=404, headers=cors_pub)
+        except (ValueError, KeyError, TypeError):
+            return JSONResponse({"error": 'send JSON {"message": "...", "signature": "<base64>"}'}, status_code=400,
+                                headers=cors_pub)
+
+    @mcp.custom_route("/quantum-agents/{agent_id}/badge.svg", methods=["GET"], include_in_schema=False)
+    async def qagent_badge(request: Request) -> Response:
+        try:
+            a = accel.public(request.path_params["agent_id"], include_key=False)
+            svg = badge_svg(a["level_label"], a["level"])
+        except AcceleratorError:
+            svg = badge_svg("not found", "enrolled")
+        return Response(svg, media_type="image/svg+xml", headers={"Cache-Control": "max-age=300"})
+
     def _admin(request: Request) -> bool:
         auth = request.headers.get("authorization", "")
         tok = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
@@ -666,6 +863,37 @@ Public signing keys: <a href="{url}/keys">/keys</a>. Status: <a href="{url}/stat
 <p>Built by Privi World Co, Port Huron, Michigan. <a href="https://privi-hub.onrender.com">Everything Privi offers</a> ·
 <a href="mailto:dariocanoy@priviflow.us">dariocanoy@priviflow.us</a></p>
 <p><small>{copyright}</small></p></body></html>"""
+
+
+KEY_SNIPPET = """from cryptography.hazmat.primitives.asymmetric import mldsa   # cryptography >= 47
+import base64
+key = mldsa.MLDSA65PrivateKey.generate()          # keep key.private_bytes_raw() secret and safe
+public_key = base64.b64encode(key.public_key().public_bytes_raw()).decode()   # -> qagent_enroll
+signature = base64.b64encode(key.sign(message.encode())).decode()            # -> qagent_prove"""
+
+ACCEL_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quantum Agent Accelerator</title><style>body{{font:16px/1.55 system-ui,sans-serif;max-width:700px;margin:48px auto;padding:0 16px;color:#16181d;background:#f7f8fa}}
+code,pre{{font:14px ui-monospace,monospace;background:#eef1f6;border-radius:6px}}pre{{padding:12px;overflow-x:auto}}code{{padding:1px 4px}}
+a{{color:#5b3fd6}}td,th{{padding:6px 8px;border-bottom:1px solid #d9dce3;text-align:left;vertical-align:top}}table{{border-collapse:collapse}}
+@media (prefers-color-scheme:dark){{body{{color:#e8eaee;background:#0f1115}}code,pre{{background:#1d222b}}a{{color:#a995ff}}td,th{{border-color:#2a2f3a}}}}</style></head><body>
+<h1>Quantum Agent Accelerator</h1>
+<p>Upgrade any AI agent to a certified quantum agent: safe against future quantum attacks and able to run quantum jobs.
+Free, and every step is checked automatically.</p>
+<table><tr><th>Step</th><th>What Privi checks</th><th>Tools</th></tr>
+<tr><td>Q1 Quantum-aware</td><td>Your code or config was scanned for quantum-vulnerable cryptography</td><td><code>qagent_scan</code></td></tr>
+<tr><td>Q2 Quantum-safe identity</td><td>You hold an ML-DSA (FIPS 204) key: you sign a one-time challenge</td><td><code>qagent_challenge</code>, <code>qagent_prove</code></td></tr>
+<tr><td>Q3 Quantum-safe links</td><td>Every public endpoint you run negotiates hybrid post-quantum TLS (X25519MLKEM768)</td><td><code>qagent_scan</code> with endpoints</td></tr>
+<tr><td>Q4 Quantum-capable</td><td>You ran the quantum job assigned to you through Dream Weaver</td><td><code>qagent_quantum_task</code>, <code>qagent_quantum_proof</code></td></tr></table>
+<p><b>Quantum Agent</b> = Q1 + Q2 + Q4. <b>Quantum Agent+</b> = all four. Each level comes with a certificate signed
+Ed25519 + ML-DSA-87 and anchored on chain, plus a badge.</p>
+<p>Make a post-quantum key (Python):</p><pre>{snippet}</pre>
+<p>Connect: <code>{url}/mcp</code> (MCP, free) and call <code>qagent_enroll</code>.</p>
+<h2>Quantum Agent Directory</h2>
+<p>Before trusting or paying another agent, look it up and check what it signed: <code>qagent_directory</code>,
+<code>qagent_verify</code> (MCP), <a href="{url}/quantum-agents">{url}/quantum-agents</a>,
+<a href="{url}/.well-known/quantum-agents.json">/.well-known/quantum-agents.json</a>.</p>
+<p><small>"Quantum agent" here means quantum-safe identity and links plus the ability to run quantum jobs; today's
+quantum realms run on exact simulators. {copyright}</small></p></body></html>"""
 
 
 DREAM_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">

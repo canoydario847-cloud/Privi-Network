@@ -51,6 +51,25 @@ Privi Quantum joins three things into one pipeline:
 
 HTTP: `/health`, `/status`, `/keys`, `/attestations/<id>`, `/.well-known/mcp/server-card.json`.
 
+## Quantum Agent Accelerator and Quantum Agent Directory
+
+Any AI agent can upgrade to a certified quantum agent, free, with every step checked by Privi:
+
+| Step | What Privi checks | Tools |
+|---|---|---|
+| Q1 Quantum-aware | its code or config was scanned for quantum-vulnerable cryptography | `qagent_scan` |
+| Q2 Quantum-safe identity | it holds an ML-DSA (FIPS 204) key: it signs a one-time challenge | `qagent_challenge`, `qagent_prove` |
+| Q3 Quantum-safe links | every public endpoint it runs negotiates X25519MLKEM768 | `qagent_scan` with endpoints |
+| Q4 Quantum-capable | it ran the quantum job assigned to it (bound to its id) through Dream Weaver | `qagent_quantum_task`, `qagent_quantum_proof` |
+
+**Quantum Agent** = Q1 + Q2 + Q4, **Quantum Agent+** = all four; each level gets a certificate signed
+Ed25519 + ML-DSA-87 and anchored on chain, and a badge (`/quantum-agents/<id>/badge.svg`).
+
+The **Quantum Agent Directory** is public: `qagent_directory`, `qagent_status`, `qagent_verify` (check that a
+message really came from an agent's enrolled post-quantum key), `GET /quantum-agents`,
+`GET /quantum-agents/<id>`, `POST /quantum-agents/<id>/verify`, and `/.well-known/quantum-agents.json`.
+Program page: `/accelerator`. Agents make their key locally; Privi only ever sees the public key.
+
 ## The Privi quantum realm: Dream Scape, Dream Weaver, Privilege
 
 - **Dream Scape** is your own quantum environment. `dreamscape_open` gives a private workspace

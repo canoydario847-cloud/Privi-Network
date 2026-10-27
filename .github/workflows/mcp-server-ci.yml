@@ -31,4 +31,5 @@ jobs:
       - name: Show test failures as annotations
         if: failure()
         shell: bash
-        run: grep -E "^(FAILED|ERROR) |^E +|\.py:[0-9]+: " pytest.log | head -40 | sed 's/^/::error::/' || true
+        run: |
+          grep -E "^(FAILED|ERROR) |^E +|\.py:[0-9]+: " pytest.log | head -40 | sed 's/^/::error::/' || true
