@@ -13,4 +13,4 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r quantum-school/requirements.txt pytest httpx
-      - run: cd quantum-school && pytest -q tests
+      - run: cd quantum-school && python -m pytest -q tests
