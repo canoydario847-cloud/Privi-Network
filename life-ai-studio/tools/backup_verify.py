@@ -510,6 +510,19 @@ def validate_database(conn):
     ).fetchone()
     if bad_session is not None:
         raise ValueError("Not a LIFE database; invalid session authentication state")
+    # Project files must restore as usable text with a nonblank relative
+    # path. SQLite can store BLOBs or empty paths in TEXT columns even when
+    # schema and ownership checks pass; reject malformed private files without
+    # printing their paths or contents.
+    invalid_file_text = conn.execute(
+        'SELECT 1 FROM "files" WHERE '
+        "typeof(\"path\") != 'text' OR "
+        "length(trim(\"path\", char(9) || char(10) || char(11) || "
+        "char(12) || char(13) || ' ')) = 0 OR "
+        "typeof(\"content\") != 'text' LIMIT 1"
+    ).fetchone()
+    if invalid_file_text is not None:
+        raise ValueError("Not a LIFE database; invalid private project file text")
     # File versions are optimistic-concurrency counters for private project
     # edits. SQLite's dynamic typing permits invalid values in older or
     # lookalike schemas; restoring them could bypass version conflict checks.
