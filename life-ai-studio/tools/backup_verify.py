@@ -170,6 +170,19 @@ def validate_database(conn):
             break
     if not has_idempotency_guard:
         raise ValueError("Not a LIFE database; ledger idempotency UNIQUE constraint missing")
+    # The live credit/debit API accepts only nonblank text idempotency keys
+    # of at most 180 characters. A restored ledger with malformed keys can
+    # break retry safety even when the UNIQUE index survives the restore.
+    # Validate without exposing customer keys in error messages.
+    invalid_idempotency = conn.execute(
+        'SELECT 1 FROM "ledger" WHERE '
+        'typeof("idempotency") != \'text\' OR length("idempotency") > 180 '
+        'OR length(trim("idempotency", '
+        "char(9) || char(10) || char(11) || char(12) || char(13) || ' '"
+        ')) = 0 LIMIT 1'
+    ).fetchone()
+    if invalid_idempotency is not None:
+        raise ValueError("Not a LIFE database; invalid credit ledger idempotency key")
     # Wallet-link challenges are authentication state. Older snapshots may not
     # have this table, but a present table must preserve one-time nonce identity
     # and account ownership. The current LIFE schema has no foreign key here.
