@@ -1,5 +1,5 @@
 """Regression checks for the mainnet-only source export."""
-import importlib.util
+import unittest
 import pathlib
 import subprocess
 import sys
@@ -50,3 +50,14 @@ def test_mainnet_export_rejects_secret_named_file(tmp_path):
                             cwd=repo, capture_output=True, text=True)
     assert result.returncode != 0
     assert not output.exists()
+class ExportTests(unittest.TestCase):
+    def test_mainnet_export_is_allowlisted(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            test_mainnet_export_is_allowlisted(pathlib.Path(directory))
+
+    def test_mainnet_export_rejects_secret_named_file(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            test_mainnet_export_rejects_secret_named_file(pathlib.Path(directory))
+
