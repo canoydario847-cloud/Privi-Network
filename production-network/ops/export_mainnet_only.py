@@ -4,6 +4,7 @@ import argparse
 import pathlib
 import subprocess
 import sys
+import tarfile
 
 ALLOWED = ("production-network/mainnet", "production-network/ops")
 EXCLUDED = ("life-ai-studio", "listing", "migration", "testnet")
@@ -25,14 +26,20 @@ def main():
     with output.open("wb") as target:
         subprocess.run(["git", "-C", root, "archive", "--format=tar", commit, "--", *ALLOWED],
                        check=True, stdout=target)
-    import tarfile
     with tarfile.open(output) as archive:
-        names = archive.getnames()
+        members = archive.getmembers()
+        names = [member.name for member in members]
         if not names:
             raise RuntimeError("Unexpected empty archive")
         if any(not any(name == p or name.startswith(p + "/") for p in ALLOWED) for name in names):
             output.unlink(missing_ok=True)
             raise RuntimeError("Export contained a path outside the mainnet allowlist")
+        if any(member.issym() or member.islnk() or not (member.isfile() or member.isdir()) for member in members):
+            output.unlink(missing_ok=True)
+            raise RuntimeError("Export contained an unsupported link or special file")
+        if any(part.startswith(".env") or part in ("id_rsa", "id_ed25519") for name in names for part in pathlib.PurePosixPath(name).parts):
+            output.unlink(missing_ok=True)
+            raise RuntimeError("Export contained a possible secret file")
     print(f"Staged mainnet-only archive from {commit}: {output}")
     print("This is NOT a new GitHub repository, production binary, or mainnet launch.")
 
