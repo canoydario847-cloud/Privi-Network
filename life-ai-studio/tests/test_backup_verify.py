@@ -1404,3 +1404,17 @@ def test_backup_requires_canonical_safe_private_file_paths(tmp_path, stored_path
         with pytest.raises(ValueError, match="unsafe private project file path"):
             backup.backup_and_verify(source, destination)
         assert not destination.exists(), "Unsafe project paths must not publish a backup"
+
+def test_backup_rejects_session_owned_by_missing_account(tmp_path):
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    with sqlite3.connect(source) as db:
+        db.execute(
+            "INSERT INTO sessions (token_hash,user_id,expires) VALUES (?,?,?)",
+            ("a" * 64, "deleted-account", 123456),
+        )
+    dest = tmp_path / "vault" / "snapshot.sqlite3"
+    with pytest.raises(ValueError, match="orphaned authentication session"):
+        backup.backup_and_verify(source, dest)
+    assert not dest.exists(), "Invalid authentication state must not publish a backup"
+
