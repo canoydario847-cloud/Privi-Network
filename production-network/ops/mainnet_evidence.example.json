@@ -1,0 +1,56 @@
+{
+  "network": "privi-native-mainnet",
+  "asset": "PRVI",
+  "gates": {
+    "custom_chain_audit": {
+      "status": "pending",
+      "evidence_url": "",
+      "reviewer": ""
+    },
+    "pop_consensus_spec_and_review": {
+      "status": "pending",
+      "evidence_url": "",
+      "reviewer": ""
+    },
+    "genesis_supply_and_vesting_review": {
+      "status": "pending",
+      "evidence_url": "",
+      "reviewer": ""
+    },
+    "validator_independence": {
+      "status": "pending",
+      "evidence_url": "",
+      "reviewer": ""
+    },
+    "genesis_signatures": {
+      "status": "pending",
+      "evidence_url": "",
+      "reviewer": ""
+    },
+    "key_custody_and_double_sign_prevention": {
+      "status": "pending",
+      "evidence_url": "",
+      "reviewer": ""
+    },
+    "public_testnet_consensus_and_evm_tests": {
+      "status": "pending",
+      "evidence_url": "",
+      "reviewer": ""
+    },
+    "rpc_monitoring_and_incident_drill": {
+      "status": "pending",
+      "evidence_url": "",
+      "reviewer": ""
+    },
+    "security_audit": {
+      "status": "pending",
+      "evidence_url": "",
+      "reviewer": ""
+    },
+    "legal_and_financial_launch_approval": {
+      "status": "pending",
+      "evidence_url": "",
+      "reviewer": ""
+    }
+  }
+}
