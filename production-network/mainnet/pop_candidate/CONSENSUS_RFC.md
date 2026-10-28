@@ -46,7 +46,10 @@ engineering proposals.** Calling the proposal "PoP" does not confer security.
   `Privi/PoP/Research/ProposerElection/v2` seed: SHA-256 of the UTF-8
   JSON array [version tag, chain ID, genesis hash, epoch, governance key
   fingerprint, sorted admitted validator key fingerprints, height, round],
-  interpreted as a big-endian integer modulo validator count. Binding the
+  interpreted as a big-endian integer modulo validator count. Signer
+  fingerprints are sorted by ascending raw ASCII code units (lowercase
+  fixed-width hexadecimal), never host-locale collation; inconsistent
+  ordering would yield divergent election seeds across research nodes. Binding the
   actual admitted signer roster avoids reusing the same election seed for
   different committees with identical sizes. Reordering registry JSON cannot
   change election order. This version change is NOT compatible with earlier
