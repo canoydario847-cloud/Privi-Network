@@ -41,8 +41,11 @@ function verifyResearchCertificatePair(committee,left,right) {
   // violate the persistent research height lock.
   const incompatible=differentBlock||differentParent;
   const secondSigners=new Map(right.votes.map(v=>[v.validatorId,v]));
+  // Signer fingerprints are fixed-width lowercase ASCII hex. Evidence order
+  // must not depend on host ICU locale or environment language settings.
   const intersection=left.votes.filter(v=>secondSigners.has(v.validatorId))
-    .sort((a,b)=>a.validatorId.localeCompare(b.validatorId));
+    .sort((a,b)=>a.validatorId < b.validatorId ? -1 :
+                 a.validatorId > b.validatorId ? 1 : 0);
 
   // Two supermajority quorums in one admitted committee mathematically
   // intersect, but this is checked explicitly as a defensive assertion.
