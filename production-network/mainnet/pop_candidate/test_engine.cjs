@@ -172,28 +172,44 @@ test("duplicate, unknown, and missing signers are refused",()=>{
 test("validator cannot double vote same height for conflicting position blocks",()=>{
   const f=fixture();
   const v=f.committee.validators[0],lock=new ResearchVoteLock();
-  lock.accept(f.committee.epoch,5,0,v.id,"0x"+"b".repeat(64));
-  lock.accept(f.committee.epoch,5,0,v.id,"0x"+"b".repeat(64));
-  assert.throws(()=>lock.accept(f.committee.epoch,5,1,v.id,"0x"+"c".repeat(64)),
+  lock.accept(f.committee.epoch,5,0,v.id,"0x"+"b".repeat(64),"0x"+"a".repeat(64));
+  lock.accept(f.committee.epoch,5,0,v.id,"0x"+"b".repeat(64),"0x"+"a".repeat(64));
+  assert.throws(()=>lock.accept(f.committee.epoch,5,1,v.id,"0x"+"c".repeat(64),"0x"+"a".repeat(64)),
     /double-sign/);
-  lock.accept(f.committee.epoch,6,0,v.id,"0x"+"c".repeat(64));
+  lock.accept(f.committee.epoch,6,0,v.id,"0x"+"c".repeat(64),"0x"+"b".repeat(64));
 });
 
 test("in-memory research signer lock does not reset at epoch transition",()=>{
   const f=fixture();
   const id=f.committee.validators[0].id, lock=new ResearchVoteLock();
   const first="0x"+"c".repeat(64), conflicting="0x"+"d".repeat(64);
-  lock.accept(1,25,0,id,first);
-  lock.accept(1,25,1,id,first); // round changes do not reset same-block lock
-  assert.throws(()=>lock.accept(2,25,0,id,conflicting),
+  lock.accept(1,25,0,id,first,"0x"+"a".repeat(64));
+  lock.accept(1,25,1,id,first,"0x"+"a".repeat(64)); // round changes do not reset same-block lock
+  assert.throws(()=>lock.accept(2,25,0,id,conflicting,"0x"+"a".repeat(64)),
                 /epoch transition/,"new epoch cannot bypass a same-height lock");
-  assert.throws(()=>lock.accept(2,25,0,id,first),
+  assert.throws(()=>lock.accept(2,25,0,id,first,"0x"+"a".repeat(64)),
                 /epoch transition/,"even same block requires reviewed epoch handoff");
   // Unrelated heights remain signable with a later epoch.
-  lock.accept(2,26,0,id,conflicting);
+  lock.accept(2,26,0,id,conflicting,first);
   // A failed cross-epoch attempt must not overwrite the original commitment.
-  assert.throws(()=>lock.accept(1,25,2,id,conflicting),/double-sign/);
-  lock.accept(1,25,2,id,first);
+  assert.throws(()=>lock.accept(1,25,2,id,conflicting,"0x"+"a".repeat(64)),/double-sign/);
+  lock.accept(1,25,2,id,first,"0x"+"a".repeat(64));
+});
+
+test("in-memory PoP height lock refuses same child with conflicting signed parent",()=>{
+  const f=fixture();
+  const id=f.committee.validators[0].id,lock=new ResearchVoteLock();
+  const child="0x"+"c".repeat(64),parentA="0x"+"a".repeat(64);
+  const parentB="0x"+"b".repeat(64);
+  lock.accept(1,42,0,id,child,parentA);
+  assert.throws(()=>lock.accept(1,42,1,id,child,parentB),
+                /parent-link double-sign/);
+  // Rejected attempts cannot replace the first commitment.
+  lock.accept(1,42,2,id,child,parentA);
+  assert.throws(()=>lock.accept(1,42,3,id,child),/previous block hash/);
+  assert.throws(()=>lock.accept(1,42,3,id,child,child),/previous block hash/);
+  assert.throws(()=>lock.accept(1,42,3,id,child,"invalid"),/previous block hash/);
+  lock.accept(1,42,4,id,child,parentA);
 });
 
 test("no valid validator quorum with ambiguous unsigned position proof",()=>{
