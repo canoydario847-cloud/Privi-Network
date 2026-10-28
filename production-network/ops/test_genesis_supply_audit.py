@@ -251,6 +251,46 @@ class SupplyAuditTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"unsupported vesting"):
             self.check(g)
 
+    def test_module_auth_address_collisions_rejected(self):
+        module={"@type":mod.MODULE_ACCOUNT_TYPE,
+                "base_account":{"address":"privi1vestingexample"},
+                "name":"distribution","permissions":[]}
+        for module_first in (True, False):
+            with self.subTest(module_first=module_first):
+                g=periodic_genesis()
+                accounts=g["app_state"]["auth"]["accounts"]
+                accounts.insert(0, module) if module_first else accounts.append(module)
+                with self.assertRaisesRegex(ValueError,"duplicate auth account address"):
+                    self.check(g)
+
+    def test_module_and_base_auth_address_collision_rejected(self):
+        g=fixture()
+        g["app_state"]["auth"]={"accounts":[
+            {"@type":mod.MODULE_ACCOUNT_TYPE,
+             "base_account":{"address":"privi1same"},
+             "name":"distribution","permissions":[]},
+            {"@type":mod.BASE_ACCOUNT_TYPE,"address":"privi1same"}]}
+        with self.assertRaisesRegex(ValueError,"duplicate auth account address"):
+            self.check(g)
+
+    def test_malformed_module_auth_base_account_rejected(self):
+        for embedded in (None, {}, {"address":"   "}):
+            with self.subTest(embedded=embedded):
+                g=fixture()
+                g["app_state"]["auth"]={"accounts":[
+                    {"@type":mod.MODULE_ACCOUNT_TYPE,
+                     "base_account":embedded,"name":"distribution","permissions":[]}]}
+                with self.assertRaisesRegex(ValueError,"module auth account"):
+                    self.check(g)
+
+    def test_distinct_module_auth_address_allowed(self):
+        g=periodic_genesis()
+        g["app_state"]["auth"]["accounts"].append(
+            {"@type":mod.MODULE_ACCOUNT_TYPE,
+             "base_account":{"address":"privi1module"},
+             "name":"distribution","permissions":[]})
+        self.assertEqual(self.check(g)["periodic_vesting_accounts_checked"],1)
+
     def test_missing_auth_account_type_rejected(self):
         g=periodic_genesis()
         del g["app_state"]["auth"]["accounts"][0]["@type"]
