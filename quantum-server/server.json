@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.canoydario847-cloud/privi-quantum",
   "title": "Privi Quantum",
-  "description": "Quantum on IonQ/IBM/Braket: spending mandates, signed benchmarks, paid PQC CBOM, advantage receipts.",
-  "version": "0.9.0",
+  "description": "Agents drive company software into IBM/IonQ quantum runs: signed mandates, bridges, receipts, CBOM.",
+  "version": "0.10.0",
   "websiteUrl": "https://privi-discovery.onrender.com",
   "repository": {
     "url": "https://github.com/canoydario847-cloud/Privi-Network",

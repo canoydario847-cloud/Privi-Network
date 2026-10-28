@@ -37,13 +37,14 @@ from .accelerator import LEVEL_LABEL, STEPS, Accelerator, AcceleratorError, badg
 from .inspector import LEVELS as INSPECTOR_LEVELS, Inspector, credential_message
 from .humans import HumanError, HumanRegistry
 from .mandates import MandateError, QuantumMandates
+from .bridge import BridgeError, Bridges, apply_transform as bridges_apply
 from .anchoring import AnchorError, HttpAnchorClient, anchor_pending
-from .attest import PQ_ALG, Attestor
+from .attest import PQ_ALG, Attestor, now_iso
 from .payments import PaySettings
 from .x402 import NO_CHARGE_KEY, Facilitator, Paywall
 from . import benchmarks
 
-__version__ = "0.9.0"
+__version__ = "0.10.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/quantum-server"
 PUBLIC_URL = os.getenv("QUANTUM_PUBLIC_URL", "https://privi-quantum.onrender.com").rstrip("/")
 EXPLORER_URL = os.getenv("PRIVI_EXPLORER_URL", "").rstrip("/") or f"{PUBLIC_URL}/explorer/lookup"
@@ -113,6 +114,11 @@ factory decisions and returns answers you can prove later.
 16. Bring your own circuit: quantum_run_circuit takes the OpenQASM 2.0/3.0 that Qiskit writes (qasm2.dumps / qasm3.dumps)
    and runs it on IBM Quantum, IonQ, Amazon Braket or the local simulator; the counts are sealed and anchored.
 17. quantum_leaderboard (and /leaderboard) ranks every backend only by runs Privi measured and sealed.
+18. Privi Bridge drives a company's existing software. bridge_connect (with your Privi pass) registers its HTTPS JSON
+   API: a base URL and a few operations, each READ (pull data in) or WRITE (push a signed result back). The person who
+   approved you signs that exact scope with their passkey at the bridge page; nothing outside it can ever be called.
+   quantum_workflow_run then pulls the data, maps it into a problem (transform), runs it on any backend, pushes the
+   answer back and seals every step. Each request carries X-Privi-Signature so the software can check it came from Privi.
 
 15. Honest benchmarks: quantum_benchmarks (free) and the public page /benchmarks show, problem by problem, how the
    quantum answer compares with exact search and simulated annealing, including the cases classical wins.
@@ -205,6 +211,8 @@ class Settings:
     hardware_poll_seconds: int = 60
     mandate_required: bool = True
     mandate_id_over_usd: float = 100.0
+    bridge_allow_private: bool = False
+    bridge_allow_http: bool = False
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -234,6 +242,8 @@ class Settings:
             hardware_poll_seconds=int(os.getenv("HARDWARE_POLL_SECONDS", "60")),
             mandate_required=os.getenv("QUANTUM_MANDATE_REQUIRED", "1") != "0",
             mandate_id_over_usd=float(os.getenv("QUANTUM_MANDATE_ID_OVER_USD", "100") or 100),
+            bridge_allow_private=os.getenv("BRIDGE_ALLOW_PRIVATE") == "1",
+            bridge_allow_http=os.getenv("BRIDGE_ALLOW_HTTP") == "1",
         )
 
 
@@ -267,7 +277,7 @@ def _who(ctx: Context) -> str:
 def build_server(settings: Settings | None = None, attestor: Attestor | None = None,
                  anchor_client=None, endpoint_checker=None, hardware_router: HardwareRouter | None = None,
                  repo_scanner=None, pay_settings: PaySettings | None = None,
-                 facilitator: Facilitator | None = None) -> MCPServer:
+                 facilitator: Facilitator | None = None, bridge_http=None, bridge_resolver=None) -> MCPServer:
     settings = settings or Settings.from_env()
     attestor = attestor or Attestor(settings.db_path, settings.signing_seed)
     if anchor_client is None and settings.anchor_api_key:
@@ -290,6 +300,9 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     sweep_state: dict[str, float | None] = {"last": None}
     router = hardware_router or HardwareRouter(settings.db_path, backends_from_env(), settings.hardware_daily_budget_usd)
     mandates = QuantumMandates(settings.db_path, settings.mandate_id_over_usd)
+    bridges = Bridges(settings.db_path,
+                      hashlib.sha256(b"privi-bridge-key-v1" + attestor._ed.private_bytes_raw()).digest(),
+                      settings.bridge_allow_private, settings.bridge_allow_http, bridge_http, bridge_resolver)
     scan_repo = repo_scanner or inventory.scan_repo
     bench = benchmarks.Benchmarks(settings.db_path, attestor, router, PUBLIC_URL)
     pay = pay_settings or PaySettings.from_env(settings.db_path)
@@ -637,6 +650,14 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         return agent_id, reservation, None
 
     def finalize_hw(jid: str) -> dict | None:
+        """Poll a job, seal it once when done, then finish any Privi Bridge workflow that was waiting on it."""
+        j = _finalize_hw(jid)
+        if j and (j["status"] in ("failed", "canceled") or j.get("receipt_id")):
+            for wid in bridges.workflows_for_job(jid):
+                complete_workflow(wid, j)
+        return j
+
+    def _finalize_hw(jid: str) -> dict | None:
         """Poll a hardware job; when it is done, decode the answer and seal a run attestation + advantage receipt once."""
         with finalize_lock:
             j = router.refresh(jid)
@@ -989,6 +1010,272 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         j = await anyio.to_thread.run_sync(finalize_hw, sub["job_id"])
         return _result({**hw_view(j), "routing": sub["routing"], "circuit": {"qubits": c["qubits"], "source_gates": c["source_gates"],
                         "basis_gates": len(c["gates"]), "openqasm": c["version"]}, "copyright": COPYRIGHT})
+
+    # ---------------- Privi Bridge: agents drive existing software ----------------
+
+    def _bridge_url(bid: str) -> str:
+        return f"{PUBLIC_URL}/bridges/{bid}"
+
+    def _pass_agent(ctx: Context, privi_pass: str | None, scope: str) -> tuple[str | None, CallToolResult | None]:
+        tok = privi_pass or ((ctx.headers or {}).get("x-privi-pass") if ctx.headers is not None else None)
+        if blocked := realm_gate(ctx, tok, scope):
+            return None, blocked
+        agent_id = inspector.agent_for_pass(tok)
+        if not agent_id:
+            return None, _result({"error": "send your Privi pass (inspector_pass) so Privi knows which agent is asking"},
+                                 is_error=True)
+        return agent_id, None
+
+    def _seal_bridge(bid: str, kind: str) -> str:
+        b = bridges.get(bid)
+        body = {"bridge_id": bid, "agent_id": b["agent_id"], "human_id": b["human_id"], "software": b["name"],
+                "base_url": b["base_url"], "operations": json.loads(b["operations"]), "scope_sha256": b["scope_hash"],
+                "scope_text": b["scope_text"], "signed_with": "passkey (WebAuthn, user verified)"}
+        if kind.endswith("revocation"):
+            body.update(revoked_at=b["revoked_at"], revoked_by=b["revoked_by"])
+        else:
+            body.update(activated_at=b["activated_at"])
+        att = attestor.issue(kind, body)
+        bridges.set_attestation(bid, att["id"], "revocation_attestation_id" if kind.endswith("revocation") else "attestation_id")
+        return att["id"]
+
+    def _bridge_payload(wid: str, b: dict, j: dict) -> dict[str, Any]:
+        res = j.get("result") or {}
+        out: dict[str, Any] = {"privi_workflow": wid, "bridge_id": b["bridge_id"], "problem": j["problem"],
+                               "job_id": j["job_id"], "backend": j["backend_id"], "issued_by": "Privi Quantum (Privi World Co)",
+                               "attestation_id": j.get("attestation_id"),
+                               "verify": {"attestation_url": f"{PUBLIC_URL}/attestations/{j.get('attestation_id')}",
+                                          "public_keys_url": f"{PUBLIC_URL}/keys"}}
+        if j["problem"] == "circuit":
+            out["top_outcomes"] = res.get("top_outcomes", [])[:16]
+        else:
+            out["decision"] = res.get("decision")
+            m = res.get("measurement") or {}
+            out.update(cost=m.get("cost"), found_optimum=m.get("found_optimum"), exact_optimum_cost=res.get("exact_optimum_cost"))
+            if j.get("receipt_id"):
+                out["advantage_receipt_id"] = j["receipt_id"]
+                out["verify"]["receipt_url"] = f"{PUBLIC_URL}/receipts/{j['receipt_id']}"
+        return out
+
+    def complete_workflow(wid: str, j: dict) -> dict:
+        """The quantum job behind a workflow finished: push the answer into the software (if asked) and seal the run."""
+        w = bridges.workflow(wid)
+        if not w or w["status"] not in ("running", "waiting_hardware"):
+            return w or {}
+        b = bridges.get(w["bridge_id"])
+        if j["status"] in ("failed", "canceled"):
+            bridges.log(wid, {"step": "quantum", "job_id": j["job_id"], "status": j["status"], "error": j.get("error", "")})
+            return finish_workflow(wid, "failed", f"quantum job {j['status']}: {j.get('error', '')}".strip(), j)
+        bridges.log(wid, {"step": "quantum", "job_id": j["job_id"], "status": "done", "backend": j["backend_id"],
+                          "attestation_id": j.get("attestation_id"), "receipt_id": j.get("receipt_id")})
+        if w["push_op"]:
+            try:
+                bb, op = bridges.usable(w["bridge_id"], w["agent_id"], w["push_op"], "write")
+                r = bridges.call(bb, op, w["push_params"], _bridge_payload(wid, bb, j), wid)
+                bridges.log(wid, {"step": "push", **r})
+            except BridgeError as e:
+                bridges.log(wid, {"step": "push", "operation": w["push_op"], "error": str(e)})
+                return finish_workflow(wid, "failed", f"push failed: {e}", j)
+        return finish_workflow(wid, "done", "", j)
+
+    def finish_workflow(wid: str, status: str, error: str, j: dict | None) -> dict:
+        w = bridges.workflow(wid)
+        b = bridges.get(w["bridge_id"])
+        att = attestor.issue("software_bridge_run", {
+            "workflow_id": wid, "bridge_id": w["bridge_id"], "agent_id": w["agent_id"], "software": b["name"],
+            "base_url": b["base_url"], "problem": w["problem"], "outcome": status, "error": error,
+            "job_id": j["job_id"] if j else None, "run_attestation_id": j.get("attestation_id") if j else None,
+            "advantage_receipt_id": j.get("receipt_id") if j else None,
+            "steps": [{k: v for k, v in x.items() if k in ("at", "step", "operation", "method", "url", "status", "request_sha256",
+                                                          "response_sha256", "bytes", "data_sha256", "items", "job_id",
+                                                          "backend", "error")} for x in w["log"]]})
+        bridges.update_workflow(wid, status=status, error=error[:400], attestation_id=att["id"], finished_at=now_iso())
+        return bridges.workflow(wid)
+
+    def workflow_view(w: dict) -> dict[str, Any]:
+        out = {k: w[k] for k in ("workflow_id", "bridge_id", "status", "problem", "job_id", "error", "created_at", "finished_at")}
+        out["steps"] = w["log"]
+        if w.get("attestation_id"):
+            out["sealed"] = {"id": w["attestation_id"], **links(w["attestation_id"])}
+        if w.get("job_id"):
+            j = router.get(w["job_id"])
+            if j:
+                out["quantum"] = hw_view(j)
+        if w["status"] == "waiting_hardware":
+            out["next"] = "the quantum job is queued; Privi pushes the answer and seals the run when it finishes (bridge_workflow)"
+        return out
+
+    @mcp.tool(title="Privi Bridge: connect existing software", annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True))
+    async def bridge_connect(
+        ctx: Context,
+        name: Annotated[str, Field(description="The software's name, e.g. 'Acme ERP' or 'Plant 2 scheduler'")],
+        base_url: Annotated[str, Field(description="HTTPS base URL of its JSON API, e.g. https://erp.acme.com/api")],
+        operations: Annotated[list[dict[str, Any]], Field(description="1-12 of {name, method, path, kind: read|write, description}. "
+                                                                       "READ = GET that returns JSON to pull in; WRITE = POST/PUT/PATCH that "
+                                                                       "receives Privi's signed result. Paths may use {param} placeholders.")],
+        auth_header: Annotated[str, Field(description="Optional header for the software's API credential, e.g. Authorization or X-Api-Key")] = "",
+        auth_value: Annotated[str, Field(description="Optional credential for that header; stored encrypted, never shown again")] = "",
+        days: Annotated[int, Field(description="How long the bridge lasts once signed (1-365)", ge=1, le=365)] = 90,
+        privi_pass: Annotated[str | None, PASS_ARG] = None,
+    ) -> CallToolResult:
+        """Register a bridge to a company's existing software so this agent can pull data from it and push quantum
+        results back. Returns a sign_url: the person who approved the agent reads the exact operations and signs them
+        with their passkey; nothing outside that scope can ever be called. Also returns a one-time signing secret the
+        software can use to check every request came from Privi (X-Privi-Signature). Free."""
+        agent_id, blocked = _pass_agent(ctx, privi_pass, "bridge_connect")
+        if blocked:
+            return blocked
+        appr = humans.approval(agent_id)
+        if not appr or not appr["current"]:
+            return _result({"error": "no current human approval for this agent: qagent_human_request first"}, is_error=True)
+        try:
+            a = accel._row(agent_id)
+            out = await anyio.to_thread.run_sync(lambda: bridges.draft(a, appr["human_id"], name, base_url, operations,
+                                                                       auth_header, auth_value, days))
+        except (BridgeError, AcceleratorError) as e:
+            return _result({"error": str(e)}, is_error=True)
+        return _result({**out, "sign_url": _bridge_url(out["bridge_id"]),
+                        "next": "Send sign_url to the person who approved you; once they sign, use quantum_workflow_run."})
+
+    @mcp.tool(title="Privi Bridge: status", annotations=READ_ONLY)
+    def bridge_status(bridge_id: Annotated[str, Field(description="br_... id")]) -> CallToolResult:
+        """A bridge's signed scope, status (draft, active, expired, revoked) and recent workflows. Free."""
+        try:
+            return _result({**bridges.public(bridge_id), "workflows": bridges.recent_workflows(bridge_id),
+                            "page": _bridge_url(bridge_id)})
+        except BridgeError as e:
+            return _result({"error": str(e)}, is_error=True)
+
+    @mcp.tool(title="Privi Bridge: test a READ operation", annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
+    async def bridge_test(
+        ctx: Context,
+        bridge_id: Annotated[str, Field(description="br_... id")],
+        operation: Annotated[str, Field(description="A READ operation name from the bridge")],
+        params: Annotated[dict[str, Any] | None, Field(description="Path {param} values and query parameters")] = None,
+        privi_pass: Annotated[str | None, PASS_ARG] = None,
+    ) -> CallToolResult:
+        """Call one READ operation and show the first part of the JSON it returns, so you can write the transform for
+        quantum_workflow_run. WRITE operations are never called here. Free."""
+        agent_id, blocked = _pass_agent(ctx, privi_pass, "bridge_test")
+        if blocked:
+            return blocked
+        try:
+            b, op = bridges.usable(bridge_id, agent_id, operation, "read")
+            r = await anyio.to_thread.run_sync(lambda: bridges.call(b, op, params))
+        except BridgeError as e:
+            return _result({"error": str(e)}, is_error=True)
+        preview = json.dumps(r.pop("json"))[:4000]
+        return _result({**r, "preview": preview, "truncated": len(preview) >= 4000,
+                        "transform_example": {"jobs": {"from": "data.orders", "fields": {"name": "sku", "minutes": "cycle_min"}}}})
+
+    @mcp.tool(title="Privi Bridge: revoke (agent)", annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False))
+    async def bridge_revoke(
+        ctx: Context,
+        bridge_id: Annotated[str, Field(description="br_... id")],
+        privi_pass: Annotated[str | None, PASS_ARG] = None,
+    ) -> CallToolResult:
+        """The agent gives up its own bridge (the person can also revoke it on the bridge page with their passkey).
+        Signed and anchored. Free."""
+        tok = privi_pass or ((ctx.headers or {}).get("x-privi-pass") if ctx.headers is not None else None)
+        agent_id = inspector.agent_for_pass(tok)
+        b = bridges.get(bridge_id)
+        if not b:
+            return _result({"error": "unknown bridge"}, is_error=True)
+        if not agent_id or agent_id != b["agent_id"]:
+            return _result({"error": "only the agent this bridge belongs to can revoke it here (send its Privi pass)"}, is_error=True)
+        try:
+            bridges.revoke(bridge_id, "agent")
+        except BridgeError as e:
+            return _result({"error": str(e)}, is_error=True)
+        return _result({**bridges.public(bridge_id), "revocation_attestation_id": _seal_bridge(bridge_id, "software_bridge_revocation")})
+
+    @mcp.tool(title="Privi Bridge: run a workflow through existing software", annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True))
+    async def quantum_workflow_run(
+        ctx: Context,
+        bridge_id: Annotated[str, Field(description="br_... id of an active (signed) bridge")],
+        pull_operation: Annotated[str, Field(description="READ operation that returns the data")],
+        problem: Annotated[str, Field(description="balance_lines | select_lots | split_conflicts | qubo (see quantum_problems)")],
+        transform: Annotated[dict[str, Any], Field(description="How to build the problem data from the software's JSON: "
+                                                               "{field: {from: 'path.to.list', fields: {target: 'source'}} | "
+                                                               "{path: 'path.to.value'} | {value: constant}}")],
+        pull_params: Annotated[dict[str, Any] | None, Field(description="Path {param} values and query parameters for the pull")] = None,
+        push_operation: Annotated[str | None, Field(description="Optional WRITE operation that receives the signed answer")] = None,
+        push_params: Annotated[dict[str, Any] | None, Field(description="Path {param} values for the push")] = None,
+        backend: Annotated[str, Field(description="'local' or a backend id from quantum_backends (e.g. ibm:ibm_kingston)")] = "local",
+        policy: Annotated[str, Field(description="With backend='auto': cheapest | fastest | hardware")] = "cheapest",
+        layers: Annotated[int, Field(description="QAOA depth p (1-4)", ge=1, le=4)] = 1,
+        shots: Annotated[int, Field(description="Shots (1-10000)", ge=1, le=10000)] = 1000,
+        mandate_id: Annotated[str | None, Field(description="Quantum Mandate, required for paid backends")] = None,
+        privi_pass: Annotated[str | None, PASS_ARG] = None,
+    ) -> CallToolResult:
+        """One workflow across the company's software and quantum hardware: pull data with a READ operation, map it
+        into a Privi Quantum problem, run it (local simulator, IBM Quantum, IonQ, Braket), push the answer back with a
+        WRITE operation, and seal every step (hashes of each request and response) as a signed attestation. If the
+        backend queues, the push happens automatically when the job finishes. Only operations in the human-signed
+        scope can run; paid hardware also needs a Quantum Mandate. Free."""
+        agent_id, blocked = _pass_agent(ctx, privi_pass, "quantum_workflow_run")
+        if blocked:
+            return blocked
+        if not limiter.allow(_who(ctx)):
+            return _result({"error": f"rate limit: {settings.rate_per_min} calls per minute"}, is_error=True)
+        try:
+            b, pull = bridges.usable(bridge_id, agent_id, pull_operation, "read")
+            if push_operation:
+                bridges.usable(bridge_id, agent_id, push_operation, "write")
+            if problem not in qaoa.TEMPLATES:
+                raise BridgeError(f"problem must be one of {', '.join(qaoa.TEMPLATES)}")
+        except BridgeError as e:
+            return _result({"error": str(e)}, is_error=True)
+        wid = bridges.new_workflow(b, agent_id, problem, push_operation or "", push_params)
+        try:
+            r = await anyio.to_thread.run_sync(lambda: bridges.call(b, pull, pull_params, None, wid))
+            bridges.log(wid, {"step": "pull", **r})
+            data = bridges_apply(r["json"], transform)
+            bridges.log(wid, {"step": "transform", "data_sha256": hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest(),
+                              "items": {k: len(v) for k, v in data.items() if isinstance(v, list)}})
+            qubo, _ = qaoa.build(problem, data)
+            chosen, est, _ = router.choose(backend, policy, shots, None)
+        except (BridgeError, qaoa.ProblemError, HardwareError) as e:
+            bridges.log(wid, {"step": "prepare", "error": str(e)})
+            return _result({**workflow_view(finish_workflow(wid, "failed", str(e), None)), "error": str(e)}, is_error=True)
+        _, reservation, gate = paid_gate(ctx, chosen, est, shots, problem, mandate_id, privi_pass, "quantum_workflow_run")
+        if gate:
+            msg = (gate.structured_content or {}).get("error", "blocked")
+            bridges.log(wid, {"step": "quantum", "error": msg})
+            return _result({**workflow_view(finish_workflow(wid, "failed", msg, None)), "error": msg}, is_error=True)
+        try:
+            sol = await anyio.to_thread.run_sync(lambda: qaoa.solve(qubo, layers=layers, shots=256), limiter=cpu)
+            qasm = qaoa.to_qasm(qubo, sol["angles"]["gamma"], sol["angles"]["beta"], sol["cost_normalization"]["min"],
+                                sol["cost_normalization"]["span"])
+            sub = await anyio.to_thread.run_sync(lambda: router.submit(
+                problem, data, qasm, shots, layers, {"angles": sol["angles"], "algorithm": sol["algorithm"]},
+                chosen.id, policy, None, agent_id))
+        except (qaoa.ProblemError, HardwareError) as e:
+            if reservation:
+                mandates.refund(reservation)
+            bridges.log(wid, {"step": "quantum", "error": str(e)})
+            return _result({**workflow_view(finish_workflow(wid, "failed", str(e), None)), "error": str(e)}, is_error=True)
+        if reservation:
+            mandates.bind_job(reservation, sub["job_id"])
+        bridges.update_workflow(wid, job_id=sub["job_id"], status="waiting_hardware")
+        await anyio.to_thread.run_sync(finalize_hw, sub["job_id"])     # local runs finish (and push) right here
+        return _result(workflow_view(bridges.workflow(wid)))
+
+    @mcp.tool(title="Privi Bridge: workflow status", annotations=READ_ONLY)
+    async def bridge_workflow(workflow_id: Annotated[str, Field(description="wf_... id")]) -> CallToolResult:
+        """Every step of a Privi Bridge workflow (pull, transform, quantum job, push) with request/response hashes, and
+        the sealed record once it finishes. Free."""
+        w = bridges.workflow(workflow_id)
+        if not w:
+            return _result({"error": "unknown workflow"}, is_error=True)
+        if w["status"] == "waiting_hardware" and w.get("job_id"):
+            await anyio.to_thread.run_sync(finalize_hw, w["job_id"])
+            w = bridges.workflow(workflow_id)
+        return _result(workflow_view(w))
 
     @mcp.tool(title="Crypto inventory (CBOM) for a company", annotations=ToolAnnotations(
         readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True))
@@ -1873,6 +2160,68 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     async def leaderboard_page(_: Request) -> Response:
         return HTMLResponse(board.render(board.compute(router, attestor), EXPLORER_URL), headers={"Cache-Control": "no-store"})
 
+    @mcp.custom_route("/bridges/{bid}.json", methods=["GET"], include_in_schema=False)
+    async def bridge_json(request: Request) -> JSONResponse:
+        try:
+            bid = request.path_params["bid"]
+            return JSONResponse({**bridges.public(bid), "workflows": bridges.recent_workflows(bid)},
+                                headers={**cors, "Cache-Control": "no-store"})
+        except BridgeError as e:
+            return JSONResponse({"error": str(e)}, status_code=404, headers=cors)
+
+    @mcp.custom_route("/bridges/{bid}/options", methods=["GET"], include_in_schema=False)
+    async def bridge_options(request: Request) -> JSONResponse:
+        try:
+            ch = bridges.challenge(request.path_params["bid"], request.query_params.get("action", "sign"))
+        except BridgeError as e:
+            return JSONResponse({"error": str(e)}, status_code=404)
+        return JSONResponse({"get": humans.get_options(ch)}, headers={"Cache-Control": "no-store"})
+
+    @mcp.custom_route("/bridges/{bid}/sign", methods=["POST"], include_in_schema=False)
+    async def bridge_sign(request: Request) -> JSONResponse:
+        bid = request.path_params["bid"]
+        try:
+            cred = await request.json()
+            if not isinstance(cred, dict):
+                raise HumanError("send the passkey response as JSON")
+            hid, cid = humans.verify_assertion(cred, bridges.challenge(bid, "sign"))
+            bridges.activate(bid, hid, cid)
+        except (HumanError, BridgeError, ValueError, KeyError, TypeError) as e:
+            return JSONResponse({"error": str(e) or "could not verify the passkey"}, status_code=400)
+        aid = _seal_bridge(bid, "software_bridge")
+        return JSONResponse({**bridges.public(bid), "attestation_id": aid}, headers={"Cache-Control": "no-store"})
+
+    @mcp.custom_route("/bridges/{bid}/revoke", methods=["POST"], include_in_schema=False)
+    async def bridge_revoke_human(request: Request) -> JSONResponse:
+        bid = request.path_params["bid"]
+        try:
+            cred = await request.json()
+            if not isinstance(cred, dict):
+                raise HumanError("send the passkey response as JSON")
+            b = bridges.get(bid)
+            if not b:
+                raise BridgeError("unknown bridge")
+            hid, _ = humans.verify_assertion(cred, bridges.challenge(bid, "revoke"))
+            if hid != b["human_id"]:
+                raise BridgeError("only the person who signed this bridge can revoke it")
+            bridges.revoke(bid, "human")
+        except (HumanError, BridgeError, ValueError, KeyError, TypeError) as e:
+            return JSONResponse({"error": str(e) or "could not verify the passkey"}, status_code=400)
+        aid = _seal_bridge(bid, "software_bridge_revocation")
+        return JSONResponse({**bridges.public(bid), "revocation_attestation_id": aid}, headers={"Cache-Control": "no-store"})
+
+    @mcp.custom_route("/bridges/{bid}", methods=["GET"], include_in_schema=False)
+    async def bridge_page(request: Request) -> Response:
+        bid = request.path_params["bid"]
+        try:
+            br = bridges.public(bid)
+            a = accel._row(br["agent_id"])
+        except (BridgeError, AcceleratorError) as e:
+            return Response(HUMAN_DONE.format(title="Bridge not found", body=_h(str(e))), status_code=404,
+                            media_type="text/html; charset=utf-8")
+        return Response(render_bridge(br, a, bridges.recent_workflows(bid)), media_type="text/html; charset=utf-8",
+                        headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+
     @mcp.custom_route("/quantum-mandates/{mid}.json", methods=["GET"], include_in_schema=False)
     async def qmandate_json(request: Request) -> JSONResponse:
         try:
@@ -2167,6 +2516,73 @@ that measures every realm and ranks it by expected time to the proven optimum.</
 <p>Every winning answer is signed with Ed25519 + ML-DSA-87 and anchored on chain. Realms run CVaR-QAOA on exact simulators
 today; quantum hardware joins Privilege as a realm once a provider account is connected.</p>
 <p><small>{copyright}</small></p></body></html>"""
+
+
+def render_bridge(br: dict, a: dict, workflows: list[dict]) -> str:
+    """The page a person opens to read, sign or revoke a Privi Bridge with their passkey."""
+    st = br["status"]
+    badge = {"draft": ("#8a5a00", "Waiting for your signature"), "active": ("#0a7d4f", "Active"),
+             "expired": ("#44546a", "Expired"), "revoked": ("#b23a2e", "Revoked")}[st]
+    ops = "".join(f"<tr><td><span class='k {_h(o['kind'])}'>{_h(o['kind'].upper())}</span></td><td><code>{_h(o['method'])} {_h(o['path'])}</code></td>"
+                  f"<td>{_h(o['description'])}</td></tr>" for o in br["operations"])
+    runs = "".join(f"<tr><td>{_h((w['created_at'] or '')[:16].replace('T', ' '))}</td><td>{_h(w['problem'])}</td><td>{_h(w['status'])}</td>"
+                   f"<td>{_h(w['attestation_id'] or '')}</td></tr>" for w in workflows)
+    runs_tbl = (f"<table><tr><th>When (UTC)</th><th>Problem</th><th>Status</th><th>Sealed record</th></tr>{runs}</table>"
+                if runs else "<p class=muted>No workflows yet.</p>")
+    action = "sign" if st == "draft" else "revoke" if st == "active" else ""
+    button = ("<button id=go>Sign with my passkey</button>" if action == "sign" else
+              "<button id=go class=danger>Revoke with my passkey</button>" if action == "revoke" else "")
+    att = (f"<p class=muted>Sealed as attestation <a href='/attestations/{_h(br['attestation_id'])}'>{_h(br['attestation_id'])}</a> "
+           "(Ed25519 + ML-DSA-87), anchored on Base.</p>" if br["attestation_id"] else "")
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privi Bridge - Privi</title><style>
+:root{{--bg:#f7f8fa;--fg:#16181d;--card:#fff;--line:#d9dce3;--muted:#5b6170;--brand:#5b3fd6;--read:#2F5BEA;--write:#b8590b}}
+@media (prefers-color-scheme:dark){{:root{{--bg:#0f1115;--fg:#e8eaee;--card:#171a21;--line:#2a2f3a;--muted:#9aa3b2;--brand:#a995ff;--read:#7FA2FF;--write:#F0A35A}}}}
+body{{font:16px/1.55 system-ui,sans-serif;max-width:680px;margin:36px auto;padding:0 16px;color:var(--fg);background:var(--bg)}}
+.card{{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:16px 0;overflow-x:auto}}
+pre{{white-space:pre-wrap;font:14px/1.55 ui-monospace,monospace;margin:0}}.muted{{color:var(--muted);font-size:14px}}
+.badge{{display:inline-block;font:600 13px system-ui;padding:3px 9px;border-radius:999px;color:#fff;background:{badge[0]}}}
+table{{border-collapse:collapse;width:100%;font-size:14px}}td,th{{text-align:left;padding:6px;border-bottom:1px solid var(--line);vertical-align:top}}
+code{{font:13px ui-monospace,monospace;overflow-wrap:anywhere}}.k{{font:600 11px system-ui;padding:2px 6px;border-radius:4px;color:#fff}}
+.k.read{{background:var(--read)}}.k.write{{background:var(--write)}}
+button{{font:600 16px system-ui;padding:12px 16px;border-radius:10px;border:0;background:var(--brand);color:#fff;width:100%;cursor:pointer}}
+button.danger{{background:#b23a2e}}button:disabled{{opacity:.5}}a{{color:var(--brand)}}#msg{{min-height:24px;margin-top:10px}}.ok{{color:#1f7a45}}.bad{{color:#b23a2e}}
+</style></head><body>
+<h1>Privi Bridge</h1>
+<p><span class="badge">{badge[1]}</span> &nbsp;<span class="muted">{_h(br['bridge_id'])}</span></p>
+<p>The AI agent <b>{_h(a['name'])}</b> (operated by {_h(a['operator'])}) asks to connect to your software
+<b>{_h(br['name'])}</b> at <code>{_h(br['base_url'])}</code>. It can use only the operations below: READ pulls data into
+Privi Quantum, WRITE sends Privi's signed results back. Only the person who approved this agent can sign.</p>
+<div class="card"><table><tr><th>Kind</th><th>Call</th><th>What it is for</th></tr>{ops}</table></div>
+<div class="card"><pre>{_h(br['scope_text'])}</pre></div>
+{button}<div id="msg"></div>
+<h2>Workflows</h2>{runs_tbl}{att}
+<p class="muted">Your device checks your face, fingerprint or screen lock; Privi receives only a passkey signature over this exact
+scope. Every call Privi makes carries a signature your software can check, every step is logged with hashes, and you can
+revoke here at any time. Privi World Co, Port Huron, Michigan.</p>
+<script>
+const bid={json.dumps(br['bridge_id'])}, action={json.dumps(action)};
+const b64u=b=>btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\\+/g,"-").replace(/\\//g,"_").replace(/=+$/,"");
+const unb=s=>Uint8Array.from(atob(s.replace(/-/g,"+").replace(/_/g,"/")+"===".slice((s.length+3)%4)),c=>c.charCodeAt(0));
+const msg=(t,c)=>{{const e=document.getElementById("msg");e.textContent=t;e.className=c||"";}};
+const btn=document.getElementById("go");
+if(btn) btn.onclick=async()=>{{
+  if(!window.PublicKeyCredential){{msg("This browser does not support passkeys. Open the link on a phone or a recent browser.","bad");return;}}
+  btn.disabled=true;
+  try{{
+    const o=await (await fetch(`/bridges/${{bid}}/options?action=${{action}}`)).json();
+    if(o.error) throw new Error(o.error);
+    const p=o.get; p.challenge=unb(p.challenge);
+    const cred=await navigator.credentials.get({{publicKey:p}});
+    const r=cred.response, body={{id:cred.id,rawId:b64u(cred.rawId),type:cred.type,response:{{clientDataJSON:b64u(r.clientDataJSON),
+      authenticatorData:b64u(r.authenticatorData),signature:b64u(r.signature)}}}};
+    const res=await (await fetch(`/bridges/${{bid}}/${{action}}`,{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify(body)}})).json();
+    if(res.error) throw new Error(res.error);
+    msg(action==="sign"?"Signed. The agent can now use exactly these operations.":"Revoked. The agent can no longer reach this software.","ok");
+    setTimeout(()=>location.reload(),1500);
+  }}catch(e){{msg(e.name==="NotAllowedError"?"Cancelled or timed out. Try again.":(e.message||"Something went wrong."),"bad");btn.disabled=false;}}
+}};
+</script></body></html>"""
 
 
 def render_mandate(m: dict, a: dict) -> str:

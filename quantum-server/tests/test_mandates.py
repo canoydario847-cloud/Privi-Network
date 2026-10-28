@@ -191,7 +191,7 @@ def test_quantum_mandates_end_to_end(tmp_path):
         assert not gone.is_error and gone.structured_content["status"] == "revoked"
 
         st = run(("quantum_status", {}))[0].structured_content
-        assert st["version"] == "0.9.0" and st["quantum_mandates"]["required_for_paid_backends"] is True
+        assert st["version"] == "0.10.0" and st["quantum_mandates"]["required_for_paid_backends"] is True
         feed = http.get("/explorer/recent").json()
         assert feed["by_kind"]["quantum_mandate"] == 2 and feed["by_kind"]["quantum_mandate_revocation"] == 2
 

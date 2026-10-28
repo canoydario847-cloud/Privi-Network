@@ -47,6 +47,7 @@ Privi Quantum joins three things into one pipeline:
 | `quantum_mandate_request` / `_status` / `_check` / `_revoke` | Quantum Mandates: a human signs spending terms with their passkey before an agent can run paid quantum hardware |
 | `quantum_run_circuit` | Bring your own circuit: OpenQASM 2.0/3.0 from Qiskit, run on IBM Quantum, IonQ, Braket or locally, counts sealed |
 | `quantum_leaderboard` | Every backend ranked only by runs Privi measured and sealed (also `/leaderboard`, `/leaderboard.json`) |
+| `bridge_connect` / `bridge_status` / `bridge_test` / `bridge_revoke` / `quantum_workflow_run` / `bridge_workflow` | Privi Bridge: agents pull data from a company's existing software, run it on quantum hardware and push the signed answer back, inside a passkey-signed scope |
 
 ### Ready-made problems
 
@@ -270,6 +271,26 @@ ML-DSA-87), anchored attestation, so the published numbers cannot be edited late
 runs appear in their own table with their receipts. First run (Oct 28, 2026): quantum found the proven
 optimum in 8 of 9 problems and hit it about 6x more often than random guessing; classical won all 9 on
 time, as expected at this size. Operators can re-run it with `POST /benchmarks/run` and the admin key.
+
+## v0.10: Privi Bridge, agents that drive existing software
+
+An agent can now work inside a company's own systems (an ERP, MES, scheduler or any HTTPS JSON API), not just call Privi.
+
+1. `bridge_connect` (with the agent's Privi pass): the software's base URL and up to 12 operations, each **READ**
+   (GET that returns JSON to pull in) or **WRITE** (POST/PUT/PATCH that receives Privi's signed result). An optional API
+   credential is stored encrypted (AES-256-GCM) and never shown again. Returns a `sign_url` and a one-time signing secret.
+2. The person who approved the agent opens `/bridges/<id>`, reads the exact operations and signs with their passkey.
+   Nothing outside the signed scope can ever be called; the person (passkey) or the agent (`bridge_revoke`) can revoke.
+3. `quantum_workflow_run`: pull with a READ operation, map the JSON into a problem with a `transform`
+   (`{"jobs": {"from": "data.orders", "fields": {"name": "sku", "minutes": "cycle_min"}}}`), run it on any backend
+   (paid hardware still needs a Quantum Mandate), push the answer with a WRITE operation, and seal every step as a
+   `software_bridge_run` attestation with SHA-256 hashes of each request and response. Queued hardware jobs push
+   automatically when they finish. `bridge_test` previews a READ; `bridge_workflow` shows every step.
+
+Every request carries `X-Privi-Bridge`, `X-Privi-Workflow`, `X-Privi-Timestamp` and
+`X-Privi-Signature: v1=HMAC-SHA256(secret, "<ts>.<METHOD>.<path?query>.<sha256(body)>")` so the software can verify it
+came from Privi for this bridge. Safety: HTTPS and public addresses only (`BRIDGE_ALLOW_PRIVATE=1` /
+`BRIDGE_ALLOW_HTTP=1` for testing), no redirects, 20 s timeout, 2 MB responses, 64 items per list.
 
 ## Honest limits
 
