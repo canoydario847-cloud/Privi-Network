@@ -23,6 +23,16 @@ function verifyCandidateAncestry(committee, checkpoint, certificates) {
   assertValidatedCommittee(committee);
   need(checkpoint && typeof checkpoint==="object" && !Array.isArray(checkpoint),
        "PoP research checkpoint object required");
+  // Caller-supplied anchors must not obtain their fields from prototypes or
+  // execute accessor code while the ancestry verifier checks signatures.
+  need(Object.getPrototypeOf(checkpoint)===Object.prototype &&
+       Reflect.ownKeys(checkpoint).length===2 &&
+       ["height","blockHash"].every(field=>{
+         const descriptor=Object.getOwnPropertyDescriptor(checkpoint,field);
+         return descriptor && Object.hasOwn(descriptor,"value") &&
+                descriptor.enumerable;
+       }),
+       "PoP research checkpoint requires plain own height and blockHash data fields");
   need(Number.isSafeInteger(checkpoint.height) && checkpoint.height>=0,
        "PoP research checkpoint height must be a nonnegative safe integer");
   need(typeof checkpoint.blockHash==="string" && HASH.test(checkpoint.blockHash),
