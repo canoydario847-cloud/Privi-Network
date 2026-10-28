@@ -208,6 +208,10 @@ function verifyCertificate(committee, proposal, votes) {
     height:proposal.height,round:proposal.round,
     previousBlockHash:proposal.previousBlockHash,
     blockHash:proposal.blockHash,signers:seen.size,quorum:committee.quorum,
+    // Attribute the verified research votes to exact admitted signer identities.
+    // Sort independently of input vote order and freeze the nested array:
+    // freezing the outer certificate alone would not protect its members.
+    signerIds:Object.freeze([...seen].sort()),
     // A quorum of valid research signatures is NOT a finalized chain block.
     // Consumers must not mistake this signed-proposal check for execution,
     // independent validator control, or production financial finality.
