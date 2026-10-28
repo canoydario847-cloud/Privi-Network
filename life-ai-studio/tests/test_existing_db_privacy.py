@@ -18,6 +18,14 @@ SPEC.loader.exec_module(store)
     (0o644, 0o700, False),
     (0o600, 0o750, False),
     (0o600, 0o755, False),
+    # Owner-only is not sufficient: the service needs database read/write and
+    # directory read/write/traverse even when tests run as root.
+    (0o400, 0o700, False),
+    (0o200, 0o700, False),
+    (0o000, 0o700, False),
+    (0o600, 0o600, False),
+    (0o600, 0o500, False),
+    (0o600, 0o300, False),
 ])
 def test_private_existing_database_permissions(tmp_path, file_mode, dir_mode, allowed):
     vault = tmp_path / "vault"
