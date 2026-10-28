@@ -393,6 +393,42 @@ class SupplyAuditTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "another denomination claims native PRVI"):
                     self.check(g)
 
+    def test_other_denom_units_cannot_alias_native_prvi(self):
+        # Non-native metadata cannot advertise the native base or display
+        # denomination under an unrelated symbol.
+        for alias in ("aprvi", "prvi", "PrVi", "ＰＲＶＩ"):
+            with self.subTest(alias=alias):
+                g = fixture()
+                g["app_state"]["bank"]["denom_metadata"].append({
+                    "base": "uatom", "display": "atom", "symbol": "ATOM",
+                    "denom_units": [
+                        {"denom": "uatom", "exponent": 0},
+                        {"denom": alias, "exponent": 6},
+                    ],
+                })
+                with self.assertRaisesRegex(ValueError, "reuses native PRVI denomination unit"):
+                    self.check(g)
+
+    def test_other_denom_base_cannot_claim_native_display(self):
+        g = fixture()
+        g["app_state"]["bank"]["denom_metadata"].append({
+            "base": "prvi", "display": "atom", "symbol": "ATOM",
+            "denom_units": [{"denom": "prvi", "exponent": 0}],
+        })
+        with self.assertRaisesRegex(ValueError, "claims native PRVI"):
+            self.check(g)
+
+    def test_other_denom_units_must_be_inspectable(self):
+        for units in (None, {"denom": "uatom"}, [None]):
+            with self.subTest(units=units):
+                g = fixture()
+                g["app_state"]["bank"]["denom_metadata"].append({
+                    "base": "uatom", "display": "atom", "symbol": "ATOM",
+                    "denom_units": units,
+                })
+                with self.assertRaisesRegex(ValueError, "malformed non-native denomination unit"):
+                    self.check(g)
+
     def test_distinct_other_denom_metadata_is_allowed(self):
         g=fixture()
         g["app_state"]["bank"]["denom_metadata"].append({
