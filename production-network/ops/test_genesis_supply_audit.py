@@ -19,6 +19,7 @@ def fixture(amount=100*UNIT):
 
 def periodic_genesis(original=60*UNIT, first=20*UNIT, second=40*UNIT):
     g=fixture()
+    g["app_state"]["bank"]["balances"][0]["address"]="privi1vestingexample"
     g["app_state"]["auth"]={"accounts":[{
         "@type":"/cosmos.vesting.v1beta1.PeriodicVestingAccount",
         "base_vesting_account":{
@@ -155,6 +156,23 @@ class SupplyAuditTests(unittest.TestCase):
         g=periodic_genesis()
         g["app_state"]["auth"]["accounts"][0]["vesting_periods"][0]["amount"]=[]
         with self.assertRaisesRegex(ValueError,"nonempty amount"):
+            self.check(g)
+
+    def test_vesting_address_must_have_own_genesis_bank_allocation(self):
+        g=periodic_genesis()
+        g["app_state"]["bank"]["balances"][0]["address"]="privi1unrelated"
+        with self.assertRaisesRegex(ValueError,"own genesis bank balance"):
+            self.check(g)
+
+    def test_vesting_address_cannot_borrow_other_accounts_bank_balance(self):
+        g=periodic_genesis()
+        bank=g["app_state"]["bank"]
+        bank["balances"][0]["coins"][0]["amount"]=str(40*UNIT)
+        bank["balances"].append({"address":"privi1unrelated",
+                                 "coins":[{"denom":"aprvi","amount":str(60*UNIT)}]})
+        # Total bank supply remains 100 PRVI, but only 40 belong to
+        # the account claiming 60 PRVI of original vesting.
+        with self.assertRaisesRegex(ValueError,"own genesis bank balance"):
             self.check(g)
 
     def test_periodic_vesting_amount_mismatch_fails_closed(self):
