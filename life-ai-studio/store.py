@@ -106,6 +106,25 @@ def transaction():
 def obj(row):
     return dict(row) if row is not None else None
 
+def private_existing_database(path):
+    """Fail closed on exposed or symlinked durable LIFE SQLite paths.
+
+    Only used when LIFE_REQUIRE_EXISTING_DB=1; staging defaults are unchanged.
+    An operator must provision the file (0600) and its direct directory (0700).
+    """
+    path = Path(path).absolute()  # Do not resolve away symlink components.
+    try:
+        file_mode = path.lstat().st_mode
+        parent_mode = path.parent.lstat().st_mode
+        return (
+            stat.S_ISREG(file_mode) and not (file_mode & 0o077)
+            and stat.S_ISDIR(parent_mode) and not (parent_mode & 0o077)
+            and not any(ancestor.is_symlink() for ancestor in path.parent.parents)
+        )
+    except OSError:
+        return False
+
+
 def init():
     # LIFE stores password verifiers, session hashes and private project files.
     # SQLite's default creation mode follows the process umask (often 0644).
@@ -116,14 +135,10 @@ def init():
         # Operator opt-in for durable deployments: never bootstrap an empty
         # customer database if a mounted volume is missing or uninitialized.
         # Do not create even the parent directory in this mode.
-        try:
-            regular = stat.S_ISREG(db_path.lstat().st_mode)
-        except FileNotFoundError:
-            regular = False
-        if not regular or not database_readable():
+        if not private_existing_database(db_path) or not database_readable():
             raise RuntimeError(
-                "LIFE startup requires an existing initialized database; "
-                "check the persistent volume and recovery procedure"
+                "LIFE startup requires an existing initialized private database; "
+                "check persistent storage, owner-only permissions and recovery"
             )
         # transaction() uses SQLite mode=rw: if the file disappears after
         # this check, it still cannot be recreated by the startup process.
