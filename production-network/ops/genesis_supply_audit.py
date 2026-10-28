@@ -60,6 +60,7 @@ def parse_amount(raw, where):
 
 # Only one Cosmos SDK vesting subtype is modeled here. Other vesting account
 # types must be reviewed separately; they cannot silently count as checked.
+BASE_ACCOUNT_TYPE = "/cosmos.auth.v1beta1.BaseAccount"
 PERIODIC_VESTING_TYPE = "/cosmos.vesting.v1beta1.PeriodicVestingAccount"
 MAX_TIME_SECONDS = 2**63 - 1
 
@@ -107,6 +108,9 @@ def audit_periodic_vesting(app_state, supply_by_denom, balances_by_address):
         raise ValueError("genesis auth.accounts missing or malformed")
     count = 0
     seen_vesting_addresses = set()
+    # Scope: direct BaseAccount and PeriodicVestingAccount addresses only.
+    # Other auth account types require their own SDK-aware audit.
+    seen_auth_addresses = set()
     vested_totals = {}
     for index, row in enumerate(auth["accounts"]):
         if not isinstance(row, dict):
@@ -114,6 +118,14 @@ def audit_periodic_vesting(app_state, supply_by_denom, balances_by_address):
         kind = row.get("@type")
         if not isinstance(kind, str):
             raise ValueError("auth account %d missing account type" % index)
+        if kind == BASE_ACCOUNT_TYPE:
+            address = row.get("address")
+            if not isinstance(address, str) or not address.strip():
+                raise ValueError("base auth account missing address")
+            if address in seen_auth_addresses:
+                raise ValueError("duplicate auth account address")
+            seen_auth_addresses.add(address)
+            continue
         if kind != PERIODIC_VESTING_TYPE:
             # Unrecognized Cosmos SDK vesting accounts are NEVER treated as
             # successfully verified by a periodic-only preflight.
@@ -129,6 +141,9 @@ def audit_periodic_vesting(app_state, supply_by_denom, balances_by_address):
         if address in seen_vesting_addresses:
             raise ValueError("duplicate periodic vesting account address")
         seen_vesting_addresses.add(address)
+        if address in seen_auth_addresses:
+            raise ValueError("duplicate auth account address")
+        seen_auth_addresses.add(address)
         originals = _coin_totals(base.get("original_vesting"), "original_vesting")
         if not originals:
             raise ValueError("periodic vesting requires nonempty original_vesting")
