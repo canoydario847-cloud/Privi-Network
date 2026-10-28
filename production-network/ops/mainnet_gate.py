@@ -87,8 +87,10 @@ def main():
         for error in errors:
             print(f"- {error}")
         return 1
-    print("Evidence checklist complete; independent live verification and explicit deployment authorization still required.")
-    return 0
+    # Evidence URL strings and reviewer labels are untrusted self-reported claims.
+    # A zero exit code could otherwise be mistaken for a financial deployment GO.
+    print("NO-GO: evidence checklist fields are complete, but independent live verification, consensus safety, and explicit deployment authorization are still required.")
+    return 1
 
 if __name__ == "__main__":
     sys.exit(main())
