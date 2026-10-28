@@ -207,7 +207,16 @@ def audit_native_denom_metadata(bank, denom):
     rows = bank.get("denom_metadata")
     if not isinstance(rows, list):
         raise ValueError("native PRVI bank denom_metadata is required for genesis review")
-    matching = [row for row in rows if isinstance(row, dict) and row.get("base") == denom]
+    # A second denomination must not impersonate native PRVI in wallet-facing
+    # metadata, even when its base units differ from the reviewed native denom.
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError("malformed bank denomination metadata")
+        if row.get("base") != denom and (
+            row.get("display") == "prvi" or row.get("symbol") == "PRVI"
+        ):
+            raise ValueError("another denomination claims native PRVI display or symbol")
+    matching = [row for row in rows if row.get("base") == denom]
     if len(matching) != 1:
         raise ValueError("native PRVI denomination metadata must appear exactly once")
     item = matching[0]
