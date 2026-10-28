@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 REQUIRED = (
     "custom_chain_audit",
@@ -17,6 +18,27 @@ REQUIRED = (
     "security_audit",
     "legal_and_financial_launch_approval",
 )
+
+def valid_evidence_url(value):
+    """Reject malformed and example-only links without fetching private evidence."""
+    if not isinstance(value, str) or any(c.isspace() or ord(c) < 32 for c in value):
+        return False
+    try:
+        url = urlsplit(value)
+        hostname = url.hostname
+        _ = url.port  # force invalid port syntax validation
+    except ValueError:
+        return False
+    if (url.scheme != "https" or not hostname or url.username is not None
+            or url.password is not None or url.fragment or not url.path.strip("/")):
+        return False
+    host = hostname.lower().rstrip(".")
+    if (host == "localhost" or host.endswith(".localhost")
+            or host in {"example.com", "example.org", "example.net"}
+            or host.endswith((".example", ".test", ".invalid", ".local"))):
+        return False
+    return True
+
 def check(document):
     if not isinstance(document, dict):
         return ["evidence must be a JSON object"]
@@ -29,8 +51,8 @@ def check(document):
         item = document.get("gates", {}).get(gate) if isinstance(document.get("gates"), dict) else None
         if not isinstance(item, dict) or item.get("status") != "verified":
             errors.append(f"{gate}: not verified")
-        elif not isinstance(item.get("evidence_url"), str) or not item["evidence_url"].startswith("https://"):
-            errors.append(f"{gate}: missing HTTPS evidence URL")
+        elif not valid_evidence_url(item.get("evidence_url")):
+            errors.append(f"{gate}: invalid HTTPS evidence URL (non-example report link required)")
         elif not isinstance(item.get("reviewer"), str) or not item["reviewer"].strip():
             errors.append(f"{gate}: missing reviewer")
     return errors
