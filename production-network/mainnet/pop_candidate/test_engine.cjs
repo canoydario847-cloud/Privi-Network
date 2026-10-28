@@ -64,7 +64,16 @@ test("four unique PoP position admissions yield exact three-of-four quorum",()=>
   const proof=verifyCertificate(f.committee,proposal,votes);
   assert.equal(proof.valid,true);
   assert.equal(proof.signers,3);
+  assert.equal(proof.chainId,f.committee.chainId);
+  assert.equal(proof.genesisHash,f.committee.genesisHash);
+  assert.equal(proof.governanceKeyId,f.committee.governanceKeyId);
+  assert.equal(proof.previousBlockHash,proposal.previousBlockHash);
+  assert.equal(proof.blockHash,proposal.blockHash);
+  assert.equal(proof.finalized,false);
+  assert.equal(proof.validatesExecution,false);
+  assert.equal(proof.validatorIndependenceVerified,false);
   assert.equal(proof.productionConsensus,false);
+  assert.equal(Object.isFrozen(proof),true);
 });
 
 test("candidate certificate refuses caller-forged quorum and committee copies",()=>{
