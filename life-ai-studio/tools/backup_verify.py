@@ -678,6 +678,8 @@ def backup_and_verify(source: Path, destination: Path):
         raise ValueError("Backup directory must be a real private directory, not a symlink")
     if parent_info.st_mode & 0o077:
         raise ValueError("Backup directory must have mode 0700; chmod 700 the vault first")
+    if parent_info.st_uid != os.geteuid():
+        raise ValueError("Backup directory must be owned by the LIFE backup operator")
     if any(part.is_symlink() for part in destination.parent.parents):
         raise ValueError("Backup directory path cannot traverse symlinks")
     tmp_path = None
@@ -745,6 +747,8 @@ def verify_existing_copy(snapshot: Path, expected_sha256: str):
         raise ValueError("Restore directory must be a real private directory, not a symlink")
     if parent_metadata.st_mode & 0o077:
         raise ValueError("Restore directory must have mode 0700; chmod 700 the vault first")
+    if parent_metadata.st_uid != os.geteuid():
+        raise ValueError("Restore directory must be owned by the LIFE backup operator")
     if any(part.is_symlink() for part in parent.parents):
         raise ValueError("Restore directory path cannot traverse symlinks")
     if "public" in snapshot.parts or "public" in parent.resolve().parts:
@@ -754,6 +758,8 @@ def verify_existing_copy(snapshot: Path, expected_sha256: str):
         raise ValueError("Backup copy must be a regular file, not a symlink")
     if metadata.st_mode & 0o077:
         raise ValueError("Backup copy is accessible to group/others; chmod 600 first")
+    if metadata.st_uid != os.geteuid():
+        raise ValueError("Backup copy must be owned by the LIFE backup operator")
     # A second hard-link name can grant access to the same mutable inode even
     # though this path is private and not a symlink. Require a standalone copy.
     if metadata.st_nlink != 1:
@@ -768,6 +774,8 @@ def verify_existing_copy(snapshot: Path, expected_sha256: str):
             raise ValueError("Backup copy must be a regular file, not a symlink")
         if opened.st_mode & 0o077:
             raise ValueError("Backup copy is accessible to group/others; chmod 600 first")
+        if opened.st_uid != os.geteuid():
+            raise ValueError("Opened backup copy must be owned by the LIFE backup operator")
         # Recheck the opened inode, not just the pathname metadata, to catch
         # a path swap between lstat() and open().
         if opened.st_nlink != 1:
