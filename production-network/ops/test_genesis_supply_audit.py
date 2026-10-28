@@ -219,6 +219,33 @@ class SupplyAuditTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"duplicate periodic vesting"):
             self.check(g)
 
+    def test_periodic_vesting_address_cannot_duplicate_base_auth_account(self):
+        import copy
+        for base_first in (True, False):
+            with self.subTest(base_first=base_first):
+                g=periodic_genesis()
+                base={"@type":mod.BASE_ACCOUNT_TYPE,"address":"privi1vestingexample"}
+                accounts=g["app_state"]["auth"]["accounts"]
+                if base_first:
+                    accounts.insert(0, base)
+                else:
+                    accounts.append(base)
+                with self.assertRaisesRegex(ValueError,"duplicate auth account address"):
+                    self.check(g)
+
+    def test_duplicate_base_auth_accounts_rejected(self):
+        g=fixture()
+        base={"@type":mod.BASE_ACCOUNT_TYPE,"address":"privi1same"}
+        g["app_state"]["auth"]={"accounts":[base, dict(base)]}
+        with self.assertRaisesRegex(ValueError,"duplicate auth account address"):
+            self.check(g)
+
+    def test_distinct_base_and_periodic_auth_accounts_allowed(self):
+        g=periodic_genesis()
+        g["app_state"]["auth"]["accounts"].append(
+            {"@type":mod.BASE_ACCOUNT_TYPE,"address":"privi1different"})
+        self.assertEqual(self.check(g)["periodic_vesting_accounts_checked"],1)
+
     def test_unsupported_cosmos_vesting_type_requires_manual_review(self):
         g=periodic_genesis()
         g["app_state"]["auth"]["accounts"][0]["@type"]="/cosmos.vesting.v1beta1.ContinuousVestingAccount"
