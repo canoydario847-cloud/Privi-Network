@@ -1,0 +1,13 @@
+name = "privi-edge"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+# Each hostname is a Custom Domain on this Worker (privishine.info is on Privi's Cloudflare account).
+routes = [
+  { pattern = "ledger.privishine.info", custom_domain = true },
+  { pattern = "quantum.privishine.info", custom_domain = true },
+  { pattern = "verify.privishine.info", custom_domain = true },
+  { pattern = "anchor.privishine.info", custom_domain = true },
+  { pattern = "call.privishine.info", custom_domain = true },
+  { pattern = "hub.privishine.info", custom_domain = true },
+]
