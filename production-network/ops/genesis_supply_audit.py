@@ -198,6 +198,38 @@ def audit_periodic_vesting(app_state, supply_by_denom, balances_by_address):
     return count
 
 
+def audit_native_denom_metadata(bank, denom):
+    """Verify genesis advertises native PRVI as exactly 18-decimal aprvi units.
+
+    Bank metadata is a human-facing denomination assertion, not consensus
+    supply enforcement or proof of a trusted wallet token identity.
+    """
+    rows = bank.get("denom_metadata")
+    if not isinstance(rows, list):
+        raise ValueError("native PRVI bank denom_metadata is required for genesis review")
+    matching = [row for row in rows if isinstance(row, dict) and row.get("base") == denom]
+    if len(matching) != 1:
+        raise ValueError("native PRVI denomination metadata must appear exactly once")
+    item = matching[0]
+    if item.get("symbol") != "PRVI" or item.get("display") != "prvi":
+        raise ValueError("native denomination metadata must identify PRVI display and symbol")
+    units = item.get("denom_units")
+    if not isinstance(units, list) or len(units) != 2:
+        raise ValueError("native PRVI denomination units must declare base and 18-decimal display")
+    mapped = {}
+    for unit in units:
+        if not isinstance(unit, dict):
+            raise ValueError("malformed PRVI denomination unit")
+        name = unit.get("denom")
+        exponent = unit.get("exponent")
+        if not isinstance(name, str) or not name or name in mapped or type(exponent) is not int:
+            raise ValueError("duplicate or malformed PRVI denomination unit")
+        mapped[name] = exponent
+    if denom == "prvi" or mapped != {denom: 0, "prvi": DECIMALS}:
+        raise ValueError("PRVI metadata must bind native base units to exactly 18 decimals")
+    return True
+
+
 def audit(genesis, denom, chain_id):
     if not isinstance(genesis, dict):
         raise ValueError("genesis must be a JSON object")
@@ -268,6 +300,7 @@ def audit(genesis, denom, chain_id):
     if found_supply > CAP_BASE:
         raise ValueError("initial PRVI bank supply exceeds proposed 1-billion-coin cap")
 
+    metadata_checked = audit_native_denom_metadata(bank, denom)
     periodic_checked = audit_periodic_vesting(app_state, supply_by_denom, balances_by_address)
 
     return {
@@ -278,6 +311,7 @@ def audit(genesis, denom, chain_id):
         "genesis_supply_base_units": str(found_supply),
         "genesis_supply_whole_coins": str(found_supply // 10**DECIMALS),
         "max_supply_base_units": str(CAP_BASE),
+        "native_prvi_metadata_checked": metadata_checked,
         "bank_accounts_checked": len(balances),
         "bank_denominations_reconciled": len(supply_by_denom),
         "periodic_vesting_accounts_checked": periodic_checked,
