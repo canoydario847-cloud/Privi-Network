@@ -213,19 +213,25 @@ function verifyCertificate(committee, proposal, votes) {
 // cannot clear a same-height commitment, even when the block hash is equal.
 class ResearchVoteLock {
   constructor(){this.commits=new Map();}
-  accept(epoch,height,round,validatorId,blockHash) {
+  accept(epoch,height,round,validatorId,blockHash,previousBlockHash) {
     requireNumber(epoch,"epoch");requireNumber(height,"height");requireNumber(round,"round",true);
     check(typeof validatorId==="string" && HEX.test(validatorId),
           "Invalid voter");
     check(typeof blockHash==="string" && HEX.test(blockHash),
           "Invalid vote block hash");
+    check(typeof previousBlockHash==="string" && HEX.test(previousBlockHash) &&
+          previousBlockHash!==blockHash,"Invalid vote previous block hash");
     // Epoch is deliberately excluded. An unreviewed validator-set transition
-    // must not reset a previous same-height signing commitment.
+    // must not reset a previous same-height signing commitment. Parent hash
+    // must also match: identical child hashes with different claimed ancestry
+    // are conflicting signed statements, even when rounds differ.
     const key=JSON.stringify([height,validatorId]);
     const old=this.commits.get(key);
     check(!old || old.epoch===epoch,"PoP unreviewed same-height epoch transition rejected");
     check(!old || old.blockHash===blockHash,"PoP conflicting-height double-sign rejected");
-    this.commits.set(key,{epoch,blockHash});
+    check(!old || old.previousBlockHash===previousBlockHash,
+          "PoP conflicting-height parent-link double-sign rejected");
+    this.commits.set(key,{epoch,blockHash,previousBlockHash});
   }
 }
 module.exports={
