@@ -115,12 +115,17 @@ def private_existing_database(path):
     """
     path = Path(path).absolute()  # Do not resolve away symlink components.
     try:
-        file_mode = path.lstat().st_mode
-        parent_mode = path.parent.lstat().st_mode
+        file_info = path.lstat()
+        parent_info = path.parent.lstat()
+        # Owner-only mode bits are insufficient when a container runs as root
+        # or a volume is accidentally mounted with another operator's UID.
+        # Require both the database and vault to belong to the LIFE process.
+        owner = os.geteuid()
         return (
-            stat.S_ISREG(file_mode) and path.lstat().st_nlink == 1
-            and not (file_mode & 0o077)
-            and stat.S_ISDIR(parent_mode) and not (parent_mode & 0o077)
+            stat.S_ISREG(file_info.st_mode) and file_info.st_nlink == 1
+            and file_info.st_uid == owner and not (file_info.st_mode & 0o077)
+            and stat.S_ISDIR(parent_info.st_mode) and parent_info.st_uid == owner
+            and not (parent_info.st_mode & 0o077)
             and not any(ancestor.is_symlink() for ancestor in path.parent.parents)
         )
     except OSError:
