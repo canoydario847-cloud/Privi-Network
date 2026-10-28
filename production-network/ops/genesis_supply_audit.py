@@ -10,6 +10,7 @@ import json
 import math
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 CAP_COINS = 1_000_000_000
@@ -207,13 +208,18 @@ def audit_native_denom_metadata(bank, denom):
     rows = bank.get("denom_metadata")
     if not isinstance(rows, list):
         raise ValueError("native PRVI bank denom_metadata is required for genesis review")
-    # A second denomination must not impersonate native PRVI in wallet-facing
-    # metadata, even when its base units differ from the reviewed native denom.
+    # NFKC + casefold catches common case and compatibility-width aliases
+    # (e.g. "PrVi" or "ＰＲＶＩ") that could mislead wallet-facing token labels.
+    # This is not a complete Unicode confusable/homoglyph detection system.
+    def claims_prvi(value):
+        return (isinstance(value, str) and
+                unicodedata.normalize("NFKC", value).casefold() == "prvi")
+
     for row in rows:
         if not isinstance(row, dict):
             raise ValueError("malformed bank denomination metadata")
         if row.get("base") != denom and (
-            row.get("display") == "prvi" or row.get("symbol") == "PRVI"
+            claims_prvi(row.get("display")) or claims_prvi(row.get("symbol"))
         ):
             raise ValueError("another denomination claims native PRVI display or symbol")
     matching = [row for row in rows if row.get("base") == denom]
