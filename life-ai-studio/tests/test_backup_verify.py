@@ -378,8 +378,9 @@ def test_backup_refuses_foreign_owned_private_vault(tmp_path, monkeypatch):
     vault = tmp_path / "private-vault"
     vault.mkdir(mode=0o700)
     destination = vault / "snapshot.sqlite3"
+    actual_uid = os.geteuid()
     with monkeypatch.context() as patch:
-        patch.setattr(backup.os, "geteuid", lambda: os.geteuid() + 1)
+        patch.setattr(backup.os, "geteuid", lambda: actual_uid + 1)
         # The file and directory are mode-private but owned by another UID.
         with pytest.raises(ValueError, match="owned by the LIFE backup operator"):
             backup.backup_and_verify(source, destination)
@@ -393,8 +394,9 @@ def test_verify_copy_refuses_foreign_owned_private_vault(tmp_path, monkeypatch):
     make_database(restored)
     os.chmod(restored, 0o600)
     digest = hashlib.sha256(restored.read_bytes()).hexdigest()
+    actual_uid = os.geteuid()
     with monkeypatch.context() as patch:
-        patch.setattr(backup.os, "geteuid", lambda: os.geteuid() + 1)
+        patch.setattr(backup.os, "geteuid", lambda: actual_uid + 1)
         with pytest.raises(ValueError, match="Restore directory must be owned"):
             backup.verify_existing_copy(restored, digest)
     assert restored.exists()
