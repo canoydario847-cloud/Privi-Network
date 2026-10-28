@@ -161,6 +161,13 @@ claim from bypassing an earlier height reservation.
 commitment merely because committee membership moved to a new epoch:
 even re-signing an *identical* block hash at that height in another epoch
 is refused until a separate, formally reviewed handoff protocol exists.
+The in-memory research lock now also stores height commitments in a
+private class field and freezes its public instance. This prevents callers
+from accidentally clearing or replacing a previously exposed public Map or
+overwriting the instance's accept method. It is **not** protection against
+malicious code with control of the JavaScript process, module prototype,
+signing key, host or runtime, and it does not persist across restarts.
+
 The in-memory \`ResearchVoteLock\` now mirrors this conservative
 one-chain/genesis rule. A new height may be signed after an epoch
 change; that is NOT a safe, finished consensus membership protocol.
