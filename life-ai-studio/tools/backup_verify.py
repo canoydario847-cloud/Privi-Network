@@ -676,7 +676,10 @@ def backup_and_verify(source: Path, destination: Path):
     parent_info = destination.parent.lstat()
     if not stat.S_ISDIR(parent_info.st_mode):
         raise ValueError("Backup directory must be a real private directory, not a symlink")
-    if parent_info.st_mode & 0o077:
+    if parent_info.st_mode & 0o077 or (parent_info.st_mode & 0o700) != 0o700:
+        # Private bits alone are not enough: a vault without owner write or
+        # traverse permissions cannot consistently create durable snapshots.
+        # Check the bits even when this process runs as root (root bypasses DAC).
         raise ValueError("Backup directory must have mode 0700; chmod 700 the vault first")
     if parent_info.st_uid != os.geteuid():
         raise ValueError("Backup directory must be owned by the LIFE backup operator")
@@ -745,8 +748,10 @@ def verify_existing_copy(snapshot: Path, expected_sha256: str):
     parent_metadata = parent.lstat()
     if not stat.S_ISDIR(parent_metadata.st_mode):
         raise ValueError("Restore directory must be a real private directory, not a symlink")
-    if parent_metadata.st_mode & 0o077:
-        raise ValueError("Restore directory must have mode 0700; chmod 700 the vault first")
+    if parent_metadata.st_mode & 0o077 or (parent_metadata.st_mode & 0o500) != 0o500:
+        # Verifying is read-only, but the operator must be able to list and
+        # traverse the directory. Inspect bits explicitly for root processes.
+        raise ValueError("Restore directory must allow owner read and traverse (0500) without group/other access")
     if parent_metadata.st_uid != os.geteuid():
         raise ValueError("Restore directory must be owned by the LIFE backup operator")
     if any(part.is_symlink() for part in parent.parents):
@@ -758,6 +763,8 @@ def verify_existing_copy(snapshot: Path, expected_sha256: str):
         raise ValueError("Backup copy must be a regular file, not a symlink")
     if metadata.st_mode & 0o077:
         raise ValueError("Backup copy is accessible to group/others; chmod 600 first")
+    if not metadata.st_mode & stat.S_IRUSR:
+        raise ValueError("Backup copy must be readable by its owner")
     if metadata.st_uid != os.geteuid():
         raise ValueError("Backup copy must be owned by the LIFE backup operator")
     # A second hard-link name can grant access to the same mutable inode even
@@ -774,6 +781,8 @@ def verify_existing_copy(snapshot: Path, expected_sha256: str):
             raise ValueError("Backup copy must be a regular file, not a symlink")
         if opened.st_mode & 0o077:
             raise ValueError("Backup copy is accessible to group/others; chmod 600 first")
+        if not opened.st_mode & stat.S_IRUSR:
+            raise ValueError("Opened backup copy must be readable by its owner")
         if opened.st_uid != os.geteuid():
             raise ValueError("Opened backup copy must be owned by the LIFE backup operator")
         # Recheck the opened inode, not just the pathname metadata, to catch
