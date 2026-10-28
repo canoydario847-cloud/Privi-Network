@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "privi-quantum-mcp"
-version = "0.9.0"
+version = "0.10.0"
 description = "Quantum optimization (CVaR-QAOA) for manufacturing decisions, with post-quantum signed results anchored on the Privi blockchain, as an MCP server."
 readme = "README.md"
 license = { file = "LICENSE" }
