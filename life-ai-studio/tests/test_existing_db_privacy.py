@@ -69,3 +69,25 @@ def test_guarded_startup_accepts_private_initialized_db(tmp_path, monkeypatch):
     monkeypatch.setenv("LIFE_REQUIRE_EXISTING_DB", "1")
     store.init()  # Existing private database passes the guard without recreation.
     assert db.exists()
+
+
+def test_private_existing_database_rejects_hardlinked_file(tmp_path):
+    """A second pathname must not bypass the guarded database's private vault."""
+    vault = tmp_path / "vault"
+    vault.mkdir(mode=0o700)
+    db = vault / "synthetic.sqlite3"
+    db.write_bytes(b"synthetic fixture, no customer data")
+    os.chmod(db, 0o600)
+    assert store.private_existing_database(db)
+
+    # An accessible second pathname refers to the same inode even though the
+    # original database path and vault retain owner-only permissions.
+    public = tmp_path / "public"
+    public.mkdir(mode=0o755)
+    alias = public / "hardlink.sqlite3"
+    os.link(db, alias)
+    assert not store.private_existing_database(db)
+    assert not store.private_existing_database(alias)
+
+    alias.unlink()
+    assert store.private_existing_database(db)
