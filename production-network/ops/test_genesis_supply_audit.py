@@ -220,7 +220,6 @@ class SupplyAuditTests(unittest.TestCase):
             self.check(g)
 
     def test_periodic_vesting_address_cannot_duplicate_base_auth_account(self):
-        import copy
         for base_first in (True, False):
             with self.subTest(base_first=base_first):
                 g=periodic_genesis()
