@@ -130,6 +130,8 @@ def audit_periodic_vesting(app_state, supply_by_denom):
             raise ValueError("duplicate periodic vesting account address")
         seen_vesting_addresses.add(address)
         originals = _coin_totals(base.get("original_vesting"), "original_vesting")
+        if not originals:
+            raise ValueError("periodic vesting requires nonempty original_vesting")
         start = _uint63_time(row.get("start_time"), "vesting start_time")
         end = _uint63_time(base.get("end_time"), "vesting end_time", positive=True)
         periods = row.get("vesting_periods")
@@ -144,7 +146,10 @@ def audit_periodic_vesting(app_state, supply_by_denom):
             if running_time > MAX_TIME_SECONDS - length:
                 raise ValueError("periodic vesting time overflow")
             running_time += length
-            for denom, amount in _coin_totals(period.get("amount"), "vesting period amount").items():
+            period_amounts = _coin_totals(period.get("amount"), "vesting period amount")
+            if not period_amounts:
+                raise ValueError("periodic vesting period requires nonempty amount")
+            for denom, amount in period_amounts.items():
                 distributed[denom] = distributed.get(denom, 0) + amount
         if running_time != end:
             raise ValueError("periodic vesting end_time does not match summed lengths")
