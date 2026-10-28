@@ -1626,3 +1626,46 @@ def test_backup_rejects_invalid_project_workspace_kind(tmp_path, kind, accepted)
         with pytest.raises(ValueError, match="invalid project workspace kind"):
             backup.backup_and_verify(source, destination)
         assert not destination.exists(), "Invalid workspace metadata must not publish a backup"
+
+
+@pytest.mark.parametrize("mode", [0o500, 0o300, 0o000])
+def test_backup_refuses_vault_without_owner_write_and_traverse(tmp_path, mode):
+    """A private but unusable vault must fail closed even under root."""
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    vault = tmp_path / "vault"
+    vault.mkdir(mode=0o700)
+    vault.chmod(mode)
+    destination = vault / "snapshot.sqlite3"
+    try:
+        with pytest.raises(ValueError, match="Backup directory must have mode 0700"):
+            backup.backup_and_verify(source, destination)
+    finally:
+        vault.chmod(0o700)
+    assert not destination.exists(), "Rejected backups must never publish snapshots"
+
+
+@pytest.mark.parametrize("directory_mode,file_mode,error", [
+    (0o400, 0o600, "Restore directory must allow owner read and traverse"),
+    (0o200, 0o600, "Restore directory must allow owner read and traverse"),
+    (0o700, 0o200, "Backup copy must be readable by its owner"),
+    (0o500, 0o400, None),  # Read-only verification is still supported.
+])
+def test_verify_copy_requires_usable_owner_read_access(tmp_path, directory_mode, file_mode, error):
+    """A root-run restore check must not bypass missing owner permission bits."""
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    vault = tmp_path / "vault"
+    destination = vault / "snapshot.sqlite3"
+    result = backup.backup_and_verify(source, destination)
+    vault.chmod(directory_mode)
+    destination.chmod(file_mode)
+    try:
+        if error is None:
+            assert backup.verify_existing_copy(destination, result["sha256"])["restore_drill"] == "passed"
+        else:
+            with pytest.raises(ValueError, match=error):
+                backup.verify_existing_copy(destination, result["sha256"])
+    finally:
+        vault.chmod(0o700)
+        destination.chmod(0o600)
