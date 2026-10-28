@@ -295,26 +295,7 @@ class HumanRegistry:
                 self._db.commit()
             created = True
         else:
-            raw_cd = self._check_client(resp.get("clientDataJSON", ""), "webauthn.get", challenge)
-            cid = cred.get("id") or cred.get("rawId") or ""
-            row = self._db.execute("SELECT * FROM human_passkeys WHERE credential_id=?", (cid,)).fetchone()
-            if not row:
-                raise HumanError("unknown passkey; create one on this page first")
-            ad_raw = unb64u(resp.get("authenticatorData", ""))
-            ad = parse_auth_data(ad_raw)
-            if ad["rp_id_hash"] != rp_hash:
-                raise HumanError("passkey is for a different site")
-            if not (ad["up"] and ad["uv"]):
-                raise HumanError("the device did not verify the person (biometric or screen lock); try again")
-            cose = cbor_decode(base64.b64decode(row["cose_key"]))
-            if not cose_verify(cose, unb64u(resp.get("signature", "")), ad_raw + hashlib.sha256(raw_cd).digest()):
-                raise HumanError("passkey signature does not verify")
-            if ad["sign_count"] and row["sign_count"] and ad["sign_count"] <= row["sign_count"]:
-                raise HumanError("passkey counter went backwards; this passkey may be cloned")
-            human_id = row["human_id"]
-            with self._lock:
-                self._db.execute("UPDATE human_passkeys SET sign_count=? WHERE credential_id=?", (ad["sign_count"], cid))
-                self._db.commit()
+            human_id, cid = self.verify_assertion(cred, challenge)
             created = False
         with self._lock:
             self._db.execute("UPDATE human_requests SET done=1 WHERE request_id=?", (rid,))
@@ -326,6 +307,35 @@ class HumanRegistry:
             self._db.commit()
         return {"approved": True, "agent_id": agent_id, "human_id": human_id, "new_passkey": created,
                 "human_session": token, "id_verified": self.human(human_id)["id_status"] == "verified"}
+
+    def verify_assertion(self, cred: dict, challenge: bytes) -> tuple[str, str]:
+        """Verify a passkey sign-in (navigator.credentials.get) over `challenge` with the person verified.
+        Returns (human_id, credential_id). Used for agent approval and for signing quantum mandates."""
+        resp = cred.get("response") or {}
+        rp_hash = hashlib.sha256(self.rp_id.encode()).digest()
+        raw_cd = self._check_client(resp.get("clientDataJSON", ""), "webauthn.get", challenge)
+        cid = cred.get("id") or cred.get("rawId") or ""
+        row = self._db.execute("SELECT * FROM human_passkeys WHERE credential_id=?", (cid,)).fetchone()
+        if not row:
+            raise HumanError("unknown passkey; create one on this page first")
+        ad_raw = unb64u(resp.get("authenticatorData", ""))
+        ad = parse_auth_data(ad_raw)
+        if ad["rp_id_hash"] != rp_hash:
+            raise HumanError("passkey is for a different site")
+        if not (ad["up"] and ad["uv"]):
+            raise HumanError("the device did not verify the person (biometric or screen lock); try again")
+        cose = cbor_decode(base64.b64decode(row["cose_key"]))
+        if not cose_verify(cose, unb64u(resp.get("signature", "")), ad_raw + hashlib.sha256(raw_cd).digest()):
+            raise HumanError("passkey signature does not verify")
+        if ad["sign_count"] and row["sign_count"] and ad["sign_count"] <= row["sign_count"]:
+            raise HumanError("passkey counter went backwards; this passkey may be cloned")
+        with self._lock:
+            self._db.execute("UPDATE human_passkeys SET sign_count=? WHERE credential_id=?", (ad["sign_count"], cid))
+            self._db.commit()
+        return row["human_id"], cid
+
+    def get_options(self, challenge: bytes) -> dict:
+        return {"challenge": b64u(challenge), "rpId": self.rp_id, "userVerification": "required", "timeout": 120000}
 
     # ---- lookups ------------------------------------------------------------------
 

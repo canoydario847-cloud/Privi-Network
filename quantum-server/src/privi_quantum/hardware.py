@@ -431,6 +431,12 @@ class HardwareRouter:
                              (self._today(), usd, usd))
             self._db.commit()
 
+    def refund_spend(self, usd: float) -> None:
+        """Return a failed or canceled job's estimate to today's operator budget."""
+        with self._lock:
+            self._db.execute("UPDATE hw_spend SET usd=MAX(0, usd-?) WHERE day=?", (usd, self._today()))
+            self._db.commit()
+
     def affordable(self, b: Backend, shots: int, max_cost: float | None) -> tuple[bool, str, float | None]:
         est = b.estimate_usd(shots)
         if est == 0:

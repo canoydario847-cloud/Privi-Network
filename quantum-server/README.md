@@ -44,6 +44,9 @@ Privi Quantum joins three things into one pipeline:
 | `quantum_run_hardware` / `quantum_hardware_job` | Routes a trained circuit to real hardware by price or speed; the finished run is sealed with an advantage receipt |
 | `pqc_crypto_inventory` | One CBOM for a company from its domains and public GitHub repos: every quantum-vulnerable algorithm, where it is, dated plan |
 | `vault_keygen` / `vault_seal` / `vault_open` / `vault_receipt` | Privi Vault: re-wrap long-lived data under hybrid X25519 + ML-KEM against "harvest now, decrypt later" |
+| `quantum_mandate_request` / `_status` / `_check` / `_revoke` | Quantum Mandates: a human signs spending terms with their passkey before an agent can run paid quantum hardware |
+| `quantum_run_circuit` | Bring your own circuit: OpenQASM 2.0/3.0 from Qiskit, run on IBM Quantum, IonQ, Braket or locally, counts sealed |
+| `quantum_leaderboard` | Every backend ranked only by runs Privi measured and sealed (also `/leaderboard`, `/leaderboard.json`) |
 
 ### Ready-made problems
 
@@ -188,7 +191,53 @@ python -m privi_quantum.vault open contract.vault.json --private-key key.json --
 
 then send only the envelope's SHA-256 to `vault_receipt` for a signed, anchored protection receipt.
 
-## v0.7: pricing and public benchmarks
+## v0.7: Quantum Mandates
+
+No AI agent spends on paid quantum hardware without a person's signed permission.
+
+1. The agent calls `quantum_mandate_request` with its Privi pass: total budget, cap per job, allowed backends
+   and problems, most shots per job, and how many days it lasts. It gets a `sign_url`.
+2. The person who approved that agent opens the link, reads the exact plain-English terms and signs with their
+   passkey (Face ID, Touch ID, Windows Hello or screen lock; checked on their device). Nobody else can sign.
+   Budgets over `QUANTUM_MANDATE_ID_OVER_USD` (default $100) also need that person's government ID verified.
+3. Every paid run (`quantum_run_hardware` on a backend with a price) must carry `mandate_id` and the agent's
+   `privi_pass`. Privi checks backend, problem, shots, per-job cap and remaining budget under a lock, so two runs
+   can never overspend together. Jobs the provider fails or cancels are refunded to the mandate and to the daily
+   operator budget.
+4. The person revokes on the same page with their passkey; the agent can give up its own mandate with
+   `quantum_mandate_revoke`. Signing and revocation are sealed as attestations (Ed25519 + ML-DSA-87) and
+   anchored on Base, and show up in Privi Explorer.
+
+Public: `/quantum-mandates/<id>` (read, sign, revoke) and `/quantum-mandates/<id>.json`. Free tools:
+`quantum_mandate_check` (dry run) and `quantum_mandate_status`. Config: `QUANTUM_MANDATE_REQUIRED` (default 1;
+0 turns the requirement off) and `QUANTUM_MANDATE_ID_OVER_USD`. Free backends (`local`, IonQ simulator) never
+need a mandate. Mandates authorize spending of the operator's provider accounts; billing the agent's owner for
+that spend is not part of v0.7.
+
+## v0.8: bring your own circuit, and the leaderboard
+
+**Qiskit circuits.** `quantum_run_circuit` takes the OpenQASM that Qiskit writes and runs it on any backend:
+
+```python
+from qiskit import QuantumCircuit, qasm2
+qc = QuantumCircuit(2); qc.h(0); qc.cx(0, 1); qc.measure_all()
+qasm = qasm2.dumps(qc)          # or qiskit.qasm3.dumps(qc)
+# MCP: quantum_run_circuit(qasm=qasm, backend="ibm:ibm_brisbane" | "ionq:simulator" | "local", shots=1000)
+```
+
+Standard-library gates (x, y, z, h, s, t, sx, rx, ry, rz, p, u, u1-u3, cx, cy, cz, ch, swap, crx, cry, crz, cp, ccx,
+rxx, ryy, rzz and their daggers) are rewritten exactly (up to global phase) into h, rz, rx, cx, so no Qiskit install is
+needed and every provider runs the same circuit. All qubits are measured at the end; counts come back as Qiskit-ordered
+bitstrings (qubit 0 on the right) and are sealed as a `quantum_circuit_run` attestation. Mid-circuit measurement,
+reset, classical control and custom `gate` definitions are refused with the fix (transpile to basis gates first).
+Paid QPUs need a Quantum Mandate, like every paid run.
+
+**Leaderboard.** `/leaderboard` ranks every backend by the share of sealed runs that found the proven optimum, then
+job success rate, then median turnaround, using only runs Privi routed itself (3 runs to be ranked). It shows the
+running quantum vs classical tally from Advantage Receipts and links receipt hashes to Privi Explorer
+(`PRIVI_EXPLORER_URL`). Vendor claims never enter it.
+
+## v0.9: pricing and public benchmarks
 
 ### Pricing (x402: USDC on Base, or the PRIVI token)
 
