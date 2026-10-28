@@ -651,6 +651,11 @@ def backup_and_verify(source: Path, destination: Path):
     destination = Path(destination).expanduser().absolute()
     if not source.is_file():
         raise ValueError("Source is not a regular database file")
+    # A second pathname to the same inode can bypass the guarded startup
+    # vault and let an operator snapshot an unintended tenant database.
+    # Keep backup tooling aligned with LIFE_REQUIRE_EXISTING_DB's hard-link guard.
+    if source.stat().st_nlink != 1:
+        raise ValueError("Source database has multiple hard links")
     if source == destination or source == destination.resolve():
         raise ValueError("Cannot overwrite the source database")
     if destination.exists() or destination.is_symlink():
