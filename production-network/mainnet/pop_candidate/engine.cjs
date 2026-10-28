@@ -200,10 +200,16 @@ function verifyCertificate(committee, proposal, votes) {
   return Object.freeze({
     valid:true,
     protocol:"Point of Position candidate (not live consensus)",
-    chainId:committee.chainId,epoch:committee.epoch,
+    chainId:committee.chainId,genesisHash:committee.genesisHash,
+    governanceKeyId:committee.governanceKeyId,epoch:committee.epoch,
     height:proposal.height,round:proposal.round,
+    previousBlockHash:proposal.previousBlockHash,
     blockHash:proposal.blockHash,signers:seen.size,quorum:committee.quorum,
-    productionConsensus:false
+    // A quorum of valid research signatures is NOT a finalized chain block.
+    // Consumers must not mistake this signed-proposal check for execution,
+    // independent validator control, or production financial finality.
+    finalized:false,validatesExecution:false,
+    validatorIndependenceVerified:false,productionConsensus:false
   });
 }
 // This lock is ephemeral test logic and is not crash-safe. It MUST NOT be
