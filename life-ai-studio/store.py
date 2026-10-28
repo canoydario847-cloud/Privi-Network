@@ -137,7 +137,7 @@ def init():
         # Do not create even the parent directory in this mode.
         if not private_existing_database(db_path) or not database_readable():
             raise RuntimeError(
-                "LIFE startup requires an existing initialized private database; "
+                "LIFE startup requires an existing initialized database with private access; "
                 "check persistent storage, owner-only permissions and recovery"
             )
         # transaction() uses SQLite mode=rw: if the file disappears after
