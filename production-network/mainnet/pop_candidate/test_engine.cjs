@@ -148,6 +148,41 @@ test("research election is deterministic, not PRVI balances/PoS/PoSA",()=>{
   assert.equal(f.registry.validators.some(v=>Object.hasOwn(v,"stake")),false);
 });
 
+test("research proposer seed is domain-separated and bound to the signed roster",()=>{
+  const first=fixture(7),second=fixture(7);
+  const ordered=first.committee;
+  // Registry JSON ordering is not consensus ordering: admission sorts keys.
+  const reversed=parseRegistry({
+    ...first.registry,validators:[...first.registry.validators].reverse()
+  },first.gov.publicKeyB64);
+  function electionSeed(c,height,round){
+    return hash(Buffer.from(JSON.stringify([
+      "Privi/PoP/Research/ProposerElection/v2",
+      c.chainId,c.genesisHash,c.epoch,c.governanceKeyId,
+      c.validators.map(v=>v.id),height,round
+    ]),"utf8"));
+  }
+  const height=63;
+  assert.equal(electionSeed(ordered,height,0),electionSeed(reversed,height,0));
+  // The same chain, genesis, epoch, height and round must not produce the
+  // same election seed when a different roster/governance root was admitted.
+  assert.equal(ordered.chainId,second.committee.chainId);
+  assert.equal(ordered.genesisHash,second.committee.genesisHash);
+  assert.equal(ordered.epoch,second.committee.epoch);
+  assert.notEqual(electionSeed(ordered,height,0),
+                  electionSeed(second.committee,height,0));
+  for(const c of [ordered,reversed,second.committee]){
+    for(const round of [0,1,2,17]){
+      const slot=Number(BigInt(electionSeed(c,height,round))%
+                        BigInt(c.validators.length));
+      assert.equal(proposer(c,height,round),c.validators[slot].id);
+    }
+  }
+  for(const round of [0,1,2,17]){
+    assert.equal(proposer(ordered,height,round),proposer(reversed,height,round));
+  }
+});
+
 test("research proposer refuses forged or post-admission modified committees",()=>{
   const f=fixture(4);
   const original=proposer(f.committee,9,0);
