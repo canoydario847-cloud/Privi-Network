@@ -221,6 +221,23 @@ test("in-memory PoP height lock refuses same child with conflicting signed paren
   lock.accept(1,42,4,id,child,parentA);
 });
 
+test("in-memory research lock cannot be reset through public mutable state",()=>{
+  const f=fixture();
+  const id=f.committee.validators[0].id,lock=new ResearchVoteLock();
+  const first="0x"+"c".repeat(64),other="0x"+"d".repeat(64);
+  const parent="0x"+"a".repeat(64);
+  lock.accept(1,51,0,id,first,parent);
+  // A previously public Map could be cleared or replaced to permit a
+  // conflicting second commitment at the same height.
+  assert.equal(Object.hasOwn(lock,"commits"),false);
+  assert.equal(Object.isFrozen(lock),true);
+  assert.throws(()=>{lock.commits=new Map();},TypeError);
+  assert.throws(()=>{lock.accept=()=>{};},TypeError);
+  assert.throws(()=>lock.accept(1,51,1,id,other,parent),/double-sign/);
+  // Failed tampering and a rejected conflict must preserve exact replay.
+  lock.accept(1,51,2,id,first,parent);
+});
+
 test("no valid validator quorum with ambiguous unsigned position proof",()=>{
   const f=fixture();
   const noAnchor=structuredClone(f.registry);
