@@ -31,13 +31,17 @@ def gate(manifest: dict, *, financial_mainnet: bool = True) -> dict:
     """Describe blockers without enabling chain state, funds, or deployment."""
     blockers = []
     if not isinstance(manifest, dict):
-        return {"status": "NO_GO", "blockers": ["Invalid mainnet manifest"]}
+        return {"status": "NO_GO", "production_mainnet_activated": False,
+                "financial_prvi_issued": False,
+                "blockers": ["Invalid mainnet manifest"]}
     if manifest.get("chain_family") != "privi-native":
         blockers.append("Native Privi chain identity required")
     if manifest.get("target_protocol") != "Point of Position":
         blockers.append("Point of Position must be explicitly named")
     if manifest.get("consensus_kind") in ("pos", "posa", "proof-of-stake", "proof-of-staked-authority"):
         blockers.append("PoS or PoSA cannot be represented as Point of Position")
+    elif manifest.get("consensus_kind") != "pop-not-yet-implemented":
+        blockers.append("Unknown or missing PoP consensus implementation state")
     if manifest.get("iot_settlement") != "privi-only":
         blockers.append("IoT commitments must settle on Privi only")
     if manifest.get("external_bridges") is not False or manifest.get("external_pairings") is not False:
@@ -74,6 +78,7 @@ def main():
         result = gate(data, financial_mainnet=not args.development)
     except (OSError, ValueError) as exc:
         result = {"status": "NO_GO", "production_mainnet_activated": False,
+                  "financial_prvi_issued": False,
                   "blockers": ["Manifest not available or invalid: " + type(exc).__name__]}
     print(json.dumps(result, indent=2))
     # A nonfinancial development check may pass offline, but mainnet NEVER

@@ -1,0 +1,27 @@
+# Read-only, no blockchain transactions and no claim of token price.
+name: Read-only BNB PRIV token mainnet verification
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/life-ai-studio-multiagent]
+    paths: ['.github/workflows/bnb-priv-real-token-check.yml', 'life-ai-studio/tools/bnb_priv_readonly_check.py']
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read contract code and token metadata from BSC mainnet
+        run: python life-ai-studio/tools/bnb_priv_readonly_check.py
+      - name: Attach evidence regardless of RPC result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: priv-bnb-real-token-readonly-verification
+          path: bnb-priv-readonly-check.json
+          retention-days: 30

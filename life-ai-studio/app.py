@@ -1,0 +1,1147 @@
+"""Privi LIFE AI Studio: multi-project AI teamwork with wallet-gated utility credits."""
+import asyncio
+import hashlib
+import hmac
+import json
+import os
+import re
+import secrets
+import time
+from pathlib import Path
+
+import httpx
+from eth_account import Account
+from fastapi import FastAPI, HTTPException, Request, Response, Depends
+from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel, Field
+
+import agents
+import store
+import fastlane
+import multichain
+import cogvative
+import bnb_priv
+import stripe_credits
+
+app = FastAPI(title="Privi LIFE AI Studio", version="0.1.0")
+store.init()
+STATIC = Path(__file__).parent / "public"
+ORIGIN = os.getenv("PUBLIC_ORIGIN", "http://localhost:8080").rstrip("/")
+COOKIE_SECURE = os.getenv("LIFE_COOKIE_SECURE", "0") == "1"
+FEE_BPS = 1000
+AGENT_COST = 2
+# Missing environment configuration must never expose non-sandbox signup or payment routes.
+STAGING_MODE = os.getenv("LIFE_STAGING_ONLY", "1") != "0"
+_demo_requests = {}  # One process only: sandbox is NOT a production signup service.
+
+# Product-wide PRVI utility directory. Other Privi services consume credits
+# through the authenticated /api/internal/charge API after integration.
+UTILITIES = {
+    "agent_run": ("Team AI agent execution", 2, True),
+    "fast_answer": ("Fast Lane parallel response", 2, True),
+    "code_review": ("Collaborative code review", 2, True),
+    "cogvative_code_call": ("Signed code-use royalty allocation", 1, True),
+    "hey_jose": ("Hey Jose assistant", 1, False),
+    "life_backup": ("LIFE settings and data backup", 1, False),
+    "iot_ledger": ("Privi IoT event processing", 1, False),
+    "privi_guard": ("Privi Guard security scan", 1, False),
+    "privi_ledger": ("Privi Ledger audit record", 1, False),
+    "privi_anchor": ("Privi Anchor notarization", 1, False),
+    "privi_verify": ("Privi Verify data authenticity", 1, False),
+    "privi_os": ("Privi OS cloud tools", 1, False),
+    "data_label": ("Privi AI metadata labeling", 1, False),
+    "api_gateway": ("Privi API gateway requests", 1, False),
+}
+
+class AuthInput(BaseModel):
+    email: str = Field(min_length=5, max_length=250)
+    password: str = Field(min_length=12, max_length=200)
+
+class WalletInput(BaseModel):
+    wallet: str
+class WalletLink(WalletInput):
+    signature: str
+class ProjectCreate(BaseModel):
+    title: str = Field(min_length=2, max_length=100)
+    kind: str = "code"
+class FileInput(BaseModel):
+    path: str
+    content: str = Field(max_length=60000)
+    expected_version: int = Field(ge=0)
+class TeamRun(BaseModel):
+    task: str = Field(min_length=4, max_length=4500)
+    agents: list[str] = Field(min_length=1, max_length=6)
+    mode: str = "parallel"  # team_up gives each member an explicit coding role
+
+class FastAnswerRequest(BaseModel):
+    question: str = Field(min_length=4, max_length=4500)
+    providers: list[str] = Field(min_length=1, max_length=3)
+class QuoteInput(BaseModel):
+    credits: int = Field(ge=1, le=1000)
+class RedeemInput(BaseModel):
+    quote_id: str
+    tx_hash: str
+class CogWalletInput(BaseModel):
+    wallet: str
+
+class CogWalletProof(CogWalletInput):
+    signature: str
+
+class CogDeploymentInput(BaseModel):
+    tx_hash: str
+
+class CogUseInput(BaseModel):
+    event_id: str
+    idempotency_key: str = Field(min_length=8, max_length=180)
+
+class InternalCharge(BaseModel):
+    user_id: str
+    service: str
+    idempotency_key: str = Field(min_length=8, max_length=180)
+
+def fail(code, message):
+    raise HTTPException(code, detail=message)
+
+def password_hash(password):
+    salt = os.urandom(16)
+    digest = hashlib.scrypt(password.encode(), salt=salt, n=16384, r=8, p=1)
+    return salt.hex() + ":" + digest.hex()
+
+def valid_password(password, encoded):
+    try:
+        salt, expected = encoded.split(":")
+        actual = hashlib.scrypt(password.encode(), salt=bytes.fromhex(salt), n=16384, r=8, p=1)
+        return hmac.compare_digest(actual, bytes.fromhex(expected))
+    except (ValueError, TypeError):
+        return False
+
+def session_response(response, user_id):
+    token = secrets.token_urlsafe(36)
+    with store.transaction() as db:
+        db.execute("INSERT INTO sessions VALUES(?,?,?)", (store.sha(token), user_id, store.now()+604800))
+    response.set_cookie("life_session", token, httponly=True, secure=COOKIE_SECURE,
+                        samesite="strict", max_age=604800, path="/")
+
+def current(request: Request):
+    user = store.session_user(request.cookies.get("life_session"))
+    if not user:
+        fail(401, "Sign in with LIFE membership")
+    return user
+
+def member_wallet(user=Depends(current)):
+    if not user["wallet"]:
+        fail(403, "Connect and sign with your Privi wallet first")
+    return user
+
+def own(project_id, user):
+    project = store.owns(project_id, user["id"])
+    if not project:
+        fail(404, "Project not found")
+    return project
+
+@app.middleware("http")
+async def origin_guard(request: Request, call_next):
+    rejected = False
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        origin = request.headers.get("origin")
+        # Require exact origin when provided, and reject cross-site browser
+        # writes even if Origin is absent. Non-browser service callbacks
+        # (including signed payment webhooks) typically send neither header.
+        fetch_site = request.headers.get("sec-fetch-site", "").lower()
+        rejected = (
+            (origin is not None and origin.rstrip("/") != ORIGIN)
+            or fetch_site in ("cross-site", "same-site")
+        )
+    response = (Response(status_code=403, content="Cross-origin write rejected")
+                if rejected else await call_next(request))
+    # Authenticated project data, account details and even error responses must
+    # not be cached by browsers or intermediary proxies shared by customers.
+    # Monitoring must never reuse a cached OK during a database outage.
+    if request.url.path.startswith("/api/") or request.url.path in ("/health", "/readyz"):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "same-origin"
+    # HSTS only on an explicitly HTTPS deployment with secure session cookies.
+    # Avoid includeSubDomains/preload: other Privi subdomains are not audited.
+    if ORIGIN.startswith("https://") and COOKIE_SECURE:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000"
+    response.headers["Content-Security-Policy"] = ("default-src 'self'; script-src 'self'; "
+        "style-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'")
+    return response
+
+@app.get("/")
+def root():
+    return FileResponse(STATIC / "index.html")
+@app.get("/app.js")
+def javascript():
+    return FileResponse(STATIC / "app.js", media_type="text/javascript")
+@app.get("/style.css")
+def stylesheet():
+    return FileResponse(STATIC / "style.css", media_type="text/css")
+@app.get("/readyz")
+def operational_ready():
+    """Operational DB read probe only; never a release approval or live payment gate."""
+    body = {"service": "privi-life-ai-studio", "check": "database_readability",
+            "production_launch_approved": False}
+    if store.database_readable():
+        return {**body, "status": "ok"}
+    # No DB path, connection errors or customer data in public responses.
+    return JSONResponse(status_code=503, content={**body, "status": "unavailable"})
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": "privi-life-ai-studio", "staging": STAGING_MODE, "prvi_settlement_enabled": payment_ready(), "bnb_priv_payment_configured": bnb_priv.configured(STAGING_MODE, COOKIE_SECURE) is not None}
+
+
+@app.get("/api/production-readiness")
+def production_readiness():
+    """Public, non-secret release checklist. /health remains the liveness probe."""
+    try:
+        signing_available = cogvative.signing_key() is not None
+    except (ValueError, RuntimeError):
+        signing_available = False
+    checks = {
+        "demo_mode_disabled": not STAGING_MODE,
+        "https_public_origin": ORIGIN.startswith("https://"),
+        "secure_session_cookie": COOKIE_SECURE,
+        "signed_code_provenance": signing_available,
+        "persistent_multi_instance_database_and_restore_test": False,  # SQLite MVP
+        "verified_accounts_recovery_and_mfa": False,
+        "independent_security_and_privacy_review": False,
+    }
+    return {
+        "ready": all(checks.values()),
+        "mode": "staging" if STAGING_MODE else "development",
+        "checks": checks,
+        "note": "Readiness is a conservative launch checklist, not a substitute for a live health probe or external audit.",
+    }
+
+@app.get("/api/public-config")
+def public_config():
+    return {"staging": STAGING_MODE, "real_money_enabled": payment_ready()}
+
+@app.post("/api/auth/demo")
+def demo_login(request: Request, response: Response):
+    """Disposable isolated sandbox; fake EVM address and valueless demo credits."""
+    if not STAGING_MODE:
+        fail(404, "Not available")
+    existing = store.session_user(request.cookies.get("life_session"))
+    if existing:
+        return store.get_user(existing["id"])
+    ip = request.client.host if request.client else "unknown"
+    current = time.monotonic()
+    # Prevent unbounded public account creation on a free ephemeral host.
+    recent = [t for t in _demo_requests.get(ip, []) if current-t < 3600]
+    if len(recent) >= 5:
+        fail(429, "Sandbox account limit reached for this hour")
+    _demo_requests[ip] = recent + [current]
+    user_id = store.uid("demo")
+    email = f"{secrets.token_hex(12)}@example.invalid"
+    fake_wallet = "0x" + secrets.token_hex(20)
+    with store.transaction() as db:
+        db.execute("INSERT INTO users (id,email,pwdhash,wallet,member_since) VALUES(?,?,?,?,?)",
+                   (user_id,email,password_hash(secrets.token_urlsafe(32)),fake_wallet,store.now()))
+    store.credit(user_id, 60, "SANDBOX_VALUELESS_CREDITS", "demo:"+user_id)
+    session_response(response,user_id)
+    return {**store.get_user(user_id), "demo": True}
+
+@app.post("/api/auth/signup")
+def signup(data: AuthInput, response: Response, request: Request):
+    if STAGING_MODE:
+        fail(403, "Public signup is disabled in sandbox: use disposable Demo Workspace")
+    # Count even unsuccessful requests. A shared reverse-proxy socket peer can
+    # affect multiple users; review trusted proxy configuration before launch.
+    client_host = request.client.host if request.client else "unknown"
+    if not store.signup_allowed(client_host):
+        fail(429, "Too many signup attempts; try again later")
+    email = data.email.strip().lower()
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
+        fail(400, "Invalid email")
+    user_id = store.uid("life")
+    try:
+        with store.transaction() as db:
+            db.execute("INSERT INTO users (id,email,pwdhash,member_since) VALUES(?,?,?,?)",
+                       (user_id, email, password_hash(data.password), store.now()))
+    except Exception as exc:
+        if "UNIQUE constraint" in str(exc):
+            fail(409, "Account already exists")
+        raise
+    # Trial balances are explicitly valueless developer credits, never PRVI.
+    trial = int(os.getenv("LIFE_DEV_TRIAL_CREDITS", "0"))
+    if trial > 0 and not COOKIE_SECURE:
+        store.credit(user_id, min(20, trial), "DEV_TRIAL_ONLY", "signup:"+user_id)
+    session_response(response, user_id)
+    return store.get_user(user_id)
+
+@app.post("/api/auth/login")
+def login(data: AuthInput, response: Response, request: Request):
+    if STAGING_MODE:
+        fail(403, "Public login disabled in disposable sandbox")
+    email = data.email.strip().lower()
+    client_host = request.client.host if request.client else ""
+    if store.login_blocked(email, client_host):
+        fail(429, "Too many sign-in attempts; try again in 15 minutes")
+    with store.transaction() as db:
+        row = db.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
+    if not row or not valid_password(data.password, row["pwdhash"]):
+        store.login_failed(email, client_host)
+        fail(401, "Invalid credentials")
+    store.login_succeeded(email, client_host)
+    session_response(response, row["id"])
+    return store.get_user(row["id"])
+
+@app.post("/api/auth/logout")
+def logout(request: Request, response: Response):
+    token = request.cookies.get("life_session")
+    if token:
+        with store.transaction() as db:
+            db.execute("DELETE FROM sessions WHERE token_hash=?", (store.sha(token),))
+    response.delete_cookie("life_session", path="/")
+    return {"ok": True}
+
+@app.get("/api/me")
+def me(user=Depends(current)):
+    return {**user, "membership": "LIFE Member",
+            "test_credits": int(os.getenv("LIFE_DEV_TRIAL_CREDITS", "0")) > 0 and not COOKIE_SECURE}
+
+@app.get("/api/catalog")
+def catalog(user=Depends(current)):
+    return {"agents": agents.catalog(), "services": [
+        {"id": k, "name": v[0], "credits": v[1], "integrated": v[2]} for k,v in UTILITIES.items()
+    ], "real_prvi_payments": payment_ready(), "bnb_priv_payments_configured": bnb_priv.configured(STAGING_MODE, COOKIE_SECURE) is not None, "fee_bps": FEE_BPS}
+
+@app.post("/api/wallet/challenge")
+def challenge(data: WalletInput, user=Depends(current)):
+    if STAGING_MODE:
+        fail(403, "Use a sandbox wallet only; real wallet linking disabled")
+    if not re.fullmatch(r"0x[a-fA-F0-9]{40}", data.wallet):
+        fail(400, "Invalid EVM wallet address")
+    wallet = data.wallet.lower()
+    nonce = secrets.token_urlsafe(24)
+    expires = store.now() + 300
+    message = (f"Privi LIFE wallet link\nOrigin: {ORIGIN}\nMember: {user['id']}\n"
+               f"Wallet: {wallet}\nNonce: {nonce}\nExpires: {expires}")
+    with store.transaction() as db:
+        db.execute("DELETE FROM challenges WHERE user_id=?", (user["id"],))
+        db.execute("INSERT INTO challenges VALUES(?,?,?,?,?)",
+                   (store.sha(nonce), user["id"], wallet, message, expires))
+    return {"message": message, "wallet": wallet}
+
+@app.post("/api/wallet/link")
+def wallet_link(data: WalletLink, user=Depends(current)):
+    if STAGING_MODE:
+        fail(403, "Wallet linking disabled in sandbox")
+    with store.transaction() as db:
+        row = db.execute("SELECT * FROM challenges WHERE user_id=? AND wallet=? AND expires>?",
+                         (user["id"], data.wallet.lower(), store.now())).fetchone()
+        if not row:
+            fail(400, "Wallet challenge missing or expired")
+        try:
+            signer = Account.recover_message(
+                __import__("eth_account").messages.encode_defunct(text=row["message"]),
+                signature=data.signature).lower()
+        except Exception:
+            fail(400, "Invalid signature")
+        if signer != row["wallet"]:
+            fail(403, "Wallet signature does not match")
+        used = db.execute("SELECT id FROM users WHERE wallet=? AND id!=?",
+                          (signer, user["id"])).fetchone()
+        if used:
+            fail(409, "Wallet already linked to another membership")
+        db.execute("UPDATE users SET wallet=? WHERE id=?", (signer, user["id"]))
+        db.execute("DELETE FROM challenges WHERE user_id=?", (user["id"],))
+    return store.get_user(user["id"])
+
+@app.get("/api/projects")
+def projects(user=Depends(current)):
+    with store.transaction() as db:
+        return [dict(row) for row in db.execute(
+            "SELECT * FROM projects WHERE owner_id=? ORDER BY created DESC", (user["id"],)).fetchall()]
+
+@app.post("/api/projects")
+def create_project(data: ProjectCreate, user=Depends(member_wallet)):
+    if data.kind not in ("code", "research", "business", "design", "writing", "automation"):
+        fail(400, "Invalid project type")
+    ident = store.uid("prj")
+    with store.transaction() as db:
+        db.execute("INSERT INTO projects VALUES (?,?,?,?,?)",
+                   (ident, user["id"], data.title.strip(), data.kind, store.now()))
+    return {"id": ident, "title": data.title, "kind": data.kind}
+
+@app.get("/api/projects/{project_id}")
+def project_detail(project_id: str, user=Depends(current)):
+    return own(project_id, user)
+
+@app.get("/api/projects/{project_id}/files")
+def list_files(project_id: str, user=Depends(current)):
+    own(project_id, user)
+    with store.transaction() as db:
+        return [dict(r) for r in db.execute("SELECT * FROM files WHERE project_id=? ORDER BY path",
+                                           (project_id,)).fetchall()]
+
+@app.put("/api/projects/{project_id}/files")
+def save_file(project_id: str, data: FileInput, user=Depends(member_wallet)):
+    own(project_id, user)
+    try:
+        path = agents.safe_path(data.path)
+    except ValueError as exc:
+        fail(400, str(exc))
+    with store.transaction() as db:
+        row = db.execute("SELECT version,content FROM files WHERE project_id=? AND path=?",
+                         (project_id, path)).fetchone()
+        current_version = row["version"] if row else 0
+        if current_version != data.expected_version:
+            fail(409, "File changed. Refresh to avoid overwriting another agent.")
+        if row and not db.execute(
+              "SELECT 1 FROM cog_events WHERE project_id=? AND path=?",(project_id,path)).fetchone():
+            cogvative.attest(db,store.uid("cog"),user["id"],project_id,path,
+                current_version,row["content"],"historical_author_unverified",
+                "existing_snapshot_observed_now_not_original_creation",credit_cost=None)
+        db.execute("INSERT INTO files (project_id,path,content,version) VALUES(?,?,?,?) "
+                   "ON CONFLICT(project_id,path) DO UPDATE SET content=excluded.content, "
+                   "version=excluded.version",
+                   (project_id, path, data.content, current_version+1))
+        proof = cogvative.attest(db,store.uid("cog"),user["id"],project_id,path,
+                current_version+1,data.content,"life-member:"+user["id"],"member_write",credit_cost=0)
+    return {"path": path, "version": current_version+1, "cogvative": proof}
+
+@app.get("/api/projects/{project_id}/runs")
+def list_runs(project_id: str, user=Depends(current)):
+    own(project_id, user)
+    with store.transaction() as db:
+        return [dict(r) for r in db.execute(
+            "SELECT * FROM runs WHERE project_id=? ORDER BY created DESC", (project_id,)).fetchall()]
+
+@app.get("/api/projects/{project_id}/proposals")
+def proposals(project_id: str, user=Depends(current)):
+    own(project_id, user)
+    with store.transaction() as db:
+        rows = db.execute("SELECT * FROM proposals WHERE project_id=? ORDER BY rowid DESC",
+                          (project_id,)).fetchall()
+    return [{**dict(r), "payload": json.loads(r["payload"])} for r in rows]
+
+async def run_one(run_id, provider, project, task, user_id, snapshots, suggestions, responsibility=""):
+    files_context = json.dumps(snapshots, ensure_ascii=False)[:45000]
+    instructions = ("You are one of several independent agents working together in Privi LIFE AI Studio. "
+        "Only propose changes; NEVER claim to have run code or deployed software. "
+        "The human reviews all changes before they merge. "
+        "For coding tasks respond ONLY with JSON: "
+        '{"summary":"your work","files":[{"path":"src/example.py","content":"full file contents"}]}. '
+        "For non-coding tasks, provide a helpful plain text response. "
+        "Do not include secrets, private keys, or destructive instructions.")
+    prompt = (f"Project: {project['title']} ({project['kind']})\nShared task: {task}\n"
+              f"Committed shared files: {files_context}\nOther agent proposals available for review: "
+              f"{json.dumps(suggestions)[:12000]}\nWork on a distinct component where sensible.\n"
+              f"Your assigned Team Up role: {responsibility or 'General collaborator'}. "
+              "Coordinate interfaces through shared requirements. Do not claim another agent approved your code.")
+    try:
+        result = await agents.generate(provider, instructions, prompt)
+        proposed = agents.extract_code_proposal(result) if project["kind"] == "code" else None
+        with store.transaction() as db:
+            db.execute("UPDATE runs SET status='done',output=? WHERE id=?", (result[:90000], run_id))
+            if proposed:
+                snapshot_versions = {f["path"]: f["version"] for f in snapshots}
+                proposed["files"] = [{**p, "expected_version": snapshot_versions.get(p["path"],0)}
+                                     for p in proposed["files"]]
+                pid=store.uid("patch")
+                for file in proposed["files"]:
+                    cogvative.sign_agent_proposal(db,pid,file["path"],file["content"],
+                                                  provider,run_id,AGENT_COST)
+                db.execute("INSERT INTO proposals VALUES(?,?,?,?,?,?)",
+                           (pid, run_id, project["id"], proposed["summary"],
+                            json.dumps(proposed), "pending"))
+    except Exception as exc:
+        # Refund failed provider requests; do not expose provider tokens or URLs in errors.
+        with store.transaction() as db:
+            db.execute("UPDATE runs SET status='failed',error=? WHERE id=?",
+                       (type(exc).__name__ + ": provider request failed", run_id))
+        store.credit(user_id, AGENT_COST, "AGENT_REFUND", "refund:"+run_id)
+
+@app.post("/api/projects/{project_id}/run-team")
+async def run_team(project_id: str, data: TeamRun, user=Depends(member_wallet)):
+    project = own(project_id, user)
+    if data.mode not in ("parallel", "team_up"):
+        fail(400, "Unsupported team mode")
+    if data.mode == "team_up" and (project["kind"] != "code" or len(data.agents) < 2):
+        fail(400, "Team Up requires a coding project and at least two agents")
+    if len(set(data.agents)) != len(data.agents):
+        fail(400, "Duplicate agents")
+    ready = {a["id"] for a in agents.catalog() if a["ready"]}
+    if not set(data.agents).issubset(ready):
+        fail(400, "One or more agents are not configured")
+    if any(a not in agents.SERVICES and (not STAGING_MODE or a not in agents.SANDBOX_AGENTS) for a in data.agents):
+        fail(400, "Unknown agent")
+    roles = ["Frontend & user experience", "Backend & integrations",
+             "Tests & quality assurance", "Security & reliability",
+             "Documentation & developer experience", "System integration"]
+    responsibilities = {provider: roles[i] for i, provider in enumerate(data.agents)} if data.mode == "team_up" else {}
+    run_ids = [store.uid("run") for _ in data.agents]
+    total = AGENT_COST * len(run_ids)
+    with store.transaction() as db:
+        balance = db.execute("SELECT credits FROM users WHERE id=?", (user["id"],)).fetchone()
+        active = db.execute("SELECT COUNT(*) AS n FROM runs r JOIN projects p ON r.project_id=p.id WHERE p.owner_id=? AND r.status='running'", (user["id"],)).fetchone()["n"]
+        if active + len(run_ids) > 12:
+            fail(429, "Too many active agents; finish current runs before starting more")
+        if not balance or balance["credits"] < total:
+            fail(402, "Insufficient Privi utility credits")
+        db.execute("UPDATE users SET credits=credits-? WHERE id=?", (total,user["id"]))
+        for run_id, provider in zip(run_ids, data.agents):
+            db.execute("INSERT INTO runs (id,project_id,agent,status,task,created) VALUES(?,?,?,?,?,?)",
+                       (run_id, project_id, provider, "running",
+                        (f"[Team Up: {responsibilities[provider]}] " if responsibilities else "") + data.task, store.now()))
+            db.execute("INSERT INTO ledger VALUES (?,?,?,?,?,?,?,?)",
+                       (store.uid("led"),user["id"],"charge","agent_run",-AGENT_COST,
+                        AGENT_COST*FEE_BPS*100, "run:"+run_id,store.now()))
+        snapshots = [dict(r) for r in db.execute(
+            "SELECT path,content,version FROM files WHERE project_id=? ORDER BY path LIMIT 50",
+            (project_id,)).fetchall()]
+        previews = [dict(r) for r in db.execute(
+            "SELECT summary FROM proposals WHERE project_id=? AND status='pending' LIMIT 15",
+            (project_id,)).fetchall()]
+    await asyncio.gather(*(run_one(run_id, provider, project, data.task, user["id"], snapshots, previews,
+                                        responsibilities.get(provider, ""))
+                           for run_id, provider in zip(run_ids, data.agents)))
+    return {"runs": list_runs(project_id,user), "proposals": proposals(project_id,user),
+            "mode": data.mode, "assignments": responsibilities,
+            "credits": store.get_user(user["id"])["credits"]}
+
+
+@app.get("/api/networks/assets")
+def network_assets(user=Depends(current)):
+    """AI vendors are API providers, not presumed crypto networks."""
+    return multichain.inventory(payconfig())
+
+
+@app.post("/api/networks/swap/quote")
+def swap_quote(user=Depends(member_wallet)):
+    # No real quoted rate, calldata, wallet approvals, or relayer until a
+    # third-party audited bridge and verified token allowlist are integrated.
+    fail(503, "PRVI cross-chain swaps are disabled: no audited route or liquidity source")
+
+
+@app.post("/api/projects/{project_id}/fast-answer")
+async def fast_answer(project_id: str, data: FastAnswerRequest, user=Depends(member_wallet)):
+    project = own(project_id, user)
+    if len(set(data.providers)) != len(data.providers):
+        fail(400, "Duplicate providers")
+    ready = {a["id"] for a in agents.catalog() if a["ready"]}
+    if not set(data.providers).issubset(ready):
+        fail(400, "One or more AI providers are unavailable")
+    # Key includes LIFE member and project ID, question, exact configured
+    # agent selection and accepted file versions. Other members never share cache.
+    with store.transaction() as db:
+        versions = [dict(row) for row in db.execute(
+            "SELECT path,version FROM files WHERE project_id=? ORDER BY path", (project_id,))]
+    context_fingerprint = hashlib.sha256(json.dumps({
+        "uid": user["id"], "project": project_id, "question": data.question,
+        "providers": data.providers, "versions": versions
+    },sort_keys=True).encode()).hexdigest()
+    cached = fastlane.cache.get(context_fingerprint)
+    if cached is not None:
+        return {**cached, "cached": True, "charged_credits": 0}
+
+    run_ids = [store.uid("fast") for _ in data.providers]
+    total = AGENT_COST * len(run_ids)
+    with store.transaction() as db:
+        active = db.execute("SELECT COUNT(*) AS n FROM runs r JOIN projects p ON r.project_id=p.id WHERE p.owner_id=? AND r.status='running'", (user["id"],)).fetchone()["n"]
+        row = db.execute("SELECT credits FROM users WHERE id=?", (user["id"],)).fetchone()
+        if active + len(run_ids) > 12:
+            fail(429, "Too many running agents")
+        if not row or row["credits"] < total:
+            fail(402, "Insufficient Privi utility credits")
+        db.execute("UPDATE users SET credits=credits-? WHERE id=?", (total, user["id"]))
+        for name, run_id in zip(data.providers, run_ids):
+            db.execute("INSERT INTO runs (id,project_id,agent,status,task,created) VALUES (?,?,?,?,?,?)",
+                       (run_id,project_id,name,"running","[Fast Lane] "+data.question,store.now()))
+            db.execute("INSERT INTO ledger VALUES (?,?,?,?,?,?,?,?)",
+                       (store.uid("led"), user["id"], "charge", "fast_answer", -AGENT_COST,
+                        AGENT_COST*FEE_BPS*100, "fast:"+run_id,store.now()))
+
+    async def one_provider(name, run_id):
+        try:
+            reply = await agents.generate(
+                name, "Answer precisely and concisely. Never claim to be a quantum processor. "
+                      "Do not reveal credentials, and separate speculation from facts.",
+                f"Project: {project['title']}\\nQuestion: {data.question}")
+            with store.transaction() as db:
+                db.execute("UPDATE runs SET status='done',output=? WHERE id=?",
+                           (reply[:90000], run_id))
+            return reply
+        except asyncio.CancelledError:
+            # A cancelled dispatched request might have cost provider API tokens.
+            with store.transaction() as db:
+                db.execute("UPDATE runs SET status='cancelled' WHERE id=?", (run_id,))
+            raise
+        except Exception:
+            with store.transaction() as db:
+                db.execute("UPDATE runs SET status='failed',error=? WHERE id=?",
+                           ("AI provider failed", run_id))
+            store.credit(user["id"],AGENT_COST,"FAST_FAILED_REFUND","refund:"+run_id)
+            raise
+    workers = {name: (lambda p=name,r=r_id: one_provider(p,r))
+               for name,r_id in zip(data.providers,run_ids)}
+    try:
+        answer = await fastlane.first_success(workers)
+    except RuntimeError:
+        fail(502,"No selected provider returned an answer")
+    payload = {**answer, "cached": False, "charged_credits": total,
+               "quantum_hardware_used": False, "method": "classical_parallel_first_success"}
+    fastlane.cache.put(context_fingerprint,payload)
+    return payload
+
+
+@app.post("/api/projects/{project_id}/proposals/{proposal_id}/apply")
+def apply_proposal(project_id: str, proposal_id: str, user=Depends(member_wallet)):
+    own(project_id,user)
+    with store.transaction() as db:
+        proposal = db.execute("SELECT * FROM proposals WHERE id=? AND project_id=?",
+                              (proposal_id, project_id)).fetchone()
+        if not proposal:
+            fail(404, "Proposal not found")
+        if proposal["status"] == "applied":
+            return {"status": "applied", "unchanged": True}
+        if proposal["status"] != "pending":
+            fail(409, "Proposal already closed")
+        changed = json.loads(proposal["payload"])["files"]
+        source_run = db.execute("SELECT agent FROM runs WHERE id=?",(proposal["run_id"],)).fetchone()
+        agent_name = source_run["agent"] if source_run else "unknown_agent"
+        for f in changed:
+            row = db.execute("SELECT version FROM files WHERE project_id=? AND path=?",
+                             (project_id, f["path"])).fetchone()
+            if (row["version"] if row else 0) != f["expected_version"]:
+                fail(409, "Merge conflict: an agent or member changed "+f["path"])
+        for f in changed:
+            prior=db.execute("SELECT content,version FROM files WHERE project_id=? AND path=?",
+                            (project_id,f["path"])).fetchone()
+            if prior and not db.execute("SELECT 1 FROM cog_events WHERE project_id=? AND path=?",
+                                        (project_id,f["path"])).fetchone():
+                cogvative.attest(db,store.uid("cog"),user["id"],project_id,f["path"],
+                    prior["version"],prior["content"],"historical_author_unverified",
+                    "existing_snapshot_observed_now_not_original_creation",credit_cost=None)
+            db.execute("INSERT INTO files VALUES(?,?,?,?) "
+                       "ON CONFLICT(project_id,path) DO UPDATE SET "
+                       "content=excluded.content,version=excluded.version",
+                       (project_id,f["path"],f["content"],f["expected_version"]+1))
+            cogvative.attest(db,store.uid("cog"),user["id"],project_id,f["path"],
+                f["expected_version"]+1,f["content"],agent_name,"agent_proposal_approved",
+                run_id=proposal["run_id"],credit_cost=AGENT_COST)
+        db.execute("UPDATE proposals SET status='applied' WHERE id=?", (proposal_id,))
+    return {"status": "applied", "files": [f["path"] for f in changed]}
+
+
+@app.get("/api/cogvative/about")
+def cogvative_about():
+    return {"feature":cogvative.BRAND,"rights_notice":cogvative.NOTICE,
+        "royalty_bps":cogvative.ROYALTY_BPS,
+        "code_use_credit_charge":cogvative.CALL_CREDITS,
+        "proposed_prvi_per_call_wei":str(cogvative.PROPOSED_PRVI_PER_CALL_WEI),
+        "prvi_real_transfer_enabled":False,"agent_payout_enabled":False,
+        "verified_git_history_does_not_prove_ai_authorship":True,
+        "platform_tracking_only":True,
+        "ed25519_signatures_configured":cogvative.signing_key() is not None,
+        "deployment_gas": "unknown until a cryptographically verified deployment receipt is attached"}
+
+
+@app.get("/api/projects/{project_id}/cogvative")
+def cogvative_list(project_id: str, user=Depends(current)):
+    own(project_id,user)
+    with store.transaction() as db:
+        events=db.execute("SELECT id,path,version,agent,source,stamp_utc,"
+           "event_hash,signature_hex,pubkey_hex,credit_cost,prvi_deploy_wei,rights_notice "
+           "FROM cog_events WHERE project_id=? ORDER BY rowid DESC LIMIT 200",(project_id,)).fetchall()
+    return [{**dict(e),"signature_status":"ed25519_signed" if e["signature_hex"] else "hash_only_unsigned",
+             "deployment_prvi_wei":e["prvi_deploy_wei"]} for e in events]
+
+
+@app.get("/api/projects/{project_id}/cogvative/event/{event_id}")
+def cogvative_detail(project_id: str,event_id: str,user=Depends(current)):
+    own(project_id,user)
+    with store.transaction() as db:
+        e=db.execute("SELECT * FROM cog_events WHERE project_id=? AND id=?",
+                     (project_id,event_id)).fetchone()
+        if not e: fail(404,"Signature not found")
+        lines=[dict(r) for r in db.execute(
+            "SELECT line_no,line_text,line_sha256,author_agent,author_time,origin_event "
+            "FROM cog_lines WHERE event_id=? ORDER BY line_no",(event_id,))]
+    result=cogvative.verify(e,lines)
+    return {"event":dict(e),"lines":lines,"verification":
+        "ed25519_verified" if result is True else
+        "hash_integrity_only_unverified_issuer" if result is None else "INVALID"}
+
+
+
+@app.get("/api/projects/{project_id}/cogvative/proposals")
+def cogvative_proposal_signatures(project_id: str,user=Depends(current)):
+    own(project_id,user)
+    with store.transaction() as db:
+        rows=db.execute("SELECT s.proposal_id,s.path,s.agent,s.run_id,s.stamp_utc,s.event_hash,"
+           "s.signature_hex,s.pubkey_hex FROM cog_proposal_signatures s "
+           "JOIN proposals p ON p.id=s.proposal_id WHERE p.project_id=?",
+           (project_id,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.post("/api/projects/{project_id}/cogvative/{event_id}/deployment")
+async def record_cogvative_deployment(project_id: str,event_id: str,data: CogDeploymentInput,
+                                      user=Depends(member_wallet)):
+    """Record receipt-verified *gas*, never unverified source/bytecode equivalence."""
+    own(project_id,user)
+    config=payconfig()
+    if not config: fail(503,"Verified native PRVI mainnet unavailable")
+    if not re.fullmatch(r"0x[a-fA-F0-9]{64}",data.tx_hash):
+        fail(400,"Invalid transaction hash")
+    await verify_chain(config)
+    chain,rpc_url,treasury,unit,confirms,genesis=config
+    tx=await rpc(rpc_url,"eth_getTransactionByHash",[data.tx_hash])
+    receipt=await rpc(rpc_url,"eth_getTransactionReceipt",[data.tx_hash])
+    tip=await rpc(rpc_url,"eth_blockNumber",[])
+    if not tx or not receipt or not tx.get("blockNumber"):
+        fail(409,"Transaction is not mined")
+    block=await rpc(rpc_url,"eth_getBlockByNumber",[tx["blockNumber"],False])
+    if (tx.get("from","").lower()!=user["wallet"].lower() or tx.get("to") is not None
+        or receipt.get("status")!="0x1"
+        or not re.fullmatch(r"0x[0-9a-fA-F]{40}",receipt.get("contractAddress") or "")
+        or receipt.get("transactionHash","").lower()!=data.tx_hash.lower()
+        or receipt.get("blockHash")!=tx.get("blockHash")
+        or not block or block.get("hash")!=tx.get("blockHash")
+        or int(tip,16)-int(receipt["blockNumber"],16)+1<confirms):
+        fail(409,"Not a confirmed wallet-owned Privi contract deployment receipt")
+    gas=int(receipt["gasUsed"],16)*int(receipt["effectiveGasPrice"],16)
+    if gas<=0: fail(409,"Invalid verified gas amount")
+    with store.transaction() as db:
+        event=db.execute("SELECT * FROM cog_events WHERE id=? AND owner_id=? AND project_id=?",
+                         (event_id,user["id"],project_id)).fetchone()
+        if not event: fail(404,"Signature not found")
+        if db.execute("SELECT 1 FROM cog_deployments WHERE tx_hash=? OR event_id=?",
+                      (data.tx_hash.lower(),event_id)).fetchone():
+            fail(409,"Deployment receipt already attributed")
+        db.execute("INSERT INTO cog_deployments VALUES(?,?,?,?,?,?,?)",
+                   (data.tx_hash.lower(),event_id,chain,receipt["contractAddress"].lower(),
+                    str(gas),store.now(),
+                    "verified_contract_creation_from_member; source_build_equivalence_not_proven"))
+        db.execute("UPDATE cog_events SET prvi_deploy_wei=? WHERE id=?",(str(gas),event_id))
+    return {"event_id":event_id,"gas_paid_wei":str(gas),"native_token":"PRVI",
+            "source_build_equivalence_proven":False,
+            "receipt_verified":True}
+
+
+@app.post("/api/projects/{project_id}/cogvative/{agent}/wallet/challenge")
+def cogvative_wallet_challenge(project_id: str,agent: str,data: CogWalletInput,
+                              user=Depends(member_wallet)):
+    own(project_id,user)
+    if STAGING_MODE:
+        fail(403,"Real payout wallets are disabled in valueless sandbox")
+    if not re.fullmatch(r"[a-zA-Z0-9_-]{2,64}",agent):
+        fail(400,"Invalid agent")
+    if not re.fullmatch(r"0x[a-fA-F0-9]{40}",data.wallet) or int(data.wallet,16)==0:
+        fail(400,"Invalid wallet")
+    expires=store.now()+300
+    wallet=data.wallet.lower()
+    nonce=secrets.token_urlsafe(24)
+    message=(f"Privi Cogvative Signature agent royalty payout wallet claim\\n"
+             f"Origin: {ORIGIN}\\nMember: {user['id']}\\nProject: {project_id}\\n"
+             f"Agent: {agent}\\nWallet: {wallet}\\nNonce: {nonce}\\nExpires: {expires}\\n"
+             "Wallet control proof only, NOT an AI provider endorsement or token payout.")
+    with store.transaction() as db:
+        db.execute("INSERT INTO cog_claim_challenges VALUES(?,?,?,?,?,?) "
+                   "ON CONFLICT(user_id,project_id,agent) DO UPDATE SET "
+                   "wallet=excluded.wallet,message=excluded.message,expires=excluded.expires",
+                   (user["id"],project_id,agent,wallet,message,expires))
+    return {"message":message,"wallet":wallet,"expires":expires}
+
+
+@app.post("/api/projects/{project_id}/cogvative/{agent}/wallet/link")
+def cogvative_wallet_link(project_id: str,agent: str,data: CogWalletProof,
+                         user=Depends(member_wallet)):
+    own(project_id,user)
+    if STAGING_MODE: fail(403,"Payout wallets disabled in sandbox")
+    with store.transaction() as db:
+        challenge=db.execute(
+            "SELECT * FROM cog_claim_challenges WHERE user_id=? AND project_id=? "
+            "AND agent=? AND wallet=? AND expires>?",
+            (user["id"],project_id,agent,data.wallet.lower(),store.now())).fetchone()
+        if not challenge: fail(400,"Missing/expired wallet proof")
+        try:
+            from eth_account.messages import encode_defunct
+            recovered=Account.recover_message(encode_defunct(text=challenge["message"]),
+                                               signature=data.signature).lower()
+        except Exception:
+            fail(400,"Signature could not be recovered")
+        if not hmac.compare_digest(recovered,challenge["wallet"]):
+            fail(403,"Payout wallet proof mismatch")
+        db.execute("INSERT INTO cog_wallets VALUES(?,?,?,?,?) ON CONFLICT(user_id,project_id,agent) "
+                   "DO UPDATE SET wallet=excluded.wallet,linked_at=excluded.linked_at",
+                   (user["id"],project_id,agent,recovered,store.now()))
+        db.execute("DELETE FROM cog_claim_challenges WHERE user_id=? AND project_id=? AND agent=?",
+                   (user["id"],project_id,agent))
+    return {"agent":agent,"wallet":recovered,"verified_control":True,"payout_live":False,
+            "provider_endorsement_verified":False}
+
+
+@app.get("/api/projects/{project_id}/cogvative/royalty-balances")
+def cogvative_royalties(project_id: str,user=Depends(current)):
+    own(project_id,user)
+    with store.transaction() as db:
+        rows=db.execute("SELECT r.agent,r.credited_wallet,r.status,"
+           "SUM(r.amount_micros) AS amount_micros,SUM(r.line_count) AS credited_lines "
+           "FROM cog_royalties r JOIN cog_royalty_calls c ON c.id=r.call_id "
+           "WHERE c.project_id=? GROUP BY r.agent,r.credited_wallet,r.status",
+           (project_id,)).fetchall()
+    return {"unit":"valueless LIFE microcredits accounting until real PRVI settlement",
+            "amounts":[dict(row) for row in rows],"real_prvi_distributed":False}
+
+
+@app.post("/api/projects/{project_id}/cogvative/code-use")
+def cogvative_code_use(project_id: str,data: CogUseInput,user=Depends(member_wallet)):
+    """Meter an authorized platform code-access call; never execute arbitrary AI code.
+
+    Royalties accrue to signed wallet claims as accounting entries only.
+    No PRVI mint, PRVI debit, transfer or custody can occur here.
+    """
+    own(project_id,user)
+    cost=cogvative.CALL_CREDITS
+    with store.transaction() as db:
+        prior=db.execute("SELECT * FROM cog_royalty_calls WHERE user_id=? AND idem=?",
+                         (user["id"],data.idempotency_key)).fetchone()
+        if prior:
+            if prior["project_id"]!=project_id or prior["event_id"]!=data.event_id:
+                fail(409,"Idempotency key reused for different code")
+            return {"call_id":prior["id"],"charged_credits":prior["credits"],
+                    "repeat":True,"real_prvi_paid":False}
+        event=db.execute("SELECT * FROM cog_events WHERE project_id=? AND id=?",
+                         (project_id,data.event_id)).fetchone()
+        if not event: fail(404,"Code attestation not found")
+        approved=db.execute("SELECT version FROM files WHERE project_id=? AND path=?",
+                            (project_id,event["path"])).fetchone()
+        if not approved or approved["version"]!=event["version"]:
+            fail(409,"Select the latest approved code attestation")
+        lines=[dict(r) for r in db.execute("SELECT * FROM cog_lines WHERE event_id=? ORDER BY line_no",
+                                          (data.event_id,)).fetchall()]
+        if not lines: fail(400,"No code lines to license")
+        if cogvative.verify(event,lines) is False:
+            fail(409,"Code attestation verification failed")
+        payer=db.execute("SELECT credits FROM users WHERE id=?",(user["id"],)).fetchone()
+        if payer["credits"]<cost: fail(402,"Insufficient LIFE credits")
+        call_id=store.uid("call")
+        royalty_micros=cost*cogvative.ROYALTY_BPS*100
+        db.execute("UPDATE users SET credits=credits-? WHERE id=?",(cost,user["id"]))
+        db.execute("INSERT INTO ledger VALUES(?,?,?,?,?,?,?,?)",
+                   (store.uid("led"),user["id"],"charge","cogvative_code_call",-cost,
+                    cost*FEE_BPS*100,data.idempotency_key,store.now()))
+        db.execute("INSERT INTO cog_royalty_calls VALUES(?,?,?,?,?,?,?,?)",
+                   (call_id,user["id"],project_id,event["id"],data.idempotency_key,
+                    cost,royalty_micros,store.now()))
+        allocations=cogvative.divide_royalties(lines,royalty_micros)
+        for agent,line_count,amount in allocations:
+            claim=db.execute("SELECT wallet FROM cog_wallets WHERE user_id=? AND project_id=? "
+                             "AND agent=?",(user["id"],project_id,agent)).fetchone()
+            wallet=claim["wallet"] if claim else None
+            db.execute("INSERT INTO cog_royalties VALUES(?,?,?,?,?,?)",
+                       (call_id,agent,wallet,line_count,amount,
+                        "accrued_unpaid" if wallet else "awaiting_wallet_claim"))
+    return {"call_id":call_id,"charged_credits":cost,"repeat":False,
+            "royalty_micros":royalty_micros,"real_prvi_paid":False,
+            "payout_status":"accrued_only_not_transferred"}
+
+
+@app.get("/api/wallet/ledger")
+def ledger(user=Depends(current)):
+    with store.transaction() as db:
+        return [dict(r) for r in db.execute(
+            "SELECT * FROM ledger WHERE user_id=? ORDER BY created DESC LIMIT 100",
+            (user["id"],)).fetchall()]
+
+def payconfig():
+    if STAGING_MODE or os.getenv("PRVI_MAINNET_PAYMENTS_ENABLED") != "1":
+        return None
+    try:
+        chain_id = int(os.environ["PRVI_EVM_CHAIN_ID"])
+        rpc = os.environ["PRVI_RPC_URL"]
+        treasury = os.environ["PRVI_TREASURY_ADDRESS"].lower()
+        genesis = os.environ["PRVI_GENESIS_BLOCK_HASH"].lower()
+        per_credit = int(os.environ["PRVI_WEI_PER_CREDIT"])
+        confirms = int(os.getenv("PRVI_REQUIRED_CONFIRMATIONS", "12"))
+        if (chain_id in (0,1,56,97,11155111,262144) or chain_id < 100 or
+            not rpc.startswith("https://") or not re.fullmatch(r"0x[a-f0-9]{64}", genesis) or
+            not re.fullmatch(r"0x[a-f0-9]{40}", treasury) or
+            per_credit <= 0 or confirms < 12 or not COOKIE_SECURE):
+            return None
+        return chain_id,rpc,treasury,per_credit,confirms,genesis
+    except (KeyError,ValueError):
+        return None
+
+def payment_ready():
+    return payconfig() is not None
+
+async def verify_chain(config):
+    chain_id,rpc_url,treasury,unit,confirms,genesis=config
+    if int(await rpc(rpc_url,'eth_chainId',[]),16)!=chain_id:
+        fail(503,'Configured chain does not match RPC')
+    block=await rpc(rpc_url,'eth_getBlockByNumber',['0x0',False])
+    if not block or block.get('hash','').lower()!=genesis:
+        fail(503,'PRVI chain genesis does not match verified configuration')
+
+async def rpc(url, method, params):
+    async with httpx.AsyncClient(timeout=20, follow_redirects=False) as client:
+        response = await client.post(url,json={"jsonrpc":"2.0","id":1,"method":method,"params":params})
+        response.raise_for_status()
+        data = response.json()
+    if "error" in data or "result" not in data:
+        fail(503, "Blockchain RPC unavailable")
+    return data["result"]
+
+
+@app.get("/api/payments/bnb-priv/status")
+def bnb_priv_payment_status():
+    cfg = bnb_priv.configured(STAGING_MODE, COOKIE_SECURE)
+    return {
+        "asset": "PRIV",
+        "network": "BNB Smart Chain",
+        "chain_id": 56,
+        "symbol_not_independently_verified": True,
+        "payments_configured": cfg is not None,
+        "payments_live": False,
+        "checkout_configuration_present": bool(cfg),
+        "actual_chain_checks_performed_only_during_quote": True,
+        "token_contract": cfg.contract if cfg else None,
+        "merchant_treasury": cfg.treasury if cfg else None,
+        "token_decimals": cfg.token_decimals if cfg else None,
+        "units_per_credit": str(cfg.units_per_credit) if cfg else None,
+        "confirmations": cfg.confirmations if cfg else None,
+        "native_PRVI_separate": True,
+        "staging_blocks_real_payments": STAGING_MODE,
+        "source": "operator-reviewed contract config; chain validated for each quote",
+    }
+
+
+@app.post("/api/payments/bnb-priv/quote")
+async def bnb_priv_quote(data: QuoteInput, user=Depends(member_wallet)):
+    """Pay for LIFE credits with separately issued BNB PRIV, never PRVI_TEST."""
+    cfg = bnb_priv.configured(STAGING_MODE, COOKIE_SECURE)
+    if not cfg:
+        fail(503, "BNB PRIV payments not enabled: review token, treasury, rate and runtime code")
+    try:
+        await bnb_priv.validate_contract(cfg, rpc)
+    except bnb_priv.InvalidPayment as exc:
+        fail(503, str(exc))
+    units = cfg.units_per_credit * data.credits
+    if units >= 2**256:
+        fail(400, "Token amount exceeds ERC20 limits")
+    ident=store.uid("privq")
+    now=store.now()
+    with store.transaction() as db:
+        db.execute("INSERT INTO bnb_priv_quotes VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL)",
+                   (ident,user["id"],user["wallet"].lower(),data.credits,str(units),
+                    cfg.contract,cfg.treasury,cfg.code_sha256,cfg.token_decimals,now,now+1800))
+    return {"quote_id":ident,"chain_id_hex":"0x38","token_contract":cfg.contract,
+            "to":cfg.treasury,"amount_units":str(units),"decimals":cfg.token_decimals,
+            "token_transfer_data":bnb_priv.calldata(cfg.treasury,units),
+            "credits":data.credits,"expires":now+1800,
+            "required_confirmations":cfg.confirmations,"asset":"BNB PRIV",
+            "amount_fiat_usd":None,
+            "warning":"Token is not USD; price, trading liquidity and cash conversion are not guaranteed"}
+
+
+@app.post("/api/payments/bnb-priv/redeem")
+async def bnb_priv_redeem(data: RedeemInput, user=Depends(member_wallet)):
+    cfg = bnb_priv.configured(STAGING_MODE, COOKIE_SECURE)
+    if not cfg:
+        fail(503, "BNB PRIV payments not enabled")
+    if not re.fullmatch(r"0x[a-fA-F0-9]{64}",data.tx_hash):
+        fail(400,"Invalid BNB transaction hash")
+    with store.transaction() as db:
+        quote = db.execute("SELECT * FROM bnb_priv_quotes WHERE id=? AND user_id=? "
+                           "AND wallet=? AND expires>? AND used_tx IS NULL",
+                           (data.quote_id,user["id"],user["wallet"].lower(),store.now())).fetchone()
+        if not quote:
+            fail(409, "BNB PRIV quote expired or already redeemed")
+        q=dict(quote)
+    if (q["contract"] != cfg.contract or q["treasury"] != cfg.treasury or
+        q["code_sha256"] != cfg.code_sha256 or q["decimals"] != cfg.token_decimals
+        or int(q["amount_units"]) != cfg.units_per_credit*q["credits"]):
+        fail(409, "BNB PRIV payment configuration changed since quote")
+    try:
+        proof=await bnb_priv.verify_transfer(cfg,q,data.tx_hash,rpc)
+    except bnb_priv.InvalidPayment as exc:
+        fail(409,str(exc))
+    tx=data.tx_hash.lower()
+    with store.transaction() as db:
+        taken=db.execute("SELECT 1 FROM bnb_priv_redemptions WHERE tx_hash=?",
+                         (tx,)).fetchone()
+        fresh=db.execute("SELECT * FROM bnb_priv_quotes WHERE id=? AND user_id=? "
+                         "AND wallet=? AND expires>? AND used_tx IS NULL",
+                         (q["id"],user["id"],q["wallet"],store.now())).fetchone()
+        if taken or not fresh:
+            fail(409,"Token transaction already used or quote expired")
+        db.execute("INSERT INTO bnb_priv_redemptions VALUES(?,?,?,?,?,?)",
+                   (tx,q["id"],user["id"],q["amount_units"],q["credits"],store.now()))
+        db.execute("UPDATE bnb_priv_quotes SET used_tx=? WHERE id=?",(tx,q["id"]))
+        db.execute("UPDATE users SET credits=credits+? WHERE id=?",(q["credits"],user["id"]))
+        db.execute("INSERT INTO ledger VALUES(?,?,?,?,?,?,?,?)",
+                   (store.uid("led"),user["id"],"credit","bnb_priv_token_payment",
+                    q["credits"],0,"bnbpriv:"+tx,store.now()))
+    return {"status":"confirmed","asset":"BNB PRIV","amount_units":q["amount_units"],
+            "credits_added":q["credits"],"balance":store.get_user(user["id"])["credits"],
+            "receipt":proof,"fiat_income_usd":None}
+
+
+@app.post("/api/wallet/quote")
+async def buy_quote(data: QuoteInput, user=Depends(member_wallet)):
+    config = payconfig()
+    if not config:
+        fail(503, "Native PRVI purchases are disabled pending verified mainnet release")
+    chain_id,rpc_url,treasury,unit,confirms,genesis = config
+    await verify_chain(config)
+    amount_wei = str(unit * data.credits)
+    quote_id = store.uid("quote")
+    with store.transaction() as db:
+        db.execute("INSERT INTO quotes VALUES (?,?,?,?,?,?,?,NULL)",
+                   (quote_id,user["id"],user["wallet"],data.credits,amount_wei,store.now()+7200,store.now()))
+    return {"quote_id":quote_id,"to":treasury,"value_hex":hex(int(amount_wei)),
+            "chain_id_hex":hex(chain_id),"credits":data.credits,"required_confirmations":confirms}
+
+@app.post("/api/wallet/redeem")
+async def redeem(data: RedeemInput, user=Depends(member_wallet)):
+    config = payconfig()
+    if not config:
+        fail(503,"Native PRVI purchases are disabled")
+    if not re.fullmatch(r"0x[a-fA-F0-9]{64}",data.tx_hash):
+        fail(400,"Invalid transaction hash")
+    with store.transaction() as db:
+        quote = db.execute("SELECT * FROM quotes WHERE id=? AND user_id=? AND used_tx IS NULL "
+                           "AND wallet=? AND expires>?",
+                           (data.quote_id,user["id"],user["wallet"],store.now())).fetchone()
+        if not quote:
+            fail(409,"Quote expired or already redeemed")
+        q = dict(quote)
+    chain,rpc_url,treasury,unit,confirms,genesis=config
+    await verify_chain(config)
+    tx = await rpc(rpc_url,"eth_getTransactionByHash",[data.tx_hash])
+    receipt = await rpc(rpc_url,"eth_getTransactionReceipt",[data.tx_hash])
+    height = await rpc(rpc_url,"eth_blockNumber",[])
+    block = await rpc(rpc_url,"eth_getBlockByNumber",[tx["blockNumber"],False]) if tx and tx.get("blockNumber") else None
+    if not tx or not receipt or not tx.get("blockNumber") or not receipt.get("blockNumber"):
+        fail(409,"Transaction is not mined")
+    if (tx.get("from","").lower()!=q["wallet"] or
+        tx.get("to","").lower()!=treasury or
+        int(tx.get("value","0x0"),16)<int(q["amount_wei"]) or
+        int(receipt.get("status","0x0"),16)!=1 or
+        receipt.get("transactionHash","").lower()!=data.tx_hash.lower() or
+        receipt.get("blockHash")!=tx.get("blockHash") or
+        not block or block.get("hash")!=tx.get("blockHash") or
+        int(block.get("timestamp","0x0"),16)<q["created"] or
+        int(height,16)-int(receipt["blockNumber"],16)+1<confirms):
+        fail(409,"Transaction did not pass wallet, amount, receipt or confirmation checks")
+    with store.transaction() as db:
+        exists = db.execute("SELECT 1 FROM redemptions WHERE tx_hash=?",
+                            (data.tx_hash.lower(),)).fetchone()
+        row = db.execute("SELECT * FROM quotes WHERE id=? AND user_id=? AND used_tx IS NULL "
+                         "AND expires>?", (q["id"],user["id"],store.now())).fetchone()
+        if exists or not row:
+            fail(409,"Transaction or quote already used")
+        db.execute("INSERT INTO redemptions VALUES(?,?,?,?,?)",
+                   (data.tx_hash.lower(),q["id"],user["id"],q["credits"],store.now()))
+        db.execute("UPDATE quotes SET used_tx=? WHERE id=?", (data.tx_hash.lower(),q["id"]))
+        db.execute("UPDATE users SET credits=credits+? WHERE id=?", (q["credits"],user["id"]))
+        db.execute("INSERT INTO ledger VALUES (?,?,?,?,?,?,?,?)",
+                   (store.uid("led"),user["id"],"credit","native_prvi_purchase",
+                    q["credits"],0,"tx:"+data.tx_hash.lower(),store.now()))
+    return {"status":"confirmed","credits_added":q["credits"],
+            "balance":store.get_user(user["id"])["credits"]}
+
+def stripe_settings():
+    return stripe_credits.settings(staging=STAGING_MODE, secure_cookie=COOKIE_SECURE,
+                                   origin=ORIGIN)
+
+
+@app.get("/api/payments/stripe/status")
+def stripe_credit_status():
+    cfg = stripe_settings()
+    return {"enabled": cfg is not None, "credits": stripe_credits.CREDITS,
+            "amount_cents": stripe_credits.CENTS, "currency": "usd",
+            "livemode": cfg.live if cfg else False,
+            "token_sales_enabled": False, "base_swaps_enabled": False}
+
+
+@app.post("/api/payments/stripe/checkout")
+def stripe_credit_checkout(user=Depends(current)):
+    """Authenticated Stripe-hosted checkout; never trust amounts from browser."""
+    cfg = stripe_settings()
+    if cfg is None:
+        fail(503, "LIFE credit checkout is not enabled")
+    try:
+        session = stripe_credits.create_session(cfg, user["id"], ORIGIN)
+        session_id = session["id"]
+        checkout_url = session["url"]
+        if (not session_id.startswith("cs_") or bool(session["livemode"]) != cfg.live
+                or not isinstance(checkout_url, str)
+                or not checkout_url.startswith("https://checkout.stripe.com/")):
+            fail(503, "Unexpected Stripe checkout response")
+        # Never send the payment URL until the order is durably recorded.
+        with store.transaction() as db:
+            db.execute(
+                "INSERT INTO stripe_checkout_sessions "
+                "(session_id,user_id,price_id,credits,amount_cents,created,fulfilled_at) "
+                "VALUES (?,?,?,?,?,?,NULL)",
+                (session_id, user["id"], cfg.price_id,
+                 stripe_credits.CREDITS, stripe_credits.CENTS, store.now()))
+        return {"checkout_url": checkout_url}
+    except HTTPException:
+        raise
+    except Exception:
+        fail(503, "Unable to create a verified LIFE credit checkout")
+
+
+@app.post("/api/payments/stripe/webhook")
+async def stripe_credit_webhook(request: Request):
+    """Signed Stripe event; browser redirect never issues credits."""
+    cfg = stripe_settings()
+    if cfg is None:
+        fail(503, "Stripe credit fulfillment disabled")
+    raw = await request.body()
+    if len(raw) > 65536:
+        fail(413, "Stripe event too large")
+    header = request.headers.get("stripe-signature", "")
+    try:
+        session = stripe_credits.verified_paid_session(cfg, raw, header)
+    except (ValueError, stripe_credits.stripe.error.SignatureVerificationError):
+        fail(400, "Invalid Stripe payment event")
+    except Exception:
+        fail(503, "Stripe event verification unavailable")
+    if session is None:
+        return {"received": True, "credited": False}
+    try:
+        credited = stripe_credits.fulfill_paid_session(session, cfg.price_id)
+    except ValueError:
+        fail(409, "Stripe checkout order not ready or mismatched")
+    except Exception:
+        fail(503, "Stripe credit ledger temporarily unavailable")
+    return {"received": True, "credited": credited}
+
+
+@app.post("/api/internal/charge")
+def integration_charge(data: InternalCharge,request: Request):
+    """Privi-only backend service integration. Never expose service keys to browsers."""
+    try:
+        keys = json.loads(os.getenv("PRIVI_SERVICE_KEYS_JSON","{}"))
+    except ValueError:
+        fail(503,"Invalid service configuration")
+    token = request.headers.get("x-privi-service-key","")
+    if (data.service not in UTILITIES or not isinstance(keys,dict) or
+        not isinstance(keys.get(data.service),str) or
+        len(keys[data.service])<32 or not hmac.compare_digest(token,keys[data.service])):
+        fail(403,"Service key missing or unauthorized")
+    user = store.get_user(data.user_id)
+    if not user:
+        fail(404,"LIFE member not found")
+    _,cost,_ = UTILITIES[data.service]
+    try:
+        ok = store.charge(user["id"],data.service,cost,data.idempotency_key,FEE_BPS)
+    except ValueError as exc:
+        fail(409,str(exc))
+    if not ok:
+        fail(402,"Insufficient Privi credits or wallet not linked")
+    return {"charged":cost,"service":data.service,"balance":store.get_user(user["id"])["credits"]}
