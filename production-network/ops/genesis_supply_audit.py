@@ -218,10 +218,22 @@ def audit_native_denom_metadata(bank, denom):
     for row in rows:
         if not isinstance(row, dict):
             raise ValueError("malformed bank denomination metadata")
-        if row.get("base") != denom and (
-            claims_prvi(row.get("display")) or claims_prvi(row.get("symbol"))
-        ):
-            raise ValueError("another denomination claims native PRVI display or symbol")
+        if row.get("base") != denom:
+            if (claims_prvi(row.get("base")) or
+                claims_prvi(row.get("display")) or
+                claims_prvi(row.get("symbol"))):
+                raise ValueError("another denomination claims native PRVI display or symbol")
+            # A conflicting denom_unit is also wallet-facing token identity,
+            # even when the metadata's display and symbol appear unrelated.
+            units = row.get("denom_units")
+            if not isinstance(units, list):
+                raise ValueError("malformed non-native denomination units")
+            for unit in units:
+                if not isinstance(unit, dict):
+                    raise ValueError("malformed non-native denomination unit")
+                unit_denom = unit.get("denom")
+                if unit_denom == denom or claims_prvi(unit_denom):
+                    raise ValueError("another denomination reuses native PRVI denomination unit")
     matching = [row for row in rows if row.get("base") == denom]
     if len(matching) != 1:
         raise ValueError("native PRVI denomination metadata must appear exactly once")
