@@ -186,6 +186,41 @@ test("corrupt lock state must fail closed and remain present for audit",()=>{
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });
 
+test("ambiguous duplicate-key and noncanonical persisted locks cannot release votes",()=>{
+  const f=fixture();
+  const p=f.proposal(41),v=f.committee.validators[0];
+  const inputKey=f.keysById.get(v.id);
+  const mutations=[
+    ["earlier forged blockHash masked by duplicate JSON key",original=>
+      '{"blockHash":"0x'+"f".repeat(64)+'",'+original.slice(1)],
+    ["equivalent JSON with different whitespace",original=>
+      JSON.stringify(JSON.parse(original),null,2)+"\n"],
+    ["appended trailing whitespace",original=>original+" \n"],
+  ];
+  for(const [kind,mutate] of mutations) {
+    const dir=tempRoot();
+    const input={lockDirectory:dir,committee:f.committee,proposal:p,
+                 privateKey:inputKey};
+    try {
+      const first=signCommitWithResearchLock(input);
+      assert.equal(first.researchOnly,true);
+      const record=recordFor(f.committee,p.height,v.id,p.blockHash,p.previousBlockHash);
+      const file=path.join(dir,lockedFileName(record));
+      const original=fs.readFileSync(file,"utf8");
+      const tampered=mutate(original);
+      assert.deepEqual(JSON.parse(tampered),JSON.parse(original),
+        "mutation must have the same decoded fields to demonstrate JSON parsing ambiguity");
+      fs.writeFileSync(file,tampered);
+      assert.throws(()=>signCommitWithResearchLock(input),
+        /corrupt or noncanonical/,kind);
+      assert.equal(fs.readFileSync(file,"utf8"),tampered,
+        "ambiguous height lock must remain for forensic review");
+    } finally {
+      fs.rmSync(dir,{recursive:true,force:true});
+    }
+  }
+});
+
 test("existing lock replay re-syncs file and directory before signing",()=>{
   const f=fixture(),dir=tempRoot();
   const p=f.proposal(),v=f.committee.validators[0];
