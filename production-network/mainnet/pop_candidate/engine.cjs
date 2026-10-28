@@ -218,7 +218,11 @@ function verifyCertificate(committee, proposal, votes) {
 // Match the durable research guard's conservative rule: epoch transitions
 // cannot clear a same-height commitment, even when the block hash is equal.
 class ResearchVoteLock {
-  constructor(){this.commits=new Map();}
+  // Never expose a writable Map that callers could clear to bypass a height
+  // commitment. This is only same-process research hardening, not durable
+  // signing-state recovery or a defense against a compromised JS runtime.
+  #commits = new Map();
+  constructor(){Object.freeze(this);}
   accept(epoch,height,round,validatorId,blockHash,previousBlockHash) {
     requireNumber(epoch,"epoch");requireNumber(height,"height");requireNumber(round,"round",true);
     check(typeof validatorId==="string" && HEX.test(validatorId),
@@ -232,12 +236,12 @@ class ResearchVoteLock {
     // must also match: identical child hashes with different claimed ancestry
     // are conflicting signed statements, even when rounds differ.
     const key=JSON.stringify([height,validatorId]);
-    const old=this.commits.get(key);
+    const old=this.#commits.get(key);
     check(!old || old.epoch===epoch,"PoP unreviewed same-height epoch transition rejected");
     check(!old || old.blockHash===blockHash,"PoP conflicting-height double-sign rejected");
     check(!old || old.previousBlockHash===previousBlockHash,
           "PoP conflicting-height parent-link double-sign rejected");
-    this.commits.set(key,{epoch,blockHash,previousBlockHash});
+    this.#commits.set(key,{epoch,blockHash,previousBlockHash});
   }
 }
 module.exports={
