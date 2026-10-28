@@ -94,6 +94,22 @@ test("reject skipped, duplicated and reordered block heights", () => {
   assert.throws(() => verify(f, {bundles: [...f.chain].reverse()}), /height gap/);
 });
 
+test("reject signed block-hash cycles, including a return to the pinned anchor", () => {
+  const f = fixture();
+  // Both malicious third-block proposals are signed by the correct proposer
+  // and a quorum, and each references the correct immediate parent.
+  const repeatsFirst = f.block(3, f.b2, f.b1);
+  assert.throws(
+    () => verify(f, {bundles: [f.chain[0], f.chain[1], repeatsFirst]}),
+    /repeats an earlier block hash/
+  );
+  const returnsToGenesis = f.block(3, f.b2, f.genesisHash);
+  assert.throws(
+    () => verify(f, {bundles: [f.chain[0], f.chain[1], returnsToGenesis]}),
+    /repeats an earlier block hash/
+  );
+});
+
 test("valid signatures cannot bypass an incorrect parent link", () => {
   const f = fixture();
   const wrongParent = f.block(2, f.genesisHash, f.b2);
