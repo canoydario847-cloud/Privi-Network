@@ -1658,8 +1658,10 @@ def test_verify_copy_requires_usable_owner_read_access(tmp_path, directory_mode,
     vault = tmp_path / "vault"
     destination = vault / "snapshot.sqlite3"
     result = backup.backup_and_verify(source, destination)
-    vault.chmod(directory_mode)
+    # Set the file mode before restricting directory traversal, so this
+    # regression also runs correctly as the non-root CI account.
     destination.chmod(file_mode)
+    vault.chmod(directory_mode)
     try:
         if error is None:
             assert backup.verify_existing_copy(destination, result["sha256"])["restore_drill"] == "passed"
