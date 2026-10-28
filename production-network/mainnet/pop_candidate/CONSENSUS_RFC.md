@@ -52,6 +52,17 @@ engineering proposals.** Calling the proposal "PoP" does not confer security.
   equivocation at the same height (including across rounds), but it is NOT a
   crash-safe signing service.
 
+**Research certificate result semantics:** The verifier returns `valid:true`
+only when the candidate proposal and distinct Ed25519 quorum signatures
+validate against the admitted research committee. The result now exposes
+the signed research chain ID, genesis hash, governance admission key
+fingerprint, previous block hash and block hash for explicit provenance.
+It always returns `finalized:false`, `validatesExecution:false`,
+`validatorIndependenceVerified:false`, and `productionConsensus:false`.
+These are explicit **non-finality** flags, not a path to production approval.
+A quorum signature alone cannot establish canonical chain ancestry, execution,
+validator independence or a safe financial settlement.
+
 ## What "PoP only" means for official IoT features
 
 On the official Privi IoT contract, the Privi administrator enrolls each
