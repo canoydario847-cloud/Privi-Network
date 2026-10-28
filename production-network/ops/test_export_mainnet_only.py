@@ -100,6 +100,42 @@ def test_existing_archive_never_overwritten(tmp_path):
     assert result.returncode != 0
     assert output.read_bytes() == b"preexisting archive must stay untouched"
 
+def test_mainnet_export_rejects_validator_keys_and_signing_material(tmp_path):
+    # These keys can be present in an allowlisted path while still being
+    # completely unsafe to redistribute as a release artifact.
+    sensitive_names = (
+        "priv_validator_key.json",
+        "node_key.json",
+        "wallet.json",
+        "keys/identity.pem",
+        "keys/release.p12",
+        "keyring-test/validator.info",
+        "secrets/operator.key",
+    )
+    for index, name in enumerate(sensitive_names):
+        repo = tmp_path / f"repo-{index}"
+        repo.mkdir()
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        subprocess.run(["git", "-C", str(repo), "config", "user.email", "ci@example.test"], check=True)
+        subprocess.run(["git", "-C", str(repo), "config", "user.name", "CI"], check=True)
+        bad_file = repo / "production-network" / "mainnet" / name
+        bad_file.parent.mkdir(parents=True, exist_ok=True)
+        bad_file.write_text("fake synthetic private-data fixture", encoding="utf-8")
+        safe_file = repo / "production-network" / "ops" / "readme.txt"
+        safe_file.parent.mkdir(parents=True, exist_ok=True)
+        safe_file.write_text("fixture", encoding="utf-8")
+        subprocess.run(["git", "-C", str(repo), "add", "-f", "."], check=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-qm", "synthetic fixture"], check=True)
+        output = tmp_path / f"mainnet-{index}.tar"
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--output", str(output)],
+            cwd=repo, capture_output=True, text=True,
+        )
+        assert result.returncode != 0, name
+        assert not output.exists(), name
+        assert not list(tmp_path.glob(".privi-mainnet-export-*")), name
+
+
 class ExportTests(unittest.TestCase):
     def test_mainnet_export_is_allowlisted(self):
         import tempfile
@@ -120,4 +156,9 @@ class ExportTests(unittest.TestCase):
         import tempfile
         with tempfile.TemporaryDirectory() as directory:
             test_existing_archive_never_overwritten(pathlib.Path(directory))
+
+    def test_mainnet_export_rejects_validator_keys_and_signing_material(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            test_mainnet_export_rejects_validator_keys_and_signing_material(pathlib.Path(directory))
 
