@@ -160,8 +160,12 @@ creates each record exclusively (O_EXCL), and fsyncs both the file and
 directory before any signature leaves the process. An existing lock
 is re-validated from an open file descriptor and re-synced on replay,
 so a previous directory-sync failure cannot be mistaken for durable
-commitment. Corrupted or conflicting records are never auto-deleted.
-Dedicated tests cover ordinary restart/replay, corrupted locks,
+commitment. Existing records must also match the signer's exact canonical
+JSON bytes (including the terminating newline). This deliberately rejects
+duplicate JSON member names, changed field order, alternate whitespace,
+and appended bytes, even when JSON.parse would recover equivalent fields.
+Corrupted or conflicting records are never auto-deleted.
+Dedicated tests cover ordinary restart/replay, ambiguous records, corrupted locks,
 symlink ancestors, hard links, simulated sync failure, and competing
 signing processes across epoch boundaries and conflicting parent links.
 
