@@ -37,6 +37,32 @@ class GateTests(unittest.TestCase):
             with self.subTest(url=url):
                 self.assertFalse(valid_evidence_url(url))
 
+    def test_rejects_private_and_ip_literal_evidence_urls(self):
+        blocked = [
+            "https://127.0.0.1/report",
+            "https://127.1/report",
+            "https://10.0.0.1/report",
+            "https://192.168.1.7/report",
+            "https://169.254.169.254/latest/meta-data",
+            "https://8.8.8.8/report",
+            "https://[::1]/report",
+            "https://[fe80::1]/report",
+            "https://0x7f.0.0.1/report",
+            "https://review.internal/report",
+            "https://review.home.arpa/report",
+            "https://review.lan/report",
+            "https://review.onion/report",
+            "https://review/report",
+        ]
+        for url in blocked:
+            with self.subTest(url=url):
+                self.assertFalse(valid_evidence_url(url))
+
+    def test_public_report_domain_remains_valid(self):
+        self.assertTrue(valid_evidence_url(
+            "https://github.com/example-security-team/reports/blob/main/assessment.pdf"
+        ))
+
     def test_all_gates_reject_example_placeholder(self):
         gates = {
             name: {
