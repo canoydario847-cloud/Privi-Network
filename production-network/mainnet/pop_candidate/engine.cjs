@@ -135,8 +135,14 @@ function proposer(committee,height,round) {
   // A caller-constructed roster cannot serve as a PoP proposer authority.
   assertValidatedCommittee(committee);
   requireNumber(height,"height");requireNumber(round,"round",true);
+  // Bind this deterministic RESEARCH election to the governance-admitted
+  // signer roster, not only epoch and committee size. This is NOT a
+  // randomness beacon, anti-censorship proof, or production leader election.
+  const rosterIds=committee.validators.map(v=>v.id); // sorted at admission
   const seed=hash(Buffer.from(JSON.stringify([
-    committee.chainId,committee.genesisHash,committee.epoch,height,round
+    "Privi/PoP/Research/ProposerElection/v2",
+    committee.chainId,committee.genesisHash,committee.epoch,
+    committee.governanceKeyId,rosterIds,height,round
   ]),"utf8"));
   const slot=Number(BigInt(seed)%BigInt(committee.validators.length));
   return committee.validators[slot].id;
