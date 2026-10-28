@@ -3,7 +3,7 @@
 **Quantum optimization for factory decisions, with answers no quantum computer can forge.**
 A Privi World Co product · Copyright (c) 2026 Privi World Co. All rights reserved.
 
-Endpoint (MCP, streamable HTTP, free): `https://privi-quantum.onrender.com/mcp`
+Endpoint (MCP, streamable HTTP): `https://privi-quantum.onrender.com/mcp`. Most tools are free; four are paid per call with x402 (see Pricing). Public benchmarks: `https://privi-quantum.onrender.com/benchmarks`
 
 ```json
 { "mcpServers": { "privi-quantum": { "url": "https://privi-quantum.onrender.com/mcp" } } }
@@ -187,6 +187,40 @@ python -m privi_quantum.vault open contract.vault.json --private-key key.json --
 ```
 
 then send only the envelope's SHA-256 to `vault_receipt` for a signed, anchored protection receipt.
+
+## v0.7: pricing and public benchmarks
+
+### Pricing (x402: USDC on Base, or the PRIVI token)
+
+| Tool | Default price | Env to change it |
+|---|---|---|
+| `pqc_readiness_package` | $5 | `QUANTUM_PRICE_READINESS` |
+| `pqc_crypto_inventory` | $5 | `QUANTUM_PRICE_INVENTORY` |
+| `quantum_advantage_receipt` | $0.25 | `QUANTUM_PRICE_RECEIPT` |
+| `quantum_run_hardware` | $1 routing fee | `QUANTUM_PRICE_HARDWARE` |
+
+Everything else stays free: code scans, endpoint checks, federal deadlines, `quantum_optimize`, verification,
+the vault, the accelerator and the inspector. `quantum_pricing` lists live prices.
+
+- Payments turn on when `QUANTUM_PAY_TO` is set (with `CDP_API_KEY_ID` / `CDP_API_KEY_SECRET` for the Coinbase
+  facilitator on Base mainnet). With it empty, every tool is free, as before.
+- Input is checked before payment is asked for, and a call that fails after payment (bad repo, provider error)
+  returns the error without settling, so nothing is charged.
+- Paid tools declare x402 Bazaar metadata, so they are listed on Coinbase's agent marketplace (agentic.market)
+  after their first settled payment.
+- When payments are on, the browser demo at `/api/pqc/package` (used by the gov site) is capped at 3 assets,
+  files and endpoints and points to the full paid tool.
+
+### Public benchmarks (`/benchmarks`, `/benchmarks.json`, `quantum_benchmarks`)
+
+A fixed, seeded set of nine factory problems (6 to 16 qubits: line balancing, lot selection, conflict
+splitting) runs every `QUANTUM_BENCHMARK_HOURS` (default 24). Each problem races CVaR-QAOA against
+exhaustive search (the proven optimum) and simulated annealing, and reports the verdict, how often the
+circuit hits the optimum, and its lift over random guessing. The whole run is one signed (Ed25519 +
+ML-DSA-87), anchored attestation, so the published numbers cannot be edited later. Finished real-hardware
+runs appear in their own table with their receipts. First run (Oct 28, 2026): quantum found the proven
+optimum in 8 of 9 problems and hit it about 6x more often than random guessing; classical won all 9 on
+time, as expected at this size. Operators can re-run it with `POST /benchmarks/run` and the admin key.
 
 ## Honest limits
 

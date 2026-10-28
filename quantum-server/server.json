@@ -3,7 +3,7 @@
   "name": "io.github.canoydario847-cloud/privi-quantum",
   "title": "Privi Quantum",
   "description": "Quantum runs on IonQ/IBM/Braket with signed advantage receipts, crypto inventory (CBOM), PQ vault.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "websiteUrl": "https://privi-discovery.onrender.com",
   "repository": {
     "url": "https://github.com/canoydario847-cloud/Privi-Network",

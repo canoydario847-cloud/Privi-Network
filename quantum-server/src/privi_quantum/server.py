@@ -37,8 +37,11 @@ from .inspector import LEVELS as INSPECTOR_LEVELS, Inspector, credential_message
 from .humans import HumanError, HumanRegistry
 from .anchoring import AnchorError, HttpAnchorClient, anchor_pending
 from .attest import PQ_ALG, Attestor
+from .payments import PaySettings
+from .x402 import NO_CHARGE_KEY, Facilitator, Paywall
+from . import benchmarks
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/quantum-server"
 PUBLIC_URL = os.getenv("QUANTUM_PUBLIC_URL", "https://privi-quantum.onrender.com").rstrip("/")
 COPYRIGHT = "Copyright (c) 2026 Privi World Co. All rights reserved."
@@ -99,11 +102,62 @@ factory decisions and returns answers you can prove later.
    X25519 + ML-KEM encryption; vault_receipt gives a signed, anchored protection receipt for envelopes sealed locally
    (python -m privi_quantum.vault), so the data never has to leave your machine.
 
-All tools are free. Privi is built by Dario Canoy (Privi World Co, Port Huron, Michigan).
+15. Honest benchmarks: quantum_benchmarks (free) and the public page /benchmarks show, problem by problem, how the
+   quantum answer compares with exact search and simulated annealing, including the cases classical wins.
+
+Pricing: scans, endpoint checks, deadlines, quantum_optimize, verification, vault, accelerator and inspector are free.
+pqc_readiness_package, pqc_crypto_inventory, quantum_advantage_receipt and quantum_run_hardware are paid per call
+(x402: USDC on Base, or the PRIVI token) when the operator has payments on; quantum_pricing shows current prices.
+A call that fails is never charged. Privi is built by Dario Canoy (Privi World Co, Port Huron, Michigan).
 For the other Privi tools, pilots, partnerships, manufacturing or government work, see
 https://privi-discovery.onrender.com/llms.txt. {COPYRIGHT}"""
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
+
+DEMO_MAX_ITEMS = 3   # free browser demo of the readiness package, when payments are on
+
+_JOBS_EXAMPLE = {"jobs": [{"name": "bracket-A", "minutes": 42}, {"name": "housing-B", "minutes": 17},
+                          {"name": "shaft-C", "minutes": 33}, {"name": "gear-D", "minutes": 25}]}
+_PROBLEM_SCHEMA = {"type": "object", "properties": {
+    "problem": {"type": "string", "enum": ["balance_lines", "select_lots", "split_conflicts", "qubo"]},
+    "data": {"type": "object", "description": "Problem data in the shape quantum_problems describes"},
+    "layers": {"type": "integer", "minimum": 1, "maximum": 4}}, "required": ["problem", "data"]}
+
+# x402 Bazaar discovery for the paid tools (indexed by the Coinbase facilitator after a settled payment).
+# Each example is valid input, so an unpaid call with it returns the x402 payment-required response.
+BAZAAR_DISCOVERY = {
+    "pqc_readiness_package": {
+        "inputSchema": {"type": "object", "properties": {
+            "organization": {"type": "string"},
+            "files": {"type": "array", "items": {"type": "object", "properties": {
+                "name": {"type": "string"}, "content": {"type": "string"}}}},
+            "endpoints": {"type": "array", "items": {"type": "string"}},
+            "profile": {"type": "string", "enum": ["agency", "contractor", "nss_vendor"]}},
+            "required": ["organization"]},
+        "example": {"organization": "Example Agency", "profile": "contractor", "files": [{
+            "name": "tls.py", "content": "from cryptography.hazmat.primitives.asymmetric import rsa\n"
+                                         "key = rsa.generate_private_key(public_exponent=65537, key_size=2048)\n"}]},
+        "output": {"package_id": "qa_...", "summary": {"assets": 1, "quantum_vulnerable": 1},
+                   "report_url": "https://privi-quantum.onrender.com/reports/qa_...",
+                   "signatures": "Ed25519 + ML-DSA-87"}},
+    "pqc_crypto_inventory": {
+        "inputSchema": {"type": "object", "properties": {
+            "organization": {"type": "string"},
+            "domains": {"type": "array", "items": {"type": "string"}},
+            "repos": {"type": "array", "items": {"type": "string"}},
+            "long_lived_data": {"type": "boolean"}}, "required": ["organization"]},
+        "example": {"organization": "Example Co", "domains": ["example.com"]},
+        "output": {"package_id": "qa_...", "cbom_url": "https://privi-quantum.onrender.com/reports/qa_....cbom.json"}},
+    "quantum_advantage_receipt": {
+        "inputSchema": _PROBLEM_SCHEMA,
+        "example": {"problem": "balance_lines", "data": _JOBS_EXAMPLE},
+        "output": {"receipt_id": "qa_...", "verdict": "tie", "receipt_url": "https://privi-quantum.onrender.com/receipts/qa_..."}},
+    "quantum_run_hardware": {
+        "inputSchema": {**_PROBLEM_SCHEMA, "properties": {**_PROBLEM_SCHEMA["properties"],
+                        "backend": {"type": "string"}, "policy": {"type": "string", "enum": ["cheapest", "fastest", "hardware"]}}},
+        "example": {"problem": "balance_lines", "data": _JOBS_EXAMPLE, "backend": "auto", "policy": "cheapest"},
+        "output": {"job_id": "hw_...", "status": "submitted", "backend": "ionq:simulator"}},
+}
 
 
 def _h(text: str) -> str:
@@ -196,7 +250,8 @@ def _who(ctx: Context) -> str:
 
 def build_server(settings: Settings | None = None, attestor: Attestor | None = None,
                  anchor_client=None, endpoint_checker=None, hardware_router: HardwareRouter | None = None,
-                 repo_scanner=None) -> MCPServer:
+                 repo_scanner=None, pay_settings: PaySettings | None = None,
+                 facilitator: Facilitator | None = None) -> MCPServer:
     settings = settings or Settings.from_env()
     attestor = attestor or Attestor(settings.db_path, settings.signing_seed)
     if anchor_client is None and settings.anchor_api_key:
@@ -219,6 +274,23 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     sweep_state: dict[str, float | None] = {"last": None}
     router = hardware_router or HardwareRouter(settings.db_path, backends_from_env(), settings.hardware_daily_budget_usd)
     scan_repo = repo_scanner or inventory.scan_repo
+    bench = benchmarks.Benchmarks(settings.db_path, attestor, router, PUBLIC_URL)
+    pay = pay_settings or PaySettings.from_env(settings.db_path)
+    paywall = Paywall(pay, facilitator, service={
+        "url": f"{PUBLIC_URL}/mcp", "serviceName": "Privi Quantum",
+        "tags": ["post-quantum", "pqc", "cbom", "quantum-computing", "compliance"],
+        "iconUrl": "https://raw.githubusercontent.com/canoydario847-cloud/Privi-Network/main/assets/logo-400.png"},
+        discovery=BAZAAR_DISCOVERY)
+
+    def no_charge(data: dict[str, Any]) -> dict[str, Any]:
+        """Mark a failed result so the paywall returns it without settling the payment."""
+        return {**data, NO_CHARGE_KEY: True}
+
+    def meta_of(ctx: Context) -> dict:
+        try:
+            return dict(ctx.request_context.meta or {})
+        except Exception:
+            return {}
 
     def realm_gate(ctx: Context, privi_pass: str | None, scope: str) -> CallToolResult | None:
         """Privi Inspector: intercept agents without a valid, current certificate before they enter the realm."""
@@ -256,9 +328,26 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
                 "anchoring": {"enabled": anchor_client is not None, "chain": "Base via Privi Anchor (until the Privi chain mainnet)",
                               "interval_seconds": settings.anchor_interval},
                 "attestations_issued": attestor.count(), "public_keys_url": f"{PUBLIC_URL}/keys",
+                "payments": "x402 on (see quantum_pricing)" if pay.payments_enabled else "off (all tools free)",
+                "benchmarks": f"{PUBLIC_URL}/benchmarks",
                 "quantum_realm": {"dream_scape": f"{PUBLIC_URL}/dreamscape", "privilege": f"{PUBLIC_URL}/privilege",
                                   "realms": len(privilege.active()),
                                   "websocket": PUBLIC_URL.replace("https://", "wss://") + "/dreamscape/ws"}}
+
+    @mcp.tool(title="Privi Quantum pricing", annotations=READ_ONLY)
+    def quantum_pricing() -> dict[str, Any]:
+        """Which tools are paid, their price per call, how to pay (x402: USDC on Base, or the PRIVI token), and the
+        payout wallet. Everything else on this server is free. Failed calls are never charged."""
+        return {"payments": "on (x402, Base mainnet)" if pay.payments_enabled else "off - every tool is free right now",
+                "network": pay.network["network"], "asset": "USDC " + pay.network["asset"],
+                "pay_to": pay.pay_to or None, "paid_tools": pay.price_table(),
+                "privi_token": "accepted (send _meta['privi/payment'])" if getattr(paywall, "privi", None) else "not enabled",
+                "free_tools": ["pqc_scan_code", "pqc_endpoint_check", "pqc_federal_deadlines", "quantum_optimize",
+                               "quantum_verify", "quantum_backends", "quantum_hardware_job", "quantum_benchmarks",
+                               "vault_*", "qagent_*", "inspector_*", "privilege_*", "dreamweaver_run", "dreamscape_*"],
+                "how_to_pay": "call the tool; it answers with an x402 PaymentRequired object; pay with an x402 client and "
+                              "retry with the payment in _meta['x402/payment']",
+                "never_charged": "calls that fail (bad input, provider error) return the error and the payment is not settled"}
 
     @mcp.tool(title="List optimization problems", annotations=READ_ONLY)
     def quantum_problems() -> dict[str, Any]:
@@ -444,14 +533,22 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     ) -> CallToolResult:
         """Build a signed post-quantum readiness package: prioritized migration list with the federal deadline for
         each asset (EO 14409, OMB M-26-15, NIST IR 8547 draft, CNSA 2.0), the nine M-26-15 plan elements marked as
-        evidence or gaps, and a CycloneDX 1.6 CBOM. Signed with ML-DSA-87, anchored on chain, public report URL. Free."""
+        evidence or gaps, and a CycloneDX 1.6 CBOM. Signed with ML-DSA-87, anchored on chain, public report URL.
+        Paid per call via x402 when payments are on (see quantum_pricing); failed calls are not charged."""
         if not limiter.allow(_who(ctx)):
             return _result({"error": f"rate limit: {settings.rate_per_min} calls per minute"}, is_error=True)
-        try:
-            return _result(await anyio.to_thread.run_sync(lambda: make_package(
-                organization, assets, files, profile, pqc_lead, system_name, impact, hva, endpoints)))
-        except ValueError as ex:
-            return _result({"error": str(ex)}, is_error=True)
+        if not (organization or "").strip():
+            return _result({"error": "give the organization name"}, is_error=True)
+
+        async def work() -> dict[str, Any]:
+            try:
+                return await anyio.to_thread.run_sync(lambda: make_package(
+                    organization, assets, files, profile, pqc_lead, system_name, impact, hva, endpoints))
+            except ValueError as ex:
+                return no_charge({"error": str(ex)})
+
+        return await paywall.run("pqc_readiness_package", "Signed post-quantum readiness package with CBOM",
+                                 meta_of(ctx), work)
 
     @mcp.tool(title="Check public endpoints for post-quantum TLS", annotations=ToolAnnotations(
         readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
@@ -562,24 +659,32 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         """Race the quantum answer against classical baselines (exhaustive search = proven optimum, and simulated
         annealing) on the same problem and seal the result as a signed, chain-anchored Quantum Advantage Receipt:
         answer quality and time for each side and a verdict (quantum_won / classical_won / tie), published whichever
-        side wins. For a real-hardware receipt use quantum_run_hardware. Free."""
+        side wins. For a real-hardware receipt use quantum_run_hardware. Paid per call via x402 when payments are on
+        (see quantum_pricing); failed calls are not charged."""
         if not limiter.allow(_who(ctx)):
             return _result({"error": f"rate limit: {settings.rate_per_min} calls per minute"}, is_error=True)
         try:
-            qubo, decode = qaoa.build(problem, data)
-
-            def work():
-                r = qaoa.solve(qubo, layers=layers, shots=shots)
-                return r, [advantage.exhaustive(qubo), advantage.simulated_annealing(qubo)]
-            r, classical = await anyio.to_thread.run_sync(work, limiter=cpu)
+            qubo, decode = qaoa.build(problem, data)   # validate before asking for payment
         except qaoa.ProblemError as e:
             return _result({"error": str(e)}, is_error=True)
-        quantum = {"method": r["algorithm"], "backend": "local", "backend_kind": "simulator", "shots": shots,
-                   "cost": r["cost"], "found_optimum": r["found_optimum"],
-                   "optimum_frequency": r["probability_of_optimum"], "runtime_ms": float(r["runtime_ms"])}
-        body = advantage.receipt_body(problem, _psha(problem, data), qubo, quantum, classical)
-        att = await anyio.to_thread.run_sync(attestor.issue, "advantage_receipt", body)
-        return _result({**_receipt_summary(att), "quantum_decision": decode(r["solution"]), "copyright": COPYRIGHT})
+
+        async def work() -> dict[str, Any]:
+            def solve():
+                r = qaoa.solve(qubo, layers=layers, shots=shots)
+                return r, [advantage.exhaustive(qubo), advantage.simulated_annealing(qubo)]
+            try:
+                r, classical = await anyio.to_thread.run_sync(solve, limiter=cpu)
+            except qaoa.ProblemError as e:
+                return no_charge({"error": str(e)})
+            quantum = {"method": r["algorithm"], "backend": "local", "backend_kind": "simulator", "shots": shots,
+                       "cost": r["cost"], "found_optimum": r["found_optimum"],
+                       "optimum_frequency": r["probability_of_optimum"], "runtime_ms": float(r["runtime_ms"])}
+            body = advantage.receipt_body(problem, _psha(problem, data), qubo, quantum, classical)
+            att = await anyio.to_thread.run_sync(attestor.issue, "advantage_receipt", body)
+            return {**_receipt_summary(att), "quantum_decision": decode(r["solution"]), "copyright": COPYRIGHT}
+
+        return await paywall.run("quantum_advantage_receipt", "Signed quantum-vs-classical advantage receipt",
+                                 meta_of(ctx), work)
 
     @mcp.tool(title="Quantum hardware backends", annotations=READ_ONLY)
     def quantum_backends() -> dict[str, Any]:
@@ -609,21 +714,30 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         """Train the CVaR-QAOA circuit, route it to a quantum backend (IonQ, IBM Quantum, Amazon Braket or this
         server's simulator) by price or speed, and return a job id. When the run finishes, the answer is sealed with a
         post-quantum signed attestation and a Quantum Advantage Receipt against classical baselines. Poll with
-        quantum_hardware_job. Free to call; paid QPUs run only within the operator's configured budget."""
+        quantum_hardware_job. Paid per call via x402 when payments are on (a routing fee, see quantum_pricing); paid
+        QPUs still run only within the operator's configured budget. A call that fails to submit is not charged."""
         if not limiter.allow(_who(ctx)):
             return _result({"error": f"rate limit: {settings.rate_per_min} calls per minute"}, is_error=True)
         try:
-            qubo, _ = qaoa.build(problem, data)
-            r = await anyio.to_thread.run_sync(lambda: qaoa.solve(qubo, layers=layers, shots=256), limiter=cpu)
-            qasm = qaoa.to_qasm(qubo, r["angles"]["gamma"], r["angles"]["beta"], r["cost_normalization"]["min"],
-                                r["cost_normalization"]["span"])
-            sub = await anyio.to_thread.run_sync(lambda: router.submit(
-                problem, data, qasm, shots, layers, {"angles": r["angles"], "algorithm": r["algorithm"]},
-                backend, policy, max_cost_usd, _who(ctx)))
-        except (qaoa.ProblemError, HardwareError) as e:
+            qubo, _ = qaoa.build(problem, data)   # validate before asking for payment
+        except qaoa.ProblemError as e:
             return _result({"error": str(e), "backends": "see quantum_backends"}, is_error=True)
-        j = await anyio.to_thread.run_sync(finalize_hw, sub["job_id"])
-        return _result({**hw_view(j), "routing": sub["routing"], "copyright": COPYRIGHT})
+
+        async def work() -> dict[str, Any]:
+            try:
+                r = await anyio.to_thread.run_sync(lambda: qaoa.solve(qubo, layers=layers, shots=256), limiter=cpu)
+                qasm = qaoa.to_qasm(qubo, r["angles"]["gamma"], r["angles"]["beta"], r["cost_normalization"]["min"],
+                                    r["cost_normalization"]["span"])
+                sub = await anyio.to_thread.run_sync(lambda: router.submit(
+                    problem, data, qasm, shots, layers, {"angles": r["angles"], "algorithm": r["algorithm"]},
+                    backend, policy, max_cost_usd, _who(ctx)))
+            except (qaoa.ProblemError, HardwareError) as e:
+                return no_charge({"error": str(e), "backends": "see quantum_backends"})
+            j = await anyio.to_thread.run_sync(finalize_hw, sub["job_id"])
+            return {**hw_view(j), "routing": sub["routing"], "copyright": COPYRIGHT}
+
+        return await paywall.run("quantum_run_hardware", "Route a trained QAOA circuit to quantum hardware",
+                                 meta_of(ctx), work)
 
     @mcp.tool(title="Quantum hardware job", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
                                                                          idempotentHint=True, openWorldHint=True))
@@ -652,22 +766,27 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         """Point Privi at a company's domains and GitHub repositories and get one cryptographic bill of materials: every
         algorithm quantum computers will break, where it is, a prioritized migration plan with dates, a CycloneDX 1.6
         CBOM and a public report page, signed with ML-DSA-87 and anchored on chain. Repos are scanned in memory and not
-        kept. Free."""
+        kept. Paid per call via x402 when payments are on (see quantum_pricing); failed calls are not charged."""
         if not limiter.allow(_who(ctx)):
             return _result({"error": f"rate limit: {settings.rate_per_min} calls per minute"}, is_error=True)
         if not (domains or repos or files or assets):
             return _result({"error": "give domains, repos, files and/or assets"}, is_error=True)
         prof = profile if profile in govpqc.PROFILES else "company"
         extra = [{**a, "sensitive_past_2030": a.get("sensitive_past_2030", long_lived_data)} for a in (assets or [])]
-        try:
-            out = await anyio.to_thread.run_sync(lambda: make_package(
-                organization, extra, files, prof, "", "Submitted files", "high" if long_lived_data else "unknown", False,
-                domains, repos))
-        except (ValueError, inventory.InventoryError) as ex:
-            return _result({"error": str(ex)}, is_error=True)
-        out["next_step"] = ("quantum_run_hardware / quantum_advantage_receipt for optimization; vault_seal to re-wrap "
-                            "long-lived data under hybrid ML-KEM now")
-        return _result(out)
+
+        async def work() -> dict[str, Any]:
+            try:
+                out = await anyio.to_thread.run_sync(lambda: make_package(
+                    organization, extra, files, prof, "", "Submitted files", "high" if long_lived_data else "unknown",
+                    False, domains, repos))
+            except (ValueError, inventory.InventoryError) as ex:
+                return no_charge({"error": str(ex)})
+            out["next_step"] = ("quantum_run_hardware / quantum_advantage_receipt for optimization; vault_seal to re-wrap "
+                                "long-lived data under hybrid ML-KEM now")
+            return out
+
+        return await paywall.run("pqc_crypto_inventory", "Company crypto inventory (CBOM) with a dated PQC migration plan",
+                                 meta_of(ctx), work)
 
     def _vault_receipt(env_info: dict, label: str, structure_checked: bool) -> dict[str, Any]:
         att = attestor.issue("vault_protection", {"envelope_sha256": env_info["envelope_sha256"], "suite": env_info.get("suite"),
@@ -1407,6 +1526,40 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     mcp._humans = humans
     mcp._patrol_minutes = settings.inspector_patrol_minutes
     mcp._dream = (privilege, weaver, scapes)
+    mcp._benchmarks = bench
+
+    # ---------------- public, signed benchmarks ----------------
+
+    @mcp.tool(title="Privi Quantum benchmarks", annotations=READ_ONLY)
+    def quantum_benchmarks() -> dict[str, Any]:
+        """The latest signed benchmark suite: Privi's quantum solver against exhaustive search and simulated annealing on
+        a fixed set of factory problems (6-16 qubits), with each verdict, how often the circuit finds the optimum, and
+        its lift over random guessing, plus finished real-hardware runs with their receipts. Published whichever side
+        wins. Public page: /benchmarks. Free."""
+        rep = bench.report()
+        rep["page"] = f"{PUBLIC_URL}/benchmarks"
+        if not rep["suite"]:
+            rep["note"] = "first run in progress, check back in a few minutes" if rep["running"] else "no run yet"
+        return rep
+
+    @mcp.custom_route("/benchmarks", methods=["GET"], include_in_schema=False)
+    async def benchmarks_page(_: Request) -> HTMLResponse:
+        return HTMLResponse(benchmarks.render_page(bench.report(), PUBLIC_URL, COPYRIGHT),
+                            headers={"Cache-Control": "public, max-age=300"})
+
+    @mcp.custom_route("/benchmarks.json", methods=["GET"], include_in_schema=False)
+    async def benchmarks_json(_: Request) -> JSONResponse:
+        return JSONResponse(bench.report(), headers={**cors, "Cache-Control": "public, max-age=300"})
+
+    @mcp.custom_route("/benchmarks/run", methods=["POST"], include_in_schema=False)
+    async def benchmarks_run(request: Request) -> JSONResponse:
+        """Operator only (Authorization: Bearer QUANTUM_ADMIN_KEY): run the suite now."""
+        if not _admin(request):
+            return JSONResponse({"error": "admin key required"}, status_code=401)
+        if bench.running():
+            return JSONResponse({"status": "already running"}, status_code=409)
+        threading.Thread(target=bench.run, daemon=True).start()
+        return JSONResponse({"status": "started", "page": f"{PUBLIC_URL}/benchmarks"}, status_code=202)
 
     @mcp.custom_route("/health", methods=["GET"], include_in_schema=False)
     async def health(_: Request) -> JSONResponse:
@@ -1503,10 +1656,25 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
             if len(raw) > 1_200_000:
                 return JSONResponse({"error": "request too large"}, status_code=413, headers=pre)
             b = json.loads(raw or b"{}")
+            assets_in, files_in, eps_in = b.get("assets"), b.get("files"), b.get("endpoints")
+            demo_note = None
+            if pay.payments_enabled:
+                # Free browser demo: a small sample. The full package is the paid MCP tool.
+                cut = (len(assets_in or []) > DEMO_MAX_ITEMS or len(files_in or []) > DEMO_MAX_ITEMS
+                       or len(eps_in or []) > DEMO_MAX_ITEMS)
+                assets_in = (assets_in or [])[:DEMO_MAX_ITEMS] or None
+                files_in = (files_in or [])[:DEMO_MAX_ITEMS] or None
+                eps_in = (eps_in or [])[:DEMO_MAX_ITEMS] or None
+                demo_note = (f"Free demo: up to {DEMO_MAX_ITEMS} assets, files and endpoints"
+                             + (" (your extra items were left out)" if cut else "")
+                             + f". The full package is pqc_readiness_package on {PUBLIC_URL}/mcp "
+                               f"(${pay.prices_usd['pqc_readiness_package']} USDC via x402).")
             out = await anyio.to_thread.run_sync(lambda: make_package(
-                str(b.get("organization") or "Demo agency")[:160], b.get("assets"), b.get("files"),
+                str(b.get("organization") or "Demo agency")[:160], assets_in, files_in,
                 str(b.get("profile") or "agency"), str(b.get("pqc_lead") or "")[:120], str(b.get("system_name") or "")[:120],
-                str(b.get("impact") or "unknown"), bool(b.get("hva")), b.get("endpoints")))
+                str(b.get("impact") or "unknown"), bool(b.get("hva")), eps_in))
+            if demo_note:
+                out["demo"] = demo_note
             return JSONResponse(out, headers=pre)
         except (ValueError, json.JSONDecodeError, AttributeError, TypeError) as ex:
             return JSONResponse({"error": str(ex)}, status_code=400, headers=pre)
@@ -1743,6 +1911,19 @@ def _patrol_loop(inspector: Inspector, interval: int) -> None:
         time.sleep(interval)
 
 
+def _benchmark_loop(bench, every_s: int) -> None:
+    """Run the benchmark suite at startup if the last run is missing or older than `every_s`, then on that cadence."""
+    time.sleep(30)  # let the server come up first
+    while True:
+        try:
+            age = bench.age_s()
+            if age is None or age >= every_s:
+                bench.run()
+        except Exception as e:  # never let a benchmark error take the server down
+            print(f"[benchmarks] run failed: {type(e).__name__}: {e}", flush=True)
+        time.sleep(max(600, every_s // 4))
+
+
 def _hardware_loop(finalize_open, interval: int) -> None:
     while True:
         time.sleep(interval)
@@ -1777,6 +1958,9 @@ def main() -> None:
         threading.Thread(target=_patrol_loop, args=(mcp._inspector, mcp._patrol_minutes * 60), daemon=True).start()
     if mcp._hw_poll_seconds > 0:
         threading.Thread(target=_hardware_loop, args=(mcp._privi_finalize_open, mcp._hw_poll_seconds), daemon=True).start()
+    bench_hours = int(os.getenv("QUANTUM_BENCHMARK_HOURS", "24") or 0)
+    if bench_hours > 0:
+        threading.Thread(target=_benchmark_loop, args=(mcp._benchmarks, bench_hours * 3600), daemon=True).start()
     if args.stdio:
         mcp.run("stdio")
         return

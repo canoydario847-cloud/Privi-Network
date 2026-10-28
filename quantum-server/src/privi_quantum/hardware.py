@@ -579,6 +579,14 @@ class HardwareRouter:
                              (json.dumps(result), attestation_id, receipt_id, jid))
             self._db.commit()
 
+    def finished_with_receipts(self, limit: int = 25) -> list[dict]:
+        """Newest finished jobs on a real provider (not this server's simulator) that carry an advantage receipt."""
+        rows = self._db.execute(
+            "SELECT job_id, backend_id, problem, qubits, shots, finished_at, turnaround_s, receipt_id FROM hw_jobs "
+            "WHERE status='done' AND receipt_id IS NOT NULL AND backend_id != 'local' "
+            "ORDER BY submitted_unix DESC LIMIT ?", (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
     def open_jobs(self, limit: int = 50) -> list[str]:
         return [r["job_id"] for r in self._db.execute(
             "SELECT job_id FROM hw_jobs WHERE status NOT IN ('done','failed','canceled') ORDER BY submitted_unix LIMIT ?", (limit,))]
