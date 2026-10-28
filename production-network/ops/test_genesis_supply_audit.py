@@ -270,6 +270,32 @@ class SupplyAuditTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"unsupported vesting"):
             self.check(g)
 
+    def test_unknown_auth_account_type_fails_closed(self):
+        # EVM account wrappers can contain a BaseAccount address. Until an
+        # SDK-aware handler is reviewed, they must not bypass the address
+        # uniqueness audit or be counted as validated.
+        for kind in (
+            "/ethermint.types.v1.EthAccount",
+            "/cosmos.auth.v1beta1.FutureAccount",
+        ):
+            with self.subTest(kind=kind):
+                g = periodic_genesis()
+                g["app_state"]["auth"]["accounts"].append({
+                    "@type": kind,
+                    "base_account": {"address": "privi1vestingexample"},
+                })
+                with self.assertRaisesRegex(ValueError, "unsupported auth account type"):
+                    self.check(g)
+
+    def test_unknown_auth_account_type_rejected_even_without_collision(self):
+        g = fixture()
+        g["app_state"]["auth"] = {"accounts": [{
+            "@type": "/cosmos.auth.v1beta1.FutureAccount",
+            "base_account": {"address": "privi1distinct"},
+        }]}
+        with self.assertRaisesRegex(ValueError, "unsupported auth account type"):
+            self.check(g)
+
     def test_module_auth_address_collisions_rejected(self):
         module={"@type":mod.MODULE_ACCOUNT_TYPE,
                 "base_account":{"address":"privi1vestingexample"},
