@@ -7,6 +7,7 @@ enforcement, vesting/staking review, signer approval or mainnet activation.
 """
 import argparse
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -32,6 +33,14 @@ def _reject_non_json_number(token):
     raise ValueError("invalid JSON numeric constant: " + token)
 
 
+def _finite_json_float(token):
+    """Reject JSON exponents that overflow Python floats to infinity."""
+    number = float(token)
+    if not math.isfinite(number):
+        raise ValueError("non-finite JSON floating-point number: " + token)
+    return number
+
+
 def parse_strict_json_bytes(raw):
     """Parse the EXACT bytes being audited; no ignored duplicate JSON members."""
     if not isinstance(raw, bytes) or len(raw) > MAX_GENESIS_FILE_BYTES:
@@ -40,6 +49,7 @@ def parse_strict_json_bytes(raw):
         raw.decode("utf-8"),
         object_pairs_hook=_unique_object,
         parse_constant=_reject_non_json_number,
+        parse_float=_finite_json_float,
     )
 
 

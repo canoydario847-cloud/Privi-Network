@@ -117,6 +117,18 @@ class SupplyAuditTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "invalid JSON numeric"):
                     mod.parse_strict_json_bytes(b'{"x":' + constant + b'}')
 
+    def test_json_exponent_overflow_rejected_even_in_unrelated_fields(self):
+        # Python's json.loads otherwise converts 1e309 to float('inf'), even
+        # though a signed genesis hash can match those same invalid semantics.
+        for exponent in (b"1e309", b"-1e309", b"1E+99999"):
+            with self.subTest(exponent=exponent):
+                raw = b'{"unrelated":{"nested":[' + exponent + b']}}'
+                with self.assertRaisesRegex(ValueError, "non-finite JSON floating-point"):
+                    mod.parse_strict_json_bytes(raw)
+
+    def test_finite_json_fraction_still_parses(self):
+        self.assertEqual(mod.parse_strict_json_bytes(b'{"other":1.25}'), {"other": 1.25})
+
     def test_unbounded_or_invalid_utf8_input_fails(self):
         with tempfile.TemporaryDirectory() as temp:
             oversized = Path(temp) / "oversized.json"
