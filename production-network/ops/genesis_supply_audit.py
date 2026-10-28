@@ -58,6 +58,106 @@ def parse_amount(raw, where):
     return int(raw)
 
 
+# Only one Cosmos SDK vesting subtype is modeled here. Other vesting account
+# types must be reviewed separately; they cannot silently count as checked.
+PERIODIC_VESTING_TYPE = "/cosmos.vesting.v1beta1.PeriodicVestingAccount"
+MAX_TIME_SECONDS = 2**63 - 1
+
+
+def _uint63_time(raw, where, positive=False):
+    if (not isinstance(raw, str) or not raw.isascii() or
+        not raw.isdecimal() or (len(raw) > 1 and raw.startswith("0")) or
+        len(raw) > 19):
+        raise ValueError(where + ": noncanonical unsigned time string")
+    result = int(raw)
+    if result > MAX_TIME_SECONDS or (positive and result == 0):
+        raise ValueError(where + ": time out of bounds")
+    return result
+
+
+def _coin_totals(rows, where):
+    if not isinstance(rows, list):
+        raise ValueError(where + ": coins must be an array")
+    totals = {}
+    for coin in rows:
+        if (not isinstance(coin, dict) or
+            not isinstance(coin.get("denom"), str) or not coin["denom"]):
+            raise ValueError(where + ": malformed coin")
+        denom = coin["denom"]
+        if denom in totals:
+            raise ValueError(where + ": duplicate denomination")
+        amount = parse_amount(coin.get("amount"), where + " " + denom)
+        if amount == 0:
+            raise ValueError(where + ": zero coin amount")
+        totals[denom] = amount
+    return totals
+
+
+def audit_periodic_vesting(app_state, supply_by_denom):
+    """Check necessary PeriodicVestingAccount schedule invariants, not vesting execution.
+
+    No vesting type other than periodic is considered verified. This function
+    deliberately does not infer custody, delegation, withdrawal rights, or
+    Cosmos SDK keeper behavior from genesis JSON.
+    """
+    auth = app_state.get("auth")
+    if auth is None:
+        return 0  # No account evidence: caller MUST NOT claim vesting verified.
+    if not isinstance(auth, dict) or not isinstance(auth.get("accounts"), list):
+        raise ValueError("genesis auth.accounts missing or malformed")
+    count = 0
+    seen_vesting_addresses = set()
+    vested_totals = {}
+    for index, row in enumerate(auth["accounts"]):
+        if not isinstance(row, dict):
+            raise ValueError("malformed auth account %d" % index)
+        kind = row.get("@type")
+        if not isinstance(kind, str):
+            raise ValueError("auth account %d missing account type" % index)
+        if kind != PERIODIC_VESTING_TYPE:
+            # Unrecognized Cosmos SDK vesting accounts are NEVER treated as
+            # successfully verified by a periodic-only preflight.
+            if "vesting" in kind.casefold():
+                raise ValueError("unsupported vesting account type requires separate review")
+            continue
+        base = row.get("base_vesting_account")
+        if not isinstance(base, dict) or not isinstance(base.get("base_account"), dict):
+            raise ValueError("periodic vesting missing base account")
+        address = base["base_account"].get("address")
+        if not isinstance(address, str) or not address.strip():
+            raise ValueError("periodic vesting missing address")
+        if address in seen_vesting_addresses:
+            raise ValueError("duplicate periodic vesting account address")
+        seen_vesting_addresses.add(address)
+        originals = _coin_totals(base.get("original_vesting"), "original_vesting")
+        start = _uint63_time(row.get("start_time"), "vesting start_time")
+        end = _uint63_time(base.get("end_time"), "vesting end_time", positive=True)
+        periods = row.get("vesting_periods")
+        if not isinstance(periods, list) or not periods:
+            raise ValueError("periodic vesting requires one or more periods")
+        running_time = start
+        distributed = {}
+        for period in periods:
+            if not isinstance(period, dict):
+                raise ValueError("malformed periodic vesting period")
+            length = _uint63_time(period.get("length"), "vesting period length", positive=True)
+            if running_time > MAX_TIME_SECONDS - length:
+                raise ValueError("periodic vesting time overflow")
+            running_time += length
+            for denom, amount in _coin_totals(period.get("amount"), "vesting period amount").items():
+                distributed[denom] = distributed.get(denom, 0) + amount
+        if running_time != end:
+            raise ValueError("periodic vesting end_time does not match summed lengths")
+        if distributed != originals:
+            raise ValueError("periodic vesting amounts do not reconcile to original_vesting")
+        for denom, amount in originals.items():
+            vested_totals[denom] = vested_totals.get(denom, 0) + amount
+            if vested_totals[denom] > supply_by_denom.get(denom, 0):
+                raise ValueError("periodic vesting original allocations exceed bank supply")
+        count += 1
+    return count
+
+
 def audit(genesis, denom, chain_id):
     if not isinstance(genesis, dict):
         raise ValueError("genesis must be a JSON object")
@@ -125,6 +225,8 @@ def audit(genesis, denom, chain_id):
     if found_supply > CAP_BASE:
         raise ValueError("initial PRVI bank supply exceeds proposed 1-billion-coin cap")
 
+    periodic_checked = audit_periodic_vesting(app_state, supply_by_denom)
+
     return {
         "genesis_bank_audit": "PASS",
         "cosmos_chain_id": chain_id,
@@ -135,7 +237,9 @@ def audit(genesis, denom, chain_id):
         "max_supply_base_units": str(CAP_BASE),
         "bank_accounts_checked": len(balances),
         "bank_denominations_reconciled": len(supply_by_denom),
-        "warning": "One-time genesis bank accounting cannot prove immutable lifetime cap enforcement, emissions, vesting, consensus, or release readiness",
+        "periodic_vesting_accounts_checked": periodic_checked,
+        "vesting_execution_verified": False,
+        "warning": "One-time genesis bank and periodic schedule arithmetic cannot prove lifetime cap enforcement, vesting execution, delegation safety, other vesting types, consensus, or release readiness",
     }
 
 
