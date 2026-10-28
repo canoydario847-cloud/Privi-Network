@@ -358,4 +358,26 @@ class SupplyAuditTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"duplicate"):
             self.check(g)
 
+    def test_other_bank_denom_cannot_impersonate_prvi_display_or_symbol(self):
+        for field, value in (("display", "prvi"), ("symbol", "PRVI")):
+            with self.subTest(field=field):
+                g=fixture()
+                g["app_state"]["bank"]["denom_metadata"].append({
+                    "base":"uatom", "display":"atom", "symbol":"ATOM",
+                    "denom_units":[{"denom":"uatom","exponent":0},
+                                   {"denom":"atom","exponent":6}]
+                })
+                g["app_state"]["bank"]["denom_metadata"][1][field]=value
+                with self.assertRaisesRegex(ValueError,"another denomination claims native PRVI"):
+                    self.check(g)
+
+    def test_distinct_other_denom_metadata_is_allowed(self):
+        g=fixture()
+        g["app_state"]["bank"]["denom_metadata"].append({
+            "base":"uatom", "display":"atom", "symbol":"ATOM",
+            "denom_units":[{"denom":"uatom","exponent":0},
+                           {"denom":"atom","exponent":6}]
+        })
+        self.assertIs(self.check(g)["native_prvi_metadata_checked"], True)
+
 if __name__=="__main__": unittest.main()
