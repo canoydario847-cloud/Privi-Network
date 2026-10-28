@@ -91,3 +91,36 @@ def test_private_existing_database_rejects_hardlinked_file(tmp_path):
 
     alias.unlink()
     assert store.private_existing_database(db)
+
+
+def test_guarded_database_rejects_foreign_process_uid(tmp_path, monkeypatch):
+    """Mode 0600/0700 must not mask a UID mismatch on mounted storage."""
+    vault = tmp_path / "vault"
+    vault.mkdir(mode=0o700)
+    db = vault / "synthetic.sqlite3"
+    db.write_bytes(b"synthetic fixture, no customer data")
+    os.chmod(db, 0o600)
+    os.chmod(vault, 0o700)
+    assert store.private_existing_database(db)
+
+    # Simulate running the service under a different UID without requiring
+    # root privileges, chown, a real deployment, or private member records.
+    service_uid = os.geteuid()
+    monkeypatch.setattr(store.os, "geteuid", lambda: service_uid + 1)
+    assert not store.private_existing_database(db)
+
+
+def test_guarded_startup_rejects_foreign_uid_without_mutation(tmp_path, monkeypatch):
+    vault = tmp_path / "vault"
+    vault.mkdir(mode=0o700)
+    db = vault / "synthetic.sqlite3"
+    db.write_bytes(b"synthetic fixture")
+    os.chmod(db, 0o600)
+    monkeypatch.setattr(store, "DB", str(db))
+    monkeypatch.setenv("LIFE_REQUIRE_EXISTING_DB", "1")
+    monkeypatch.setattr(store, "database_readable", lambda: True)
+    service_uid = os.geteuid()
+    monkeypatch.setattr(store.os, "geteuid", lambda: service_uid + 1)
+    with pytest.raises(RuntimeError, match="owner-only permissions"):
+        store.init()
+    assert db.read_bytes() == b"synthetic fixture"
