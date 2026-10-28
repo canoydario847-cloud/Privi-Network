@@ -183,6 +183,28 @@ test("research proposer seed is domain-separated and bound to the signed roster"
   }
 });
 
+test("research proposer roster ordering is ASCII-canonical, not locale-dependent",()=>{
+  const f=fixture(7);
+  const expected=f.registry.validators.map(v=>v.id).sort();
+  const originalLocaleCompare=String.prototype.localeCompare;
+  try {
+    // Simulate hosts with incompatible ICU collation. A consensus seed must
+    // never depend on host locale, even for otherwise valid signer keys.
+    String.prototype.localeCompare=function(){
+      throw Error("locale-dependent comparator invoked");
+    };
+    const reordered=parseRegistry({
+      ...f.registry,validators:[...f.registry.validators].reverse()
+    },f.gov.publicKeyB64);
+    assert.deepEqual(reordered.validators.map(v=>v.id),expected);
+    for(const round of [0,1,3,17]){
+      assert.equal(proposer(reordered,44,round),proposer(f.committee,44,round));
+    }
+  } finally {
+    String.prototype.localeCompare=originalLocaleCompare;
+  }
+});
+
 test("research proposer refuses forged or post-admission modified committees",()=>{
   const f=fixture(4);
   const original=proposer(f.committee,9,0);
