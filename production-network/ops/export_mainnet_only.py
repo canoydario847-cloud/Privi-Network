@@ -9,7 +9,25 @@ import tarfile
 import tempfile
 
 ALLOWED = ("production-network/mainnet", "production-network/ops")
-EXCLUDED = ("life-ai-studio", "listing", "migration", "testnet")
+# Block common node, wallet, certificate and cloud-credential filenames from
+# the release export. The presence of a key must fail closed even when the
+# paths are otherwise in the production-network allowlist.
+SECRET_FILES = frozenset((
+    "priv_validator_key.json", "node_key.json",
+    "id_rsa", "id_ed25519", "credentials.json",
+    "mnemonic", "mnemonic.txt", "seed.txt", "wallet.json",
+    "aws_credentials", "service-account.json",
+))
+SECRET_SUFFIXES = (".pem", ".p12", ".pfx", ".keystore", ".key")
+SECRET_DIRS = frozenset(("keyring-test", "keyring-file", "keyring-os", ".ssh"))
+
+def sensitive_path(name):
+    components = [p.casefold() for p in pathlib.PurePosixPath(name).parts]
+    return any(
+        p.startswith(".env") or p in SECRET_FILES or p in SECRET_DIRS
+        or p.endswith(SECRET_SUFFIXES)
+        for p in components
+    )
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -53,11 +71,8 @@ def main():
                 for member in members
             ):
                 raise RuntimeError("Export contained an unsupported link or special file")
-            if any(
-                part.startswith(".env") or part in ("id_rsa", "id_ed25519")
-                for name in names for part in pathlib.PurePosixPath(name).parts
-            ):
-                raise RuntimeError("Export contained a possible secret file")
+            if any(sensitive_path(name) for name in names):
+                raise RuntimeError("Export contained a possible secret or signing-key file")
         # Hard-link requires a nonexistent destination. Unlike os.replace, it
         # cannot silently overwrite a file another process just created.
         os.link(staging, output)
