@@ -1,5 +1,7 @@
 import json
 import tempfile
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 from mainnet_gate import check, REQUIRED, valid_evidence_url
@@ -73,6 +75,29 @@ class GateTests(unittest.TestCase):
         }
         errors = check({"network": "privi-native-mainnet", "asset": "PRVI", "gates": gates})
         self.assertEqual(len(errors), len(REQUIRED))
+
+    def test_cli_never_authorizes_mainnet_even_with_self_declared_verified_links(self):
+        # Complete shape is not proof of chain security or operational readiness.
+        gates = {
+            name: {
+                "status": "verified",
+                "evidence_url": VALID_REPORT,
+                "reviewer": "claimed independent reviewer",
+            } for name in REQUIRED
+        }
+        document = {"network": "privi-native-mainnet", "asset": "PRVI", "gates": gates}
+        self.assertEqual(check(document), [])  # Presence-only checks can pass.
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "untrusted-evidence.json"
+            path.write_text(json.dumps(document), encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(Path(__file__).with_name("mainnet_gate.py")), str(path)],
+                capture_output=True, text=True, check=False,
+            )
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("NO-GO", result.stdout)
+        self.assertIn("independent live verification", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
