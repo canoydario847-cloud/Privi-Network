@@ -131,6 +131,9 @@ function parseRegistry(registry, governanceKey) {
   return committee;
 }
 function proposer(committee,height,round) {
+  // Election results must be bound to an admitted, unmodified committee.
+  // A caller-constructed roster cannot serve as a PoP proposer authority.
+  assertValidatedCommittee(committee);
   requireNumber(height,"height");requireNumber(round,"round",true);
   const seed=hash(Buffer.from(JSON.stringify([
     committee.chainId,committee.genesisHash,committee.epoch,height,round
