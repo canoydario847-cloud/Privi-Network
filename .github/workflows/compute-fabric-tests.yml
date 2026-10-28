@@ -1,0 +1,23 @@
+name: Privi Compute Fabric unit tests
+on:
+  push:
+    paths:
+      - 'compute-fabric/**'
+      - '.github/workflows/compute-fabric-tests.yml'
+  pull_request:
+    paths:
+      - 'compute-fabric/**'
+      - '.github/workflows/compute-fabric-tests.yml'
+permissions:
+  contents: read
+jobs:
+  unit-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test fail-closed routing
+        working-directory: compute-fabric
+        run: python -m unittest -v test_runtime.py
