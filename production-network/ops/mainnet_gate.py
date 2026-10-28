@@ -2,6 +2,8 @@
 """Fail-closed offline Privi mainnet evidence gate. No keys, chain writes or network calls."""
 import argparse
 import json
+import ipaddress
+import re
 import sys
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -36,6 +38,19 @@ def valid_evidence_url(value):
     if (host == "localhost" or host.endswith(".localhost")
             or host in {"example.com", "example.org", "example.net"}
             or host.endswith((".example", ".test", ".invalid", ".local"))):
+        return False
+    # Evidence must be independently retrievable as a public HTTPS report.
+    # Reject IP literals (including loopback, metadata-service and IPv6 hosts),
+    # private DNS suffixes, single-label intranet names and abbreviated numeric
+    # IP spellings. Do not dereference the URL or inspect confidential reports.
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        pass
+    else:
+        return False
+    if ("." not in host or host.endswith((".internal", ".lan", ".home.arpa", ".onion"))
+            or re.fullmatch(r"(?:0[xX][0-9a-fA-F]+|[0-9]+)(?:\\.(?:0[xX][0-9a-fA-F]+|[0-9]+))*", host)):
         return False
     return True
 
