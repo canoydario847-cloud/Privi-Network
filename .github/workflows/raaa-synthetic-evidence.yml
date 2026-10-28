@@ -1,0 +1,40 @@
+name: RAAA synthetic signed evidence verifier (research only)
+
+on:
+  pull_request:
+    paths:
+      - "examples/raaa-synthetic-evidence/**"
+      - ".github/workflows/raaa-synthetic-evidence.yml"
+  push:
+    branches: [feat/raaa-synthetic-evidence-poc]
+    paths:
+      - "examples/raaa-synthetic-evidence/**"
+      - ".github/workflows/raaa-synthetic-evidence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-receipt:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Verify synthetic signatures, ordering, replay and tampering
+        run: |
+          node --test examples/raaa-synthetic-evidence/test_demo.cjs
+      - name: Generate and independently check a disposable demonstration receipt
+        run: |
+          node examples/raaa-synthetic-evidence/demo.cjs create "$RUNNER_TEMP/raaa-synthetic"
+          node examples/raaa-synthetic-evidence/demo.cjs verify \
+            "$RUNNER_TEMP/raaa-synthetic/receipt.json" \
+            "$RUNNER_TEMP/raaa-synthetic/trusted-keys.json"
+      - name: State limitations in workflow summary
+        if: always()
+        run: |
+          echo "## Synthetic local evidence only" >> "$GITHUB_STEP_SUMMARY"
+          echo "No Privi production issuer, independent RAAA identity, verified execution, live customer workflow, PHI, wallet key, deposit, payment or mainnet activation." >> "$GITHUB_STEP_SUMMARY"
