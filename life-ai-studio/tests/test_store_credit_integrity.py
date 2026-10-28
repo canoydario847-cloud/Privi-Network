@@ -209,6 +209,11 @@ def test_durable_startup_requires_preexisting_initialized_database(tmp_path, mon
         )
 
     monkeypatch.setenv("LIFE_REQUIRE_EXISTING_DB", "1")
+    # The old fixture directory defaults to 0755. Guarded startup must refuse
+    # that exposure until the operator makes the persistent directory private.
+    with pytest.raises(RuntimeError, match="owner-only permissions"):
+        store.init()
+    path.parent.chmod(0o700)
     store.init()
     with store.transaction() as db:
         assert db.execute(
