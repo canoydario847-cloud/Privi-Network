@@ -751,7 +751,7 @@ def verify_existing_copy(snapshot: Path, expected_sha256: str):
     if parent_metadata.st_mode & 0o077 or (parent_metadata.st_mode & 0o500) != 0o500:
         # Verifying is read-only, but the operator must be able to list and
         # traverse the directory. Inspect bits explicitly for root processes.
-        raise ValueError("Restore directory must allow owner read and traverse (0500) without group/other access")
+        raise ValueError("Restore directory must have mode 0700 or owner-read/traverse-only mode 0500; chmod 700 the vault first")
     if parent_metadata.st_uid != os.geteuid():
         raise ValueError("Restore directory must be owned by the LIFE backup operator")
     if any(part.is_symlink() for part in parent.parents):
