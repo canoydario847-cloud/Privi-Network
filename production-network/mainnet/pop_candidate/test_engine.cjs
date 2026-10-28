@@ -131,6 +131,31 @@ test("research election is deterministic, not PRVI balances/PoS/PoSA",()=>{
   assert.equal(f.registry.validators.some(v=>Object.hasOwn(v,"stake")),false);
 });
 
+test("research proposer refuses forged or post-admission modified committees",()=>{
+  const f=fixture(4);
+  const original=proposer(f.committee,9,0);
+  assert.equal(f.committee.byId.has(original),true);
+  assert.throws(()=>proposer({...f.committee},9,0),
+                /Unverified PoP committee/);
+  // A cloned roster cannot confer proposer authority, even with the same
+  // IDs, quorum, epoch and genesis as a verified registry.
+  assert.throws(()=>proposer({
+    ...f.committee,
+    validators:[...f.committee.validators],
+    byId:new Map(f.committee.byId)
+  },9,0),/Unverified PoP committee/);
+  const signer=f.committee.validators[0];
+  const originalEntry=f.committee.byId.get(signer.id);
+  try {
+    f.committee.byId.set(signer.id,{...originalEntry});
+    assert.throws(()=>proposer(f.committee,9,0),
+                  /membership changed/);
+  } finally {
+    f.committee.byId.set(signer.id,originalEntry);
+  }
+  assert.equal(proposer(f.committee,9,0),original);
+});
+
 test("reject unapproved, copied or forged PoP authority",()=>{
   const f=fixture();
   const invalid=structuredClone(f.registry);
