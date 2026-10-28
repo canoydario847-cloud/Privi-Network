@@ -195,6 +195,18 @@ services:
         sync: false
       - key: GITHUB_TOKEN                 # optional: higher GitHub limits for crypto inventory repo scans
         sync: false
+      # x402 paid tools (v0.7): readiness package $5, crypto inventory $5, advantage receipt $0.25, hardware routing $1
+      - fromGroup: privi-coinbase-cdp     # CDP_API_KEY_ID / CDP_API_KEY_SECRET for the Coinbase facilitator
+      - key: QUANTUM_PAY_TO               # setting this turns payments on; leave it empty to keep every tool free
+        value: "0x1990589FD200E043b8C6FD9ec5956c61b3071048"
+      - key: QUANTUM_NETWORK
+        value: base
+      - key: QUANTUM_FACILITATOR_URL
+        value: https://api.cdp.coinbase.com/platform/v2/x402
+      - key: PRIVI_PAYMENTS               # paid tools also accept the PRIVI token
+        value: "1"
+      - key: QUANTUM_BENCHMARK_HOURS      # re-run the public benchmark suite (/benchmarks) this often
+        value: "24"
 
   # ------------------------------------------------------------------ Privi Call
   - type: web

@@ -307,7 +307,7 @@ def test_mcp_receipts_hardware_and_vault(tmp_path):
             assert rr["envelope_sha256"] == "ab" * 32
             assert (await c.call_tool("vault_receipt", {"envelope_sha256": "zz"})).is_error
             st = (await c.call_tool("quantum_status", {})).structured_content
-            assert st["version"] == "0.8.0" and st["backends"]["local"] == "ready"
+            assert st["version"] == "0.9.0" and st["backends"]["local"] == "ready"
             return receipt
     receipt = anyio.run(go)
     assert att.get(receipt)["body"]["kind"] == "advantage_receipt"
