@@ -42,10 +42,18 @@ engineering proposals.** Calling the proposal "PoP" does not confer security.
   version, exact research chain ID, genesis hash and membership epoch; proposal
   votes also commit to height, round, previous block hash, candidate block hash
   and designated proposer.
-* The deterministic research proposer is the indexed validator selected by
-  SHA-256(chain ID, genesis, epoch, height, round) modulo validator count,
-  after validators are sorted by public identity. This is not a proof of leader
-  unpredictability or censorship resistance.
+* The deterministic **research-only** proposer uses a versioned
+  `Privi/PoP/Research/ProposerElection/v2` seed: SHA-256 of the UTF-8
+  JSON array [version tag, chain ID, genesis hash, epoch, governance key
+  fingerprint, sorted admitted validator key fingerprints, height, round],
+  interpreted as a big-endian integer modulo validator count. Binding the
+  actual admitted signer roster avoids reusing the same election seed for
+  different committees with identical sizes. Reordering registry JSON cannot
+  change election order. This version change is NOT compatible with earlier
+  research proposer selection and is NOT a reviewed production upgrade.
+  The result remains predictable from public data: it provides **no**
+  unpredictability, fairness guarantee, Sybil resistance, censorship
+  resistance, or production consensus.
 * A prototype commit certificate for N candidate validators requires
   \`floor(2*N/3) + 1\` **distinct valid Ed25519 signatures** to the same
   proposal. N must be between 4 and 31 in tests. An in-memory model rejects
