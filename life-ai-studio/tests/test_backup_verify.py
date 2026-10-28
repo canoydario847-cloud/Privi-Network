@@ -303,6 +303,27 @@ def test_corrupt_database_restore_drill_fails(tmp_path):
     assert not (tmp_path / "vault" / "out.sqlite3").exists()
 
 
+@pytest.mark.parametrize("symlink_location", ["database", "parent"])
+def test_backup_rejects_symlinked_source_without_creating_snapshot(tmp_path, symlink_location):
+    """Do not back up an unintended database through a symlink alias."""
+    private_dir = tmp_path / "private-source"
+    private_dir.mkdir(mode=0o700)
+    original = private_dir / "life.sqlite3"
+    make_database(original)
+    if symlink_location == "database":
+        source = tmp_path / "alias.sqlite3"
+        source.symlink_to(original)
+    else:
+        alias_dir = tmp_path / "alias-directory"
+        alias_dir.symlink_to(private_dir, target_is_directory=True)
+        source = alias_dir / original.name
+    destination = tmp_path / "vault" / "snapshot.sqlite3"
+    with pytest.raises(ValueError, match="Source database path cannot traverse symlinks"):
+        backup.backup_and_verify(source, destination)
+    assert not destination.exists()
+    assert original.exists()
+
+
 def test_symlinked_backup_parent_into_public_is_rejected(tmp_path):
     source = tmp_path / "life.sqlite3"
     make_database(source)
