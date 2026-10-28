@@ -641,7 +641,13 @@ def verify_restore_drill(snapshot: Path):
 
 
 def backup_and_verify(source: Path, destination: Path):
-    source = Path(source).expanduser().resolve(strict=True)
+    # Resolve only after checking the operator-supplied path. Otherwise a
+    # symlink could silently redirect a backup to another tenant's database.
+    # This matches LIFE's guarded startup requirement for real storage paths.
+    source = Path(source).expanduser().absolute()
+    if source.is_symlink() or any(parent.is_symlink() for parent in source.parents):
+        raise ValueError("Source database path cannot traverse symlinks")
+    source = source.resolve(strict=True)
     destination = Path(destination).expanduser().absolute()
     if not source.is_file():
         raise ValueError("Source is not a regular database file")
