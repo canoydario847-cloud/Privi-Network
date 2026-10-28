@@ -145,6 +145,18 @@ class SupplyAuditTests(unittest.TestCase):
         self.assertEqual(outcome["periodic_vesting_accounts_checked"],0)
         self.assertIs(outcome["vesting_execution_verified"],False)
 
+    def test_empty_periodic_original_vesting_rejected(self):
+        g=periodic_genesis()
+        g["app_state"]["auth"]["accounts"][0]["base_vesting_account"]["original_vesting"]=[]
+        with self.assertRaisesRegex(ValueError,"nonempty original_vesting"):
+            self.check(g)
+
+    def test_empty_periodic_release_amount_rejected(self):
+        g=periodic_genesis()
+        g["app_state"]["auth"]["accounts"][0]["vesting_periods"][0]["amount"]=[]
+        with self.assertRaisesRegex(ValueError,"nonempty amount"):
+            self.check(g)
+
     def test_periodic_vesting_amount_mismatch_fails_closed(self):
         with self.assertRaisesRegex(ValueError,"periodic vesting amounts"):
             self.check(periodic_genesis(second=39*UNIT))
