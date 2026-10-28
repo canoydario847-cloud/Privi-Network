@@ -100,6 +100,41 @@ test("two 5-of-7 quorums guarantee at least three verifiable common research sig
   assert.equal(result.doubleSignEvidence.length,3);
   assert.equal(result.slashingAuthorized,false);
 });
+test("conflict evidence signer ordering is canonical despite hostile host locale",()=>{
+  const f=fixture(7);
+  const left=f.certificate({indexes:[0,1,2,3,4]});
+  const right=f.certificate({round:1,block:"0x"+"d".repeat(64),
+                             indexes:[2,3,4,5,6]});
+  const expected=[2,3,4].map(i=>f.committee.validators[i].id).sort();
+  const originalLocaleCompare=String.prototype.localeCompare;
+  try {
+    // Simulate hosts with incompatible collation: evidence verification must
+    // not consult localeCompare for cryptographic signer fingerprint order.
+    String.prototype.localeCompare=function(){
+      throw Error("host locale must not affect PoP conflict evidence");
+    };
+    const first=verifyResearchCertificatePair(f.committee,left,right);
+    const reversed=verifyResearchCertificatePair(f.committee,
+      {...left,votes:[...left.votes].reverse()},
+      {...right,votes:[...right.votes].reverse()});
+    for(const report of [first,reversed]){
+      assert.equal(report.incompatibleCommitments,true);
+      assert.deepEqual(report.doubleSignEvidence.map(v=>v.validatorId),expected);
+      assert.equal(report.minimumGuaranteedIntersection,3);
+      assert.equal(report.slashingAuthorized,false);
+      assert.equal(report.finalityProven,false);
+      for(const evidence of report.doubleSignEvidence){
+        assert.equal(verifyEvidenceSignature(f.committee,evidence.validatorId,
+                                            "commit",evidence.first),true);
+        assert.equal(verifyEvidenceSignature(f.committee,evidence.validatorId,
+                                            "commit",evidence.second),true);
+      }
+    }
+  } finally {
+    String.prototype.localeCompare=originalLocaleCompare;
+  }
+});
+
 test("same block hash with conflicting parent is cryptographic equivocation evidence",()=>{
   const f=fixture(),left=f.certificate({parent:"0x"+"a".repeat(64)}),
     right=f.certificate({round:1,parent:"0x"+"b".repeat(64)});
