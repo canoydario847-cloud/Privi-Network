@@ -33,6 +33,9 @@ function verifyLinkedResearchCertificates({committee, anchorHeight, anchorHash, 
       "Research genesis anchor does not match committee identity");
   }
   const checked = [];
+  // A signed but repeated block identity is not a valid linear history.
+  // Include the anchor to reject a return to an already accepted block.
+  const seenBlockHashes = new Set([anchorHash]);
   let parent = anchorHash;
   let height = anchorHeight;
   for (const item of bundles) {
@@ -46,6 +49,9 @@ function verifyLinkedResearchCertificates({committee, anchorHeight, anchorHash, 
     // Every block is signature-checked under the SAME pinned committee.
     // No membership/epoch transition or view change is inferred here.
     const certificate = verifyCertificate(committee, item.proposal, item.votes);
+    requireValid(!seenBlockHashes.has(certificate.blockHash),
+      "Research certificate repeats an earlier block hash");
+    seenBlockHashes.add(certificate.blockHash);
     checked.push(Object.freeze({
       height: certificate.height,
       round: certificate.round,
