@@ -1,0 +1,24 @@
+{
+  "actorSpecification": 1,
+  "name": "post-quantum-tls-check",
+  "title": "Post-Quantum TLS Check (by Privi)",
+  "description": "Checks websites and APIs for TLS 1.3 and hybrid post-quantum key exchange (X25519MLKEM768, FIPS 203). One result per host with the fix to apply, ready for EO 14409 / OMB M-26-15 and CycloneDX CBOM inventories.",
+  "version": "0.1",
+  "buildTag": "latest",
+  "minMemoryMbytes": 128,
+  "maxMemoryMbytes": 512,
+  "input": "./input_schema.json",
+  "dockerfile": "../Dockerfile",
+  "storages": {
+    "dataset": {
+      "actorSpecification": 1,
+      "views": {
+        "overview": {
+          "title": "Results",
+          "transformation": {"fields": ["host", "port", "status", "tls_version", "pq_key_exchange", "classical_key_exchange", "action"]},
+          "display": {"component": "table"}
+        }
+      }
+    }
+  }
+}
