@@ -123,8 +123,14 @@ def private_existing_database(path):
         owner = os.geteuid()
         return (
             stat.S_ISREG(file_info.st_mode) and file_info.st_nlink == 1
-            and file_info.st_uid == owner and not (file_info.st_mode & 0o077)
+            and file_info.st_uid == owner
+            # A private but unreadable or unwritable DB cannot serve durable
+            # LIFE requests. Root can bypass DAC, so inspect mode bits directly.
+            and (file_info.st_mode & 0o600) == 0o600
+            and not (file_info.st_mode & 0o077)
             and stat.S_ISDIR(parent_info.st_mode) and parent_info.st_uid == owner
+            # SQLite needs directory traversal and journal/WAL file creation.
+            and (parent_info.st_mode & 0o700) == 0o700
             and not (parent_info.st_mode & 0o077)
             and not any(ancestor.is_symlink() for ancestor in path.parent.parents)
         )
