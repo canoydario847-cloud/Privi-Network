@@ -76,6 +76,23 @@ test("four unique PoP position admissions yield exact three-of-four quorum",()=>
   assert.equal(Object.isFrozen(proof),true);
 });
 
+test("research certificate signer attribution is deterministic and immutable",()=>{
+  const f=fixture(7);
+  const {proposal,votes}=f.bundle();
+  const expected=votes.map(v=>v.validatorId).sort();
+  const forward=verifyCertificate(f.committee,proposal,votes);
+  const reversed=verifyCertificate(f.committee,proposal,[...votes].reverse());
+  assert.deepEqual(forward.signerIds,expected);
+  assert.deepEqual(reversed.signerIds,expected);
+  assert.equal(forward.signerIds.length,forward.signers);
+  assert.equal(Object.isFrozen(forward.signerIds),true);
+  assert.throws(()=>{forward.signerIds[0]="0x"+"f".repeat(64);},TypeError);
+  assert.throws(()=>{forward.signerIds.push("forged");},TypeError);
+  assert.deepEqual(forward.signerIds,expected);
+  assert.equal(forward.finalized,false);
+  assert.equal(forward.productionConsensus,false);
+});
+
 test("candidate certificate refuses caller-forged quorum and committee copies",()=>{
   const f=fixture();
   const {proposal,votes}=f.bundle();
