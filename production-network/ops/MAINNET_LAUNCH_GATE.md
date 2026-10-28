@@ -17,6 +17,23 @@ This is an evidence checklist, not a launch authorization. The local Cosmos EVM 
 | 7. Legal and communications | Review of token launch obligations and published user disclosures; claims accurately distinguish PRVI, TEST, BNB PRIV | BLOCKED |
 | 8. Final approval | Named reviewers sign off on immutable binary + genesis hashes; published UTC activation plan and rollback/stop policy | BLOCKED |
 
+## Latest CI evidence (verified 2026-10-27; build-only, NOT launch approval)
+
+Both workflows passed for the current reviewed source commit
+`7fbbe2c6b4c8cbdc9376363bbe3033f70d1f8a1d`:
+
+- [Native mainnet safety checks](https://github.com/canoydario847-cloud/Privi-Network/actions/runs/40448201355):
+  completed successfully.
+- [Four-validator smoke test](https://github.com/canoydario847-cloud/Privi-Network/actions/runs/40448201422):
+  completed successfully with ephemeral test validators.
+
+**Evidence boundary:** Passing ephemeral CI does not demonstrate four
+independently operated production validators, audited production binaries,
+signed genesis, live PoP finality, multi-host public testnet resilience,
+security sign-off, or legal authorization. All eight gates above remain
+BLOCKED pending their specific evidence. A newer source commit must receive
+its own green runs before any claim that the current head passed CI.
+
 ## Cap model progress (NOT a production cap implementation)
 
 A separately tested [proposed 1-billion lifetime PRVI cap model](../mainnet/capmodel/cap.go)

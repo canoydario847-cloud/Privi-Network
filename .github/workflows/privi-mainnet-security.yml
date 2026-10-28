@@ -38,6 +38,8 @@ jobs:
         with:
           go-version: '1.25.9'
           cache: false
+      - name: Test isolated mainnet source export
+        run: python3 -m unittest discover -s production-network/ops -p "test_export_mainnet_only.py" -v
       - name: Run pinned offline tests
         run: bash production-network/testnet/run_offline_checks.sh
       - name: State release limitation in check output

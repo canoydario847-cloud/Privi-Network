@@ -30,6 +30,10 @@ def assess(manifest, genesis_path):
     validators = manifest.get("validators", [])
     require(isinstance(validators, list) and len(validators) >= 4, "at least four validators required")
     if isinstance(validators, list):
+        # Reject malformed entries before inspecting attributes; never allow
+        # untrusted evidence JSON to crash verification with TypeError.
+        require(all(isinstance(v, dict) for v in validators),
+                "each validator must be a JSON object")
         for attr in ("operator_id", "consensus_pubkey", "fault_domain"):
             values = [v.get(attr) for v in validators if isinstance(v, dict)]
             require(len(values) == len(validators) and all(isinstance(x, str) and x.strip() for x in values) and len(set(values)) == len(values),
@@ -38,6 +42,12 @@ def assess(manifest, genesis_path):
                 "each operator must explicitly attest independent control")
     sha = manifest.get("genesis_sha256")
     require(isinstance(sha, str) and HEX64.fullmatch(sha) is not None, "genesis_sha256 required")
+    # Avoid unbounded memory consumption from a malformed or hostile genesis.
+    # The verifier is an offline evidence tool, not a streaming parser.
+    MAX_GENESIS_BYTES = 64 * 1024 * 1024
+    if genesis_path.is_file() and genesis_path.stat().st_size > MAX_GENESIS_BYTES:
+        errors.append("genesis exceeds 64 MiB offline audit limit")
+        return errors
     require(genesis_path.is_file(), "genesis file missing")
     if genesis_path.is_file():
         actual = hashlib.sha256(genesis_path.read_bytes()).hexdigest()
