@@ -60,6 +60,12 @@ fingerprint, previous block hash and block hash for explicit provenance.
 It always returns `finalized:false`, `validatesExecution:false`,
 `validatorIndependenceVerified:false`, and `productionConsensus:false`.
 These are explicit **non-finality** flags, not a path to production approval.
+The certificate also returns a lexicographically sorted, frozen `signerIds`
+array of the verified admitted validator key fingerprints. This makes research
+quorum attribution independent of vote arrival order and prevents accidental
+post-verification mutation of the returned signer list. It is not an
+independently verifiable proof export: the underlying signatures and proposal
+must still be retained and checked against the admitted registry.
 A quorum signature alone cannot establish canonical chain ancestry, execution,
 validator independence or a safe financial settlement.
 
