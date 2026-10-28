@@ -324,6 +324,28 @@ def test_backup_rejects_symlinked_source_without_creating_snapshot(tmp_path, sym
     assert original.exists()
 
 
+@pytest.mark.parametrize("source_name", ["original", "alias"])
+def test_backup_rejects_hardlinked_source_without_creating_snapshot(tmp_path, source_name):
+    """A second pathname to the same SQLite inode must not be a backup source."""
+    private_dir = tmp_path / "private-source"
+    private_dir.mkdir(mode=0o700)
+    original = private_dir / "life.sqlite3"
+    make_database(original)
+    alias = tmp_path / "unintended-tenant-alias.sqlite3"
+    os.link(original, alias)
+    source = original if source_name == "original" else alias
+    destination = tmp_path / "vault" / "snapshot.sqlite3"
+
+    with pytest.raises(ValueError, match="Source database has multiple hard links"):
+        backup.backup_and_verify(source, destination)
+    assert not destination.exists()
+    assert original.exists()
+
+    alias.unlink()
+    # Once the extra hard link is gone, the legitimate database remains usable.
+    assert backup.backup_and_verify(original, destination)["restore_drill"] == "passed"
+
+
 def test_symlinked_backup_parent_into_public_is_rejected(tmp_path):
     source = tmp_path / "life.sqlite3"
     make_database(source)
