@@ -30,8 +30,8 @@ class GateTests(unittest.TestCase):
             "https://user:pass@review.audit-domain.org/report",
             "https://review.audit-domain.org/report#secret",
             "https://review.audit-domain.org:bad/report",
-            "https://review.audit-domain.org/report\\n",
-            "https://review.audit-domain.org/\\treport",
+            "https://review.audit-domain.org/report\n",
+            "https://review.audit-domain.org/\treport",
         ]
         for url in invalid:
             with self.subTest(url=url):
