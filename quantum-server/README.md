@@ -44,6 +44,7 @@ Privi Quantum joins three things into one pipeline:
 | `quantum_run_hardware` / `quantum_hardware_job` | Routes a trained circuit to real hardware by price or speed; the finished run is sealed with an advantage receipt |
 | `pqc_crypto_inventory` | One CBOM for a company from its domains and public GitHub repos: every quantum-vulnerable algorithm, where it is, dated plan |
 | `vault_keygen` / `vault_seal` / `vault_open` / `vault_receipt` | Privi Vault: re-wrap long-lived data under hybrid X25519 + ML-KEM against "harvest now, decrypt later" |
+| `quantum_mandate_request` / `_status` / `_check` / `_revoke` | Quantum Mandates: a human signs spending terms with their passkey before an agent can run paid quantum hardware |
 
 ### Ready-made problems
 
@@ -187,6 +188,29 @@ python -m privi_quantum.vault open contract.vault.json --private-key key.json --
 ```
 
 then send only the envelope's SHA-256 to `vault_receipt` for a signed, anchored protection receipt.
+
+## v0.7: Quantum Mandates
+
+No AI agent spends on paid quantum hardware without a person's signed permission.
+
+1. The agent calls `quantum_mandate_request` with its Privi pass: total budget, cap per job, allowed backends
+   and problems, most shots per job, and how many days it lasts. It gets a `sign_url`.
+2. The person who approved that agent opens the link, reads the exact plain-English terms and signs with their
+   passkey (Face ID, Touch ID, Windows Hello or screen lock; checked on their device). Nobody else can sign.
+   Budgets over `QUANTUM_MANDATE_ID_OVER_USD` (default $100) also need that person's government ID verified.
+3. Every paid run (`quantum_run_hardware` on a backend with a price) must carry `mandate_id` and the agent's
+   `privi_pass`. Privi checks backend, problem, shots, per-job cap and remaining budget under a lock, so two runs
+   can never overspend together. Jobs the provider fails or cancels are refunded to the mandate and to the daily
+   operator budget.
+4. The person revokes on the same page with their passkey; the agent can give up its own mandate with
+   `quantum_mandate_revoke`. Signing and revocation are sealed as attestations (Ed25519 + ML-DSA-87) and
+   anchored on Base, and show up in Privi Explorer.
+
+Public: `/quantum-mandates/<id>` (read, sign, revoke) and `/quantum-mandates/<id>.json`. Free tools:
+`quantum_mandate_check` (dry run) and `quantum_mandate_status`. Config: `QUANTUM_MANDATE_REQUIRED` (default 1;
+0 turns the requirement off) and `QUANTUM_MANDATE_ID_OVER_USD`. Free backends (`local`, IonQ simulator) never
+need a mandate. Mandates authorize spending of the operator's provider accounts; billing the agent's owner for
+that spend is not part of v0.7.
 
 ## Honest limits
 

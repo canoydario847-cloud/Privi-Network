@@ -264,6 +264,14 @@ class Inspector:
                 "use": "Send privi_pass with each quantum realm call (tool argument, header X-Privi-Pass, "
                        "or the WebSocket auth frame)."}
 
+    def agent_for_pass(self, token: str | None) -> str | None:
+        """The agent a current Privi pass was issued to (None if missing or expired)."""
+        if not token:
+            return None
+        r = self._db.execute("SELECT agent_id, expires_at FROM inspector_passes WHERE pass_hash=?",
+                             (hashlib.sha256(token.encode()).hexdigest(),)).fetchone()
+        return r["agent_id"] if r and r["expires_at"] >= time.time() else None
+
     def check_pass(self, token: str | None, scope: str) -> dict:
         """Gate one request. Returns the verdict; in report mode a failing verdict is allowed but logged."""
         if self.mode == "off":

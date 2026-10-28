@@ -174,7 +174,8 @@ function when(t) {
 }
 const setDot = (id, up) => $(id).innerHTML = `<span class="dot ${up ? "up" : "down"}"></span>${up ? "live" : "waking"}`;
 const KIND = {advantage_receipt: "Advantage receipt", pqc_readiness: "Crypto inventory", quantum_agent_certificate: "Agent certificate",
-  quantum_hardware_run: "Hardware run", vault_protection: "Vault protection", optimization: "Optimization"};
+  quantum_hardware_run: "Hardware run", vault_protection: "Vault protection", optimization: "Optimization",
+  quantum_optimization: "Optimization", quantum_mandate: "Quantum mandate", quantum_mandate_revocation: "Mandate revoked"};
 const kindName = k => KIND[k] || String(k || "").replace(/_/g, " ");
 const searchBtn = (q, label) => `<button class="h" data-q="${esc(q)}">${esc(label || q)}</button>`;
 

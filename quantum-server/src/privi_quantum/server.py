@@ -16,6 +16,7 @@ import hashlib
 import hmac
 import json
 import os
+import secrets
 import threading
 import time
 from collections import defaultdict, deque
@@ -35,10 +36,11 @@ from .dream import BENCHMARK, MODES, DreamError, DreamScape, DreamWeaver, Privil
 from .accelerator import LEVEL_LABEL, STEPS, Accelerator, AcceleratorError, badge_svg
 from .inspector import LEVELS as INSPECTOR_LEVELS, Inspector, credential_message
 from .humans import HumanError, HumanRegistry
+from .mandates import MandateError, QuantumMandates
 from .anchoring import AnchorError, HttpAnchorClient, anchor_pending
 from .attest import PQ_ALG, Attestor
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/quantum-server"
 PUBLIC_URL = os.getenv("QUANTUM_PUBLIC_URL", "https://privi-quantum.onrender.com").rstrip("/")
 COPYRIGHT = "Copyright (c) 2026 Privi World Co. All rights reserved."
@@ -98,6 +100,12 @@ factory decisions and returns answers you can prove later.
 14. Privi Vault (harvest now, decrypt later): vault_keygen, vault_seal and vault_open wrap long-lived data under hybrid
    X25519 + ML-KEM encryption; vault_receipt gives a signed, anchored protection receipt for envelopes sealed locally
    (python -m privi_quantum.vault), so the data never has to leave your machine.
+15. Quantum Mandates: an agent may spend on paid quantum hardware only with a mandate its human signed. Call
+   quantum_mandate_request (with your Privi pass) with a budget, per-job cap, allowed backends and problems, max
+   shots and days; send the returned sign_url to the person who approved you. They sign the exact terms with their
+   passkey (budgets over the ID threshold also need their ID verified). Then pass mandate_id and privi_pass to
+   quantum_run_hardware. quantum_mandate_check is a free dry run; quantum_mandate_status shows spend and remaining
+   budget; failed provider jobs are refunded; the person (sign page) or the agent (quantum_mandate_revoke) can revoke.
 
 All tools are free. Privi is built by Dario Canoy (Privi World Co, Port Huron, Michigan).
 For the other Privi tools, pilots, partnerships, manufacturing or government work, see
@@ -137,6 +145,8 @@ class Settings:
     stripe_identity_webhook_secret: str = ""
     hardware_daily_budget_usd: float = 0.0
     hardware_poll_seconds: int = 60
+    mandate_required: bool = True
+    mandate_id_over_usd: float = 100.0
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -164,6 +174,8 @@ class Settings:
             stripe_identity_webhook_secret=os.getenv("STRIPE_IDENTITY_WEBHOOK_SECRET", ""),
             hardware_daily_budget_usd=float(os.getenv("HARDWARE_DAILY_BUDGET_USD", "0") or 0),
             hardware_poll_seconds=int(os.getenv("HARDWARE_POLL_SECONDS", "60")),
+            mandate_required=os.getenv("QUANTUM_MANDATE_REQUIRED", "1") != "0",
+            mandate_id_over_usd=float(os.getenv("QUANTUM_MANDATE_ID_OVER_USD", "100") or 100),
         )
 
 
@@ -218,6 +230,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     scapes.gate = inspector.check_pass
     sweep_state: dict[str, float | None] = {"last": None}
     router = hardware_router or HardwareRouter(settings.db_path, backends_from_env(), settings.hardware_daily_budget_usd)
+    mandates = QuantumMandates(settings.db_path, settings.mandate_id_over_usd)
     scan_repo = repo_scanner or inventory.scan_repo
 
     def realm_gate(ctx: Context, privi_pass: str | None, scope: str) -> CallToolResult | None:
@@ -252,6 +265,9 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
                 "backends": {b["id"]: ("ready" if b["usable_now"] else b["status"] if not b["available"] else b["money_guard"])
                              for b in router.directory()},
                 "hardware_budget_usd": {"daily": router.daily_budget, "spent_today": round(router.spent_today(), 4)},
+                "quantum_mandates": {"required_for_paid_backends": settings.mandate_required,
+                                     "id_verification_over_usd": settings.mandate_id_over_usd,
+                                     "active": mandates.active_count(), "request": "quantum_mandate_request"},
                 "signatures": f"Ed25519 + {PQ_ALG}", "signing_key_id": keys["key_id"],
                 "anchoring": {"enabled": anchor_client is not None, "chain": "Base via Privi Anchor (until the Privi chain mainnet)",
                               "interval_seconds": settings.anchor_interval},
@@ -499,6 +515,8 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         """Poll a hardware job; when it is done, decode the answer and seal a run attestation + advantage receipt once."""
         with finalize_lock:
             j = router.refresh(jid)
+            if j and j["status"] in ("failed", "canceled") and mandates.refund(jid) and j.get("est_cost_usd"):
+                router.refund_spend(j["est_cost_usd"])
             if not j or j["status"] != "done" or j.get("receipt_id"):
                 return j
             qubo, decode = qaoa.build(j["problem"], j["data"])
@@ -535,6 +553,9 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         out = {"job_id": j["job_id"], "status": j["status"], "backend": j["backend_id"], "provider_job_id": j["provider_job_id"],
                "problem": j["problem"], "qubits": j["qubits"], "shots": j["shots"], "estimated_cost_usd": j["est_cost_usd"],
                "submitted_at": j["submitted_at"], "finished_at": j.get("finished_at"), "turnaround_s": j.get("turnaround_s")}
+        sp = mandates.spend_for_job(j["job_id"])
+        if sp:
+            out["mandate"] = {"mandate_id": sp["mandate_id"], "charged_usd": sp["amount"] / 1_000_000, "status": sp["status"]}
         if j.get("error"):
             out["error"] = j["error"]
         if j.get("poll_error"):
@@ -605,13 +626,38 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         layers: Annotated[int, Field(description="QAOA depth p (1-4)", ge=1, le=4)] = 1,
         shots: Annotated[int, Field(description="Shots on the backend (1-10000)", ge=1, le=10000)] = 1000,
         max_cost_usd: Annotated[float | None, Field(description="Refuse if the estimated price is above this", ge=0)] = None,
+        mandate_id: Annotated[str | None, Field(description="qm_... Quantum Mandate your human signed; required for any paid backend")] = None,
+        privi_pass: Annotated[str | None, Field(description="Your Privi pass (ppass_...); required with a mandate")] = None,
     ) -> CallToolResult:
         """Train the CVaR-QAOA circuit, route it to a quantum backend (IonQ, IBM Quantum, Amazon Braket or this
         server's simulator) by price or speed, and return a job id. When the run finishes, the answer is sealed with a
         post-quantum signed attestation and a Quantum Advantage Receipt against classical baselines. Poll with
-        quantum_hardware_job. Free to call; paid QPUs run only within the operator's configured budget."""
+        quantum_hardware_job. Free to call; paid QPUs need a Quantum Mandate signed by the agent's human (quantum_mandate_request) and run only within the
+        operator's configured budget."""
         if not limiter.allow(_who(ctx)):
             return _result({"error": f"rate limit: {settings.rate_per_min} calls per minute"}, is_error=True)
+        try:
+            chosen, est, _ = router.choose(backend, policy, shots, max_cost_usd)
+        except HardwareError as e:
+            return _result({"error": str(e), "backends": "see quantum_backends"}, is_error=True)
+        agent_id, reservation = None, None
+        if est and (settings.mandate_required or mandate_id):
+            if not mandate_id:
+                return _result({"error": f"{chosen.id} is a paid backend (about ${est}): it needs a Quantum Mandate signed by "
+                                         "your human", "how": "quantum_mandate_request, then pass mandate_id and privi_pass",
+                                "free_now": "backend='local' or another free backend"}, is_error=True)
+            tok = privi_pass or ((ctx.headers or {}).get("x-privi-pass") if ctx.headers is not None else None)
+            v = inspector.check_pass(tok, "quantum_run_hardware")
+            agent_id = inspector.agent_for_pass(tok)
+            if not v["allowed"] or not agent_id:
+                return _result({"error": "intercepted by Privi Inspector: a paid run needs your current Privi pass",
+                                "reasons": v.get("reasons"), "fixes": v.get("fixes")}, is_error=True)
+            reservation = "res_" + secrets.token_hex(8)
+            try:
+                mandates.charge(mandate_id, agent_id, reservation, chosen.id, shots, est, problem)
+            except MandateError as e:
+                return _result({"error": f"Quantum Mandate refused this run: {e}", "mandate_id": mandate_id,
+                                "check": "quantum_mandate_check"}, is_error=True)
         try:
             qubo, _ = qaoa.build(problem, data)
             r = await anyio.to_thread.run_sync(lambda: qaoa.solve(qubo, layers=layers, shots=256), limiter=cpu)
@@ -619,9 +665,13 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
                                 r["cost_normalization"]["span"])
             sub = await anyio.to_thread.run_sync(lambda: router.submit(
                 problem, data, qasm, shots, layers, {"angles": r["angles"], "algorithm": r["algorithm"]},
-                backend, policy, max_cost_usd, _who(ctx)))
+                chosen.id, policy, max_cost_usd, agent_id or _who(ctx)))
         except (qaoa.ProblemError, HardwareError) as e:
+            if reservation:
+                mandates.refund(reservation)
             return _result({"error": str(e), "backends": "see quantum_backends"}, is_error=True)
+        if reservation:
+            mandates.bind_job(reservation, sub["job_id"])
         j = await anyio.to_thread.run_sync(finalize_hw, sub["job_id"])
         return _result({**hw_view(j), "routing": sub["routing"], "copyright": COPYRIGHT})
 
@@ -636,6 +686,111 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         if not j:
             return _result({"error": "unknown job_id"}, is_error=True)
         return _result(hw_view(j))
+
+    # ---------------- Privi Quantum Mandates ----------------
+
+    def _sign_url(mid: str) -> str:
+        return f"{PUBLIC_URL}/quantum-mandates/{mid}"
+
+    def _seal_mandate(mid: str, kind: str) -> str:
+        m = mandates.get(mid)
+        body = {"mandate_id": mid, "agent_id": m["agent_id"], "human_id": m["human_id"], "terms_sha256": m["terms_hash"],
+                "terms_text": m["message"], "signed_with": "passkey (WebAuthn, user verified)"}
+        if kind == "quantum_mandate_revocation":
+            body.update(revoked_at=m["revoked_at"], revoked_by=m["revoked_by"], reason=m["revoke_reason"],
+                        spent_usd=m["spent"] / 1_000_000)
+        else:
+            body.update(activated_at=m["activated_at"])
+        att = attestor.issue(kind, body)
+        mandates.set_attestation(mid, att["id"], "revocation_attestation_id" if kind.endswith("revocation") else "attestation_id")
+        return att["id"]
+
+    @mcp.tool(title="Quantum Mandate: request one", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                                                                                idempotentHint=False, openWorldHint=False))
+    async def quantum_mandate_request(
+        ctx: Context,
+        budget_usd: Annotated[float, Field(description="Total the agent may spend on paid quantum hardware under this mandate", gt=0)],
+        purpose: Annotated[str, Field(description="What the runs are for, in plain words (shown to the person who signs)")],
+        max_per_job_usd: Annotated[float | None, Field(description="Most one job may cost (default: the whole budget)", gt=0)] = None,
+        backends: Annotated[list[str] | None, Field(description="Allowed backend ids from quantum_backends (default: any paid backend)")] = None,
+        problems: Annotated[list[str] | None, Field(description="Allowed problems (default: any)")] = None,
+        max_shots: Annotated[int, Field(description="Most shots per job (1-10000)", ge=1, le=10000)] = 1000,
+        days: Annotated[int, Field(description="How long the mandate lasts once signed (1-365)", ge=1, le=365)] = 30,
+        privi_pass: Annotated[str | None, PASS_ARG] = None,
+    ) -> CallToolResult:
+        """Draft a Quantum Mandate: the spending terms under which this agent may run paid quantum hardware jobs.
+        Returns a sign_url for the person who approved the agent; they sign the exact terms with their passkey. Free."""
+        tok = privi_pass or ((ctx.headers or {}).get("x-privi-pass") if ctx.headers is not None else None)
+        if blocked := realm_gate(ctx, tok, "quantum_mandate_request"):
+            return blocked
+        agent_id = inspector.agent_for_pass(tok)
+        if not agent_id:
+            return _result({"error": "send your Privi pass (inspector_pass) so Privi knows which agent is asking"}, is_error=True)
+        appr = humans.approval(agent_id)
+        if not appr or not appr["current"]:
+            return _result({"error": "no current human approval for this agent: qagent_human_request first"}, is_error=True)
+        try:
+            a = accel._row(agent_id)
+            known = {b.id: b.name for b in router.backends.values()}
+            out = mandates.draft(a, appr["human_id"], budget_usd, max_per_job_usd, backends, problems, max_shots, days,
+                                 purpose, known, list(qaoa.TEMPLATES))
+        except (MandateError, AcceleratorError) as e:
+            return _result({"error": str(e)}, is_error=True)
+        return _result({**out, "sign_url": _sign_url(out["mandate_id"]),
+                        "next": "Send sign_url to the person who approved you. Once they sign with their passkey, pass "
+                                "mandate_id and privi_pass to quantum_run_hardware.",
+                        "sign_within_hours": 72})
+
+    @mcp.tool(title="Quantum Mandate: status", annotations=READ_ONLY)
+    def quantum_mandate_status(mandate_id: Annotated[str, Field(description="qm_... id")]) -> CallToolResult:
+        """A Quantum Mandate's terms, status (draft, active, expired, revoked), spend, remaining budget and every
+        charge and refund. Free."""
+        try:
+            return _result({**mandates.public(mandate_id, with_spends=True), "page": _sign_url(mandate_id)})
+        except MandateError as e:
+            return _result({"error": str(e)}, is_error=True)
+
+    @mcp.tool(title="Quantum Mandate: dry run", annotations=READ_ONLY)
+    def quantum_mandate_check(
+        mandate_id: Annotated[str, Field(description="qm_... id")],
+        problem: Annotated[str, Field(description="Problem you plan to run")] = "balance_lines",
+        backend: Annotated[str, Field(description="'auto' or a backend id")] = "auto",
+        policy: Annotated[str, Field(description="cheapest | fastest | hardware")] = "hardware",
+        shots: Annotated[int, Field(ge=1, le=10000)] = 1000,
+    ) -> CallToolResult:
+        """Would this paid run be allowed under the mandate? Picks the backend the router would use, estimates the
+        price and checks it against every term without spending anything. Free."""
+        if not mandates.get(mandate_id):
+            return _result({"error": "unknown mandate"}, is_error=True)
+        try:
+            chosen, est, _ = router.choose(backend, policy, shots, None)
+        except HardwareError as e:
+            return _result({"allowed": False, "reasons": [str(e)], "mandate_id": mandate_id})
+        d = mandates.decide(mandate_id, None, chosen.id, est, shots, problem)
+        return _result({**d, "backend": chosen.id, "paid": bool(est)})
+
+    @mcp.tool(title="Quantum Mandate: revoke (agent)", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True,
+                                                                                   idempotentHint=True, openWorldHint=False))
+    async def quantum_mandate_revoke(
+        ctx: Context,
+        mandate_id: Annotated[str, Field(description="qm_... id")],
+        reason: Annotated[str, Field(description="Why")] = "",
+        privi_pass: Annotated[str | None, PASS_ARG] = None,
+    ) -> CallToolResult:
+        """The agent gives up its own mandate (the person can also revoke on the mandate page with their passkey).
+        The revocation is signed and anchored. Free."""
+        tok = privi_pass or ((ctx.headers or {}).get("x-privi-pass") if ctx.headers is not None else None)
+        agent_id = inspector.agent_for_pass(tok)
+        m = mandates.get(mandate_id)
+        if not m:
+            return _result({"error": "unknown mandate"}, is_error=True)
+        if not agent_id or agent_id != m["agent_id"]:
+            return _result({"error": "only the agent this mandate belongs to can revoke it here (send its Privi pass)"}, is_error=True)
+        try:
+            mandates.revoke(mandate_id, "agent", reason)
+        except MandateError as e:
+            return _result({"error": str(e)}, is_error=True)
+        return _result({**mandates.public(mandate_id), "revocation_attestation_id": _seal_mandate(mandate_id, "quantum_mandate_revocation")})
 
     @mcp.tool(title="Crypto inventory (CBOM) for a company", annotations=ToolAnnotations(
         readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True))
@@ -1466,6 +1621,67 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
                 out["verdict"] = att["body"].get("verdict")
         return JSONResponse(out, headers={**cors, "Cache-Control": "no-store"})
 
+    @mcp.custom_route("/quantum-mandates/{mid}.json", methods=["GET"], include_in_schema=False)
+    async def qmandate_json(request: Request) -> JSONResponse:
+        try:
+            return JSONResponse(mandates.public(request.path_params["mid"], with_spends=True),
+                                headers={**cors, "Cache-Control": "no-store"})
+        except MandateError as e:
+            return JSONResponse({"error": str(e)}, status_code=404, headers=cors)
+
+    @mcp.custom_route("/quantum-mandates/{mid}/options", methods=["GET"], include_in_schema=False)
+    async def qmandate_options(request: Request) -> JSONResponse:
+        try:
+            ch = mandates.challenge(request.path_params["mid"], request.query_params.get("action", "sign"))
+        except MandateError as e:
+            return JSONResponse({"error": str(e)}, status_code=404)
+        return JSONResponse({"get": humans.get_options(ch)}, headers={"Cache-Control": "no-store"})
+
+    @mcp.custom_route("/quantum-mandates/{mid}/sign", methods=["POST"], include_in_schema=False)
+    async def qmandate_sign(request: Request) -> JSONResponse:
+        mid = request.path_params["mid"]
+        try:
+            cred = await request.json()
+            if not isinstance(cred, dict):
+                raise HumanError("send the passkey response as JSON")
+            hid, cid = humans.verify_assertion(cred, mandates.challenge(mid, "sign"))
+            mandates.activate(mid, hid, cid, humans.human(hid)["id_status"] == "verified")
+        except (HumanError, MandateError, ValueError, KeyError, TypeError) as e:
+            return JSONResponse({"error": str(e) or "could not verify the passkey"}, status_code=400)
+        aid = _seal_mandate(mid, "quantum_mandate")
+        return JSONResponse({**mandates.public(mid), "attestation_id": aid}, headers={"Cache-Control": "no-store"})
+
+    @mcp.custom_route("/quantum-mandates/{mid}/revoke", methods=["POST"], include_in_schema=False)
+    async def qmandate_revoke(request: Request) -> JSONResponse:
+        mid = request.path_params["mid"]
+        try:
+            cred = await request.json()
+            if not isinstance(cred, dict):
+                raise HumanError("send the passkey response as JSON")
+            m = mandates.get(mid)
+            if not m:
+                raise MandateError("unknown mandate")
+            hid, _ = humans.verify_assertion(cred, mandates.challenge(mid, "revoke"))
+            if hid != m["human_id"]:
+                raise MandateError("only the person who signed this mandate can revoke it")
+            mandates.revoke(mid, "human", "revoked by the person who signed it")
+        except (HumanError, MandateError, ValueError, KeyError, TypeError) as e:
+            return JSONResponse({"error": str(e) or "could not verify the passkey"}, status_code=400)
+        aid = _seal_mandate(mid, "quantum_mandate_revocation")
+        return JSONResponse({**mandates.public(mid), "revocation_attestation_id": aid}, headers={"Cache-Control": "no-store"})
+
+    @mcp.custom_route("/quantum-mandates/{mid}", methods=["GET"], include_in_schema=False)
+    async def qmandate_page(request: Request) -> Response:
+        mid = request.path_params["mid"]
+        try:
+            m = mandates.public(mid, with_spends=True)
+            a = accel._row(m["agent_id"])
+        except (MandateError, AcceleratorError) as e:
+            return Response(HUMAN_DONE.format(title="Mandate not found", body=_h(str(e))), status_code=404,
+                            media_type="text/html; charset=utf-8")
+        return Response(render_mandate(m, a), media_type="text/html; charset=utf-8",
+                        headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+
     @mcp.custom_route("/reports/{aid}.cbom.json", methods=["GET"], include_in_schema=False)
     async def report_cbom(request: Request) -> Response:
         att = attestor.get(request.path_params["aid"])
@@ -1684,6 +1900,72 @@ that measures every realm and ranks it by expected time to the proven optimum.</
 <p>Every winning answer is signed with Ed25519 + ML-DSA-87 and anchored on chain. Realms run CVaR-QAOA on exact simulators
 today; quantum hardware joins Privilege as a realm once a provider account is connected.</p>
 <p><small>{copyright}</small></p></body></html>"""
+
+
+def render_mandate(m: dict, a: dict) -> str:
+    """The page a person opens to read, sign or revoke a Quantum Mandate with their passkey."""
+    st = m["status"]
+    badge = {"draft": ("#8a5a00", "Waiting for your signature"), "active": ("#0a7d4f", "Active"),
+             "expired": ("#44546a", "Expired"), "revoked": ("#b23a2e", "Revoked")}[st]
+    spends = "".join(f"<tr><td>{_h(x['at'][:16].replace('T', ' '))}</td><td>{_h(x['backend'])}</td><td>{_h(x['shots'])}</td>"
+                     f"<td>${x['usd']:.2f}</td><td>{_h(x['status'])}</td></tr>" for x in m.get("spends", []))
+    spend_tbl = (f"<table><tr><th>When (UTC)</th><th>Backend</th><th>Shots</th><th>Cost</th><th></th></tr>{spends}</table>"
+                 if spends else "<p class=muted>No paid runs yet.</p>")
+    action = "sign" if st == "draft" else "revoke" if st == "active" else ""
+    button = ("<button id=go>Sign with my passkey</button>" if action == "sign" else
+              "<button id=go class=danger>Revoke with my passkey</button>" if action == "revoke" else "")
+    idnote = ("<p class=muted>This budget is over the ID threshold, so your government ID must be verified "
+              "(you can do that from the agent approval link).</p>" if m["needs_id_verification"] and st == "draft" else "")
+    att = (f"<p class=muted>Sealed as attestation <a href='/attestations/{_h(m['attestation_id'])}'>{_h(m['attestation_id'])}</a> "
+           "(Ed25519 + ML-DSA-87), anchored on Base.</p>" if m["attestation_id"] else "")
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quantum Mandate - Privi</title><style>
+:root{{--bg:#f7f8fa;--fg:#16181d;--card:#fff;--line:#d9dce3;--muted:#5b6170;--brand:#5b3fd6}}
+@media (prefers-color-scheme:dark){{:root{{--bg:#0f1115;--fg:#e8eaee;--card:#171a21;--line:#2a2f3a;--muted:#9aa3b2;--brand:#a995ff}}}}
+body{{font:16px/1.55 system-ui,sans-serif;max-width:640px;margin:36px auto;padding:0 16px;color:var(--fg);background:var(--bg)}}
+.card{{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:16px 0}}
+pre{{white-space:pre-wrap;font:14px/1.55 ui-monospace,monospace;margin:0}}.muted{{color:var(--muted);font-size:14px}}
+.badge{{display:inline-block;font:600 13px system-ui;padding:3px 9px;border-radius:999px;color:#fff;background:{badge[0]}}}
+dl{{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0}}dt{{color:var(--muted)}}dd{{margin:0}}
+table{{border-collapse:collapse;width:100%;font-size:14px}}td,th{{text-align:left;padding:6px;border-bottom:1px solid var(--line)}}
+button{{font:600 16px system-ui;padding:12px 16px;border-radius:10px;border:0;background:var(--brand);color:#fff;width:100%;cursor:pointer}}
+button.danger{{background:#b23a2e}}button:disabled{{opacity:.5}}a{{color:var(--brand)}}#msg{{min-height:24px;margin-top:10px}}.ok{{color:#1f7a45}}.bad{{color:#b23a2e}}
+</style></head><body>
+<h1>Quantum Mandate</h1>
+<p><span class="badge">{badge[1]}</span> &nbsp;<span class="muted">{_h(m['mandate_id'])}</span></p>
+<p>The AI agent <b>{_h(a['name'])}</b> (operated by {_h(a['operator'])}) asks to spend on paid quantum computers on your
+behalf. Read the exact terms. Signing uses your Privi passkey; only the person who approved this agent can sign.</p>
+<div class="card"><pre>{_h(m['terms_text'])}</pre></div>
+<div class="card"><dl><dt>Spent</dt><dd>${m['spent_usd']:.2f} of ${m['terms']['budget_usd']:.2f}</dd>
+<dt>Remaining</dt><dd>${m['remaining_usd']:.2f}</dd><dt>Terms SHA-256</dt><dd style="overflow-wrap:anywhere"><code>{_h(m['terms_sha256'])}</code></dd></dl></div>
+{idnote}{button}<div id="msg"></div>
+<h2>Paid runs</h2>{spend_tbl}{att}
+<p class="muted">Your device checks your face, fingerprint or screen lock; Privi receives only a passkey signature over these
+exact terms. Every paid run is checked against them, failed jobs are refunded, and you can revoke here at any time.
+Privi World Co, Port Huron, Michigan.</p>
+<script>
+const mid={json.dumps(m['mandate_id'])}, action={json.dumps(action)};
+const b64u=b=>btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\\+/g,"-").replace(/\\//g,"_").replace(/=+$/,"");
+const unb=s=>Uint8Array.from(atob(s.replace(/-/g,"+").replace(/_/g,"/")+"===".slice((s.length+3)%4)),c=>c.charCodeAt(0));
+const msg=(t,c)=>{{const e=document.getElementById("msg");e.textContent=t;e.className=c||"";}};
+const btn=document.getElementById("go");
+if(btn) btn.onclick=async()=>{{
+  if(!window.PublicKeyCredential){{msg("This browser does not support passkeys. Open the link on a phone or a recent browser.","bad");return;}}
+  btn.disabled=true;
+  try{{
+    const o=await (await fetch(`/quantum-mandates/${{mid}}/options?action=${{action}}`)).json();
+    if(o.error) throw new Error(o.error);
+    const p=o.get; p.challenge=unb(p.challenge);
+    const cred=await navigator.credentials.get({{publicKey:p}});
+    const r=cred.response, body={{id:cred.id,rawId:b64u(cred.rawId),type:cred.type,response:{{clientDataJSON:b64u(r.clientDataJSON),
+      authenticatorData:b64u(r.authenticatorData),signature:b64u(r.signature)}}}};
+    const res=await (await fetch(`/quantum-mandates/${{mid}}/${{action}}`,{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify(body)}})).json();
+    if(res.error) throw new Error(res.error);
+    msg(action==="sign"?"Signed. The agent can now run paid quantum jobs within these terms.":"Revoked. No more paid runs under this mandate.","ok");
+    setTimeout(()=>location.reload(),1500);
+  }}catch(e){{msg(e.name==="NotAllowedError"?"Cancelled or timed out. Try again.":(e.message||"Something went wrong."),"bad");btn.disabled=false;}}
+}};
+</script></body></html>"""
 
 
 def render_receipt(att: dict, v: dict) -> str:
