@@ -93,7 +93,7 @@ def _coin_totals(rows, where):
     return totals
 
 
-def audit_periodic_vesting(app_state, supply_by_denom):
+def audit_periodic_vesting(app_state, supply_by_denom, balances_by_address):
     """Check necessary PeriodicVestingAccount schedule invariants, not vesting execution.
 
     No vesting type other than periodic is considered verified. This function
@@ -159,6 +159,10 @@ def audit_periodic_vesting(app_state, supply_by_denom):
             vested_totals[denom] = vested_totals.get(denom, 0) + amount
             if vested_totals[denom] > supply_by_denom.get(denom, 0):
                 raise ValueError("periodic vesting original allocations exceed bank supply")
+            # Aggregate supply is not evidence that the vesting account owns
+            # its locked coins. Check its own bank allocation at genesis.
+            if amount > balances_by_address.get(address, {}).get(denom, 0):
+                raise ValueError("periodic vesting original allocation exceeds own genesis bank balance")
         count += 1
     return count
 
@@ -183,6 +187,7 @@ def audit(genesis, denom, chain_id):
         raise ValueError("bank balances and supply must both be arrays")
 
     balances_by_denom = {}
+    balances_by_address = {}
     seen_addresses = set()
     for idx, row in enumerate(balances):
         if (not isinstance(row, dict) or
@@ -196,6 +201,7 @@ def audit(genesis, denom, chain_id):
         if not isinstance(coins, list):
             raise ValueError("account coins must be an array")
         local_denoms = set()
+        balances_by_address[address] = {}
         for coin in coins:
             if (not isinstance(coin, dict) or
                 not isinstance(coin.get("denom"), str) or not coin["denom"]):
@@ -208,6 +214,7 @@ def audit(genesis, denom, chain_id):
             if amount == 0:
                 raise ValueError("zero bank balance coin forbidden")
             balances_by_denom[d] = balances_by_denom.get(d, 0) + amount
+            balances_by_address[address][d] = amount
 
     supply_by_denom = {}
     for coin in supplies:
@@ -230,7 +237,7 @@ def audit(genesis, denom, chain_id):
     if found_supply > CAP_BASE:
         raise ValueError("initial PRVI bank supply exceeds proposed 1-billion-coin cap")
 
-    periodic_checked = audit_periodic_vesting(app_state, supply_by_denom)
+    periodic_checked = audit_periodic_vesting(app_state, supply_by_denom, balances_by_address)
 
     return {
         "genesis_bank_audit": "PASS",
