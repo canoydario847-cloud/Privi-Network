@@ -1638,16 +1638,22 @@ def test_backup_refuses_vault_without_owner_write_and_traverse(tmp_path, mode):
     vault.chmod(mode)
     destination = vault / "snapshot.sqlite3"
     try:
-        with pytest.raises(ValueError, match="Backup directory must have mode 0700"):
-            backup.backup_and_verify(source, destination)
+        # With mode 000, path existence checks may fail before the explicit
+        # permission validator, depending on the non-root OS account.
+        if mode == 0o000:
+            with pytest.raises((ValueError, PermissionError)):
+                backup.backup_and_verify(source, destination)
+        else:
+            with pytest.raises(ValueError, match="Backup directory must have mode 0700"):
+                backup.backup_and_verify(source, destination)
     finally:
         vault.chmod(0o700)
     assert not destination.exists(), "Rejected backups must never publish snapshots"
 
 
 @pytest.mark.parametrize("directory_mode,file_mode,error", [
-    (0o400, 0o600, "Restore directory must allow owner read and traverse"),
-    (0o200, 0o600, "Restore directory must allow owner read and traverse"),
+    (0o400, 0o600, "Restore directory must have mode 0700"),
+    (0o200, 0o600, "Restore directory must have mode 0700"),
     (0o700, 0o200, "Backup copy must be readable by its owner"),
     (0o500, 0o400, None),  # Read-only verification is still supported.
 ])
