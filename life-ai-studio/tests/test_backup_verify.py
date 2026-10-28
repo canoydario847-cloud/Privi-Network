@@ -372,6 +372,58 @@ def test_backup_refuses_existing_group_accessible_vault(tmp_path):
     assert backup.backup_and_verify(source, destination)["restore_drill"] == "passed"
 
 
+def test_backup_refuses_foreign_owned_private_vault(tmp_path, monkeypatch):
+    source = tmp_path / "life.sqlite3"
+    make_database(source)
+    vault = tmp_path / "private-vault"
+    vault.mkdir(mode=0o700)
+    destination = vault / "snapshot.sqlite3"
+    with monkeypatch.context() as patch:
+        patch.setattr(backup.os, "geteuid", lambda: os.geteuid() + 1)
+        # The file and directory are mode-private but owned by another UID.
+        with pytest.raises(ValueError, match="owned by the LIFE backup operator"):
+            backup.backup_and_verify(source, destination)
+    assert not destination.exists()
+
+
+def test_verify_copy_refuses_foreign_owned_private_vault(tmp_path, monkeypatch):
+    vault = tmp_path / "private-vault"
+    vault.mkdir(mode=0o700)
+    restored = vault / "restored.sqlite3"
+    make_database(restored)
+    os.chmod(restored, 0o600)
+    digest = hashlib.sha256(restored.read_bytes()).hexdigest()
+    with monkeypatch.context() as patch:
+        patch.setattr(backup.os, "geteuid", lambda: os.geteuid() + 1)
+        with pytest.raises(ValueError, match="Restore directory must be owned"):
+            backup.verify_existing_copy(restored, digest)
+    assert restored.exists()
+
+
+def test_verify_copy_refuses_foreign_owned_file_in_private_vault(tmp_path, monkeypatch):
+    vault = tmp_path / "private-vault"
+    vault.mkdir(mode=0o700)
+    restored = vault / "restored.sqlite3"
+    make_database(restored)
+    os.chmod(restored, 0o600)
+    digest = hashlib.sha256(restored.read_bytes()).hexdigest()
+    original_lstat = Path.lstat
+
+    def foreign_file_metadata(path):
+        info = original_lstat(path)
+        if path == restored:
+            values = list(info)
+            values[4] = os.geteuid() + 1  # synthetic foreign st_uid
+            return os.stat_result(values)
+        return info
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "lstat", foreign_file_metadata)
+        with pytest.raises(ValueError, match="Backup copy must be owned"):
+            backup.verify_existing_copy(restored, digest)
+    assert backup.verify_existing_copy(restored, digest)["restore_drill"] == "passed"
+
+
 def test_backup_refuses_symlink_to_private_vault(tmp_path):
     source = tmp_path / "life.sqlite3"
     make_database(source)
