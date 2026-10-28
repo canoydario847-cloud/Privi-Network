@@ -111,13 +111,15 @@ def private_existing_database(path):
 
     Only used when LIFE_REQUIRE_EXISTING_DB=1; staging defaults are unchanged.
     An operator must provision the file (0600) and its direct directory (0700).
+    Reject hard links: a second name could expose the same database elsewhere.
     """
     path = Path(path).absolute()  # Do not resolve away symlink components.
     try:
         file_mode = path.lstat().st_mode
         parent_mode = path.parent.lstat().st_mode
         return (
-            stat.S_ISREG(file_mode) and not (file_mode & 0o077)
+            stat.S_ISREG(file_mode) and path.lstat().st_nlink == 1
+            and not (file_mode & 0o077)
             and stat.S_ISDIR(parent_mode) and not (parent_mode & 0o077)
             and not any(ancestor.is_symlink() for ancestor in path.parent.parents)
         )
