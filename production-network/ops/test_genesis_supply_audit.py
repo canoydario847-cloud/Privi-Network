@@ -14,7 +14,14 @@ def fixture(amount=100*UNIT):
     return {"chain_id":"privi-candidate-1",
             "app_state":{"bank":{
                 "balances":[{"address":"privi1example","coins":[{"denom":"aprvi","amount":str(amount)}]}],
-                "supply":[{"denom":"aprvi","amount":str(amount)}]}}}
+                "supply":[{"denom":"aprvi","amount":str(amount)}],
+                "denom_metadata":[{
+                    "base":"aprvi","display":"prvi","symbol":"PRVI",
+                    "denom_units":[
+                        {"denom":"aprvi","exponent":0},
+                        {"denom":"prvi","exponent":18}
+                    ]
+                }]}}}
 
 
 def periodic_genesis(original=60*UNIT, first=20*UNIT, second=40*UNIT):
@@ -307,6 +314,48 @@ class SupplyAuditTests(unittest.TestCase):
         g=periodic_genesis()
         del g["app_state"]["auth"]["accounts"][0]["@type"]
         with self.assertRaisesRegex(ValueError,"missing account type"):
+            self.check(g)
+
+
+    def test_native_denom_metadata_required(self):
+        g=fixture()
+        del g["app_state"]["bank"]["denom_metadata"]
+        with self.assertRaisesRegex(ValueError,"denom_metadata"):
+            self.check(g)
+
+    def test_native_denom_metadata_exact_18_decimal_units(self):
+        self.assertIs(self.check(fixture())["native_prvi_metadata_checked"],True)
+        for bad_exponent in (6,17,19,True,"18",-18):
+            with self.subTest(exponent=bad_exponent):
+                g=fixture()
+                g["app_state"]["bank"]["denom_metadata"][0]["denom_units"][1]["exponent"]=bad_exponent
+                with self.assertRaisesRegex(ValueError,"denomination unit|18 decimals"):
+                    self.check(g)
+
+    def test_native_denom_metadata_rejects_wrong_symbol_or_display(self):
+        for field,value in (("symbol","TEST"),("symbol","PRIV"),("display","test")):
+            with self.subTest(field=field,value=value):
+                g=fixture()
+                g["app_state"]["bank"]["denom_metadata"][0][field]=value
+                with self.assertRaisesRegex(ValueError,"identify PRVI"):
+                    self.check(g)
+
+    def test_native_denom_metadata_rejects_duplicate_or_missing_base(self):
+        import copy
+        g=fixture()
+        metadata=g["app_state"]["bank"]["denom_metadata"]
+        metadata.append(copy.deepcopy(metadata[0]))
+        with self.assertRaisesRegex(ValueError,"exactly once"):
+            self.check(g)
+        g=fixture()
+        g["app_state"]["bank"]["denom_metadata"][0]["denom_units"][0]["denom"]="other"
+        with self.assertRaisesRegex(ValueError,"18 decimals"):
+            self.check(g)
+
+    def test_native_denom_metadata_rejects_duplicate_units(self):
+        g=fixture()
+        g["app_state"]["bank"]["denom_metadata"][0]["denom_units"][1]["denom"]="aprvi"
+        with self.assertRaisesRegex(ValueError,"duplicate"):
             self.check(g)
 
 if __name__=="__main__": unittest.main()
