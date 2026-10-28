@@ -61,6 +61,7 @@ def parse_amount(raw, where):
 # Only one Cosmos SDK vesting subtype is modeled here. Other vesting account
 # types must be reviewed separately; they cannot silently count as checked.
 BASE_ACCOUNT_TYPE = "/cosmos.auth.v1beta1.BaseAccount"
+MODULE_ACCOUNT_TYPE = "/cosmos.auth.v1beta1.ModuleAccount"
 PERIODIC_VESTING_TYPE = "/cosmos.vesting.v1beta1.PeriodicVestingAccount"
 MAX_TIME_SECONDS = 2**63 - 1
 
@@ -108,7 +109,7 @@ def audit_periodic_vesting(app_state, supply_by_denom, balances_by_address):
         raise ValueError("genesis auth.accounts missing or malformed")
     count = 0
     seen_vesting_addresses = set()
-    # Scope: direct BaseAccount and PeriodicVestingAccount addresses only.
+    # Scope: BaseAccount, ModuleAccount.base_account, and PeriodicVestingAccount.
     # Other auth account types require their own SDK-aware audit.
     seen_auth_addresses = set()
     vested_totals = {}
@@ -118,10 +119,15 @@ def audit_periodic_vesting(app_state, supply_by_denom, balances_by_address):
         kind = row.get("@type")
         if not isinstance(kind, str):
             raise ValueError("auth account %d missing account type" % index)
-        if kind == BASE_ACCOUNT_TYPE:
-            address = row.get("address")
+        if kind in (BASE_ACCOUNT_TYPE, MODULE_ACCOUNT_TYPE):
+            # Cosmos ModuleAccount embeds a BaseAccount. Check the same address
+            # namespace, including collisions with ordinary/vesting accounts.
+            account = row if kind == BASE_ACCOUNT_TYPE else row.get("base_account")
+            if not isinstance(account, dict):
+                raise ValueError("module auth account missing base_account")
+            address = account.get("address")
             if not isinstance(address, str) or not address.strip():
-                raise ValueError("base auth account missing address")
+                raise ValueError("base or module auth account missing address")
             if address in seen_auth_addresses:
                 raise ValueError("duplicate auth account address")
             seen_auth_addresses.add(address)
