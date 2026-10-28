@@ -16,6 +16,24 @@ def fixture(amount=100*UNIT):
                 "balances":[{"address":"privi1example","coins":[{"denom":"aprvi","amount":str(amount)}]}],
                 "supply":[{"denom":"aprvi","amount":str(amount)}]}}}
 
+
+def periodic_genesis(original=60*UNIT, first=20*UNIT, second=40*UNIT):
+    g=fixture()
+    g["app_state"]["auth"]={"accounts":[{
+        "@type":"/cosmos.vesting.v1beta1.PeriodicVestingAccount",
+        "base_vesting_account":{
+            "base_account":{"address":"privi1vestingexample"},
+            "original_vesting":[{"denom":"aprvi","amount":str(original)}],
+            "end_time":"400"
+        },
+        "start_time":"100",
+        "vesting_periods":[
+            {"length":"100","amount":[{"denom":"aprvi","amount":str(first)}]},
+            {"length":"200","amount":[{"denom":"aprvi","amount":str(second)}]}
+        ]
+    }]}
+    return g
+
 class SupplyAuditTests(unittest.TestCase):
     def check(self,g):return mod.audit(g,"aprvi","privi-candidate-1")
     def test_valid_allocation(self):
@@ -115,5 +133,72 @@ class SupplyAuditTests(unittest.TestCase):
             import json
             candidate.write_text(json.dumps(fixture()), encoding="utf-8")
             self.assertEqual(self.check(mod.load_strict_genesis(candidate))["genesis_bank_audit"], "PASS")
+
+
+    def test_periodic_vesting_sums_and_release_dates_reconcile(self):
+        outcome=self.check(periodic_genesis())
+        self.assertEqual(outcome["periodic_vesting_accounts_checked"],1)
+        self.assertIs(outcome["vesting_execution_verified"],False)
+
+    def test_no_auth_accounts_never_claims_vesting_verified(self):
+        outcome=self.check(fixture())
+        self.assertEqual(outcome["periodic_vesting_accounts_checked"],0)
+        self.assertIs(outcome["vesting_execution_verified"],False)
+
+    def test_periodic_vesting_amount_mismatch_fails_closed(self):
+        with self.assertRaisesRegex(ValueError,"periodic vesting amounts"):
+            self.check(periodic_genesis(second=39*UNIT))
+
+    def test_periodic_vesting_incorrect_end_time_fails_closed(self):
+        g=periodic_genesis()
+        g["app_state"]["auth"]["accounts"][0]["base_vesting_account"]["end_time"]="401"
+        with self.assertRaisesRegex(ValueError,"end_time"):
+            self.check(g)
+
+    def test_periodic_vesting_overallocations_exceed_bank_supply(self):
+        # All period coins agree with original, but genesis cannot vest more
+        # than its entire bank supply of that denomination.
+        with self.assertRaisesRegex(ValueError,"allocations exceed bank supply"):
+            self.check(periodic_genesis(original=101*UNIT,first=50*UNIT,second=51*UNIT))
+
+    def test_noncanonical_times_and_zero_length_rejected(self):
+        for field, value in (("start_time","0100"),("start_time",100),
+                             ("start_time","-100"),("start_time","9223372036854775808")):
+            with self.subTest(field=field,value=value):
+                g=periodic_genesis()
+                g["app_state"]["auth"]["accounts"][0][field]=value
+                with self.assertRaisesRegex(ValueError,"time"):
+                    self.check(g)
+        g=periodic_genesis()
+        g["app_state"]["auth"]["accounts"][0]["vesting_periods"][0]["length"]="0"
+        with self.assertRaisesRegex(ValueError,"time out of bounds"):
+            self.check(g)
+
+    def test_periodic_vesting_rejects_time_overflow(self):
+        g=periodic_genesis()
+        account=g["app_state"]["auth"]["accounts"][0]
+        account["start_time"]=str(mod.MAX_TIME_SECONDS-100)
+        with self.assertRaisesRegex(ValueError,"time overflow"):
+            self.check(g)
+
+    def test_duplicate_periodic_vesting_addresses_rejected(self):
+        import copy
+        g=periodic_genesis()
+        g["app_state"]["auth"]["accounts"].append(
+            copy.deepcopy(g["app_state"]["auth"]["accounts"][0]))
+        with self.assertRaisesRegex(ValueError,"duplicate periodic vesting"):
+            self.check(g)
+
+    def test_unsupported_cosmos_vesting_type_requires_manual_review(self):
+        g=periodic_genesis()
+        g["app_state"]["auth"]["accounts"][0]["@type"]="/cosmos.vesting.v1beta1.ContinuousVestingAccount"
+        with self.assertRaisesRegex(ValueError,"unsupported vesting"):
+            self.check(g)
+
+    def test_missing_auth_account_type_rejected(self):
+        g=periodic_genesis()
+        del g["app_state"]["auth"]["accounts"][0]["@type"]
+        with self.assertRaisesRegex(ValueError,"missing account type"):
+            self.check(g)
 
 if __name__=="__main__": unittest.main()
