@@ -50,7 +50,7 @@ def valid_evidence_url(value):
     else:
         return False
     if ("." not in host or host.endswith((".internal", ".lan", ".home.arpa", ".onion"))
-            or re.fullmatch(r"(?:0[xX][0-9a-fA-F]+|[0-9]+)(?:\\.(?:0[xX][0-9a-fA-F]+|[0-9]+))*", host)):
+            or re.fullmatch(r"(?:0[xX][0-9a-fA-F]+|[0-9]+)(?:\.(?:0[xX][0-9a-fA-F]+|[0-9]+))*", host)):
         return False
     return True
 
