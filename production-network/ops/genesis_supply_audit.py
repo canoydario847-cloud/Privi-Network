@@ -144,11 +144,13 @@ def audit_periodic_vesting(app_state, supply_by_denom, balances_by_address):
             seen_auth_addresses.add(address)
             continue
         if kind != PERIODIC_VESTING_TYPE:
-            # Unrecognized Cosmos SDK vesting accounts are NEVER treated as
-            # successfully verified by a periodic-only preflight.
+            # Unknown auth types may embed a BaseAccount address (including
+            # EVM-specific account wrappers). Silently skipping them can
+            # conceal duplicate identities and wrongly label genesis audited.
+            # Add explicit SDK-aware handlers before accepting such accounts.
             if "vesting" in kind.casefold():
                 raise ValueError("unsupported vesting account type requires separate review")
-            continue
+            raise ValueError("unsupported auth account type requires separate SDK-aware review")
         base = row.get("base_vesting_account")
         if not isinstance(base, dict) or not isinstance(base.get("base_account"), dict):
             raise ValueError("periodic vesting missing base account")
