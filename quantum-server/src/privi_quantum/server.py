@@ -30,7 +30,7 @@ from pydantic import Field
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 
-from . import advantage, govpqc, govreport, inventory, pqctls, qaoa, scanner, vault
+from . import advantage, circuits, govpqc, leaderboard as board, govreport, inventory, pqctls, qaoa, scanner, vault
 from .hardware import HardwareError, HardwareRouter, backends_from_env
 from .dream import BENCHMARK, MODES, DreamError, DreamScape, DreamWeaver, Privilege
 from .accelerator import LEVEL_LABEL, STEPS, Accelerator, AcceleratorError, badge_svg
@@ -40,9 +40,10 @@ from .mandates import MandateError, QuantumMandates
 from .anchoring import AnchorError, HttpAnchorClient, anchor_pending
 from .attest import PQ_ALG, Attestor
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/quantum-server"
 PUBLIC_URL = os.getenv("QUANTUM_PUBLIC_URL", "https://privi-quantum.onrender.com").rstrip("/")
+EXPLORER_URL = os.getenv("PRIVI_EXPLORER_URL", "").rstrip("/") or f"{PUBLIC_URL}/explorer/lookup"
 COPYRIGHT = "Copyright (c) 2026 Privi World Co. All rights reserved."
 
 INSTRUCTIONS = f"""\
@@ -106,6 +107,9 @@ factory decisions and returns answers you can prove later.
    passkey (budgets over the ID threshold also need their ID verified). Then pass mandate_id and privi_pass to
    quantum_run_hardware. quantum_mandate_check is a free dry run; quantum_mandate_status shows spend and remaining
    budget; failed provider jobs are refunded; the person (sign page) or the agent (quantum_mandate_revoke) can revoke.
+16. Bring your own circuit: quantum_run_circuit takes the OpenQASM 2.0/3.0 that Qiskit writes (qasm2.dumps / qasm3.dumps)
+   and runs it on IBM Quantum, IonQ, Amazon Braket or the local simulator; the counts are sealed and anchored.
+17. quantum_leaderboard (and /leaderboard) ranks every backend only by runs Privi measured and sealed.
 
 All tools are free. Privi is built by Dario Canoy (Privi World Co, Port Huron, Michigan).
 For the other Privi tools, pilots, partnerships, manufacturing or government work, see
@@ -511,6 +515,30 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
 
     finalize_lock = threading.Lock()
 
+    def paid_gate(ctx: Context, chosen, est: float, shots: int, problem: str, mandate_id: str | None,
+                  privi_pass: str | None, scope: str) -> tuple[str | None, str | None, CallToolResult | None]:
+        """A paid backend needs the agent's Privi pass and a Quantum Mandate that covers this run; the estimate is
+        reserved against the mandate under its lock. Returns (agent_id, reservation_id, error_result)."""
+        if not (est and (settings.mandate_required or mandate_id)):
+            return None, None, None
+        if not mandate_id:
+            return None, None, _result({"error": f"{chosen.id} is a paid backend (about ${est}): it needs a Quantum Mandate signed "
+                                                 "by your human", "how": "quantum_mandate_request, then pass mandate_id and privi_pass",
+                                        "free_now": "backend='local' or another free backend"}, is_error=True)
+        tok = privi_pass or ((ctx.headers or {}).get("x-privi-pass") if ctx.headers is not None else None)
+        v = inspector.check_pass(tok, scope)
+        agent_id = inspector.agent_for_pass(tok)
+        if not v["allowed"] or not agent_id:
+            return None, None, _result({"error": "intercepted by Privi Inspector: a paid run needs your current Privi pass",
+                                        "reasons": v.get("reasons"), "fixes": v.get("fixes")}, is_error=True)
+        reservation = "res_" + secrets.token_hex(8)
+        try:
+            mandates.charge(mandate_id, agent_id, reservation, chosen.id, shots, est, problem)
+        except MandateError as e:
+            return None, None, _result({"error": f"Quantum Mandate refused this run: {e}", "mandate_id": mandate_id,
+                                        "check": "quantum_mandate_check"}, is_error=True)
+        return agent_id, reservation, None
+
     def finalize_hw(jid: str) -> dict | None:
         """Poll a hardware job; when it is done, decode the answer and seal a run attestation + advantage receipt once."""
         with finalize_lock:
@@ -519,6 +547,8 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
                 router.refund_spend(j["est_cost_usd"])
             if not j or j["status"] != "done" or j.get("receipt_id"):
                 return j
+            if j["problem"] == "circuit":
+                return seal_circuit(j)
             qubo, decode = qaoa.build(j["problem"], j["data"])
             meas = advantage.best_from_counts(qubo, j["counts"])
             b = router.backends.get(j["backend_id"])
@@ -542,6 +572,24 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
             router.save_result(jid, result, run["id"], rc["id"])
             return router.get(jid)
 
+    def seal_circuit(j: dict) -> dict:
+        """A user circuit finished: seal its measurement statistics (no classical baseline for arbitrary circuits)."""
+        n, shots = j["qubits"], j["shots"]
+        counts = sorted(j["counts"].items(), key=lambda kv: -kv[1])
+        top = [{"bitstring": circuits.bitstring(k, n), "count": c, "probability": round(c / max(1, sum(j["counts"].values())), 6)}
+               for k, c in counts[:32]]
+        b = router.backends.get(j["backend_id"])
+        run = attestor.issue("quantum_circuit_run", {
+            "source": j["data"].get("source", "openqasm"), "source_sha256": j["data"].get("source_sha256"),
+            "circuit_sha256": hashlib.sha256(j["qasm"].encode()).hexdigest(), "label": j["data"].get("label", ""),
+            "qubits": n, "basis_gates": j["data"].get("basis_gates"), "backend": j["backend_id"],
+            "backend_kind": b.kind if b else "unknown", "provider_job_id": j["provider_job_id"], "shots": shots,
+            "distinct_outcomes": len(counts), "top_outcomes": top, "turnaround_s": j.get("turnaround_s"),
+            "estimated_cost_usd": j["est_cost_usd"], "bit_order": "Qiskit order: qubit 0 is the rightmost bit"})
+        router.save_result(j["job_id"], {"counts": {circuits.bitstring(k, n): c for k, c in counts[:1024]},
+                                         "top_outcomes": top, "attestation_id": run["id"]}, run["id"], run["id"])
+        return router.get(j["job_id"])
+
     def finalize_open() -> int:
         n = 0
         for jid in router.open_jobs():
@@ -560,7 +608,12 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
             out["error"] = j["error"]
         if j.get("poll_error"):
             out["poll_error"] = j["poll_error"]
-        if j.get("result"):
+        if j.get("result") and j["problem"] == "circuit":
+            out["counts"] = j["result"]["counts"]
+            out["top_outcomes"] = j["result"]["top_outcomes"][:8]
+            out["bit_order"] = "Qiskit order: qubit 0 is the rightmost bit"
+            out["attestation"] = {"id": j["attestation_id"], **links(j["attestation_id"])}
+        elif j.get("result"):
             out["decision"] = j["result"]["decision"]
             out["measurement"] = j["result"]["measurement"]
             out["attestation"] = {"id": j["attestation_id"], **links(j["attestation_id"])}
@@ -640,24 +693,9 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
             chosen, est, _ = router.choose(backend, policy, shots, max_cost_usd)
         except HardwareError as e:
             return _result({"error": str(e), "backends": "see quantum_backends"}, is_error=True)
-        agent_id, reservation = None, None
-        if est and (settings.mandate_required or mandate_id):
-            if not mandate_id:
-                return _result({"error": f"{chosen.id} is a paid backend (about ${est}): it needs a Quantum Mandate signed by "
-                                         "your human", "how": "quantum_mandate_request, then pass mandate_id and privi_pass",
-                                "free_now": "backend='local' or another free backend"}, is_error=True)
-            tok = privi_pass or ((ctx.headers or {}).get("x-privi-pass") if ctx.headers is not None else None)
-            v = inspector.check_pass(tok, "quantum_run_hardware")
-            agent_id = inspector.agent_for_pass(tok)
-            if not v["allowed"] or not agent_id:
-                return _result({"error": "intercepted by Privi Inspector: a paid run needs your current Privi pass",
-                                "reasons": v.get("reasons"), "fixes": v.get("fixes")}, is_error=True)
-            reservation = "res_" + secrets.token_hex(8)
-            try:
-                mandates.charge(mandate_id, agent_id, reservation, chosen.id, shots, est, problem)
-            except MandateError as e:
-                return _result({"error": f"Quantum Mandate refused this run: {e}", "mandate_id": mandate_id,
-                                "check": "quantum_mandate_check"}, is_error=True)
+        agent_id, reservation, blocked = paid_gate(ctx, chosen, est, shots, problem, mandate_id, privi_pass, "quantum_run_hardware")
+        if blocked:
+            return blocked
         try:
             qubo, _ = qaoa.build(problem, data)
             r = await anyio.to_thread.run_sync(lambda: qaoa.solve(qubo, layers=layers, shots=256), limiter=cpu)
@@ -733,7 +771,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
             a = accel._row(agent_id)
             known = {b.id: b.name for b in router.backends.values()}
             out = mandates.draft(a, appr["human_id"], budget_usd, max_per_job_usd, backends, problems, max_shots, days,
-                                 purpose, known, list(qaoa.TEMPLATES))
+                                 purpose, known, list(qaoa.TEMPLATES) + ["circuit"])
         except (MandateError, AcceleratorError) as e:
             return _result({"error": str(e)}, is_error=True)
         return _result({**out, "sign_url": _sign_url(out["mandate_id"]),
@@ -791,6 +829,54 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         except MandateError as e:
             return _result({"error": str(e)}, is_error=True)
         return _result({**mandates.public(mandate_id), "revocation_attestation_id": _seal_mandate(mandate_id, "quantum_mandate_revocation")})
+
+    @mcp.tool(title="Run your own circuit (Qiskit / OpenQASM)", annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True))
+    async def quantum_run_circuit(
+        qasm: Annotated[str, Field(description="OpenQASM 2.0 or 3.0 text, e.g. from Qiskit: qiskit.qasm2.dumps(circuit) or qiskit.qasm3.dumps(circuit)")],
+        ctx: Context,
+        backend: Annotated[str, Field(description="'auto' or a backend id from quantum_backends (local, ionq:simulator, ionq:qpu.forte-1, ibm:<name>, braket:<name>)")] = "auto",
+        policy: Annotated[str, Field(description="With backend='auto': cheapest | fastest | hardware (real QPUs only)")] = "cheapest",
+        shots: Annotated[int, Field(description="Shots (1-10000)", ge=1, le=10000)] = 1000,
+        label: Annotated[str, Field(description="Optional short name for the run (kept in the sealed record)")] = "",
+        max_cost_usd: Annotated[float | None, Field(description="Refuse if the estimated price is above this", ge=0)] = None,
+        mandate_id: Annotated[str | None, Field(description="qm_... Quantum Mandate (required for paid backends)")] = None,
+        privi_pass: Annotated[str | None, Field(description="Your Privi pass (ppass_...); required with a mandate")] = None,
+    ) -> CallToolResult:
+        """Bring your own quantum circuit. Paste the OpenQASM that Qiskit writes and Privi runs it on IBM Quantum, IonQ,
+        Amazon Braket or its own simulator, picked by price or speed, then seals the measurement counts with a
+        post-quantum signature anchored on chain. Standard Qiskit gates are rewritten exactly into h, rz, rx, cx; all
+        qubits are measured at the end. Poll with quantum_hardware_job. Free on free backends; paid QPUs need a
+        Quantum Mandate."""
+        if not limiter.allow(_who(ctx)):
+            return _result({"error": f"rate limit: {settings.rate_per_min} calls per minute"}, is_error=True)
+        try:
+            c = circuits.parse(qasm)
+            chosen, est, _ = router.choose(backend, policy, shots, max_cost_usd)
+        except (circuits.CircuitError, HardwareError) as e:
+            return _result({"error": str(e), "backends": "see quantum_backends"}, is_error=True)
+        if chosen.id == "local" and c["qubits"] > circuits.LOCAL_MAX_QUBITS:
+            return _result({"error": f"the local simulator runs up to {circuits.LOCAL_MAX_QUBITS} qubits; choose a provider "
+                                     "backend for this circuit"}, is_error=True)
+        agent_id, reservation, blocked = paid_gate(ctx, chosen, est, shots, "circuit", mandate_id, privi_pass, "quantum_run_circuit")
+        if blocked:
+            return blocked
+        basis = circuits.to_basis_qasm(c["qubits"], c["gates"])
+        data = {"source": f"openqasm {c['version']}", "source_sha256": c["source_sha256"], "label": " ".join(label.split())[:80],
+                "basis_gates": len(c["gates"]), "source_gates": c["source_gates"], "registers": c["registers"]}
+        try:
+            sub = await anyio.to_thread.run_sync(lambda: router.submit(
+                "circuit", data, basis, shots, 0, {"rewritten_to": ["h", "rz", "rx", "cx"]}, chosen.id, policy,
+                max_cost_usd, agent_id or _who(ctx)), limiter=cpu)
+        except HardwareError as e:
+            if reservation:
+                mandates.refund(reservation)
+            return _result({"error": str(e), "backends": "see quantum_backends"}, is_error=True)
+        if reservation:
+            mandates.bind_job(reservation, sub["job_id"])
+        j = await anyio.to_thread.run_sync(finalize_hw, sub["job_id"])
+        return _result({**hw_view(j), "routing": sub["routing"], "circuit": {"qubits": c["qubits"], "source_gates": c["source_gates"],
+                        "basis_gates": len(c["gates"]), "openqasm": c["version"]}, "copyright": COPYRIGHT})
 
     @mcp.tool(title="Crypto inventory (CBOM) for a company", annotations=ToolAnnotations(
         readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True))
@@ -1620,6 +1706,21 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
             if kind == "advantage_receipt":
                 out["verdict"] = att["body"].get("verdict")
         return JSONResponse(out, headers={**cors, "Cache-Control": "no-store"})
+
+    @mcp.tool(title="Privi Quantum Leaderboard", annotations=READ_ONLY)
+    def quantum_leaderboard() -> CallToolResult:
+        """Every quantum backend (IBM Quantum, IonQ, Amazon Braket, simulators) ranked only by runs Privi measured and
+        sealed: share that found the proven optimum, jobs finished, median turnaround, median cost, and the quantum vs
+        classical tally from Quantum Advantage Receipts. Free. Page: /leaderboard."""
+        return _result({**board.compute(router, attestor), "page": f"{PUBLIC_URL}/leaderboard"})
+
+    @mcp.custom_route("/leaderboard.json", methods=["GET"], include_in_schema=False)
+    async def leaderboard_json(_: Request) -> JSONResponse:
+        return JSONResponse(board.compute(router, attestor), headers={**cors, "Cache-Control": "no-store"})
+
+    @mcp.custom_route("/leaderboard", methods=["GET"], include_in_schema=False)
+    async def leaderboard_page(_: Request) -> Response:
+        return HTMLResponse(board.render(board.compute(router, attestor), EXPLORER_URL), headers={"Cache-Control": "no-store"})
 
     @mcp.custom_route("/quantum-mandates/{mid}.json", methods=["GET"], include_in_schema=False)
     async def qmandate_json(request: Request) -> JSONResponse:

@@ -73,7 +73,7 @@ footer p{margin:0 0 8px;max-width:60em}
 <body>
 <header><div class="wrap bar">
   <a class="mark" href="./"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#0E1B33"/><path d="M18 46V18h14a10 10 0 0 1 0 20h-6v8z" fill="none" stroke="#7FA2FF" stroke-width="5" stroke-linejoin="round"/><circle cx="46" cy="44" r="4" fill="#3CCB94"/></svg>Privi Explorer</a>
-  <nav><a href="https://www.privishine.info">Privi</a><a id="nav-scan" href="#">Quantum Scan</a><a id="nav-token" href="#">PRIVI on Basescan</a><a href="https://github.com/canoydario847-cloud/Privi-Network">Source</a></nav>
+  <nav><a href="https://www.privishine.info">Privi</a><a id="nav-scan" href="#">Quantum Scan</a><a id="nav-token" href="#">PRIVI on Basescan</a><a href="https://privi-quantum.onrender.com/leaderboard">Leaderboard</a><a href="https://github.com/canoydario847-cloud/Privi-Network">Source</a></nav>
 </div></header>
 
 <main class="wrap">
@@ -175,7 +175,7 @@ function when(t) {
 const setDot = (id, up) => $(id).innerHTML = `<span class="dot ${up ? "up" : "down"}"></span>${up ? "live" : "waking"}`;
 const KIND = {advantage_receipt: "Advantage receipt", pqc_readiness: "Crypto inventory", quantum_agent_certificate: "Agent certificate",
   quantum_hardware_run: "Hardware run", vault_protection: "Vault protection", optimization: "Optimization",
-  quantum_optimization: "Optimization", quantum_mandate: "Quantum mandate", quantum_mandate_revocation: "Mandate revoked"};
+  quantum_optimization: "Optimization", quantum_mandate: "Quantum mandate", quantum_mandate_revocation: "Mandate revoked", quantum_circuit_run: "Circuit run"};
 const kindName = k => KIND[k] || String(k || "").replace(/_/g, " ");
 const searchBtn = (q, label) => `<button class="h" data-q="${esc(q)}">${esc(label || q)}</button>`;
 
