@@ -113,7 +113,10 @@ function parseRegistry(registry, governanceKey) {
     validated.push({id,pub:pub.key,operatorId,faultDomain,stamp,positionHash,
                     anchorBlockHash});
   }
-  validated.sort((a,b)=>a.id.localeCompare(b.id));
+  // Research proposer election hashes this order. Locale collation can vary
+  // across hosts/ICU versions; fixed lowercase-hex fingerprints must use
+  // raw UTF-16/ASCII code-unit ordering on every research node.
+  validated.sort((a,b)=>a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   // No PRVI staking power, token holdings or IoT event count affects
   // committee weight. This is *proposed* equal-one-vote research admission.
   const quorum=Math.floor(2*validated.length/3)+1;
