@@ -95,6 +95,27 @@ test("fails closed on empty, oversized, or forged research batch",()=>{
   assert.throws(()=>verifyCandidateAncestry(f.committee,f.checkpoint,{}),/1..256/);
 });
 
+test("rejects inherited, accessor-backed, and ambiguous caller-supplied checkpoints",()=>{
+  const f=makeFixture(),items=f.sequence(1);
+  const inherited=Object.create({height:f.checkpoint.height});
+  inherited.blockHash=f.checkpoint.blockHash;
+  let getterReads=0;
+  const accessor={blockHash:f.checkpoint.blockHash};
+  Object.defineProperty(accessor,"height",{
+    enumerable:true,get(){getterReads++;return f.checkpoint.height;}
+  });
+  for(const untrusted of [
+    inherited,accessor,{...f.checkpoint,finalized:true},
+    Object.assign(Object.create(null),f.checkpoint)
+  ]){
+    assert.throws(()=>verifyCandidateAncestry(f.committee,untrusted,items),
+      /plain own height and blockHash data fields/);
+  }
+  assert.equal(getterReads,0,"untrusted checkpoint getter must not execute");
+  assert.equal(verifyCandidateAncestry(f.committee,f.checkpoint,items)
+    .verifiedCandidateCertificates,1);
+});
+
 test("detects missing starting candidate and gap after accepted height",()=>{
   const f=makeFixture(),items=f.sequence(3);
   assert.throws(()=>verifyCandidateAncestry(f.committee,f.checkpoint,items.slice(1)),
