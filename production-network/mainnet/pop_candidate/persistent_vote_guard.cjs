@@ -94,8 +94,11 @@ function reservePosition(dir, committee, height, validatorId, blockHash, previou
       must(stat.isFile() && stat.size>0 && stat.size<=2048 &&
            (stat.mode & 0o077)===0 && stat.nlink===1,
            "PoP height lock corrupt, hard-linked or insecure; refuse to sign");
-      let old;
-      try { old=JSON.parse(fs.readFileSync(oldFd,"utf8")); }
+      let old, original;
+      try {
+        original=fs.readFileSync(oldFd);
+        old=JSON.parse(original.toString("utf8"));
+      }
       catch (_) {throw Error("PoP height lock corrupt; refuse to sign");}
       for (const field of Object.keys(record)) {
         must(old[field]===record[field],
@@ -105,6 +108,13 @@ function reservePosition(dir, committee, height, validatorId, blockHash, previou
       }
       must(Object.keys(old).length===Object.keys(record).length,
            "PoP height lock unexpected data");
+      // JSON.parse silently accepts duplicate field names and alternative
+      // encodings, masking an earlier forged field behind the later one.
+      // The guard may replay ONLY the precise bytes this signer writes.
+      // This conservatively rejects reordered, duplicated or extra fields.
+      const canonical=Buffer.from(JSON.stringify(record)+"\n","utf8");
+      must(original.equals(canonical),
+           "PoP height lock corrupt or noncanonical; refuse to sign");
       // A previous attempt may have failed during fsync. Never release a
       // replayed signature until the file and directory are both durable.
       fs.fsyncSync(oldFd);
