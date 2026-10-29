@@ -503,6 +503,29 @@ class SupplyAuditTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "malformed non-native denomination unit"):
                     self.check(g)
 
+    def test_non_native_denom_units_require_uint32_exponents_and_nonempty_units(self):
+        # A malformed unrelated token metadata entry must not pass a PRVI
+        # candidate-genesis preflight simply because its labels are distinct.
+        for exponent in (None, True, False, -1, "6", 1.5, 4294967296):
+            with self.subTest(exponent=exponent):
+                g = fixture()
+                g["app_state"]["bank"]["denom_metadata"].append({
+                    "base": "uatom", "display": "atom", "symbol": "ATOM",
+                    "denom_units": [
+                        {"denom": "uatom", "exponent": 0},
+                        {"denom": "atom", "exponent": exponent},
+                    ],
+                })
+                with self.assertRaisesRegex(ValueError, "exponent must be uint32"):
+                    self.check(g)
+        g = fixture()
+        g["app_state"]["bank"]["denom_metadata"].append({
+            "base": "uatom", "display": "atom", "symbol": "ATOM",
+            "denom_units": [],
+        })
+        with self.assertRaisesRegex(ValueError, "at least one unit"):
+            self.check(g)
+
     def test_non_native_denom_units_reject_duplicate_or_empty_names(self):
         # An unrelated bank denomination cannot declare the same wallet unit
         # twice (even with different exponents), or an unnamed unit.
