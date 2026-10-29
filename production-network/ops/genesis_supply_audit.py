@@ -237,6 +237,9 @@ def audit_native_denom_metadata(bank, denom):
                 unicodedata.normalize("NFKC", value).casefold() == denom)
 
     seen_other_bases = set()
+    # Denomination units are wallet-facing identifiers: no two non-native
+    # metadata entries may claim the same unit, including NFKC/case aliases.
+    seen_other_units = set()
     for row in rows:
         if not isinstance(row, dict):
             raise ValueError("malformed bank denomination metadata")
@@ -277,8 +280,10 @@ def audit_native_denom_metadata(bank, denom):
                 exponent = unit.get("exponent")
                 if type(exponent) is not int or not 0 <= exponent <= 0xFFFFFFFF:
                     raise ValueError("non-native denomination unit exponent must be uint32")
-                if unit_denom in seen_unit_denoms:
-                    raise ValueError("duplicate non-native denomination unit")
+                normalized_unit = unicodedata.normalize("NFKC", unit_denom).casefold()
+                if normalized_unit in seen_other_units:
+                    raise ValueError("duplicate non-native denomination unit or alias")
+                seen_other_units.add(normalized_unit)
                 seen_unit_denoms.add(unit_denom)
                 if claims_native_base(unit_denom) or claims_prvi(unit_denom):
                     raise ValueError("another denomination reuses native PRVI denomination unit")
