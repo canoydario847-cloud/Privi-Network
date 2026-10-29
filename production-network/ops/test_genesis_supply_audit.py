@@ -194,6 +194,22 @@ class SupplyAuditTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"own genesis bank balance"):
             self.check(g)
 
+    def test_periodic_vesting_delegated_bookkeeping_requires_sdk_review(self):
+        for field in ("delegated_free", "delegated_vesting"):
+            for value in ([{"denom": "aprvi", "amount": str(UNIT)}],
+                          [{"denom": "aprvi", "amount": "0"}],
+                          {"denom": "aprvi", "amount": str(UNIT)}):
+                with self.subTest(field=field, value=value):
+                    g = periodic_genesis()
+                    g["app_state"]["auth"]["accounts"][0]["base_vesting_account"][field] = value
+                    with self.assertRaisesRegex(ValueError, field):
+                        self.check(g)
+        g = periodic_genesis()
+        base = g["app_state"]["auth"]["accounts"][0]["base_vesting_account"]
+        base["delegated_free"] = []
+        base["delegated_vesting"] = []
+        self.assertEqual(self.check(g)["periodic_vesting_accounts_checked"], 1)
+
     def test_periodic_vesting_amount_mismatch_fails_closed(self):
         with self.assertRaisesRegex(ValueError,"periodic vesting amounts"):
             self.check(periodic_genesis(second=39*UNIT))
