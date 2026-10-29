@@ -661,6 +661,34 @@ class SupplyAuditTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, error):
                     self.check(g)
 
+    def test_non_native_units_reject_case_and_nfkc_aliases_across_metadata(self):
+        # A second wallet-facing unit must not impersonate an existing one,
+        # whether it is in the same token or a separate non-native token.
+        for across_metadata in (False, True):
+            for alias in ("atom", "ATOM", "ＡＴＯＭ"):
+                with self.subTest(across_metadata=across_metadata, alias=alias):
+                    g = fixture()
+                    metadata = g["app_state"]["bank"]["denom_metadata"]
+                    metadata.append({
+                        "base": "uatom", "display": "atom", "symbol": "ATOM",
+                        "denom_units": [{"denom": "uatom", "exponent": 0},
+                                        {"denom": "atom", "exponent": 6}],
+                    })
+                    if across_metadata:
+                        metadata.append({
+                            "base": "uosmo", "display": "osmo", "symbol": "OSMO",
+                            "denom_units": [{"denom": "uosmo", "exponent": 0},
+                                            {"denom": "osmo", "exponent": 6},
+                                            {"denom": alias, "exponent": 6}],
+                        })
+                    else:
+                        metadata[-1]["denom_units"].append(
+                            {"denom": alias, "exponent": 6})
+                    with self.assertRaisesRegex(
+                        ValueError, "duplicate non-native denomination unit"
+                    ):
+                        self.check(g)
+
     def test_distinct_other_denom_metadata_is_allowed(self):
         g=fixture()
         g["app_state"]["bank"]["denom_metadata"].append({
