@@ -246,9 +246,12 @@ def audit_native_denom_metadata(bank, denom):
             base = row.get("base")
             if not isinstance(base, str) or not base:
                 raise ValueError("malformed non-native denomination metadata base")
-            if base in seen_other_bases:
-                raise ValueError("duplicate non-native denomination metadata base")
-            seen_other_bases.add(base)
+            # Distinct raw strings can advertise the same wallet-facing base
+            # after case/compatibility normalization (e.g. uatom vs ＵＡＴＯＭ).
+            normalized_base = unicodedata.normalize("NFKC", base).casefold()
+            if normalized_base in seen_other_bases:
+                raise ValueError("duplicate non-native denomination metadata base or alias")
+            seen_other_bases.add(normalized_base)
             if (claims_native_base(base) or claims_prvi(base) or
                 claims_prvi(row.get("display")) or
                 claims_prvi(row.get("symbol"))):
