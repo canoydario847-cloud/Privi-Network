@@ -17,6 +17,8 @@ CAP_COINS = 1_000_000_000
 DECIMALS = 18
 CAP_BASE = CAP_COINS * 10 ** DECIMALS
 DENOM_PATTERN = re.compile(r"^[a-z][a-z0-9/]{2,63}$")
+# Candidate mainnet IDs must be unambiguous printable ASCII, not Unicode or whitespace.
+CHAIN_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{2,63}$")
 MAX_GENESIS_FILE_BYTES = 8_000_000
 MAX_COIN_AMOUNT_DIGITS = 78
 
@@ -346,7 +348,8 @@ def audit(genesis, denom, chain_id):
         raise ValueError("genesis must be a JSON object")
     if not isinstance(denom, str) or not DENOM_PATTERN.fullmatch(denom):
         raise ValueError("invalid target base denomination")
-    if not isinstance(chain_id, str) or not chain_id.strip() or chain_id == "local-4221":
+    if (not isinstance(chain_id, str) or not CHAIN_ID_PATTERN.fullmatch(chain_id) or
+        chain_id == "local-4221"):
         raise ValueError("a distinct planned mainnet Cosmos chain ID is required")
     if genesis.get("chain_id") != chain_id:
         raise ValueError("genesis chain_id does not match expected chain ID")
