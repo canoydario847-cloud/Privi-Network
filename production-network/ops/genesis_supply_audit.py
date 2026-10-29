@@ -254,10 +254,16 @@ def audit_native_denom_metadata(bank, denom):
             units = row.get("denom_units")
             if not isinstance(units, list):
                 raise ValueError("malformed non-native denomination units")
+            seen_unit_denoms = set()
             for unit in units:
                 if not isinstance(unit, dict):
                     raise ValueError("malformed non-native denomination unit")
                 unit_denom = unit.get("denom")
+                if not isinstance(unit_denom, str) or not unit_denom:
+                    raise ValueError("malformed non-native denomination unit")
+                if unit_denom in seen_unit_denoms:
+                    raise ValueError("duplicate non-native denomination unit")
+                seen_unit_denoms.add(unit_denom)
                 if unit_denom == denom or claims_prvi(unit_denom):
                     raise ValueError("another denomination reuses native PRVI denomination unit")
     matching = [row for row in rows if row.get("base") == denom]
