@@ -41,6 +41,8 @@ function strictLocalDirectory(dir) {
   const stat = fs.lstatSync(dir);
   must(stat.isDirectory() && !stat.isSymbolicLink(), "Local lock directory must not be symlink");
   must((stat.mode & 0o077) === 0, "Local lock directory must be owner-only (0700)");
+  must(typeof process.getuid === "function" && stat.uid === process.getuid(),
+       "Local lock directory must be owned by current process");
   return fs.realpathSync(dir);
 }
 function recordFor(committee, height, validatorId, blockHash, previousBlockHash) {
@@ -97,6 +99,8 @@ function reservePosition(dir, committee, height, validatorId, blockHash, previou
       must(stat.isFile() && stat.size>0 && stat.size<=2048 &&
            (stat.mode & 0o077)===0 && stat.nlink===1,
            "PoP height lock corrupt, hard-linked or insecure; refuse to sign");
+      must(typeof process.getuid === "function" && stat.uid === process.getuid(),
+           "PoP height lock must be owned by current process; refuse to sign");
       let old, original;
       try {
         original=fs.readFileSync(oldFd);
