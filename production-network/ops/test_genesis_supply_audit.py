@@ -483,6 +483,30 @@ class SupplyAuditTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "reuses native PRVI denomination unit"):
                     self.check(g)
 
+    def test_other_denom_metadata_cannot_alias_native_base_with_nfkc_or_case(self):
+        # An unrelated token must not advertise visually equivalent APRVI base
+        # units under a different metadata base or denom-unit name.
+        for alias in ("APRVI", "Aprvi", "ａｐｒｖｉ", "ＡＰＲＶＩ"):
+            for field in ("base", "unit"):
+                with self.subTest(alias=alias, field=field):
+                    g = fixture()
+                    other = {
+                        "base": "uatom", "display": "atom", "symbol": "ATOM",
+                        "denom_units": [
+                            {"denom": "uatom", "exponent": 0},
+                            {"denom": "atom", "exponent": 6},
+                        ],
+                    }
+                    if field == "base":
+                        other["base"] = alias
+                    else:
+                        other["denom_units"][1]["denom"] = alias
+                    g["app_state"]["bank"]["denom_metadata"].append(other)
+                    with self.assertRaisesRegex(
+                        ValueError, "claims native PRVI|reuses native PRVI denomination unit"
+                    ):
+                        self.check(g)
+
     def test_other_denom_base_cannot_claim_native_display(self):
         g = fixture()
         g["app_state"]["bank"]["denom_metadata"].append({
