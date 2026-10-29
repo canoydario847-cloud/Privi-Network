@@ -59,6 +59,24 @@ class SupplyArithmeticTests(unittest.TestCase):
         self.assertTrue(
             any("exceeds 1B PRVI" in error for error in errors), errors
         )
+        # Aggregate native allocations across accounts before applying the cap.
+        # A declared bank supply matching balances must not conceal an overcap.
+        bank = genesis["app_state"]["bank"]
+        bank["balances"] = [
+            {"address": "prvi1offlinefixture", "coins": [
+                {"denom": "aprvi", "amount": str(CAP_BASE_UNITS - 1)}]},
+            {"address": "prvi1offlinefixture2", "coins": [
+                {"denom": "aprvi", "amount": "1"}]},
+        ]
+        bank["supply"][0]["amount"] = str(CAP_BASE_UNITS)
+        errors, total = auditor.check(genesis)
+        self.assertEqual(errors, [], errors)
+        self.assertEqual(total, CAP_BASE_UNITS)
+        bank["balances"][0]["coins"][0]["amount"] = str(CAP_BASE_UNITS)
+        bank["supply"][0]["amount"] = str(CAP_BASE_UNITS + 1)
+        errors, total = auditor.check(genesis)
+        self.assertEqual(total, CAP_BASE_UNITS + 1)
+        self.assertIn("native genesis supply exceeds 1B PRVI", errors)
 
     def test_exact_cap_allowed(self):
         self.assertEqual(validate_supply(CAP_BASE_UNITS, 0, 0), CAP_BASE_UNITS)
