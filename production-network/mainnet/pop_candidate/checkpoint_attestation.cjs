@@ -38,9 +38,16 @@ function verifyResearchCheckpoint(committee,checkpoint,trustedGovernancePublicKe
        !Array.isArray(checkpoint) &&
        Object.getPrototypeOf(checkpoint)===Object.prototype,
        "PoP research signed checkpoint object required");
-  need(Object.keys(checkpoint).length===REQUIRED_FIELDS.length &&
-       REQUIRED_FIELDS.every(field=>Object.hasOwn(checkpoint,field)),
-       "PoP signed checkpoint has missing or unexpected fields");
+  // Inspect descriptors rather than reading untrusted properties: accessors
+  // must never execute while verifying a purported governance attestation.
+  // Reflect.ownKeys also rejects hidden metadata and symbol-keyed claims.
+  need(Reflect.ownKeys(checkpoint).length===REQUIRED_FIELDS.length &&
+       REQUIRED_FIELDS.every(field=>{
+         const descriptor=Object.getOwnPropertyDescriptor(checkpoint,field);
+         return descriptor && Object.hasOwn(descriptor,"value") &&
+                descriptor.enumerable;
+       }),
+       "PoP signed checkpoint requires plain own data fields without extras");
   need(checkpoint.schema===SCHEMA && checkpoint.mode===MODE,
        "PoP research checkpoint must not claim production finality");
   need(checkpoint.chainId===committee.chainId &&
