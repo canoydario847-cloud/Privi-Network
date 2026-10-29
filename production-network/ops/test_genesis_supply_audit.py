@@ -597,6 +597,26 @@ class SupplyAuditTests(unittest.TestCase):
                         "duplicate non-native denomination metadata base"):
                     self.check(g)
 
+    def test_non_native_metadata_base_normalization_aliases_rejected(self):
+        # Two raw base strings must not claim the same wallet-facing token
+        # through case or Unicode compatibility-width aliases.
+        for alias in ("UATOM", "ｕａｔｏｍ", "ＵＡＴＯＭ"):
+            with self.subTest(alias=alias):
+                g = fixture()
+                metadata = g["app_state"]["bank"]["denom_metadata"]
+                metadata.append({
+                    "base": "uatom", "display": "atom", "symbol": "ATOM",
+                    "denom_units": [{"denom": "uatom", "exponent": 0},
+                                    {"denom": "atom", "exponent": 6}],
+                })
+                metadata.append({
+                    "base": alias, "display": "other", "symbol": "OTHER",
+                    "denom_units": [{"denom": alias, "exponent": 0},
+                                    {"denom": "other", "exponent": 6}],
+                })
+                with self.assertRaisesRegex(ValueError, "duplicate non-native denomination metadata base"):
+                    self.check(g)
+
     def test_non_native_metadata_requires_base_zero_and_declared_display(self):
         # Distinct metadata labels are insufficient: unit accounting must
         # anchor the actual base at exponent zero and declare the display.
