@@ -331,6 +331,11 @@ def audit_native_denom_metadata(bank, denom):
         if not isinstance(name, str) or not name or name in mapped or type(exponent) is not int:
             raise ValueError("duplicate or malformed PRVI denomination unit")
         mapped[name] = exponent
+        # Native PRVI has no approved alternative wallet-facing unit names.
+        # Do not silently accept aliases that can impersonate other assets.
+        aliases = unit.get("aliases", [])
+        if not isinstance(aliases, list) or aliases:
+            raise ValueError("native PRVI denomination unit aliases require separate review")
     if denom == "prvi" or mapped != {denom: 0, "prvi": DECIMALS}:
         raise ValueError("PRVI metadata must bind native base units to exactly 18 decimals")
     return True

@@ -736,4 +736,21 @@ class SupplyAuditTests(unittest.TestCase):
         self.assertIs(self.check(g)["native_prvi_metadata_checked"], True)
 
 
+    def test_native_prvi_denom_unit_aliases_require_review(self):
+        # The unsigned genesis preflight must not silently approve PRVI
+        # aliases (including ones that resemble other network assets).
+        for aliases in (["uatom"], ["prvi"], ["APRVI"], [""], "uatom", None,
+                        {"alias": "uatom"}):
+            for unit_index in (0, 1):
+                with self.subTest(aliases=aliases, unit_index=unit_index):
+                    g = fixture()
+                    g["app_state"]["bank"]["denom_metadata"][0]["denom_units"][unit_index]["aliases"] = aliases
+                    with self.assertRaisesRegex(ValueError, "native PRVI denomination unit aliases"):
+                        self.check(g)
+        g = fixture()
+        for unit in g["app_state"]["bank"]["denom_metadata"][0]["denom_units"]:
+            unit["aliases"] = []
+        self.assertIs(self.check(g)["native_prvi_metadata_checked"], True)
+
+
 if __name__=="__main__": unittest.main()
