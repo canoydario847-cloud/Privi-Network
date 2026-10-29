@@ -91,14 +91,56 @@ def check(evm_rpc,comet_rpc,expected_cosmos,expected_evm,now=None):
         raise RuntimeError("CometBFT commit header height mismatch")
     if header.get("chain_id")!=expected_cosmos:
         raise RuntimeError("CometBFT commit header chain ID mismatch")
-    signed=commit["signed_header"]["commit"]["signatures"]
+    # A vote count is not proof of the block being reported. The commit,
+    # its signed header, and the independently queried block at this height
+    # must agree. CometBFT block hashes are NOT Ethereum block hashes.
+    commit_record=commit["signed_header"]["commit"]
+    if str(commit_record.get("height"))!=str(height):
+        raise RuntimeError("CometBFT commit vote height mismatch")
+    commit_block_id=commit_record.get("block_id")
+    commit_hash=commit_block_id.get("hash") if isinstance(commit_block_id,dict) else None
+    if (not isinstance(commit_hash,str) or len(commit_hash)!=64
+            or any(c not in "0123456789abcdefABCDEF" for c in commit_hash)):
+        raise RuntimeError("CometBFT commit block hash invalid")
+    block=get(comet_rpc.rstrip("/")+"/block?"+urlencode({"height":str(height)}))["result"]
+    block_id=block.get("block_id")
+    block_hash=block_id.get("hash") if isinstance(block_id,dict) else None
+    if not isinstance(block_hash,str) or block_hash.upper()!=commit_hash.upper():
+        raise RuntimeError("CometBFT block hash differs from signed commit")
+    block_record=block.get("block")
+    block_header=block_record.get("header") if isinstance(block_record,dict) else None
+    if (not isinstance(block_header,dict)
+            or str(block_header.get("height"))!=str(height)
+            or block_header.get("chain_id")!=expected_cosmos):
+        raise RuntimeError("CometBFT fetched block header mismatch")
+    signed=commit_record["signatures"]
+    # CometBFT commit signatures have one slot per validator at this height.
+    # Do not let a malformed/foreign/duplicated vote be hidden behind a
+    # separately sufficient apparent quorum. This remains RPC observation,
+    # NOT cryptographic verification of the signatures.
+    if not isinstance(signed,list) or len(signed)!=count:
+        raise RuntimeError("CometBFT commit signature roster incomplete or malformed")
     signers=set()
     for signature in signed:
-        # Flag 2 is a real commit vote; absent/nil flags do not count.
-        if str(signature.get("block_id_flag"))=="2":
-            key=str(signature.get("validator_address","")).upper()
-            if key in power and key not in signers:signers.add(key)
-    signed_power=sum(power.get(k,0) for k in signers)
+        if not isinstance(signature,dict):
+            raise RuntimeError("Malformed CometBFT commit signature entry")
+        flag=str(signature.get("block_id_flag"))
+        if flag not in ("1","2","3"):
+            raise RuntimeError("Unknown CometBFT commit signature flag")
+        # Flag 2 is a commit vote; absent/nil flags do not count.
+        if flag!="2":
+            continue
+        key=signature.get("validator_address")
+        if (not isinstance(key,str) or len(key)!=40
+                or any(c not in "0123456789abcdefABCDEF" for c in key)):
+            raise RuntimeError("Invalid CometBFT commit signer address")
+        key=key.upper()
+        if key not in power:
+            raise RuntimeError("Unknown CometBFT commit signer")
+        if key in signers:
+            raise RuntimeError("Duplicate CometBFT commit signer")
+        signers.add(key)
+    signed_power=sum(power[k] for k in signers)
     if 3*signed_power<=2*total:
         raise RuntimeError("CometBFT latest commit did not have >2/3 voting power")
     return {
