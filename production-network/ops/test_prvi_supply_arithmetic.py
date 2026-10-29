@@ -63,6 +63,13 @@ class SupplyArithmeticTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_supply(CAP_BASE_UNITS, 1, 1)
 
+    def test_burn_then_remint_still_rejected_at_lifetime_cap(self):
+        # Circulating supply can fall below cap after burns, but cumulative
+        # issuance cannot exceed the fixed lifetime issuance ceiling.
+        self.assertEqual(validate_supply(CAP_BASE_UNITS, 0, 100), CAP_BASE_UNITS - 100)
+        with self.assertRaises(ValueError):
+            validate_supply(CAP_BASE_UNITS, 100, 100)
+
     def test_burn_cannot_exceed_issued(self):
         with self.assertRaises(ValueError):
             validate_supply(0, 0, 1)
