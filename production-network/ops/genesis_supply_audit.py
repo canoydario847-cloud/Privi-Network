@@ -231,6 +231,10 @@ def audit_native_denom_metadata(bank, denom):
         return (isinstance(value, str) and
                 unicodedata.normalize("NFKC", value).casefold() == "prvi")
 
+    def claims_native_base(value):
+        return (isinstance(value, str) and
+                unicodedata.normalize("NFKC", value).casefold() == denom)
+
     seen_other_bases = set()
     for row in rows:
         if not isinstance(row, dict):
@@ -245,7 +249,7 @@ def audit_native_denom_metadata(bank, denom):
             if base in seen_other_bases:
                 raise ValueError("duplicate non-native denomination metadata base")
             seen_other_bases.add(base)
-            if (claims_prvi(row.get("base")) or
+            if (claims_native_base(base) or claims_prvi(base) or
                 claims_prvi(row.get("display")) or
                 claims_prvi(row.get("symbol"))):
                 raise ValueError("another denomination claims native PRVI display or symbol")
@@ -272,7 +276,7 @@ def audit_native_denom_metadata(bank, denom):
                 if unit_denom in seen_unit_denoms:
                     raise ValueError("duplicate non-native denomination unit")
                 seen_unit_denoms.add(unit_denom)
-                if unit_denom == denom or claims_prvi(unit_denom):
+                if claims_native_base(unit_denom) or claims_prvi(unit_denom):
                     raise ValueError("another denomination reuses native PRVI denomination unit")
     matching = [row for row in rows if row.get("base") == denom]
     if len(matching) != 1:
