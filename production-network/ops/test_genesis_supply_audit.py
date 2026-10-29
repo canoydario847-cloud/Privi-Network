@@ -698,4 +698,42 @@ class SupplyAuditTests(unittest.TestCase):
         })
         self.assertIs(self.check(g)["native_prvi_metadata_checked"], True)
 
+    def test_non_native_denom_unit_aliases_cannot_impersonate_prvi(self):
+        for alias in ("aprvi", "APRVI", "prvi", "PrVi", "ＰＲＶＩ"):
+            with self.subTest(alias=alias):
+                g = fixture()
+                g["app_state"]["bank"]["denom_metadata"].append({
+                    "base": "uatom", "display": "atom", "symbol": "ATOM",
+                    "denom_units": [
+                        {"denom": "uatom", "exponent": 0, "aliases": [alias]},
+                        {"denom": "atom", "exponent": 6},
+                    ],
+                })
+                with self.assertRaisesRegex(ValueError, "native PRVI denomination alias"):
+                    self.check(g)
+
+    def test_non_native_denom_unit_aliases_reject_malformed_and_colliding_values(self):
+        for aliases in (None, "other", [1], [""], ["uATOM"], ["alt", "ＡＬＴ"]):
+            with self.subTest(aliases=aliases):
+                g = fixture()
+                g["app_state"]["bank"]["denom_metadata"].append({
+                    "base": "uatom", "display": "atom", "symbol": "ATOM",
+                    "denom_units": [
+                        {"denom": "uatom", "exponent": 0},
+                        {"denom": "atom", "exponent": 6, "aliases": aliases},
+                    ],
+                })
+                with self.assertRaisesRegex(ValueError, "alias"):
+                    self.check(g)
+        g = fixture()
+        g["app_state"]["bank"]["denom_metadata"].append({
+            "base": "uatom", "display": "atom", "symbol": "ATOM",
+            "denom_units": [
+                {"denom": "uatom", "exponent": 0, "aliases": ["microatom"]},
+                {"denom": "atom", "exponent": 6, "aliases": ["wholeatom"]},
+            ],
+        })
+        self.assertIs(self.check(g)["native_prvi_metadata_checked"], True)
+
+
 if __name__=="__main__": unittest.main()
