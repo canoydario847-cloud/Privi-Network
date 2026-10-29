@@ -30,6 +30,11 @@ class SupplyArithmeticTests(unittest.TestCase):
     def test_exact_cap_allowed(self):
         self.assertEqual(validate_supply(CAP_BASE_UNITS, 0, 0), CAP_BASE_UNITS)
 
+    def test_genesis_and_post_genesis_mint_share_one_lifetime_cap(self):
+        self.assertEqual(validate_supply(CAP_BASE_UNITS - 7, 7, 0), CAP_BASE_UNITS)
+        with self.assertRaises(ValueError):
+            validate_supply(CAP_BASE_UNITS - 7, 8, 0)
+
     def test_one_base_unit_over_cap_rejected(self):
         with self.assertRaises(ValueError):
             validate_supply(CAP_BASE_UNITS, 1, 0)
