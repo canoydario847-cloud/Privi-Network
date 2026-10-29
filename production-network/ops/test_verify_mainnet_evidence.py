@@ -109,5 +109,57 @@ class MainnetEvidenceTest(unittest.TestCase):
             problems = checker.assess(manifest, path)
             self.assertTrue(any("initial PRVI bank supply audit" in p and "exceeds" in p for p in problems))
 
+    def test_sha_matching_ambiguous_duplicate_genesis_still_rejected(self):
+        # A correct SHA of ambiguous input is NOT valid genesis evidence:
+        # alternate parsers might select a different bank object.
+        raw = b'{"chain_id":"privi-candidate-1","app_state":{"bank":{},"bank":{}}}'
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "genesis.json"
+            path.write_bytes(raw)
+            manifest = {
+                "cosmos_chain_id": "privi-candidate-1",
+                "base_denom": "aprvi",
+                "genesis_sha256": hashlib.sha256(raw).hexdigest(),
+            }
+            problems = checker.assess(manifest, path)
+            self.assertTrue(any("duplicate genesis JSON key" in p for p in problems), problems)
+            self.assertTrue(any("genesis invalid or ambiguous" in p for p in problems), problems)
+
+    def test_sha_matching_oversized_genesis_cannot_bypass_size_cap(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "genesis.json"
+            with path.open("wb") as stream:
+                stream.seek(8_000_000)
+                stream.write(b"x")
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            manifest = {
+                "cosmos_chain_id": "privi-candidate-1",
+                "base_denom": "aprvi",
+                "genesis_sha256": digest,
+            }
+            problems = checker.assess(manifest, path)
+            self.assertTrue(any("8 MB" in p for p in problems), problems)
+
+    def test_sha_matching_malformed_other_denom_is_rejected(self):
+        raw = json.dumps({
+            "chain_id": "privi-candidate-1",
+            "app_state": {"bank": {
+                "balances": [{"address": "privi1example",
+                              "coins": [{"denom": "aprvi", "amount": "100"},
+                                        {"denom": "uatom", "amount": "5"}]}],
+                "supply": [{"denom": "aprvi", "amount": "100"},
+                           {"denom": "uatom", "amount": "6"}],
+            }},
+        }).encode("utf-8")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "genesis.json"
+            path.write_bytes(raw)
+            manifest = {"cosmos_chain_id": "privi-candidate-1",
+                        "base_denom": "aprvi",
+                        "genesis_sha256": hashlib.sha256(raw).hexdigest()}
+            problems = checker.assess(manifest, path)
+            self.assertTrue(any("initial PRVI bank supply audit" in p and
+                                "across denominations" in p for p in problems), problems)
+
 if __name__ == "__main__":
     unittest.main()

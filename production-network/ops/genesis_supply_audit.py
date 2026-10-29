@@ -1,47 +1,375 @@
 #!/usr/bin/env python3
 """Read-only initial PRVI bank supply audit for an unsigned candidate Cosmos genesis.
 
-This audits genesis quantities; it DOES NOT demonstrate ongoing max-supply enforcement,
-staking safety, vesting correctness or permissioned mint authority.
+Fail-closed against duplicate JSON keys, oversized input, noncanonical amounts,
+and inconsistent bank supply in ANY denomination. This is NOT lifetime supply
+enforcement, vesting/staking review, signer approval or mainnet activation.
 """
 import argparse
 import json
+import math
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 CAP_COINS = 1_000_000_000
 DECIMALS = 18
 CAP_BASE = CAP_COINS * 10 ** DECIMALS
 DENOM_PATTERN = re.compile(r"^[a-z][a-z0-9/]{2,63}$")
+# Candidate mainnet IDs must be unambiguous printable ASCII, not Unicode or whitespace.
+CHAIN_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{2,63}$")
+MAX_GENESIS_FILE_BYTES = 8_000_000
+MAX_COIN_AMOUNT_DIGITS = 78
+
+
+def _unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate genesis JSON key: " + key)
+        result[key] = value
+    return result
+
+
+def _reject_non_json_number(token):
+    raise ValueError("invalid JSON numeric constant: " + token)
+
+
+def _finite_json_float(token):
+    """Reject JSON exponents that overflow Python floats to infinity."""
+    number = float(token)
+    if not math.isfinite(number):
+        raise ValueError("non-finite JSON floating-point number: " + token)
+    return number
+
+
+def parse_strict_json_bytes(raw):
+    """Parse the EXACT bytes being audited; no ignored duplicate JSON members."""
+    if not isinstance(raw, bytes) or len(raw) > MAX_GENESIS_FILE_BYTES:
+        raise ValueError("genesis JSON exceeds 8 MB safety limit or is not bytes")
+    return json.loads(
+        raw.decode("utf-8"),
+        object_pairs_hook=_unique_object,
+        parse_constant=_reject_non_json_number,
+        parse_float=_finite_json_float,
+    )
+
+
+def load_strict_genesis(path):
+    """Bound the actual read, not only a potentially stale stat() result."""
+    with Path(path).open("rb") as stream:
+        raw = stream.read(MAX_GENESIS_FILE_BYTES + 1)
+    return parse_strict_json_bytes(raw)
+
 
 def parse_amount(raw, where):
-    if not isinstance(raw, str) or not raw.isascii() or not raw.isdecimal():
-        raise ValueError(where + ": amount must be a nonnegative base-10 integer string")
+    if (not isinstance(raw, str) or not raw.isascii() or
+        not raw.isdecimal() or len(raw) > MAX_COIN_AMOUNT_DIGITS or
+        (len(raw) > 1 and raw.startswith("0"))):
+        raise ValueError(where + ": noncanonical nonnegative base-10 integer amount")
     return int(raw)
+
+
+# Only one Cosmos SDK vesting subtype is modeled here. Other vesting account
+# types must be reviewed separately; they cannot silently count as checked.
+BASE_ACCOUNT_TYPE = "/cosmos.auth.v1beta1.BaseAccount"
+MODULE_ACCOUNT_TYPE = "/cosmos.auth.v1beta1.ModuleAccount"
+PERIODIC_VESTING_TYPE = "/cosmos.vesting.v1beta1.PeriodicVestingAccount"
+MAX_TIME_SECONDS = 2**63 - 1
+
+
+def _uint63_time(raw, where, positive=False):
+    if (not isinstance(raw, str) or not raw.isascii() or
+        not raw.isdecimal() or (len(raw) > 1 and raw.startswith("0")) or
+        len(raw) > 19):
+        raise ValueError(where + ": noncanonical unsigned time string")
+    result = int(raw)
+    if result > MAX_TIME_SECONDS or (positive and result == 0):
+        raise ValueError(where + ": time out of bounds")
+    return result
+
+
+def _coin_totals(rows, where):
+    if not isinstance(rows, list):
+        raise ValueError(where + ": coins must be an array")
+    totals = {}
+    for coin in rows:
+        if (not isinstance(coin, dict) or
+            not isinstance(coin.get("denom"), str) or not coin["denom"]):
+            raise ValueError(where + ": malformed coin")
+        denom = coin["denom"]
+        if denom in totals:
+            raise ValueError(where + ": duplicate denomination")
+        amount = parse_amount(coin.get("amount"), where + " " + denom)
+        if amount == 0:
+            raise ValueError(where + ": zero coin amount")
+        totals[denom] = amount
+    return totals
+
+
+def _canonical_genesis_address(raw, where):
+    """Screen account identifiers before comparing them; not a Bech32 checksum audit."""
+    if not isinstance(raw, str) or not re.fullmatch(r"[a-z0-9]+", raw):
+        raise ValueError(where + ": missing or noncanonical lowercase ASCII address")
+    return raw
+
+
+def audit_periodic_vesting(app_state, supply_by_denom, balances_by_address):
+    """Check necessary PeriodicVestingAccount schedule invariants, not vesting execution.
+
+    No vesting type other than periodic is considered verified. This function
+    deliberately does not infer custody, delegation, withdrawal rights, or
+    Cosmos SDK keeper behavior from genesis JSON.
+    """
+    # An absent auth module would bypass all account identity and vesting
+    # screening while allowing an otherwise plausible bank-only genesis to pass.
+    # Empty accounts are still allowed, but cannot prove vesting execution.
+    auth = app_state.get("auth")
+    if not isinstance(auth, dict) or not isinstance(auth.get("accounts"), list):
+        raise ValueError("genesis auth.accounts missing or malformed")
+    count = 0
+    seen_vesting_addresses = set()
+    # Scope: BaseAccount, ModuleAccount.base_account, and PeriodicVestingAccount.
+    # Other auth account types require their own SDK-aware audit.
+    seen_auth_addresses = set()
+    vested_totals = {}
+    for index, row in enumerate(auth["accounts"]):
+        if not isinstance(row, dict):
+            raise ValueError("malformed auth account %d" % index)
+        kind = row.get("@type")
+        if not isinstance(kind, str):
+            raise ValueError("auth account %d missing account type" % index)
+        if kind in (BASE_ACCOUNT_TYPE, MODULE_ACCOUNT_TYPE):
+            # Cosmos ModuleAccount embeds a BaseAccount. Check the same address
+            # namespace, including collisions with ordinary/vesting accounts.
+            account = row if kind == BASE_ACCOUNT_TYPE else row.get("base_account")
+            if not isinstance(account, dict):
+                raise ValueError("module auth account missing base_account")
+            address = _canonical_genesis_address(
+                account.get("address"), "base or module auth account")
+            if address in seen_auth_addresses:
+                raise ValueError("duplicate auth account address")
+            seen_auth_addresses.add(address)
+            continue
+        if kind != PERIODIC_VESTING_TYPE:
+            # Unknown auth types may embed a BaseAccount address (including
+            # EVM-specific account wrappers). Silently skipping them can
+            # conceal duplicate identities and wrongly label genesis audited.
+            # Add explicit SDK-aware handlers before accepting such accounts.
+            if "vesting" in kind.casefold():
+                raise ValueError("unsupported vesting account type requires separate review")
+            raise ValueError("unsupported auth account type requires separate SDK-aware review")
+        base = row.get("base_vesting_account")
+        if not isinstance(base, dict) or not isinstance(base.get("base_account"), dict):
+            raise ValueError("periodic vesting missing base account")
+        address = _canonical_genesis_address(
+            base["base_account"].get("address"), "periodic vesting")
+        if address in seen_vesting_addresses:
+            raise ValueError("duplicate periodic vesting account address")
+        seen_vesting_addresses.add(address)
+        if address in seen_auth_addresses:
+            raise ValueError("duplicate auth account address")
+        seen_auth_addresses.add(address)
+        # Delegation bookkeeping changes spendability. Without an SDK-aware
+        # reconciliation against staking state, predelegated genesis accounts
+        # must not be counted as reviewed periodic vesting schedules.
+        for field in ("delegated_free", "delegated_vesting"):
+            delegated = base.get(field, [])
+            if not isinstance(delegated, list):
+                raise ValueError("periodic vesting " + field + " must be an array")
+            if delegated:
+                raise ValueError("periodic vesting " + field + " requires SDK-aware delegation review")
+        originals = _coin_totals(base.get("original_vesting"), "original_vesting")
+        if not originals:
+            raise ValueError("periodic vesting requires nonempty original_vesting")
+        start = _uint63_time(row.get("start_time"), "vesting start_time")
+        end = _uint63_time(base.get("end_time"), "vesting end_time", positive=True)
+        periods = row.get("vesting_periods")
+        if not isinstance(periods, list) or not periods:
+            raise ValueError("periodic vesting requires one or more periods")
+        running_time = start
+        distributed = {}
+        for period in periods:
+            if not isinstance(period, dict):
+                raise ValueError("malformed periodic vesting period")
+            length = _uint63_time(period.get("length"), "vesting period length", positive=True)
+            if running_time > MAX_TIME_SECONDS - length:
+                raise ValueError("periodic vesting time overflow")
+            running_time += length
+            period_amounts = _coin_totals(period.get("amount"), "vesting period amount")
+            if not period_amounts:
+                raise ValueError("periodic vesting period requires nonempty amount")
+            for denom, amount in period_amounts.items():
+                distributed[denom] = distributed.get(denom, 0) + amount
+        if running_time != end:
+            raise ValueError("periodic vesting end_time does not match summed lengths")
+        if distributed != originals:
+            raise ValueError("periodic vesting amounts do not reconcile to original_vesting")
+        for denom, amount in originals.items():
+            vested_totals[denom] = vested_totals.get(denom, 0) + amount
+            if vested_totals[denom] > supply_by_denom.get(denom, 0):
+                raise ValueError("periodic vesting original allocations exceed bank supply")
+            # Aggregate supply is not evidence that the vesting account owns
+            # its locked coins. Check its own bank allocation at genesis.
+            if amount > balances_by_address.get(address, {}).get(denom, 0):
+                raise ValueError("periodic vesting original allocation exceeds own genesis bank balance")
+        count += 1
+    return count
+
+
+def audit_native_denom_metadata(bank, denom):
+    """Verify genesis advertises native PRVI as exactly 18-decimal aprvi units.
+
+    Bank metadata is a human-facing denomination assertion, not consensus
+    supply enforcement or proof of a trusted wallet token identity.
+    """
+    rows = bank.get("denom_metadata")
+    if not isinstance(rows, list):
+        raise ValueError("native PRVI bank denom_metadata is required for genesis review")
+    # NFKC + casefold catches common case and compatibility-width aliases
+    # (e.g. "PrVi" or "ＰＲＶＩ") that could mislead wallet-facing token labels.
+    # This is not a complete Unicode confusable/homoglyph detection system.
+    def claims_prvi(value):
+        return (isinstance(value, str) and
+                unicodedata.normalize("NFKC", value).casefold() == "prvi")
+
+    def claims_native_base(value):
+        return (isinstance(value, str) and
+                unicodedata.normalize("NFKC", value).casefold() == denom)
+
+    seen_other_bases = set()
+    # Denomination units are wallet-facing identifiers: no two non-native
+    # metadata entries may claim the same unit, including NFKC/case aliases.
+    seen_other_units = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError("malformed bank denomination metadata")
+        if row.get("base") != denom:
+            # Repeating a non-native base with different wallet labels makes
+            # genesis denomination identity ambiguous even when PRVI's own
+            # metadata is valid. Treat all base entries as unique.
+            base = row.get("base")
+            if not isinstance(base, str) or not base:
+                raise ValueError("malformed non-native denomination metadata base")
+            # Distinct raw strings can advertise the same wallet-facing base
+            # after case/compatibility normalization (e.g. uatom vs ＵＡＴＯＭ).
+            normalized_base = unicodedata.normalize("NFKC", base).casefold()
+            if normalized_base in seen_other_bases:
+                raise ValueError("duplicate non-native denomination metadata base or alias")
+            seen_other_bases.add(normalized_base)
+            if (claims_native_base(base) or claims_prvi(base) or
+                claims_prvi(row.get("display")) or
+                claims_prvi(row.get("symbol"))):
+                raise ValueError("another denomination claims native PRVI display or symbol")
+            # A conflicting denom_unit is also wallet-facing token identity,
+            # even when the metadata's display and symbol appear unrelated.
+            units = row.get("denom_units")
+            if not isinstance(units, list):
+                raise ValueError("malformed non-native denomination units")
+            if not units:
+                raise ValueError("non-native denomination requires at least one unit")
+            seen_unit_denoms = set()
+            for unit in units:
+                if not isinstance(unit, dict):
+                    raise ValueError("malformed non-native denomination unit")
+                unit_denom = unit.get("denom")
+                if not isinstance(unit_denom, str) or not unit_denom:
+                    raise ValueError("malformed non-native denomination unit")
+                # Cosmos bank metadata encodes exponent as uint32. Reject
+                # booleans (Python int subclasses), strings and out-of-range
+                # values rather than silently accepting malformed genesis.
+                exponent = unit.get("exponent")
+                if type(exponent) is not int or not 0 <= exponent <= 0xFFFFFFFF:
+                    raise ValueError("non-native denomination unit exponent must be uint32")
+                normalized_unit = unicodedata.normalize("NFKC", unit_denom).casefold()
+                if normalized_unit in seen_other_units:
+                    raise ValueError("duplicate non-native denomination unit or alias")
+                seen_other_units.add(normalized_unit)
+                seen_unit_denoms.add(unit_denom)
+                if claims_native_base(unit_denom) or claims_prvi(unit_denom):
+                    raise ValueError("another denomination reuses native PRVI denomination unit")
+                # Cosmos DenomUnit.aliases are also wallet-facing labels. A
+                # different token must not claim native PRVI through an alias
+                # or reuse another declared non-native unit/alias.
+                aliases = unit.get("aliases", [])
+                if not isinstance(aliases, list):
+                    raise ValueError("non-native denomination unit aliases must be an array")
+                for alias in aliases:
+                    if not isinstance(alias, str) or not alias:
+                        raise ValueError("malformed non-native denomination unit alias")
+                    if claims_native_base(alias) or claims_prvi(alias):
+                        raise ValueError("another denomination reuses native PRVI denomination alias")
+                    normalized_alias = unicodedata.normalize("NFKC", alias).casefold()
+                    if normalized_alias in seen_other_units:
+                        raise ValueError("duplicate non-native denomination unit or alias")
+                    seen_other_units.add(normalized_alias)
+            # An unrelated bank token must identify its actual smallest unit
+            # and the wallet display unit. Otherwise the same genesis can
+            # advertise inconsistent quantities to clients.
+            if base not in seen_unit_denoms:
+                raise ValueError("non-native denomination metadata missing base unit")
+            base_unit = next(unit for unit in units if unit["denom"] == base)
+            if base_unit["exponent"] != 0:
+                raise ValueError("non-native denomination base unit exponent must be zero")
+            display = row.get("display")
+            if not isinstance(display, str) or not display or display not in seen_unit_denoms:
+                raise ValueError("non-native denomination display unit must be declared")
+    matching = [row for row in rows if row.get("base") == denom]
+    if len(matching) != 1:
+        raise ValueError("native PRVI denomination metadata must appear exactly once")
+    item = matching[0]
+    if item.get("symbol") != "PRVI" or item.get("display") != "prvi":
+        raise ValueError("native denomination metadata must identify PRVI display and symbol")
+    units = item.get("denom_units")
+    if not isinstance(units, list) or len(units) != 2:
+        raise ValueError("native PRVI denomination units must declare base and 18-decimal display")
+    mapped = {}
+    for unit in units:
+        if not isinstance(unit, dict):
+            raise ValueError("malformed PRVI denomination unit")
+        name = unit.get("denom")
+        exponent = unit.get("exponent")
+        if not isinstance(name, str) or not name or name in mapped or type(exponent) is not int:
+            raise ValueError("duplicate or malformed PRVI denomination unit")
+        mapped[name] = exponent
+        # Native PRVI has no approved alternative wallet-facing unit names.
+        # Do not silently accept aliases that can impersonate other assets.
+        aliases = unit.get("aliases", [])
+        if not isinstance(aliases, list) or aliases:
+            raise ValueError("native PRVI denomination unit aliases require separate review")
+    if denom == "prvi" or mapped != {denom: 0, "prvi": DECIMALS}:
+        raise ValueError("PRVI metadata must bind native base units to exactly 18 decimals")
+    return True
+
 
 def audit(genesis, denom, chain_id):
     if not isinstance(genesis, dict):
         raise ValueError("genesis must be a JSON object")
     if not isinstance(denom, str) or not DENOM_PATTERN.fullmatch(denom):
         raise ValueError("invalid target base denomination")
-    if not isinstance(chain_id, str) or not chain_id.strip() or chain_id == "local-4221":
+    if (not isinstance(chain_id, str) or not CHAIN_ID_PATTERN.fullmatch(chain_id) or
+        chain_id == "local-4221"):
         raise ValueError("a distinct planned mainnet Cosmos chain ID is required")
     if genesis.get("chain_id") != chain_id:
         raise ValueError("genesis chain_id does not match expected chain ID")
-    bank = genesis.get("app_state", {}).get("bank", {})
+    app_state = genesis.get("app_state")
+    if not isinstance(app_state, dict):
+        raise ValueError("genesis app_state missing or invalid")
+    bank = app_state.get("bank")
     if not isinstance(bank, dict):
         raise ValueError("genesis app_state.bank missing or invalid")
     balances, supplies = bank.get("balances"), bank.get("supply")
     if not isinstance(balances, list) or not isinstance(supplies, list):
         raise ValueError("bank balances and supply must both be arrays")
-    sum_balances = 0
+
+    balances_by_denom = {}
+    balances_by_address = {}
     seen_addresses = set()
-    account_count = 0
     for idx, row in enumerate(balances):
-        if not isinstance(row, dict) or not isinstance(row.get("address"), str) or not row["address"].strip():
+        if not isinstance(row, dict):
             raise ValueError("balance row %d missing address" % idx)
-        address = row["address"]
+        address = _canonical_genesis_address(row.get("address"), "balance row %d" % idx)
         if address in seen_addresses:
             raise ValueError("duplicate bank address: " + address)
         seen_addresses.add(address)
@@ -49,37 +377,45 @@ def audit(genesis, denom, chain_id):
         if not isinstance(coins, list):
             raise ValueError("account coins must be an array")
         local_denoms = set()
+        balances_by_address[address] = {}
         for coin in coins:
-            if not isinstance(coin, dict) or not isinstance(coin.get("denom"), str):
+            if (not isinstance(coin, dict) or
+                not isinstance(coin.get("denom"), str) or not coin["denom"]):
                 raise ValueError("invalid coin entry")
             d = coin["denom"]
             if d in local_denoms:
                 raise ValueError("duplicate denomination within account " + address)
             local_denoms.add(d)
             amount = parse_amount(coin.get("amount"), "balance for " + address)
-            if d == denom:
-                sum_balances += amount
-        account_count += 1
-    found_supply = None
-    seen_supplies = set()
+            if amount == 0:
+                raise ValueError("zero bank balance coin forbidden")
+            balances_by_denom[d] = balances_by_denom.get(d, 0) + amount
+            balances_by_address[address][d] = amount
+
+    supply_by_denom = {}
     for coin in supplies:
-        if not isinstance(coin, dict) or not isinstance(coin.get("denom"), str):
+        if (not isinstance(coin, dict) or
+            not isinstance(coin.get("denom"), str) or not coin["denom"]):
             raise ValueError("invalid supply entry")
         d = coin["denom"]
-        if d in seen_supplies:
+        if d in supply_by_denom:
             raise ValueError("duplicate denomination in bank supply")
-        seen_supplies.add(d)
         amount = parse_amount(coin.get("amount"), "bank supply for " + d)
-        if d == denom:
-            found_supply = amount
-    if found_supply is None:
+        if amount == 0:
+            raise ValueError("zero bank supply coin forbidden")
+        supply_by_denom[d] = amount
+
+    if denom not in supply_by_denom:
         raise ValueError("PRVI denomination missing from bank supply")
-    if found_supply != sum_balances:
-        raise ValueError("PRVI bank supply differs from sum of PRVI bank balances")
+    if supply_by_denom != balances_by_denom:
+        raise ValueError("bank supply differs from sum of bank balances across denominations")
+    found_supply = supply_by_denom[denom]
     if found_supply > CAP_BASE:
         raise ValueError("initial PRVI bank supply exceeds proposed 1-billion-coin cap")
-    if found_supply == 0:
-        raise ValueError("genesis PRVI supply is zero; require explicit allocation review")
+
+    metadata_checked = audit_native_denom_metadata(bank, denom)
+    periodic_checked = audit_periodic_vesting(app_state, supply_by_denom, balances_by_address)
+
     return {
         "genesis_bank_audit": "PASS",
         "cosmos_chain_id": chain_id,
@@ -88,23 +424,29 @@ def audit(genesis, denom, chain_id):
         "genesis_supply_base_units": str(found_supply),
         "genesis_supply_whole_coins": str(found_supply // 10**DECIMALS),
         "max_supply_base_units": str(CAP_BASE),
-        "bank_accounts_checked": account_count,
-        "warning": "A one-time genesis bank check does not prove immutable cap enforcement, emissions, vesting, migration rights, or launch readiness"
+        "native_prvi_metadata_checked": metadata_checked,
+        "bank_accounts_checked": len(balances),
+        "bank_denominations_reconciled": len(supply_by_denom),
+        "periodic_vesting_accounts_checked": periodic_checked,
+        "vesting_execution_verified": False,
+        "warning": "One-time genesis bank and periodic schedule arithmetic cannot prove lifetime cap enforcement, vesting execution, delegation safety, other vesting types, consensus, or release readiness",
     }
 
+
 def main():
-    ap=argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--genesis",required=True,type=Path)
-    ap.add_argument("--denom",required=True)
-    ap.add_argument("--chain-id",required=True)
-    args=ap.parse_args()
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--genesis", required=True, type=Path)
+    ap.add_argument("--denom", required=True)
+    ap.add_argument("--chain-id", required=True)
+    args = ap.parse_args()
     try:
-        result=audit(json.loads(args.genesis.read_text(encoding="utf-8")),args.denom,args.chain_id)
-    except (OSError, UnicodeError, ValueError, AttributeError) as e:
-        print(json.dumps({"ok": False, "error": str(e)}))
+        result = audit(load_strict_genesis(args.genesis), args.denom, args.chain_id)
+    except (OSError, UnicodeError, ValueError, AttributeError, TypeError) as exc:
+        print(json.dumps({"ok": False, "error": str(exc)}))
         return 1
-    print(json.dumps({"ok": True, **result},indent=2))
+    print(json.dumps({"ok": True, **result}, indent=2))
     return 0
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     sys.exit(main())

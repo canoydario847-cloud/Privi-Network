@@ -39,6 +39,8 @@ python3 production-network/ops/genesis_supply_audit.py \
 
 This can reject invalid account totals and excess starting supply; it does **not** prove a total lifetime cap, vesting implementation, uniqueness of EVM ID, or deploy a chain. Attach the verifier output and independent chain-state proof to the audit.
 
+The offline audit now also requires an explicit Cosmos SDK bank `denom_metadata` entry for the reviewed native base denomination, with display `prvi`, symbol `PRVI`, one base unit at exponent 0 and one PRVI display unit at exponent 18. Missing, duplicated or inconsistent metadata is rejected rather than assuming that a wallet-visible PRVI equals 10^18 base units. This is a **candidate-genesis review policy**, not proof that the active application honors the metadata or implements immutable supply controls. The native base-denom choice remains subject to approval; no existing TEST, BNB or Base asset is relabeled.
+
 ### Independent validator evidence (minimum four operator-controlled deployments)
 
 For each operator: independently verified organization identity, different operating control / fault domain, signed public consensus-key and node metadata, sentry design, secure remote-signing arrangement if applicable, signed genesis digest, backup-and-restore rehearsal and double-signing prevention. Do not create four nominally different validators under the same private-key or infrastructure control and claim independence.
