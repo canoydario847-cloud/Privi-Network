@@ -285,6 +285,33 @@ test("hard-linked existing lock must fail closed",()=>{
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });
 
+test("existing height lock opens nonblocking so a named pipe cannot stall the research signer",()=>{
+  const f=fixture(),dir=tempRoot();
+  const p=f.proposal(),v=f.committee.validators[0];
+  const input={lockDirectory:dir,committee:f.committee,proposal:p,
+               privateKey:f.keysById.get(v.id)};
+  const originalOpen=fs.openSync;
+  try {
+    signCommitWithResearchLock(input);
+    const file=path.join(dir,lockedFileName(recordFor(f.committee,
+      p.height,v.id,p.blockHash,p.previousBlockHash)));
+    let checked=false;
+    fs.openSync=function(target,flags,...rest) {
+      if (target===file) {
+        checked=true;
+        assert.ok((flags & fs.constants.O_NONBLOCK)!==0,
+          "existing lock must be opened with O_NONBLOCK before inode validation");
+      }
+      return originalOpen(target,flags,...rest);
+    };
+    assert.ok(signCommitWithResearchLock(input).signature);
+    assert.equal(checked,true);
+  } finally {
+    fs.openSync=originalOpen;
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
+});
+
 test("insecure path and symlinked root are forbidden",()=>{
   const f=fixture(),dir=tempRoot();
   const tmp=path.join(os.tmpdir(),"privi-pop-link-"+crypto.randomBytes(8).toString("hex"));
