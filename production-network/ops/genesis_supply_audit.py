@@ -278,6 +278,17 @@ def audit_native_denom_metadata(bank, denom):
                 seen_unit_denoms.add(unit_denom)
                 if claims_native_base(unit_denom) or claims_prvi(unit_denom):
                     raise ValueError("another denomination reuses native PRVI denomination unit")
+            # An unrelated bank token must identify its actual smallest unit
+            # and the wallet display unit. Otherwise the same genesis can
+            # advertise inconsistent quantities to clients.
+            if base not in seen_unit_denoms:
+                raise ValueError("non-native denomination metadata missing base unit")
+            base_unit = next(unit for unit in units if unit["denom"] == base)
+            if base_unit["exponent"] != 0:
+                raise ValueError("non-native denomination base unit exponent must be zero")
+            display = row.get("display")
+            if not isinstance(display, str) or not display or display not in seen_unit_denoms:
+                raise ValueError("non-native denomination display unit must be declared")
     matching = [row for row in rows if row.get("base") == denom]
     if len(matching) != 1:
         raise ValueError("native PRVI denomination metadata must appear exactly once")
