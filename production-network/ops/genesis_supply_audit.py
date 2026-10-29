@@ -120,9 +120,10 @@ def audit_periodic_vesting(app_state, supply_by_denom, balances_by_address):
     deliberately does not infer custody, delegation, withdrawal rights, or
     Cosmos SDK keeper behavior from genesis JSON.
     """
+    # An absent auth module would bypass all account identity and vesting
+    # screening while allowing an otherwise plausible bank-only genesis to pass.
+    # Empty accounts are still allowed, but cannot prove vesting execution.
     auth = app_state.get("auth")
-    if auth is None:
-        return 0  # No account evidence: caller MUST NOT claim vesting verified.
     if not isinstance(auth, dict) or not isinstance(auth.get("accounts"), list):
         raise ValueError("genesis auth.accounts missing or malformed")
     count = 0
