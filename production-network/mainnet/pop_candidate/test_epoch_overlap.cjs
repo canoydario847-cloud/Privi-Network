@@ -20,7 +20,8 @@ function fixture(n) {
     const validators=signers.map((key,i)=>{
       const operatorId=(options.changeOperatorAt===i?"ALTERNATE_OPERATOR_":"OPERATOR_")+i;
       const faultDomain="host"+i+".separate-operator.example";
-      const companyId="ORG_"+i,positionSequence=i+1;
+      const companyId="ORG_"+i;
+      const positionSequence=options.changePositionAt===i ? i+100 : i+1;
       const anchorBlockHash=hash(Buffer.from("research-position-anchor-"+i));
       const positionHash=hash(Buffer.from(positionStamp(companyId,positionSequence)));
       const fields=[usedChain,usedGenesis,epoch,operatorId,faultDomain,
@@ -77,6 +78,22 @@ test("identical key with newly claimed operator is not a stable shared identity"
   const f=fixture(4);
   const old=f.committee(f.keys,1),next=f.committee(f.keys,2,{changeOperatorAt:0});
   assert.throws(()=>analyzeEpochOverlap(old,next),/unsafe cross-epoch quorum overlap/);
+});
+
+test("governance-signed PoP position reassignment is not a stable epoch signer",()=>{
+  const f=fixture(4),previous=f.committee(f.keys,12);
+  // Keep the SAME four Ed25519 keys, operators, fault domains and governance
+  // authority. Re-sign one different position for the next epoch: a valid
+  // admission is not proof that the same participation identity persisted.
+  const next=f.committee(f.keys,13,{changePositionAt:0});
+  assert.equal(previous.validators.length,next.validators.length);
+  assert.deepEqual(previous.validators.map(v=>v.id),next.validators.map(v=>v.id));
+  assert.equal(previous.governanceKeyId,next.governanceKeyId);
+  assert.notEqual(previous.validators.find(v=>v.stamp.includes("ORG_0")).stamp,
+                  next.validators.find(v=>v.stamp.includes("ORG_0")).stamp);
+  assert.throws(()=>analyzeEpochOverlap(previous,next),
+    /unsafe cross-epoch quorum overlap/);
+  assert.equal(analyzeEpochOverlap(previous,f.committee(f.keys,13)).permitsEpochTransition,false);
 });
 
 test("four-to-seven committee expansion has no proven honest quorum intersection",()=>{
