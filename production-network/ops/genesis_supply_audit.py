@@ -287,6 +287,21 @@ def audit_native_denom_metadata(bank, denom):
                 seen_unit_denoms.add(unit_denom)
                 if claims_native_base(unit_denom) or claims_prvi(unit_denom):
                     raise ValueError("another denomination reuses native PRVI denomination unit")
+                # Cosmos DenomUnit.aliases are also wallet-facing labels. A
+                # different token must not claim native PRVI through an alias
+                # or reuse another declared non-native unit/alias.
+                aliases = unit.get("aliases", [])
+                if not isinstance(aliases, list):
+                    raise ValueError("non-native denomination unit aliases must be an array")
+                for alias in aliases:
+                    if not isinstance(alias, str) or not alias:
+                        raise ValueError("malformed non-native denomination unit alias")
+                    if claims_native_base(alias) or claims_prvi(alias):
+                        raise ValueError("another denomination reuses native PRVI denomination alias")
+                    normalized_alias = unicodedata.normalize("NFKC", alias).casefold()
+                    if normalized_alias in seen_other_units:
+                        raise ValueError("duplicate non-native denomination unit or alias")
+                    seen_other_units.add(normalized_alias)
             # An unrelated bank token must identify its actual smallest unit
             # and the wallet display unit. Otherwise the same genesis can
             # advertise inconsistent quantities to clients.
