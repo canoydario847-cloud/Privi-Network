@@ -106,6 +106,13 @@ def _coin_totals(rows, where):
     return totals
 
 
+def _canonical_genesis_address(raw, where):
+    """Screen account identifiers before comparing them; not a Bech32 checksum audit."""
+    if not isinstance(raw, str) or not re.fullmatch(r"[a-z0-9]+", raw):
+        raise ValueError(where + ": missing or noncanonical lowercase ASCII address")
+    return raw
+
+
 def audit_periodic_vesting(app_state, supply_by_denom, balances_by_address):
     """Check necessary PeriodicVestingAccount schedule invariants, not vesting execution.
 
@@ -136,9 +143,8 @@ def audit_periodic_vesting(app_state, supply_by_denom, balances_by_address):
             account = row if kind == BASE_ACCOUNT_TYPE else row.get("base_account")
             if not isinstance(account, dict):
                 raise ValueError("module auth account missing base_account")
-            address = account.get("address")
-            if not isinstance(address, str) or not address.strip():
-                raise ValueError("base or module auth account missing address")
+            address = _canonical_genesis_address(
+                account.get("address"), "base or module auth account")
             if address in seen_auth_addresses:
                 raise ValueError("duplicate auth account address")
             seen_auth_addresses.add(address)
@@ -154,9 +160,8 @@ def audit_periodic_vesting(app_state, supply_by_denom, balances_by_address):
         base = row.get("base_vesting_account")
         if not isinstance(base, dict) or not isinstance(base.get("base_account"), dict):
             raise ValueError("periodic vesting missing base account")
-        address = base["base_account"].get("address")
-        if not isinstance(address, str) or not address.strip():
-            raise ValueError("periodic vesting missing address")
+        address = _canonical_genesis_address(
+            base["base_account"].get("address"), "periodic vesting")
         if address in seen_vesting_addresses:
             raise ValueError("duplicate periodic vesting account address")
         seen_vesting_addresses.add(address)
@@ -291,10 +296,9 @@ def audit(genesis, denom, chain_id):
     balances_by_address = {}
     seen_addresses = set()
     for idx, row in enumerate(balances):
-        if (not isinstance(row, dict) or
-            not isinstance(row.get("address"), str) or not row["address"].strip()):
+        if not isinstance(row, dict):
             raise ValueError("balance row %d missing address" % idx)
-        address = row["address"]
+        address = _canonical_genesis_address(row.get("address"), "balance row %d" % idx)
         if address in seen_addresses:
             raise ValueError("duplicate bank address: " + address)
         seen_addresses.add(address)
