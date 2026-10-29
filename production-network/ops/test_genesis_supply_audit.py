@@ -57,6 +57,27 @@ class SupplyAuditTests(unittest.TestCase):
     def test_unexpected_chain(self):
         with self.assertRaisesRegex(ValueError,"chain_id"):
             self.check({"chain_id":"another-network","app_state":fixture()["app_state"]})
+    def test_chain_id_rejects_ambiguous_or_nonascii_names(self):
+        # Exact-string comparison alone would accept a malformed chain ID
+        # if the caller supplied the same bad value as the genesis file.
+        for chain_id in (
+            "privi candidate-1", "privi\\ncandidate-1",
+            "privi\\tcandidate-1", " privi-candidate-1",
+            "privi-candidate-1 ", "privi－candidate-1",
+            "bad/id", "x" * 65,
+        ):
+            with self.subTest(chain_id=chain_id):
+                g = fixture()
+                g["chain_id"] = chain_id
+                with self.assertRaisesRegex(ValueError, "chain ID"):
+                    mod.audit(g, "aprvi", chain_id)
+        g = fixture()
+        g["chain_id"] = "privi_candidate-1"
+        self.assertEqual(
+            mod.audit(g, "aprvi", "privi_candidate-1")["genesis_bank_audit"],
+            "PASS",
+        )
+
     def test_negative_amount(self):
         with self.assertRaisesRegex(ValueError,"nonnegative"):
             self.check(fixture(-1))
