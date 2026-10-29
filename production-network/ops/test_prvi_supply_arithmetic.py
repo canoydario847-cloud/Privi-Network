@@ -46,6 +46,19 @@ class SupplyArithmeticTests(unittest.TestCase):
         self.assertEqual(10 ** auditor.DECIMALS, BASE_UNITS_PER_PRVI)
         self.assertEqual(auditor.CAP, CAP_BASE_UNITS)
         self.assertEqual(auditor.DENOM, "aprvi")
+        # Cross-check actual offline genesis validation, not just constants:
+        # a self-consistent bank balance and declared supply over the cap
+        # must still fail the native-supply gate.
+        over_cap = str(CAP_BASE_UNITS + 1)
+        genesis = {"app_state": {"bank": {
+            "balances": [{"address": "prvi1offlinefixture", "coins": [
+                {"denom": "aprvi", "amount": over_cap}]}],
+            "supply": [{"denom": "aprvi", "amount": over_cap}],
+        }}}
+        errors, _ = auditor.check(genesis)
+        self.assertTrue(
+            any("exceeds 1B PRVI" in error for error in errors), errors
+        )
 
     def test_exact_cap_allowed(self):
         self.assertEqual(validate_supply(CAP_BASE_UNITS, 0, 0), CAP_BASE_UNITS)
