@@ -4,6 +4,11 @@ Run: python3 -m unittest production-network/ops/test_prvi_supply_arithmetic.py
 The production SDK mint/burn/bank paths still require independent review.
 """
 import unittest
+import sys
+from pathlib import Path
+
+# Offline checks invoke discovery from outside the ops directory.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 MAX_PRVI = 1_000_000_000
 BASE_UNITS_PER_PRVI = 10**18
