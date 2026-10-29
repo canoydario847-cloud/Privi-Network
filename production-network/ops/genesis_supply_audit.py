@@ -163,6 +163,15 @@ def audit_periodic_vesting(app_state, supply_by_denom, balances_by_address):
         if address in seen_auth_addresses:
             raise ValueError("duplicate auth account address")
         seen_auth_addresses.add(address)
+        # Delegation bookkeeping changes spendability. Without an SDK-aware
+        # reconciliation against staking state, predelegated genesis accounts
+        # must not be counted as reviewed periodic vesting schedules.
+        for field in ("delegated_free", "delegated_vesting"):
+            delegated = base.get(field, [])
+            if not isinstance(delegated, list):
+                raise ValueError("periodic vesting " + field + " must be an array")
+            if delegated:
+                raise ValueError("periodic vesting " + field + " requires SDK-aware delegation review")
         originals = _coin_totals(base.get("original_vesting"), "original_vesting")
         if not originals:
             raise ValueError("periodic vesting requires nonempty original_vesting")
