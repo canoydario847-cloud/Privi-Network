@@ -61,8 +61,8 @@ class SupplyAuditTests(unittest.TestCase):
         # Exact-string comparison alone would accept a malformed chain ID
         # if the caller supplied the same bad value as the genesis file.
         for chain_id in (
-            "privi candidate-1", "privi\\ncandidate-1",
-            "privi\\tcandidate-1", " privi-candidate-1",
+            "privi candidate-1", "privi\ncandidate-1",
+            "privi\tcandidate-1", " privi-candidate-1",
             "privi-candidate-1 ", "privi－candidate-1",
             "bad/id", "x" * 65,
         ):
