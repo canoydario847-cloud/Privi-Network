@@ -21,7 +21,7 @@ def fixture(amount=100*UNIT):
                         {"denom":"aprvi","exponent":0},
                         {"denom":"prvi","exponent":18}
                     ]
-                }]}}}
+                }]}, "auth": {"accounts": []}}}
 
 
 def periodic_genesis(original=60*UNIT, first=20*UNIT, second=40*UNIT):
@@ -159,6 +159,25 @@ class SupplyAuditTests(unittest.TestCase):
         outcome=self.check(periodic_genesis())
         self.assertEqual(outcome["periodic_vesting_accounts_checked"],1)
         self.assertIs(outcome["vesting_execution_verified"],False)
+
+    def test_auth_inventory_is_required_before_genesis_can_pass(self):
+        # A bank-only candidate cannot bypass auth address/vesting screening.
+        for label, auth in (
+            ("absent", "ABSENT"),
+            ("null", None),
+            ("empty object", {}),
+            ("missing accounts", {"other": []}),
+            ("null accounts", {"accounts": None}),
+            ("object accounts", {"accounts": {}}),
+        ):
+            with self.subTest(case=label):
+                g = fixture()
+                if auth == "ABSENT":
+                    del g["app_state"]["auth"]
+                else:
+                    g["app_state"]["auth"] = auth
+                with self.assertRaisesRegex(ValueError, "genesis auth.accounts missing or malformed"):
+                    self.check(g)
 
     def test_no_auth_accounts_never_claims_vesting_verified(self):
         outcome=self.check(fixture())
