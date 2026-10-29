@@ -252,6 +252,29 @@ test("reject unapproved, copied or forged PoP authority",()=>{
   assert.throws(()=>parseRegistry(foreignChain,f.gov.publicKeyB64),/Unexpected PoP research chain/);
 });
 
+test("two valid governance admissions cannot reuse one PoP position as two quorum votes",()=>{
+  const f=fixture(4),registry=structuredClone(f.registry);
+  const first=registry.validators[0],second=registry.validators[1];
+  // Keep distinct signing keys, operators, and fault domains. The only
+  // collision is the independently meaningful PoP position identity.
+  assert.notEqual(first.id,second.id);
+  assert.notEqual(first.operatorId,second.operatorId);
+  assert.notEqual(first.faultDomain,second.faultDomain);
+  second.companyId=first.companyId;
+  second.positionSequence=first.positionSequence;
+  second.positionHash=hash(Buffer.from(
+    positionStamp(second.companyId,second.positionSequence),"utf8"));
+  const admission=[registry.chainId,registry.genesisHash,registry.epoch,
+    second.operatorId,second.faultDomain,second.companyId,
+    second.positionSequence,second.id,second.anchorBlockHash];
+  // A real signature under the authorized governance key is not sufficient
+  // to count the same position twice toward a research quorum.
+  second.admissionSignature=sign(f.gov,"admit",admission);
+  assert.throws(()=>parseRegistry(registry,f.gov.publicKeyB64),
+    /Duplicated validator, operator, failure domain, or PoP position/);
+  assert.equal(parseRegistry(f.registry,f.gov.publicKeyB64).quorum,3);
+});
+
 test("a signed vote cannot be replayed at another block, round, epoch or chain",()=>{
   const f=fixture();
   const {proposal,votes}=f.bundle();
