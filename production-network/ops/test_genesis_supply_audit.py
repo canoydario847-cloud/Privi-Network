@@ -270,8 +270,8 @@ class SupplyAuditTests(unittest.TestCase):
     def test_noncanonical_bank_address_aliases_rejected(self):
         # Whitespace, controls, case and Unicode must not create a second
         # apparent identity or bypass bank/address reconciliation.
-        for address in (" privi1example", "privi1example ", "privi1exa\\tmple",
-                        "Privi1example", "privi1éxample", "privi1example\\x00"):
+        for address in (" privi1example", "privi1example ", "privi1exa\tmple",
+                        "Privi1example", "privi1éxample", "privi1example\x00"):
             with self.subTest(address=address):
                 g = fixture()
                 g["app_state"]["bank"]["balances"][0]["address"] = address
