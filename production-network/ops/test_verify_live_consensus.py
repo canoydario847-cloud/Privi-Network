@@ -164,7 +164,35 @@ class MainnetQuorumMonitor(unittest.TestCase):
         p,g,_,signatures=make_responses()
         signatures[:]=[{"validator_address":"F"*40,"block_id_flag":2} for _ in range(4)]
         with mock.patch.object(m,"post",p),mock.patch.object(m,"get",g):
-            with self.assertRaisesRegex(RuntimeError,"2/3 voting power"):
+            with self.assertRaisesRegex(RuntimeError,"Unknown CometBFT commit signer"):
+                m.check(EVM,COMET,CHAIN,EVM_ID,now=1000)
+
+    def test_foreign_vote_rejected_even_if_three_valid_votes_form_quorum(self):
+        p,g,_,signatures=make_responses()
+        signatures[3]["validator_address"]="F"*40
+        with mock.patch.object(m,"post",p),mock.patch.object(m,"get",g):
+            with self.assertRaisesRegex(RuntimeError,"Unknown CometBFT commit signer"):
+                m.check(EVM,COMET,CHAIN,EVM_ID,now=1000)
+
+    def test_duplicate_commit_vote_rejected_even_if_quorum_remains(self):
+        p,g,_,signatures=make_responses()
+        signatures[3]["validator_address"]=signatures[0]["validator_address"]
+        with mock.patch.object(m,"post",p),mock.patch.object(m,"get",g):
+            with self.assertRaisesRegex(RuntimeError,"Duplicate CometBFT commit signer"):
+                m.check(EVM,COMET,CHAIN,EVM_ID,now=1000)
+
+    def test_unknown_commit_flag_rejected_even_if_quorum_remains(self):
+        p,g,_,signatures=make_responses()
+        signatures[3]["block_id_flag"]=99
+        with mock.patch.object(m,"post",p),mock.patch.object(m,"get",g):
+            with self.assertRaisesRegex(RuntimeError,"Unknown CometBFT commit signature flag"):
+                m.check(EVM,COMET,CHAIN,EVM_ID,now=1000)
+
+    def test_missing_commit_signature_slot_rejected_even_if_quorum_remains(self):
+        p,g,_,signatures=make_responses()
+        signatures.pop()
+        with mock.patch.object(m,"post",p),mock.patch.object(m,"get",g):
+            with self.assertRaisesRegex(RuntimeError,"signature roster incomplete"):
                 m.check(EVM,COMET,CHAIN,EVM_ID,now=1000)
 
     def test_two_of_four_votes_insufficient(self):
