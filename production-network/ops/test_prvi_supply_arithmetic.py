@@ -27,6 +27,20 @@ def validate_supply(genesis_base_units, minted_base_units, burned_base_units):
 
 
 class SupplyArithmeticTests(unittest.TestCase):
+    def test_cap_and_denom_match_genesis_preflight(self):
+        # Prevent this independent arithmetic model from silently drifting
+        # from the candidate genesis auditor's native token configuration.
+        from privi_genesis_preflight import (
+            CAP as GENESIS_CAP,
+            DECIMALS as GENESIS_DECIMALS,
+            DENOM as GENESIS_DENOM,
+            MAX_PRVI as GENESIS_MAX_PRVI,
+        )
+        self.assertEqual(GENESIS_MAX_PRVI, MAX_PRVI)
+        self.assertEqual(10 ** GENESIS_DECIMALS, BASE_UNITS_PER_PRVI)
+        self.assertEqual(GENESIS_CAP, CAP_BASE_UNITS)
+        self.assertEqual(GENESIS_DENOM, "aprvi")
+
     def test_exact_cap_allowed(self):
         self.assertEqual(validate_supply(CAP_BASE_UNITS, 0, 0), CAP_BASE_UNITS)
 
