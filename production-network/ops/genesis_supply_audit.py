@@ -254,6 +254,8 @@ def audit_native_denom_metadata(bank, denom):
             units = row.get("denom_units")
             if not isinstance(units, list):
                 raise ValueError("malformed non-native denomination units")
+            if not units:
+                raise ValueError("non-native denomination requires at least one unit")
             seen_unit_denoms = set()
             for unit in units:
                 if not isinstance(unit, dict):
@@ -261,6 +263,12 @@ def audit_native_denom_metadata(bank, denom):
                 unit_denom = unit.get("denom")
                 if not isinstance(unit_denom, str) or not unit_denom:
                     raise ValueError("malformed non-native denomination unit")
+                # Cosmos bank metadata encodes exponent as uint32. Reject
+                # booleans (Python int subclasses), strings and out-of-range
+                # values rather than silently accepting malformed genesis.
+                exponent = unit.get("exponent")
+                if type(exponent) is not int or not 0 <= exponent <= 0xFFFFFFFF:
+                    raise ValueError("non-native denomination unit exponent must be uint32")
                 if unit_denom in seen_unit_denoms:
                     raise ValueError("duplicate non-native denomination unit")
                 seen_unit_denoms.add(unit_denom)
