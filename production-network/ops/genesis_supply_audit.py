@@ -231,10 +231,20 @@ def audit_native_denom_metadata(bank, denom):
         return (isinstance(value, str) and
                 unicodedata.normalize("NFKC", value).casefold() == "prvi")
 
+    seen_other_bases = set()
     for row in rows:
         if not isinstance(row, dict):
             raise ValueError("malformed bank denomination metadata")
         if row.get("base") != denom:
+            # Repeating a non-native base with different wallet labels makes
+            # genesis denomination identity ambiguous even when PRVI's own
+            # metadata is valid. Treat all base entries as unique.
+            base = row.get("base")
+            if not isinstance(base, str) or not base:
+                raise ValueError("malformed non-native denomination metadata base")
+            if base in seen_other_bases:
+                raise ValueError("duplicate non-native denomination metadata base")
+            seen_other_bases.add(base)
             if (claims_prvi(row.get("base")) or
                 claims_prvi(row.get("display")) or
                 claims_prvi(row.get("symbol"))):
