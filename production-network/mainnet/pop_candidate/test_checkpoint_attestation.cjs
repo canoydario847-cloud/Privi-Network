@@ -158,15 +158,43 @@ test("production-finality claims, arbitrary metadata and incomplete attestation 
   ]){
     assert.throws(()=>verifyResearchCheckpoint(
       f.committee,{...f.checkpoint,...extra},f.governance.publicKey),
-      /missing or unexpected fields/);
+      /plain own data fields/);
   }
   const incomplete={...f.checkpoint};
   delete incomplete.signatureB64;
   assert.throws(()=>verifyResearchCheckpoint(f.committee,incomplete,
-                f.governance.publicKey),/missing or unexpected fields/);
+                f.governance.publicKey),/plain own data fields/);
   const invalid={...f.checkpoint,signatureB64:"AQ=="};
   assert.throws(()=>verifyResearchCheckpoint(f.committee,invalid,
                 f.governance.publicKey),/canonical/);
+});
+
+test("rejects accessor-backed and hidden checkpoint metadata without invoking getters",()=>{
+  const f=fixture();
+  let reads=0;
+  const accessor={...f.checkpoint};
+  Object.defineProperty(accessor,"signatureB64",{
+    enumerable:true,
+    get(){reads++;return f.checkpoint.signatureB64;}
+  });
+  assert.throws(()=>verifyResearchCheckpoint(f.committee,accessor,
+                f.governance.publicKey),/plain own data fields/);
+  assert.equal(reads,0,"untrusted checkpoint getter must not run");
+
+  const hidden={...f.checkpoint};
+  Object.defineProperty(hidden,"productionFinality",{value:true,enumerable:false});
+  const symbolic={...f.checkpoint};
+  symbolic[Symbol("productionFinality")]=true;
+  const nonenumerableRequired={...f.checkpoint};
+  Object.defineProperty(nonenumerableRequired,"height",{
+    value:f.checkpoint.height,enumerable:false
+  });
+  for(const invalid of [hidden,symbolic,nonenumerableRequired]) {
+    assert.throws(()=>verifyResearchCheckpoint(f.committee,invalid,
+                  f.governance.publicKey),/plain own data fields/);
+  }
+  assert.equal(verifyResearchCheckpoint(f.committee,f.checkpoint,
+               f.governance.publicKey).checkpointIssuerSignatureVerified,true);
 });
 
 test("checkpoint height is bounded and does not accept JS unsafe integers",()=>{
@@ -199,7 +227,7 @@ test("a valid checkpoint cannot rescue a forged, disconnected, or insufficient-q
     f.committee,f.checkpoint,f.governance.publicKey,low),/quorum/);
   assert.throws(()=>verifyAttestedCandidateAncestry(
     f.committee,{height:30,blockHash:f.checkpoint.blockHash},
-    f.governance.publicKey,f.batch()),/missing or unexpected fields/);
+    f.governance.publicKey,f.batch()),/plain own data fields/);
 });
 
 test("a signed but incorrect starting checkpoint cannot authorize the unrelated candidate history",()=>{
