@@ -88,7 +88,10 @@ function reservePosition(dir, committee, height, validatorId, blockHash, previou
     // Existing lock is ALWAYS immutable: corrupt/unparseable locks block
     // further signing. Open the inode without following symlinks, verify the
     // inode itself, and never trust a separately reopened pathname.
-    const oldFd=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW);
+    // A hostile/corrupt lock path might be a FIFO: O_RDONLY alone can block
+    // forever before fstatSync can reject it. Never block the signer on open.
+    const oldFd=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|
+                                   fs.constants.O_NONBLOCK);
     try {
       const stat=fs.fstatSync(oldFd);
       must(stat.isFile() && stat.size>0 && stat.size<=2048 &&
