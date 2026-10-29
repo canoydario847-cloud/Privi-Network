@@ -412,3 +412,41 @@ test("research-only network and false committee are refused",()=>{
     assert.throws(()=>reservePosition(dir,another,p.height,v.id,p.blockHash,p.previousBlockHash),/Native Privi research/);
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+test("foreign-owned signer state fails closed before releasing research signatures",()=>{
+  if(typeof process.getuid!=="function") return; // POSIX-only research lock implementation
+  const f=fixture(),dir=tempRoot(),p=f.proposal(),v=f.committee.validators[0];
+  const input={lockDirectory:dir,committee:f.committee,proposal:p,
+               privateKey:f.keysById.get(v.id)};
+  const originalLstat=fs.lstatSync,originalFstat=fs.fstatSync;
+  const foreignUid=process.getuid()+1;
+  try {
+    // Simulate a foreign-owned 0700 directory without requiring root/chown.
+    fs.lstatSync=function(target,...args) {
+      const stat=originalLstat(target,...args);
+      return target===dir ? Object.create(stat,{uid:{value:foreignUid}}) : stat;
+    };
+    assert.throws(()=>signCommitWithResearchLock(input),/owned by current process/);
+    assert.deepEqual(fs.readdirSync(dir),[],"foreign directory must receive no lock");
+    fs.lstatSync=originalLstat;
+
+    const first=signCommitWithResearchLock(input);
+    const record=recordFor(f.committee,p.height,v.id,p.blockHash,p.previousBlockHash);
+    const file=path.join(dir,lockedFileName(record));
+    const original=fs.readFileSync(file);
+    // Replay must also refuse an existing inode that belongs to another UID.
+    fs.fstatSync=function(fd) {
+      const stat=originalFstat(fd);
+      return stat.isFile() ? Object.create(stat,{uid:{value:foreignUid}}) : stat;
+    };
+    assert.throws(()=>signCommitWithResearchLock(input),/owned by current process/);
+    assert.deepEqual(fs.readFileSync(file),original,
+      "foreign-owned lock rejection must preserve existing forensic state");
+    fs.fstatSync=originalFstat;
+    assert.equal(signCommitWithResearchLock(input).signature,first.signature);
+  } finally {
+    fs.lstatSync=originalLstat;
+    fs.fstatSync=originalFstat;
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
+});
