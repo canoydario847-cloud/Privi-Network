@@ -22,7 +22,8 @@ function fixture(n) {
       const faultDomain="host"+i+".separate-operator.example";
       const companyId="ORG_"+i;
       const positionSequence=options.changePositionAt===i ? i+100 : i+1;
-      const anchorBlockHash=hash(Buffer.from("research-position-anchor-"+i));
+      const anchorBlockHash=hash(Buffer.from("research-position-anchor-"+i+
+        (options.changeAnchorAt===i ? "-replacement" : "")));
       const positionHash=hash(Buffer.from(positionStamp(companyId,positionSequence)));
       const fields=[usedChain,usedGenesis,epoch,operatorId,faultDomain,
                     companyId,positionSequence,key.id,anchorBlockHash];
@@ -94,6 +95,22 @@ test("governance-signed PoP position reassignment is not a stable epoch signer",
   assert.throws(()=>analyzeEpochOverlap(previous,next),
     /unsafe cross-epoch quorum overlap/);
   assert.equal(analyzeEpochOverlap(previous,f.committee(f.keys,13)).permitsEpochTransition,false);
+});
+
+test("governance-signed change to a PoP anchor is not stable cross-epoch identity",()=>{
+  const f=fixture(4),old=f.committee(f.keys,20);
+  // Even valid fresh governance signatures cannot quietly replace the
+  // position's anchored block commitment during a committee handoff.
+  const changed=f.committee(f.keys,21,{changeAnchorAt:0});
+  const original=old.validators.find(v=>v.stamp==="PoP:ORG_0:VALIDATOR/AUTH:000001");
+  const updated=changed.validators.find(v=>v.stamp===original.stamp);
+  assert.equal(old.governanceKeyId,changed.governanceKeyId);
+  assert.equal(original.id,updated.id);
+  assert.equal(original.positionHash,updated.positionHash);
+  assert.notEqual(original.anchorBlockHash,updated.anchorBlockHash);
+  assert.throws(()=>analyzeEpochOverlap(old,changed),
+    /unsafe cross-epoch quorum overlap/);
+  assert.equal(analyzeEpochOverlap(old,f.committee(f.keys,21)).permitsEpochTransition,false);
 });
 
 test("four-to-seven committee expansion has no proven honest quorum intersection",()=>{
