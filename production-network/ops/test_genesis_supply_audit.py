@@ -503,6 +503,31 @@ class SupplyAuditTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "malformed non-native denomination unit"):
                     self.check(g)
 
+    def test_non_native_denom_units_reject_duplicate_or_empty_names(self):
+        # An unrelated bank denomination cannot declare the same wallet unit
+        # twice (even with different exponents), or an unnamed unit.
+        for units in (
+            [{"denom": "uatom", "exponent": 0},
+             {"denom": "uatom", "exponent": 6}],
+            [{"denom": "uatom", "exponent": 0},
+             {"denom": "atom", "exponent": 6},
+             {"denom": "atom", "exponent": 9}],
+            [{"denom": "uatom", "exponent": 0},
+             {"denom": "", "exponent": 6}],
+            [{"denom": "uatom", "exponent": 0},
+             {"denom": None, "exponent": 6}],
+        ):
+            with self.subTest(units=units):
+                g = fixture()
+                g["app_state"]["bank"]["denom_metadata"].append({
+                    "base": "uatom", "display": "atom", "symbol": "ATOM",
+                    "denom_units": units,
+                })
+                with self.assertRaisesRegex(
+                    ValueError, "duplicate non-native denomination unit|malformed non-native denomination unit"
+                ):
+                    self.check(g)
+
     def test_duplicate_non_native_metadata_base_rejected(self):
         import copy
         for alternate_labels in (False, True):
