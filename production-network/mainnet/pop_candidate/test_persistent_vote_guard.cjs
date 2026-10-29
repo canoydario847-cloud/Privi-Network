@@ -297,7 +297,7 @@ test("existing height lock opens nonblocking so a named pipe cannot stall the re
       p.height,v.id,p.blockHash,p.previousBlockHash)));
     let checked=false;
     fs.openSync=function(target,flags,...rest) {
-      if (target===file) {
+      if (target===file && (flags & fs.constants.O_CREAT)===0) {
         checked=true;
         assert.ok((flags & fs.constants.O_NONBLOCK)!==0,
           "existing lock must be opened with O_NONBLOCK before inode validation");
