@@ -267,6 +267,38 @@ class SupplyAuditTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError,"duplicate auth account address"):
                     self.check(g)
 
+    def test_noncanonical_bank_address_aliases_rejected(self):
+        # Whitespace, controls, case and Unicode must not create a second
+        # apparent identity or bypass bank/address reconciliation.
+        for address in (" privi1example", "privi1example ", "privi1exa\\tmple",
+                        "Privi1example", "privi1éxample", "privi1example\\x00"):
+            with self.subTest(address=address):
+                g = fixture()
+                g["app_state"]["bank"]["balances"][0]["address"] = address
+                with self.assertRaisesRegex(ValueError, "noncanonical"):
+                    self.check(g)
+
+    def test_noncanonical_auth_address_aliases_rejected(self):
+        for kind in (mod.BASE_ACCOUNT_TYPE, mod.MODULE_ACCOUNT_TYPE,
+                     mod.PERIODIC_VESTING_TYPE):
+            with self.subTest(kind=kind):
+                g = periodic_genesis()
+                account = g["app_state"]["auth"]["accounts"][0]
+                if kind == mod.BASE_ACCOUNT_TYPE:
+                    g["app_state"]["auth"]["accounts"] = [{
+                        "@type": kind, "address": " privi1vestingexample"
+                    }]
+                elif kind == mod.MODULE_ACCOUNT_TYPE:
+                    g["app_state"]["auth"]["accounts"] = [{
+                        "@type": kind, "base_account": {
+                            "address": "privi1vestingexample "
+                        }
+                    }]
+                else:
+                    account["base_vesting_account"]["base_account"]["address"] = "Privi1vestingexample"
+                with self.assertRaisesRegex(ValueError, "noncanonical"):
+                    self.check(g)
+
     def test_duplicate_base_auth_accounts_rejected(self):
         g=fixture()
         base={"@type":mod.BASE_ACCOUNT_TYPE,"address":"privi1same"}
