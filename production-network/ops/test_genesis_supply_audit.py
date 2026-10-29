@@ -503,6 +503,28 @@ class SupplyAuditTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "malformed non-native denomination unit"):
                     self.check(g)
 
+    def test_duplicate_non_native_metadata_base_rejected(self):
+        import copy
+        for alternate_labels in (False, True):
+            with self.subTest(alternate_labels=alternate_labels):
+                g = fixture()
+                metadata = g["app_state"]["bank"]["denom_metadata"]
+                other = {
+                    "base": "uatom", "display": "atom", "symbol": "ATOM",
+                    "denom_units": [{"denom": "uatom", "exponent": 0},
+                                    {"denom": "atom", "exponent": 6}],
+                }
+                metadata.append(other)
+                duplicate = copy.deepcopy(other)
+                if alternate_labels:
+                    duplicate["display"] = "other"
+                    duplicate["symbol"] = "OTHER"
+                    duplicate["denom_units"][1]["denom"] = "other"
+                metadata.append(duplicate)
+                with self.assertRaisesRegex(ValueError,
+                        "duplicate non-native denomination metadata base"):
+                    self.check(g)
+
     def test_distinct_other_denom_metadata_is_allowed(self):
         g=fixture()
         g["app_state"]["bank"]["denom_metadata"].append({
