@@ -597,6 +597,31 @@ class SupplyAuditTests(unittest.TestCase):
                         "duplicate non-native denomination metadata base"):
                     self.check(g)
 
+    def test_non_native_metadata_requires_base_zero_and_declared_display(self):
+        # Distinct metadata labels are insufficient: unit accounting must
+        # anchor the actual base at exponent zero and declare the display.
+        valid_units = [
+            {"denom": "uatom", "exponent": 0},
+            {"denom": "atom", "exponent": 6},
+        ]
+        cases = (
+            ("base missing", [{"denom": "atom", "exponent": 6}], "atom", "missing base unit"),
+            ("base nonzero", [{"denom": "uatom", "exponent": 1},
+                              {"denom": "atom", "exponent": 6}], "atom", "exponent must be zero"),
+            ("display missing", valid_units, "other", "display unit must be declared"),
+            ("display blank", valid_units, "", "display unit must be declared"),
+            ("display malformed", valid_units, None, "display unit must be declared"),
+        )
+        for label, units, display, error in cases:
+            with self.subTest(case=label):
+                g = fixture()
+                g["app_state"]["bank"]["denom_metadata"].append({
+                    "base": "uatom", "display": display, "symbol": "ATOM",
+                    "denom_units": units,
+                })
+                with self.assertRaisesRegex(ValueError, error):
+                    self.check(g)
+
     def test_distinct_other_denom_metadata_is_allowed(self):
         g=fixture()
         g["app_state"]["bank"]["denom_metadata"].append({
