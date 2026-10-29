@@ -4,11 +4,9 @@ Run: python3 -m unittest production-network/ops/test_prvi_supply_arithmetic.py
 The production SDK mint/burn/bank paths still require independent review.
 """
 import unittest
-import sys
+import subprocess
+import types
 from pathlib import Path
-
-# Offline checks invoke discovery from outside the ops directory.
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 MAX_PRVI = 1_000_000_000
 BASE_UNITS_PER_PRVI = 10**18
@@ -35,16 +33,19 @@ class SupplyArithmeticTests(unittest.TestCase):
     def test_cap_and_denom_match_genesis_preflight(self):
         # Prevent this independent arithmetic model from silently drifting
         # from the candidate genesis auditor's native token configuration.
-        from privi_genesis_preflight import (
-            CAP as GENESIS_CAP,
-            DECIMALS as GENESIS_DECIMALS,
-            DENOM as GENESIS_DENOM,
-            MAX_PRVI as GENESIS_MAX_PRVI,
-        )
-        self.assertEqual(GENESIS_MAX_PRVI, MAX_PRVI)
-        self.assertEqual(10 ** GENESIS_DECIMALS, BASE_UNITS_PER_PRVI)
-        self.assertEqual(GENESIS_CAP, CAP_BASE_UNITS)
-        self.assertEqual(GENESIS_DENOM, "aprvi")
+        # CI's filtered checkout can omit the auditor from the worktree;
+        # read the exact tracked source from HEAD, as its own tests do.
+        source = subprocess.run(
+            ["git", "show", "HEAD:production-network/ops/prvi_genesis_preflight.py"],
+            cwd=Path(__file__).resolve().parents[2],
+            capture_output=True, text=True, check=True,
+        ).stdout
+        auditor = types.ModuleType("prvi_genesis_preflight")
+        exec(compile(source, "prvi_genesis_preflight.py", "exec"), auditor.__dict__)
+        self.assertEqual(auditor.MAX_PRVI, MAX_PRVI)
+        self.assertEqual(10 ** auditor.DECIMALS, BASE_UNITS_PER_PRVI)
+        self.assertEqual(auditor.CAP, CAP_BASE_UNITS)
+        self.assertEqual(auditor.DENOM, "aprvi")
 
     def test_exact_cap_allowed(self):
         self.assertEqual(validate_supply(CAP_BASE_UNITS, 0, 0), CAP_BASE_UNITS)
