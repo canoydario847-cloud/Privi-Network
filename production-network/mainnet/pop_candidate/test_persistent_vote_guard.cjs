@@ -573,7 +573,7 @@ test("partial new-lock write failure leaves a forensic lock and refuses both ret
     const file=path.join(dir,lockedFileName(record));
     const bytes=fs.readFileSync(file);
     assert.deepEqual(fs.readdirSync(dir),[path.basename(file)]);
-    assert.ok(bytes.length>0 && bytes.length<Buffer.byteLength(JSON.stringify(record)+"\\n"),
+    assert.ok(bytes.length>0 && bytes.length<Buffer.byteLength(JSON.stringify(record)+"\n"),
               "incomplete lock must be retained, not silently repaired or removed");
     assert.throws(()=>signCommitWithResearchLock(input),/corrupt/,
                   "same-proposal retry must refuse a truncated reservation");
