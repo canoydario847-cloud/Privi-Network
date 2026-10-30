@@ -116,6 +116,35 @@ test("rejects inherited, accessor-backed, and ambiguous caller-supplied checkpoi
     .verifiedCandidateCertificates,1);
 });
 
+test("research certificate envelopes reject getters, inherited fields and hidden finality claims",()=>{
+  const f=makeFixture(),valid=f.sequence(1)[0];
+  let getterReads=0;
+  const accessor={votes:valid.votes};
+  Object.defineProperty(accessor,"proposal",{
+    enumerable:true,get(){getterReads++;return valid.proposal;}
+  });
+  const inherited=Object.create({proposal:valid.proposal});
+  inherited.votes=valid.votes;
+  const hidden={...valid};
+  Object.defineProperty(hidden,"finalized",{value:true,enumerable:false});
+  const symbolic={...valid};
+  symbolic[Symbol("productionConsensus")]=true;
+  const nonenumerable={...valid};
+  Object.defineProperty(nonenumerable,"votes",{
+    value:valid.votes,enumerable:false
+  });
+  for(const untrusted of [
+    accessor,inherited,hidden,symbolic,nonenumerable,
+    Object.assign(Object.create(null),valid)
+  ]){
+    assert.throws(()=>verifyCandidateAncestry(f.committee,f.checkpoint,[untrusted]),
+      /plain own proposal and votes data fields/);
+  }
+  assert.equal(getterReads,0,"untrusted certificate getter must not execute");
+  assert.equal(verifyCandidateAncestry(f.committee,f.checkpoint,[valid])
+    .verifiedCandidateCertificates,1);
+});
+
 test("caller-supplied zero-height anchor rejects negative-zero alias",()=>{
   const f=makeFixture();
   const genesis={height:0,blockHash:f.checkpoint.blockHash};

@@ -50,6 +50,16 @@ function verifyCandidateAncestry(committee, checkpoint, certificates) {
   for(const [index,certificate] of certificates.entries()) {
     need(certificate && typeof certificate==="object" && !Array.isArray(certificate),
          "PoP malformed research certificate at index "+index);
+    // A signed candidate envelope must not execute caller-supplied getters
+    // or accept inherited, hidden or symbol-keyed finality metadata.
+    need(Object.getPrototypeOf(certificate)===Object.prototype &&
+         Reflect.ownKeys(certificate).length===2 &&
+         ["proposal","votes"].every(field=>{
+           const descriptor=Object.getOwnPropertyDescriptor(certificate,field);
+           return descriptor && Object.hasOwn(descriptor,"value") &&
+                  descriptor.enumerable;
+         }),
+         "PoP research certificate requires plain own proposal and votes data fields");
     const {proposal,votes}=certificate;
     need(proposal && typeof proposal==="object" && !Array.isArray(proposal),
          "PoP missing candidate proposal at index "+index);
