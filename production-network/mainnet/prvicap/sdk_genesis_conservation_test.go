@@ -2,7 +2,11 @@ package prvicap
 
 import (
     "errors"
+    "math/big"
     "testing"
+
+    sdkmath "cosmossdk.io/math"
+    banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 
     authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
     sdk "github.com/cosmos/cosmos-sdk/types"
@@ -64,5 +68,39 @@ func TestActualSDKBankGenesisRejectsUntrackedNativeBalanceWrites(t *testing.T) {
                 t.Fatalf("native mint not forbidden after successful initialization: %v", err)
             }
         })
+    }
+}
+
+
+// The proposed 1B PRVI / 18-decimal boundary must survive the actual SDK
+// bank genesis path and the independent consensus-backed cap keeper, not
+// merely the fake bank view or a constant comparison.
+func TestActualSDKBankGenesisAtOneBillionPRVIBoundary(t *testing.T) {
+    h := newRealBankHarness(t)
+    max, ok := new(big.Int).SetString(MaxBase, 10)
+    if !ok { t.Fatal("invalid embedded PRVI maximum") }
+    amount := sdkmath.NewIntFromBigInt(max)
+    allocation := sdk.NewCoins(sdk.NewCoin(BaseDenom, amount))
+    address := authtypes.NewModuleAddress("genesisfixture")
+    h.bank.InitGenesis(h.ctx, &banktypes.GenesisState{
+        Params: banktypes.DefaultParams(),
+        Balances: []banktypes.Balance{{Address: address.String(), Coins: allocation}},
+        Supply: allocation,
+    })
+    if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount; !got.Equal(amount) {
+        t.Fatalf("real SDK bank truncated native cap: got %s", got)
+    }
+    if err := h.cap.InitGenesis(h.ctx, MaxBase, h.bank); err != nil {
+        t.Fatalf("exact-cap genesis rejected by keeper: %v", err)
+    }
+    if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
+        t.Fatalf("exact-cap SDK balances failed reconciliation: %v", err)
+    }
+    state, err := h.cap.Snapshot(h.ctx)
+    if err != nil || state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
+        t.Fatalf("exact-cap issuance record incorrect: %+v, %v", state, err)
+    }
+    if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
+        t.Fatalf("new native mint accepted at cap: %v", err)
     }
 }
