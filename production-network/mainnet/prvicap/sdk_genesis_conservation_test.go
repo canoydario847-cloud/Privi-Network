@@ -18,6 +18,7 @@ func TestActualSDKBankGenesisRejectsUntrackedNativeBalanceWrites(t *testing.T) {
     }{
         {name: "extra native units", actual: 101},
         {name: "missing native units", actual: 99},
+        {name: "all native units removed", actual: 0},
     } {
         t.Run(tc.name, func(t *testing.T) {
             h := newRealBankHarness(t)
