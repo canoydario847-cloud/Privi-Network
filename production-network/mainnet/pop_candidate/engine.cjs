@@ -212,6 +212,23 @@ function verifyCertificate(committee, proposal, votes) {
   const seen=new Set();
   for(const vote of votes) {
     check(vote && typeof vote==="object","Invalid PoP vote");
+    // Signed commit fields do not authenticate arbitrary caller metadata.
+    // Reject accessors, inherited values and extra finality claims before
+    // reading signer identity or signature. The local research signer adds
+    // only the explicitly non-production researchOnly:true marker.
+    const keys=Reflect.ownKeys(vote);
+    const required=["validatorId","signature"];
+    const marker=Object.getOwnPropertyDescriptor(vote,"researchOnly");
+    check(Object.getPrototypeOf(vote)===Object.prototype &&
+          (keys.length===2 || (keys.length===3 && marker &&
+            Object.hasOwn(marker,"value") && marker.value===true &&
+            marker.enumerable)) &&
+          required.every(field=>{
+            const descriptor=Object.getOwnPropertyDescriptor(vote,field);
+            return descriptor && Object.hasOwn(descriptor,"value") &&
+                   descriptor.enumerable;
+          }),
+          "PoP vote requires plain own canonical data fields without extras");
     const signer=committee.byId.get(vote.validatorId);
     check(!!signer,"Unadmitted PoP voter");
     check(!seen.has(vote.validatorId),"Duplicate PoP voter");
