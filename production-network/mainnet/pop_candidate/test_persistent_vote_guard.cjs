@@ -450,3 +450,45 @@ test("foreign-owned signer state fails closed before releasing research signatur
     fs.rmSync(dir,{recursive:true,force:true});
   }
 });
+
+test("new-lock fsync failure preserves the research height lock without releasing a vote",()=>{
+  const f=fixture(),dir=tempRoot(),p=f.proposal(57,0,"0x"+"c".repeat(64));
+  const voter=f.committee.validators[0];
+  const input={lockDirectory:dir,committee:f.committee,proposal:p,
+               privateKey:f.keysById.get(voter.id)};
+  const originalFsync=fs.fsyncSync;
+  let failed=false;
+  try {
+    // Inject a failed initial file fsync after O_EXCL creation and writing.
+    // The signer must not return a signature for an unconfirmed reservation.
+    fs.fsyncSync=function(fd) {
+      if(!failed) {
+        failed=true;
+        throw Object.assign(new Error("simulated new-lock fsync EIO"),{code:"EIO"});
+      }
+      return originalFsync(fd);
+    };
+    assert.throws(()=>signCommitWithResearchLock(input),/simulated new-lock fsync EIO/);
+    fs.fsyncSync=originalFsync;
+    assert.equal(failed,true);
+    const record=recordFor(f.committee,p.height,voter.id,
+                           p.blockHash,p.previousBlockHash);
+    const lockFile=path.join(dir,lockedFileName(record));
+    assert.deepEqual(fs.readdirSync(dir),[path.basename(lockFile)],
+      "failed fsync must retain the exclusive reservation for recovery");
+    assert.deepEqual(JSON.parse(fs.readFileSync(lockFile,"utf8")),record);
+    const conflict=f.proposal(57,1,"0x"+"d".repeat(64));
+    assert.throws(()=>signCommitWithResearchLock({...input,proposal:conflict}),
+                  /equivocation/,
+                  "failed fsync must not permit a different block at the same height");
+    // A same-proposal retry may sign only after the existing file AND
+    // directory have been re-synced by the guarded replay path.
+    const resumed=signCommitWithResearchLock(input);
+    assert.equal(resumed.researchOnly,true);
+    assert.equal(typeof resumed.signature,"string");
+    assert.deepEqual(JSON.parse(fs.readFileSync(lockFile,"utf8")),record);
+  } finally {
+    fs.fsyncSync=originalFsync;
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
+});
