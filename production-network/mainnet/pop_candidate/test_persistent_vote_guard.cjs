@@ -546,3 +546,44 @@ test("new-lock directory fsync failure retains exclusive reservation and require
     fs.rmSync(dir,{recursive:true,force:true});
   }
 });
+
+test("partial new-lock write failure leaves a forensic lock and refuses both retries",()=>{
+  const f=fixture(),dir=tempRoot(),p=f.proposal(59,0,"0x"+"c".repeat(64));
+  const voter=f.committee.validators[0];
+  const input={lockDirectory:dir,committee:f.committee,proposal:p,
+               privateKey:f.keysById.get(voter.id)};
+  const originalWrite=fs.writeSync;
+  let writes=0;
+  try {
+    // Simulate a short, successful first write followed by EIO. The guard
+    // must never treat the truncated height lock as an unused reservation.
+    fs.writeSync=function(fd,buffer,offset,length,position) {
+      writes++;
+      if(writes===1) {
+        return originalWrite(fd,buffer,offset,Math.max(1,Math.floor(length/2)),position);
+      }
+      throw Object.assign(new Error("simulated partial height-lock write EIO"),{code:"EIO"});
+    };
+    assert.throws(()=>signCommitWithResearchLock(input),
+                  /simulated partial height-lock write EIO/);
+    fs.writeSync=originalWrite;
+    assert.equal(writes,2);
+    const record=recordFor(f.committee,p.height,voter.id,
+                           p.blockHash,p.previousBlockHash);
+    const file=path.join(dir,lockedFileName(record));
+    const bytes=fs.readFileSync(file);
+    assert.deepEqual(fs.readdirSync(dir),[path.basename(file)]);
+    assert.ok(bytes.length>0 && bytes.length<Buffer.byteLength(JSON.stringify(record)+"\\n"),
+              "incomplete lock must be retained, not silently repaired or removed");
+    assert.throws(()=>signCommitWithResearchLock(input),/corrupt/,
+                  "same-proposal retry must refuse a truncated reservation");
+    const conflict=f.proposal(59,1,"0x"+"d".repeat(64));
+    assert.throws(()=>signCommitWithResearchLock({...input,proposal:conflict}),/corrupt/,
+                  "conflicting candidate must not escape an incomplete height lock");
+    assert.deepEqual(fs.readFileSync(file),bytes,
+                     "failed retries must preserve the exact forensic lock bytes");
+  } finally {
+    fs.writeSync=originalWrite;
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
+});
