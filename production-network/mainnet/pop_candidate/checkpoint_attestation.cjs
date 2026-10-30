@@ -11,25 +11,39 @@
  */
 const crypto=require("node:crypto");
 const {
-  assertValidatedCommittee,publicKey,signedMessage
+  assertValidatedCommittee,publicKey,signedMessage,hash
 }=require("./engine.cjs");
 const {verifyCandidateAncestry}=require("./candidate_ancestry.cjs");
-const SCHEMA="PriviPoPResearchGovernanceCheckpoint/v1";
+const SCHEMA="PriviPoPResearchGovernanceCheckpoint/v2";
 const MODE="research-attestation-not-chain-finality";
-const SIGNING_TAG="research-checkpoint-attestation-v1";
+const SIGNING_TAG="research-checkpoint-attestation-v2";
 const HASH=/^0x[0-9a-f]{64}$/;
 const REQUIRED_FIELDS=[
   "schema","mode","chainId","genesisHash","epoch","height",
-  "blockHash","governanceKeyId","signatureB64"
+  "blockHash","governanceKeyId","committeeDigest","signatureB64"
 ];
 
 function need(value,reason){if(!value)throw Error(reason);}
+
+// Pin the complete governance-admitted research roster, not just the epoch.
+// Without this binding a signed checkpoint can be replayed under a different
+// valid committee admitted by the same governance root for the same epoch.
+function committeeDigest(committee){
+  assertValidatedCommittee(committee);
+  return hash(Buffer.from(JSON.stringify([
+    "PriviPoPResearchCommittee/v1",committee.chainId,committee.genesisHash,
+    committee.epoch,committee.governanceKeyId,committee.quorum,
+    committee.validators.map(v=>[
+      v.id,v.operatorId,v.faultDomain,v.stamp,v.positionHash,v.anchorBlockHash
+    ])
+  ]),"utf8"));
+}
 
 function checkpointFields(checkpoint){
   return [
     checkpoint.schema,checkpoint.mode,checkpoint.chainId,
     checkpoint.genesisHash,checkpoint.epoch,checkpoint.height,
-    checkpoint.blockHash,checkpoint.governanceKeyId
+    checkpoint.blockHash,checkpoint.governanceKeyId,checkpoint.committeeDigest
   ];
 }
 function verifyResearchCheckpoint(committee,checkpoint,trustedGovernancePublicKey){
@@ -59,6 +73,9 @@ function verifyResearchCheckpoint(committee,checkpoint,trustedGovernancePublicKe
        "PoP signed checkpoint height must be a nonnegative bounded integer");
   need(typeof checkpoint.blockHash==="string" && HASH.test(checkpoint.blockHash),
        "PoP signed checkpoint requires canonical block hash");
+
+  need(checkpoint.committeeDigest===committeeDigest(committee),
+       "PoP signed checkpoint belongs to another admitted committee");
 
   // This key must come from an independent evaluator's pinned trust source,
   // not simply copied from the untrusted checkpoint or PR metadata.
@@ -108,6 +125,6 @@ function verifyAttestedCandidateAncestry(committee,checkpoint,
   });
 }
 module.exports={
-  SCHEMA,MODE,SIGNING_TAG,checkpointFields,verifyResearchCheckpoint,
+  SCHEMA,MODE,SIGNING_TAG,committeeDigest,checkpointFields,verifyResearchCheckpoint,
   verifyAttestedCandidateAncestry
 };
