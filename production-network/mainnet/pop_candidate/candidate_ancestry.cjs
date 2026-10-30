@@ -33,7 +33,9 @@ function verifyCandidateAncestry(committee, checkpoint, certificates) {
                 descriptor.enumerable;
        }),
        "PoP research checkpoint requires plain own height and blockHash data fields");
-  need(Number.isSafeInteger(checkpoint.height) && checkpoint.height>=0,
+  // JSON encodes -0 as 0; reject noncanonical zero in untrusted anchors.
+  need(Number.isSafeInteger(checkpoint.height) && checkpoint.height>=0 &&
+       !Object.is(checkpoint.height,-0),
        "PoP research checkpoint height must be a nonnegative safe integer");
   need(typeof checkpoint.blockHash==="string" && HASH.test(checkpoint.blockHash),
        "PoP research checkpoint hash must be a canonical 32-byte hash");
