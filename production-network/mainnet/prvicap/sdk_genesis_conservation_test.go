@@ -182,3 +182,51 @@ func TestActualSDKBankGenesisDistributedExactCap(t *testing.T) {
 		t.Fatalf("distributed exact-cap genesis allowed native mint: %v", err)
 	}
 }
+
+// TestActualSDKBankBelowCapRejectsUntrackedBoundaryUnit checks that a bank
+// supply just below the lifetime maximum cannot hide an unchecked balance
+// increase of one aprvi, even though the actual balances reach (not exceed)
+// the 1B PRVI cap. Conservation and issuance are separate invariants.
+func TestActualSDKBankBelowCapRejectsUntrackedBoundaryUnit(t *testing.T) {
+	h := newRealBankHarness(t)
+	max, ok := new(big.Int).SetString(MaxBase, 10)
+	if !ok {
+		t.Fatal("invalid embedded PRVI maximum")
+	}
+	below := new(big.Int).Sub(max, big.NewInt(1))
+	address := authtypes.NewModuleAddress("genesisfixture")
+	initial := sdk.NewCoins(sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(below)))
+	h.bank.InitGenesis(h.ctx, &banktypes.GenesisState{
+		Params: banktypes.DefaultParams(),
+		Balances: []banktypes.Balance{{Address: address.String(), Coins: initial}},
+		Supply: initial,
+	})
+	if err := h.cap.InitGenesis(h.ctx, below.String(), h.bank); err != nil {
+		t.Fatalf("one-aprvi-below-cap genesis rejected: %v", err)
+	}
+	if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
+		t.Fatalf("valid below-cap genesis did not reconcile: %v", err)
+	}
+	if err := h.bank.UncheckedSetBalance(h.ctx, address, sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(max))); err != nil {
+		t.Fatalf("could not arrange untracked boundary unit: %v", err)
+	}
+	if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount.String(); got != below.String() {
+		t.Fatalf("test precondition: declared supply unexpectedly changed: %s", got)
+	}
+	if err := h.cap.Reconcile(h.ctx, h.bank); !errors.Is(err, ErrUnexpectedSupply) {
+		t.Fatalf("untracked unit reaching cap escaped conservation check: %v", err)
+	}
+	state, err := h.cap.Snapshot(h.ctx)
+	if err != nil || state.GenesisBase != below.String() || state.LifetimeIssuedBase != below.String() {
+		t.Fatalf("failed reconciliation changed immutable issuance: %+v, %v", state, err)
+	}
+	if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
+		t.Fatalf("native mint not forbidden after mismatch: %v", err)
+	}
+	if err := h.bank.UncheckedSetBalance(h.ctx, address, sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(below))); err != nil {
+		t.Fatalf("could not restore original bank balance: %v", err)
+	}
+	if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
+		t.Fatalf("restored valid below-cap balance failed reconciliation: %v", err)
+	}
+}
