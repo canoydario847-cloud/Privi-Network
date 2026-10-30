@@ -116,6 +116,17 @@ test("rejects inherited, accessor-backed, and ambiguous caller-supplied checkpoi
     .verifiedCandidateCertificates,1);
 });
 
+test("caller-supplied zero-height anchor rejects negative-zero alias",()=>{
+  const f=makeFixture();
+  const genesis={height:0,blockHash:f.checkpoint.blockHash};
+  const first=f.certificate(1,genesis.blockHash,"0x"+"d".repeat(64));
+  assert.equal(verifyCandidateAncestry(f.committee,genesis,[first]).endingHeight,1);
+  const aliased={...genesis,height:-0};
+  assert.equal(Object.is(aliased.height,-0),true);
+  assert.throws(()=>verifyCandidateAncestry(f.committee,aliased,[first]),
+    /nonnegative safe integer/);
+});
+
 test("detects missing starting candidate and gap after accepted height",()=>{
   const f=makeFixture(),items=f.sequence(3);
   assert.throws(()=>verifyCandidateAncestry(f.committee,f.checkpoint,items.slice(1)),
