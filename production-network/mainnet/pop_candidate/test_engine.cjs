@@ -76,6 +76,35 @@ test("four unique PoP position admissions yield exact three-of-four quorum",()=>
   assert.equal(Object.isFrozen(proof),true);
 });
 
+test("research proposal verifier rejects getters and unsigned metadata before field reads",()=>{
+  const f=fixture(),{proposal,votes}=f.bundle();
+  let getterReads=0;
+  const accessor={...proposal};
+  Object.defineProperty(accessor,"height",{
+    enumerable:true,get(){getterReads++;return proposal.height;}
+  });
+  const inherited=Object.create({height:proposal.height});
+  Object.assign(inherited,proposal);
+  delete inherited.height;
+  const hidden={...proposal};
+  Object.defineProperty(hidden,"finalized",{value:true,enumerable:false});
+  const symbolic={...proposal};
+  symbolic[Symbol("productionConsensus")]=true;
+  const nonenumerable={...proposal};
+  Object.defineProperty(nonenumerable,"signature",{
+    value:proposal.signature,enumerable:false
+  });
+  for(const untrusted of [
+    accessor,inherited,hidden,symbolic,nonenumerable,
+    Object.assign(Object.create(null),proposal)
+  ]){
+    assert.throws(()=>verifyCertificate(f.committee,untrusted,votes),
+                  /plain own canonical data fields/);
+  }
+  assert.equal(getterReads,0,"proposal getter must never execute");
+  assert.equal(verifyCertificate(f.committee,proposal,votes).valid,true);
+});
+
 test("research certificate signer attribution is deterministic and immutable",()=>{
   const f=fixture(7);
   const {proposal,votes}=f.bundle();
