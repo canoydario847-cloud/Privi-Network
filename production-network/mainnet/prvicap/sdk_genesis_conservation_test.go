@@ -141,3 +141,44 @@ func TestActualSDKBankGenesisRejectsAboveOneBillionPRVIBoundary(t *testing.T) {
 		t.Fatalf("native mint did not fail closed after rejected over-cap genesis: %v", err)
 	}
 }
+
+// TestActualSDKBankGenesisDistributedExactCap verifies that a full-cap
+// allocation split across distinct SDK bank accounts is conserved exactly.
+// A one-aprvi remainder makes off-by-one summation errors observable.
+func TestActualSDKBankGenesisDistributedExactCap(t *testing.T) {
+	h := newRealBankHarness(t)
+	max, ok := new(big.Int).SetString(MaxBase, 10)
+	if !ok {
+		t.Fatal("invalid embedded PRVI maximum")
+	}
+	remaining := new(big.Int).Sub(max, big.NewInt(1))
+	first := sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))
+	second := sdk.NewCoins(sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(remaining)))
+	supply := sdk.NewCoins(sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(max)))
+	firstAddr := authtypes.NewModuleAddress("genesisfixtureone")
+	secondAddr := authtypes.NewModuleAddress("genesisfixturetwo")
+	h.bank.InitGenesis(h.ctx, &banktypes.GenesisState{
+		Params: banktypes.DefaultParams(),
+		Balances: []banktypes.Balance{
+			{Address: firstAddr.String(), Coins: first},
+			{Address: secondAddr.String(), Coins: second},
+		},
+		Supply: supply,
+	})
+	if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount.BigInt(); got.Cmp(max) != 0 {
+		t.Fatalf("distributed SDK bank supply differs from exact cap: %s", got)
+	}
+	if err := h.cap.InitGenesis(h.ctx, MaxBase, h.bank); err != nil {
+		t.Fatalf("distributed exact-cap genesis rejected: %v", err)
+	}
+	if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
+		t.Fatalf("distributed exact-cap balances failed reconciliation: %v", err)
+	}
+	state, err := h.cap.Snapshot(h.ctx)
+	if err != nil || state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
+		t.Fatalf("distributed exact-cap issuance record incorrect: %+v, %v", state, err)
+	}
+	if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
+		t.Fatalf("distributed exact-cap genesis allowed native mint: %v", err)
+	}
+}
