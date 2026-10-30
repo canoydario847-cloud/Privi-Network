@@ -51,6 +51,18 @@ func TestActualSDKBankGenesisRejectsUntrackedNativeBalanceWrites(t *testing.T) {
             if state, err := h.cap.Snapshot(h.ctx); err != nil || state.GenesisBase != "100" {
                 t.Fatalf("corrected genesis state invalid: %+v, %v", state, err)
             }
+            // A failed genesis attempt must not permit a later caller to
+            // rewrite the successfully initialized lifetime issuance record.
+            if err := h.cap.InitGenesis(h.ctx, "99", h.bank); !errors.Is(err, ErrAlreadyInitialized) {
+                t.Fatalf("second genesis initialization was not refused: %v", err)
+            }
+            if state, err := h.cap.Snapshot(h.ctx); err != nil ||
+                state.GenesisBase != "100" || state.LifetimeIssuedBase != "100" {
+                t.Fatalf("second genesis attempt changed issuance record: %+v, %v", state, err)
+            }
+            if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
+                t.Fatalf("native mint not forbidden after successful initialization: %v", err)
+            }
         })
     }
 }
