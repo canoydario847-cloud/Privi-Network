@@ -68,7 +68,10 @@ function verifyResearchCheckpoint(committee,checkpoint,trustedGovernancePublicKe
        checkpoint.genesisHash===committee.genesisHash &&
        checkpoint.epoch===committee.epoch,
        "PoP signed checkpoint belongs to another chain, genesis or epoch");
+  // JSON.stringify(-0) emits 0, so a signature for height 0 otherwise
+  // authenticates two distinct JS representations. Require canonical zero.
   need(Number.isSafeInteger(checkpoint.height) && checkpoint.height>=0 &&
+       !Object.is(checkpoint.height,-0) &&
        checkpoint.height<Number.MAX_SAFE_INTEGER,
        "PoP signed checkpoint height must be a nonnegative bounded integer");
   need(typeof checkpoint.blockHash==="string" && HASH.test(checkpoint.blockHash),
