@@ -587,3 +587,36 @@ test("partial new-lock write failure leaves a forensic lock and refuses both ret
     fs.rmSync(dir,{recursive:true,force:true});
   }
 });
+
+test("zero-byte new-lock write fails closed and retains the empty reservation",()=>{
+  const f=fixture(),dir=tempRoot(),p=f.proposal(60,0,"0x"+"c".repeat(64));
+  const voter=f.committee.validators[0];
+  const input={lockDirectory:dir,committee:f.committee,proposal:p,
+               privateKey:f.keysById.get(voter.id)};
+  const originalWrite=fs.writeSync;
+  let attempted=0;
+  try {
+    // A filesystem can report zero progress without throwing EIO. Do not
+    // spin, discard the exclusive lock, or release a research vote.
+    fs.writeSync=function(){attempted++;return 0;};
+    assert.throws(()=>signCommitWithResearchLock(input),/PoP lock write failed/);
+    fs.writeSync=originalWrite;
+    assert.equal(attempted,1,"zero progress must fail immediately");
+    const record=recordFor(f.committee,p.height,voter.id,
+                           p.blockHash,p.previousBlockHash);
+    const file=path.join(dir,lockedFileName(record));
+    assert.deepEqual(fs.readdirSync(dir),[path.basename(file)]);
+    assert.equal(fs.readFileSync(file).length,0,
+                 "failed write must retain empty lock for forensic recovery");
+    assert.throws(()=>signCommitWithResearchLock(input),/corrupt/,
+                  "same candidate cannot replay an incomplete reservation");
+    const conflict=f.proposal(60,1,"0x"+"d".repeat(64));
+    assert.throws(()=>signCommitWithResearchLock({...input,proposal:conflict}),/corrupt/,
+                  "conflicting candidate cannot escape an incomplete reservation");
+    assert.equal(fs.readFileSync(file).length,0,
+                 "rejected retries must not repair or delete the damaged lock");
+  } finally {
+    fs.writeSync=originalWrite;
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
+});
