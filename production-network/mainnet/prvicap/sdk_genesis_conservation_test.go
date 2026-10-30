@@ -181,6 +181,26 @@ func TestActualSDKBankGenesisDistributedExactCap(t *testing.T) {
 	if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
 		t.Fatalf("distributed exact-cap genesis allowed native mint: %v", err)
 	}
+	// The bank supply counter can remain at the cap while an unchecked
+	// account write makes the actual distributed allocation exceed it.
+	if err := h.bank.UncheckedSetBalance(h.ctx, firstAddr, sdk.NewInt64Coin(BaseDenom, 2)); err != nil {
+		t.Fatalf("could not arrange untracked distributed unit: %v", err)
+	}
+	if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount.BigInt(); got.Cmp(max) != 0 {
+		t.Fatalf("test precondition: declared bank supply changed: %s", got)
+	}
+	if err := h.cap.Reconcile(h.ctx, h.bank); !errors.Is(err, ErrUnexpectedSupply) {
+		t.Fatalf("distributed untracked unit escaped conservation check: %v", err)
+	}
+	if state, err := h.cap.Snapshot(h.ctx); err != nil || state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
+		t.Fatalf("failed reconciliation altered issuance record: %+v, %v", state, err)
+	}
+	if err := h.bank.UncheckedSetBalance(h.ctx, firstAddr, sdk.NewInt64Coin(BaseDenom, 1)); err != nil {
+		t.Fatalf("could not restore distributed fixture: %v", err)
+	}
+	if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
+		t.Fatalf("restored distributed exact-cap allocation failed reconciliation: %v", err)
+	}
 }
 
 // TestActualSDKBankBelowCapRejectsUntrackedBoundaryUnit checks that a bank
