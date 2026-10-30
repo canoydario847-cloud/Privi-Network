@@ -207,8 +207,20 @@ function verifyCertificate(committee, proposal, votes) {
   // verifyProposal enforces attested committee identity and frozen membership
   // before the caller can use a proposal in either a certificate or signature.
   const fields=verifyProposal(committee,proposal);
-  check(Array.isArray(votes) && votes.length <= committee.validators.length,
+  // The vote container itself is unsigned input. Reject sparse arrays,
+  // index getters and attached metadata (including hidden/symbol keys)
+  // before iterating votes. A decorated array must not imply finality.
+  check(Array.isArray(votes) &&
+        Object.getPrototypeOf(votes) === Array.prototype &&
+        votes.length <= committee.validators.length,
         "Malformed PoP vote certificate");
+  check(Reflect.ownKeys(votes).length === votes.length + 1 &&
+        Array.from({length:votes.length},(_,i)=>{
+          const descriptor=Object.getOwnPropertyDescriptor(votes,String(i));
+          return descriptor && Object.hasOwn(descriptor,"value") &&
+                 descriptor.enumerable;
+        }).every(Boolean),
+        "PoP votes require a dense plain array without unsigned metadata or accessors");
   const seen=new Set();
   for(const vote of votes) {
     check(vote && typeof vote==="object","Invalid PoP vote");
