@@ -213,7 +213,7 @@ test("rejects accessor-backed and hidden checkpoint metadata without invoking ge
 
 test("checkpoint height is bounded and does not accept JS unsafe integers",()=>{
   const f=fixture();
-  for(const height of [-1,0.2,Number.MAX_SAFE_INTEGER,Number.MAX_SAFE_INTEGER+1,NaN,Infinity]){
+  for(const height of [-1,-0,0.2,Number.MAX_SAFE_INTEGER,Number.MAX_SAFE_INTEGER+1,NaN,Infinity]){
     const checkpoint=f.resign({...f.checkpoint,height});
     assert.throws(()=>verifyResearchCheckpoint(f.committee,checkpoint,
                   f.governance.publicKey),/bounded integer/);
@@ -221,6 +221,12 @@ test("checkpoint height is bounded and does not accept JS unsafe integers",()=>{
   const genesis=f.resign({...f.checkpoint,height:0});
   assert.equal(verifyResearchCheckpoint(f.committee,genesis,
                f.governance.publicKey).height,0);
+  // A correctly signed zero-height claim must not be accepted after its
+  // numeric representation is changed to -0 (both stringify identically).
+  const aliased={...genesis,height:-0};
+  assert.equal(Object.is(aliased.height,-0),true);
+  assert.throws(()=>verifyResearchCheckpoint(f.committee,aliased,
+                f.governance.publicKey),/bounded integer/);
 });
 
 test("a caller-supplied committee shallow copy is not a valid governance admission",()=>{
