@@ -492,3 +492,57 @@ test("new-lock fsync failure preserves the research height lock without releasin
     fs.rmSync(dir,{recursive:true,force:true});
   }
 });
+
+test("new-lock directory fsync failure retains exclusive reservation and requires durable replay",()=>{
+  const f=fixture(),dir=tempRoot(),p=f.proposal(58,0,"0x"+"c".repeat(64));
+  const voter=f.committee.validators[0];
+  const input={lockDirectory:dir,committee:f.committee,proposal:p,
+               privateKey:f.keysById.get(voter.id)};
+  const originalFsync=fs.fsyncSync;
+  const observed=[];
+  let failed=false;
+  try {
+    // The new file's own fsync can succeed while syncing the containing
+    // directory fails. No research vote may escape until both are durable.
+    fs.fsyncSync=function(fd) {
+      const kind=fs.fstatSync(fd).isDirectory()?"directory":"file";
+      observed.push(kind);
+      if(kind==="directory" && !failed) {
+        failed=true;
+        throw Object.assign(new Error("simulated new-lock directory fsync EIO"),{code:"EIO"});
+      }
+      return originalFsync(fd);
+    };
+    assert.throws(()=>signCommitWithResearchLock(input),
+                  /simulated new-lock directory fsync EIO/);
+    assert.deepEqual(observed,["file","directory"],
+      "new reservation must sync file before directory");
+    fs.fsyncSync=originalFsync;
+
+    const record=recordFor(f.committee,p.height,voter.id,
+                           p.blockHash,p.previousBlockHash);
+    const file=path.join(dir,lockedFileName(record));
+    assert.deepEqual(fs.readdirSync(dir),[path.basename(file)],
+      "failed directory sync must retain the original exclusive lock");
+    assert.deepEqual(JSON.parse(fs.readFileSync(file,"utf8")),record);
+    const conflict=f.proposal(58,1,"0x"+"d".repeat(64));
+    assert.throws(()=>signCommitWithResearchLock({...input,proposal:conflict}),
+                  /equivocation/,
+                  "directory sync failure must not reopen the locked height");
+
+    const replaySync=[];
+    fs.fsyncSync=function(fd) {
+      replaySync.push(fs.fstatSync(fd).isDirectory()?"directory":"file");
+      return originalFsync(fd);
+    };
+    const recovered=signCommitWithResearchLock(input);
+    assert.equal(recovered.researchOnly,true);
+    assert.equal(typeof recovered.signature,"string");
+    assert.deepEqual(replaySync,["file","directory"],
+      "same-proposal recovery must re-sync both persisted lock and directory");
+    assert.deepEqual(JSON.parse(fs.readFileSync(file,"utf8")),record);
+  } finally {
+    fs.fsyncSync=originalFsync;
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
+});
