@@ -620,3 +620,53 @@ test("zero-byte new-lock write fails closed and retains the empty reservation",(
     fs.rmSync(dir,{recursive:true,force:true});
   }
 });
+
+
+test("existing-lock file fsync failure refuses vote and requires durable replay",()=>{
+  const f=fixture(),dir=tempRoot(),p=f.proposal(61,0,"0x"+"c".repeat(64));
+  const voter=f.committee.validators[0];
+  const input={lockDirectory:dir,committee:f.committee,proposal:p,
+               privateKey:f.keysById.get(voter.id)};
+  const originalFsync=fs.fsyncSync;
+  try {
+    const first=signCommitWithResearchLock(input);
+    const record=recordFor(f.committee,p.height,voter.id,
+                           p.blockHash,p.previousBlockHash);
+    const file=path.join(dir,lockedFileName(record));
+    const originalBytes=fs.readFileSync(file);
+    let fileSyncs=0,directorySyncs=0;
+    fs.fsyncSync=function(fd) {
+      if(fs.fstatSync(fd).isDirectory()) {
+        directorySyncs++;
+        return originalFsync(fd);
+      }
+      fileSyncs++;
+      throw Object.assign(new Error("simulated existing-lock file fsync EIO"),
+                          {code:"EIO"});
+    };
+    assert.throws(()=>signCommitWithResearchLock(input),
+                  /simulated existing-lock file fsync EIO/,
+                  "a failed replay fsync must not release a research vote");
+    assert.equal(fileSyncs,1);
+    assert.equal(directorySyncs,0,
+                 "directory sync cannot make a failed file sync safe");
+    fs.fsyncSync=originalFsync;
+    assert.deepEqual(fs.readFileSync(file),originalBytes,
+                     "failed replay must preserve original signer lock bytes");
+    const conflict=f.proposal(61,1,"0x"+"d".repeat(64));
+    assert.throws(()=>signCommitWithResearchLock({...input,proposal:conflict}),
+                  /equivocation/,
+                  "failed replay cannot unlock conflicting same-height votes");
+    const replaySync=[];
+    fs.fsyncSync=function(fd) {
+      replaySync.push(fs.fstatSync(fd).isDirectory()?"directory":"file");
+      return originalFsync(fd);
+    };
+    assert.equal(signCommitWithResearchLock(input).signature,first.signature);
+    assert.deepEqual(replaySync,["file","directory"],
+                     "recovery must sync both original file and directory");
+  } finally {
+    fs.fsyncSync=originalFsync;
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
+});
