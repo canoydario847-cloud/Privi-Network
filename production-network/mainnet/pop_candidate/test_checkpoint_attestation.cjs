@@ -7,7 +7,7 @@ const {
   proposalFields,voteFields,TRUSTED_MODE
 }=require("./engine.cjs");
 const {
-  SCHEMA,MODE,SIGNING_TAG,checkpointFields,verifyResearchCheckpoint,
+  SCHEMA,MODE,SIGNING_TAG,committeeDigest,checkpointFields,verifyResearchCheckpoint,
   verifyAttestedCandidateAncestry
 }=require("./checkpoint_attestation.cjs");
 
@@ -19,8 +19,8 @@ function newKey() {
 function sign(key,tag,fields){
   return crypto.sign(null,signedMessage(tag,fields),key.privateKey).toString("base64");
 }
-function fixture(count=4) {
-  const governance=newKey(),keys=Array.from({length:count},newKey);
+function fixture(count=4,governanceOverride=null) {
+  const governance=governanceOverride||newKey(),keys=Array.from({length:count},newKey);
   const chainId="privi-pop-research-signed-checkpoint",genesisHash="0x"+"a".repeat(64);
   const epoch=2;
   const registry={
@@ -45,7 +45,7 @@ function fixture(count=4) {
   const checkpoint={
     schema:SCHEMA,mode:MODE,chainId,genesisHash,epoch,
     height:30,blockHash:"0x"+"e".repeat(64),
-    governanceKeyId:governance.id
+    governanceKeyId:governance.id,committeeDigest:committeeDigest(committee)
   };
   function resign(subject=checkpoint,key=governance) {
     const unsigned={...subject};
@@ -83,6 +83,20 @@ test("signed research checkpoint from an independently pinned governance root au
   assert.equal(check.governanceKeyId,f.committee.governanceKeyId);
   assert.equal(check.blockHash,f.checkpoint.blockHash);
   assert.equal(Object.isFrozen(check),true);
+});
+
+test("signed checkpoint cannot be replayed under another valid same-epoch committee",()=>{
+  const original=fixture();
+  // Same pinned governance authority, chain, genesis, epoch and quorum;
+  // different independently admitted signer roster.
+  const alternate=fixture(4,original.governance);
+  assert.notEqual(committeeDigest(original.committee),committeeDigest(alternate.committee));
+  assert.throws(()=>verifyResearchCheckpoint(alternate.committee,
+                original.checkpoint,original.governance.publicKey),
+                /another admitted committee/);
+  const alternateCheckpoint=alternate.checkpoint;
+  assert.equal(verifyResearchCheckpoint(alternate.committee,alternateCheckpoint,
+               original.governance.publicKey).checkpointIssuerSignatureVerified,true);
 });
 
 test("two signed contiguous candidate certificates also require the issuer attestation",()=>{
