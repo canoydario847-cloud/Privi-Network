@@ -201,6 +201,30 @@ func TestActualSDKBankGenesisDistributedExactCap(t *testing.T) {
 	if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
 		t.Fatalf("restored distributed exact-cap allocation failed reconciliation: %v", err)
 	}
+	// A missing unit in the second account must also fail conservation.
+	// This is not a mint or burn: the bank supply counter is unchanged.
+	missing := new(big.Int).Sub(remaining, big.NewInt(1))
+	if err := h.bank.UncheckedSetBalance(h.ctx, secondAddr, sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(missing))); err != nil {
+		t.Fatalf("could not arrange untracked distributed deficit: %v", err)
+	}
+	if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount.BigInt(); got.Cmp(max) != 0 {
+		t.Fatalf("test precondition: declared supply changed during deficit: %s", got)
+	}
+	if err := h.cap.Reconcile(h.ctx, h.bank); !errors.Is(err, ErrUnexpectedSupply) {
+		t.Fatalf("distributed missing unit escaped conservation check: %v", err)
+	}
+	if state, err := h.cap.Snapshot(h.ctx); err != nil || state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
+		t.Fatalf("deficit reconciliation altered issuance record: %+v, %v", state, err)
+	}
+	if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
+		t.Fatalf("distributed deficit allowed native mint: %v", err)
+	}
+	if err := h.bank.UncheckedSetBalance(h.ctx, secondAddr, sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(remaining))); err != nil {
+		t.Fatalf("could not restore second distributed account: %v", err)
+	}
+	if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
+		t.Fatalf("restored distributed deficit failed reconciliation: %v", err)
+	}
 }
 
 // TestActualSDKBankBelowCapRejectsUntrackedBoundaryUnit checks that a bank
