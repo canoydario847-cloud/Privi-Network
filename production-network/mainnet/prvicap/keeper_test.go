@@ -199,3 +199,41 @@ func TestReconcileRejectsUntrackedDirectBalanceMutations(t *testing.T) {
     t.Fatalf("normal native supply conservation was falsely rejected: %v",err)
   }
 }
+
+
+// TestInitGenesisRejectsUntrackedBalanceChanges verifies that an honest bank
+// supply counter cannot conceal extra, missing, or zero actual native balances.
+// A rejected candidate genesis must not persist the immutable issuance record.
+func TestInitGenesisRejectsUntrackedBalanceChanges(t *testing.T) {
+  declared := sdkmath.NewInt(1000)
+  for _,tc:=range []struct{
+    name string
+    actual sdkmath.Int
+  }{
+    {"extra native balance", sdkmath.NewInt(1001)},
+    {"missing native balance", sdkmath.NewInt(999)},
+    {"all native balances absent", sdkmath.NewInt(0)},
+  } {
+    t.Run(tc.name,func(t *testing.T) {
+      data:=newFakeKV()
+      k,err:=New(fakeService{data})
+      if err!=nil {t.Fatal(err)}
+      ctx:=context.Background()
+      err=k.InitGenesis(ctx,declared.String(),fakeBank{base:declared,actual:&tc.actual})
+      if !errors.Is(err,ErrBankSupplyMismatch) {
+        t.Fatalf("inconsistent genesis balances accepted: %v",err)
+      }
+      if len(data.content)!=0 {t.Fatal("rejected genesis persisted issuance")}
+      if _,err:=k.Snapshot(ctx);!errors.Is(err,ErrNotInitialized) {
+        t.Fatalf("rejected genesis left initialized keeper: %v",err)
+      }
+      if err:=k.MintRestriction(ctx,coins(sdkmath.NewInt(1)));!errors.Is(err,ErrNotInitialized) {
+        t.Fatalf("rejected genesis permitted native mint: %v",err)
+      }
+    })
+  }
+  k,_,ctx:=setup(t,declared.String())
+  if state,err:=k.Snapshot(ctx);err!=nil||state.GenesisBase!=declared.String() {
+    t.Fatalf("matching bank balances failed genesis initialization: %+v, %v",state,err)
+  }
+}
