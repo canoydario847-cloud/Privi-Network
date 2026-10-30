@@ -105,6 +105,39 @@ test("research proposal verifier rejects getters and unsigned metadata before fi
   assert.equal(verifyCertificate(f.committee,proposal,votes).valid,true);
 });
 
+test("research certificate rejects unsigned vote metadata and getters before field reads",()=>{
+  const f=fixture(),{proposal,votes}=f.bundle();
+  let getterReads=0;
+  const getter={...votes[0]};
+  Object.defineProperty(getter,"signature",{
+    enumerable:true,get(){getterReads++;return votes[0].signature;}
+  });
+  const inherited=Object.assign(Object.create({validatorId:votes[0].validatorId}),votes[0]);
+  delete inherited.validatorId;
+  const hidden={...votes[0]};
+  Object.defineProperty(hidden,"finalized",{value:true,enumerable:false});
+  const symbolic={...votes[0]};
+  symbolic[Symbol("productionConsensus")]=true;
+  const extra={...votes[0],finalized:true};
+  const nonenumerable={...votes[0]};
+  Object.defineProperty(nonenumerable,"validatorId",{
+    value:votes[0].validatorId,enumerable:false
+  });
+  const untrusted=[getter,inherited,hidden,symbolic,extra,nonenumerable,
+    Object.assign(Object.create(null),votes[0]),
+    {...votes[0],researchOnly:false}];
+  for(const vote of untrusted){
+    assert.throws(()=>verifyCertificate(f.committee,proposal,[vote,...votes.slice(1)]),
+                  /plain own canonical data fields/);
+  }
+  assert.equal(getterReads,0,"vote getter must never execute");
+  // The durable research signer emits this non-production marker, which is
+  // allowed only as the literal own enumerable value true.
+  const marked={...votes[0],researchOnly:true};
+  assert.equal(verifyCertificate(f.committee,proposal,[marked,...votes.slice(1)]).valid,true);
+  assert.equal(verifyCertificate(f.committee,proposal,votes).productionConsensus,false);
+});
+
 test("research certificate signer attribution is deterministic and immutable",()=>{
   const f=fixture(7);
   const {proposal,votes}=f.bundle();
