@@ -6,7 +6,7 @@ const {
   hash,positionStamp,parseRegistry,signedMessage,proposer,
   proposalFields,voteFields,TRUSTED_MODE
 }=require("./engine.cjs");
-const {SCHEMA,MODE,SIGNING_TAG,checkpointFields}=require("./checkpoint_attestation.cjs");
+const {SCHEMA,MODE,SIGNING_TAG,committeeDigest,checkpointFields}=require("./checkpoint_attestation.cjs");
 const {
   stateRoot,computeResearchBlock,verifyResearchStateSequence
 }=require("./toy_state_commitment.cjs");
@@ -42,7 +42,8 @@ function fixture(n=4){
   const byKey=new Map(keys.map(k=>[k.id,k]));
   const checkpointUnsigned={
     schema:SCHEMA,mode:MODE,chainId,genesisHash,epoch,height:5,
-    blockHash:"0x"+"e".repeat(64),governanceKeyId:gov.id
+    blockHash:"0x"+"e".repeat(64),governanceKeyId:gov.id,
+    committeeDigest:committeeDigest(committee)
   };
   const checkpoint={
     ...checkpointUnsigned,
