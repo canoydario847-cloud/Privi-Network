@@ -72,9 +72,12 @@ func New(store corestore.KVStoreService) (Keeper, error) {
 }
 
 func parseCanonical(raw string) (*big.Int,error) {
-    if len(raw)==0 || raw[0]=='0' { return nil,ErrInvalidGenesis }
-    for _,char:=range []byte(raw) {
-        if char<'0'||char>'9' { return nil,ErrInvalidGenesis }
+    // The absolute native cap has len(MaxBase) decimal digits. Reject larger
+    // inputs before big.Int parsing to bound work on untrusted genesis data
+    // and corrupted consensus-store values.
+    if len(raw)==0 || len(raw)>len(MaxBase) || raw[0]=='0' { return nil,ErrInvalidGenesis }
+    for i:=0;i<len(raw);i++ {
+        if raw[i]<'0'||raw[i]>'9' { return nil,ErrInvalidGenesis }
     }
     value,ok:=new(big.Int).SetString(raw,10)
     if !ok||value.Sign()<=0 {return nil,ErrInvalidGenesis}
