@@ -104,3 +104,40 @@ func TestActualSDKBankGenesisAtOneBillionPRVIBoundary(t *testing.T) {
         t.Fatalf("new native mint accepted at cap: %v", err)
     }
 }
+
+
+// TestActualSDKBankGenesisRejectsAboveOneBillionPRVIBoundary verifies that
+// a real SDK bank genesis with one aprvi beyond the proposed maximum cannot
+// initialize the cap keeper, even if its declared supply matches its balances.
+// A caller also cannot hide the extra unit by claiming the exact maximum.
+func TestActualSDKBankGenesisRejectsAboveOneBillionPRVIBoundary(t *testing.T) {
+	h := newRealBankHarness(t)
+	max, ok := new(big.Int).SetString(MaxBase, 10)
+	if !ok {
+		t.Fatal("invalid embedded PRVI maximum")
+	}
+	over := new(big.Int).Add(max, big.NewInt(1))
+	amount := sdkmath.NewIntFromBigInt(over)
+	allocation := sdk.NewCoins(sdk.NewCoin(BaseDenom, amount))
+	address := authtypes.NewModuleAddress("genesisfixture")
+	h.bank.InitGenesis(h.ctx, &banktypes.GenesisState{
+		Params:   banktypes.DefaultParams(),
+		Balances: []banktypes.Balance{{Address: address.String(), Coins: allocation}},
+		Supply:   allocation,
+	})
+	if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount; !got.Equal(amount) {
+		t.Fatalf("test precondition: SDK bank supply differs from over-cap balance: %s", got)
+	}
+	if err := h.cap.InitGenesis(h.ctx, over.String(), h.bank); !errors.Is(err, ErrInvalidGenesis) {
+		t.Fatalf("above-cap native genesis was not rejected: %v", err)
+	}
+	if err := h.cap.InitGenesis(h.ctx, MaxBase, h.bank); !errors.Is(err, ErrBankSupplyMismatch) {
+		t.Fatalf("underdeclared over-cap native bank supply was not rejected: %v", err)
+	}
+	if _, err := h.cap.Snapshot(h.ctx); !errors.Is(err, ErrNotInitialized) {
+		t.Fatalf("rejected over-cap genesis persisted issuance: %v", err)
+	}
+	if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrNotInitialized) {
+		t.Fatalf("native mint did not fail closed after rejected over-cap genesis: %v", err)
+	}
+}
