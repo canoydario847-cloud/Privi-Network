@@ -181,6 +181,18 @@ function verifyProposal(committee, proposal) {
   assertValidatedCommittee(committee);
   check(proposal && typeof proposal==="object" && !Array.isArray(proposal),
         "Proposal missing");
+  // Reject accessors, inherited properties and unsigned extra metadata before
+  // reading any untrusted proposal field. A signature only authenticates the
+  // six canonical research fields, never a caller's added finality claims.
+  const required=["height","round","previousBlockHash","blockHash","proposerId","signature"];
+  check(Object.getPrototypeOf(proposal)===Object.prototype &&
+        Reflect.ownKeys(proposal).length===required.length &&
+        required.every(field=>{
+          const descriptor=Object.getOwnPropertyDescriptor(proposal,field);
+          return descriptor && Object.hasOwn(descriptor,"value") &&
+                 descriptor.enumerable;
+        }),
+        "PoP proposal requires plain own canonical data fields without extras");
   const {height,round,previousBlockHash,blockHash,proposerId,signature:proposalSig}=proposal;
   const fields=proposalFields(committee,height,round,
                               previousBlockHash,blockHash,proposerId);
