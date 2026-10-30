@@ -429,3 +429,32 @@ test("no valid validator quorum with ambiguous unsigned position proof",()=>{
   assert.throws(()=>parseRegistry(noAnchor,f.gov.publicKeyB64),/position-block commitment/);
   assert.throws(()=>positionStamp("ORG_TEST","bad"),/safe integer/);
 });
+
+test("research certificate refuses vote array metadata and index accessors",()=>{
+  const f=fixture(),{proposal,votes}=f.bundle();
+  let getterReads=0;
+  const decorated=[...votes];
+  decorated.finalized=true;
+  const hidden=[...votes];
+  Object.defineProperty(hidden,"productionConsensus",{value:true});
+  const symbolic=[...votes];
+  symbolic[Symbol("finalized")]=true;
+  const accessor=[...votes];
+  Object.defineProperty(accessor,"0",{
+    enumerable:true,configurable:true,
+    get(){getterReads++;return votes[0];}
+  });
+  const sparse=[...votes];
+  delete sparse[1];
+  const inherited=[...votes];
+  Object.setPrototypeOf(inherited,Object.create(Array.prototype));
+  for(const untrusted of [decorated,hidden,symbolic,accessor,sparse,inherited]){
+    assert.throws(()=>verifyCertificate(f.committee,proposal,untrusted),
+                  /dense plain array|Malformed PoP vote certificate/);
+  }
+  assert.equal(getterReads,0,"index accessor must not execute");
+  const proof=verifyCertificate(f.committee,proposal,[...votes]);
+  assert.equal(proof.valid,true);
+  assert.equal(proof.finalized,false);
+  assert.equal(proof.productionConsensus,false);
+});
