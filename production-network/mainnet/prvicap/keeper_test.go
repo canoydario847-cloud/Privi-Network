@@ -4,6 +4,7 @@ import (
   "context"
   "errors"
   "math/big"
+  "strings"
   "testing"
 
   corestore "cosmossdk.io/core/store"
@@ -197,5 +198,29 @@ func TestReconcileRejectsUntrackedDirectBalanceMutations(t *testing.T) {
   }
   if err:=k.Reconcile(ctx,fakeBank{base:initial});err!=nil {
     t.Fatalf("normal native supply conservation was falsely rejected: %v",err)
+  }
+}
+
+// TestOversizedGenesisAndCorruptStoreFailClosed prevents unbounded big.Int
+// parsing of untrusted genesis strings or corrupt persisted issuance data.
+func TestOversizedGenesisAndCorruptStoreFailClosed(t *testing.T) {
+  oversized := strings.Repeat("9", 100_000)
+  if err:=ValidateGenesisBase(oversized);!errors.Is(err,ErrInvalidGenesis) {
+    t.Fatalf("oversized genesis preflight was not rejected: %v",err)
+  }
+  data:=newFakeKV()
+  k,_:=New(fakeService{data})
+  if err:=k.InitGenesis(context.Background(),oversized,fakeBank{base:sdkmath.NewInt(1)});!errors.Is(err,ErrInvalidGenesis) {
+    t.Fatalf("oversized genesis init was not rejected: %v",err)
+  }
+  if len(data.content)!=0 {t.Fatal("rejected oversized genesis wrote consensus state")}
+
+  initialized,store,ctx:=setup(t,whole(1))
+  store.content[string(keyGenesis)]=[]byte(oversized)
+  if _,err:=initialized.Snapshot(ctx);!errors.Is(err,ErrStoreCorrupt) {
+    t.Fatalf("oversized persisted issuance was not rejected: %v",err)
+  }
+  if err:=initialized.MintRestriction(ctx,coins(sdkmath.NewInt(1)));!errors.Is(err,ErrStoreCorrupt) {
+    t.Fatalf("oversized persisted issuance did not block native mint: %v",err)
   }
 }
