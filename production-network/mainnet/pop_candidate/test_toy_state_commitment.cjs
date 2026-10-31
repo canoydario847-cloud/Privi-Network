@@ -278,3 +278,37 @@ test("toy starting-state root rejects hidden metadata and account getters",()=>{
   const f=fixture();
   assert.equal(f.verify().productionConsensus,false);
 });
+
+
+test("toy state commitments reject decorated and accessor operation arrays before iteration",()=>{
+  const f=fixture();
+  const op={kind:"increment",account:"agent_a",amount:2,nonce:1};
+  const valid=[op];
+  const expected=computeResearchBlock(f.committee,f.startingState,6,
+    f.checkpoint.blockHash,valid);
+  let getterReads=0;
+  const decorated=[op];
+  decorated.productionFinalized=true;
+  const hidden=[op];
+  Object.defineProperty(hidden,"finalized",{value:true});
+  const symbolic=[op];
+  symbolic[Symbol("productionConsensus")]=true;
+  const accessor=[op];
+  Object.defineProperty(accessor,"0",{
+    enumerable:true,configurable:true,
+    get(){getterReads++;throw Error("untrusted operation index getter executed");}
+  });
+  const sparse=[op];
+  delete sparse[0];
+  const inherited=[op];
+  Object.setPrototypeOf(inherited,Object.create(Array.prototype));
+  for(const operations of [decorated,hidden,symbolic,accessor,sparse,inherited]){
+    assert.throws(()=>computeResearchBlock(f.committee,f.startingState,6,
+      f.checkpoint.blockHash,operations),/dense plain operation array/);
+  }
+  assert.equal(getterReads,0,"operation index getter must never execute");
+  const replay=computeResearchBlock(f.committee,f.startingState,6,
+    f.checkpoint.blockHash,[op]);
+  assert.equal(replay.block.blockHash,expected.block.blockHash);
+  assert.equal(f.verify().productionConsensus,false);
+});
