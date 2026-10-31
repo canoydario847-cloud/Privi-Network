@@ -53,9 +53,11 @@ function normalizedState(input){
          "PoP toy state requires plain enumerable own account data fields");
     need(ACCOUNT.test(account),"PoP toy invalid account key");
     const entry=descriptor.value;
-    exactFields(entry,["nonce","value"],"state record");
-    integer(entry.value,"state value");integer(entry.nonce,"state nonce");
-    output.set(account,{value:entry.value,nonce:entry.nonce});
+    // Use the validated descriptor snapshot; a Proxy get trap must not
+    // substitute different account values after the field checks.
+    const record=exactFields(entry,["nonce","value"],"state record");
+    integer(record.value,"state value");integer(record.nonce,"state nonce");
+    output.set(account,{value:record.value,nonce:record.nonce});
   }
   return output;
 }

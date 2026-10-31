@@ -426,3 +426,18 @@ test("toy operation fields are bound to descriptor snapshots, never Proxy proper
   assert.equal(unsignedReads,0,"no operation property read may escape validation");
   assert.equal(f.verify().productionConsensus,false);
 });
+
+test("toy account record descriptors, not Proxy property reads, determine the committed state",()=>{
+  const f=fixture();
+  const canonical={value:2,nonce:0};
+  let reads=0;
+  const hostile=new Proxy({...canonical},{
+    get(_target,key){reads++;throw Error("unsigned account read: "+String(key));}
+  });
+  assert.equal(stateRoot({agent_a:hostile}),stateRoot({agent_a:canonical}));
+  const result=computeResearchBlock(f.committee,{agent_a:hostile},6,
+    f.checkpoint.blockHash,[{kind:"increment",account:"agent_a",amount:3,nonce:1}]);
+  assert.equal(result.nextState.agent_a.value,5);
+  assert.equal(result.nextState.agent_a.nonce,1);
+  assert.equal(reads,0,"account Proxy get traps must never execute");
+});
