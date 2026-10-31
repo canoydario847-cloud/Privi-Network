@@ -266,3 +266,46 @@ test("signatures are bound to research schema and domain-separated from validato
   assert.throws(()=>verifyResearchCheckpoint(f.committee,fake,
                 f.governance.publicKey),/issuer signature invalid/);
 });
+
+test("checkpoint signature and reported metadata use one canonical descriptor snapshot",()=>{
+  const f=fixture();
+  let ordinaryReads=0,heightDescriptorReads=0;
+  const hostile=new Proxy({...f.checkpoint},{
+    get(target,key,receiver){
+      ordinaryReads++;
+      if(key==="height")return 999;
+      if(key==="blockHash")return "0x"+"f".repeat(64);
+      if(key==="signatureB64")return "not-the-signed-signature";
+      return Reflect.get(target,key,receiver);
+    },
+    getOwnPropertyDescriptor(target,key){
+      const descriptor=Reflect.getOwnPropertyDescriptor(target,key);
+      if(key==="height"){
+        heightDescriptorReads++;
+        // A later read would supply an unsigned height. The verifier must
+        // authenticate the exact first descriptor snapshot and never reread.
+        return {...descriptor,value:heightDescriptorReads===1 ?
+          f.checkpoint.height : 999};
+      }
+      return descriptor;
+    }
+  });
+  const verified=verifyResearchCheckpoint(f.committee,hostile,
+                                          f.governance.publicKey);
+  assert.equal(ordinaryReads,0,"Proxy get traps must not influence authentication");
+  assert.equal(heightDescriptorReads,1,"signed height must be read exactly once");
+  assert.equal(verified.height,f.checkpoint.height);
+  assert.equal(verified.blockHash,f.checkpoint.blockHash);
+  assert.equal(verified.checkpointIssuerSignatureVerified,true);
+  assert.equal(verified.checkpointFinalityVerified,false);
+  assert.equal(verified.productionConsensus,false);
+
+  const forgedDescriptor=new Proxy({...f.checkpoint},{
+    getOwnPropertyDescriptor(target,key){
+      const descriptor=Reflect.getOwnPropertyDescriptor(target,key);
+      return key==="height" ? {...descriptor,value:31} : descriptor;
+    }
+  });
+  assert.throws(()=>verifyResearchCheckpoint(f.committee,forgedDescriptor,
+                f.governance.publicKey),/issuer signature invalid/);
+});
