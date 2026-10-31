@@ -312,3 +312,36 @@ test("toy state commitments reject decorated and accessor operation arrays befor
   assert.equal(replay.block.blockHash,expected.block.blockHash);
   assert.equal(f.verify().productionConsensus,false);
 });
+
+test("toy operation-array proxies cannot substitute unsigned iterators or index reads",()=>{
+  const f=fixture();
+  const valid={kind:"increment",account:"agent_a",amount:2,nonce:1};
+  const invalid={...valid,kind:"mint"};
+  let iteratorReads=0,indexReads=0;
+  const substitutedIterator=new Proxy([invalid],{
+    get(target,key,receiver){
+      if(key===Symbol.iterator){
+        return function*(){iteratorReads++;yield valid;};
+      }
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  assert.throws(()=>computeResearchBlock(f.committee,f.startingState,6,
+    f.checkpoint.blockHash,substitutedIterator),/unsupported\/non-financial operation/);
+  assert.equal(iteratorReads,0,"untrusted array iterator must not execute");
+
+  const substitutedIndex=new Proxy([valid],{
+    get(target,key,receiver){
+      if(key==="0"){indexReads++;throw Error("untrusted array index getter executed");}
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  const expected=computeResearchBlock(f.committee,f.startingState,6,
+    f.checkpoint.blockHash,[valid]);
+  const actual=computeResearchBlock(f.committee,f.startingState,6,
+    f.checkpoint.blockHash,substitutedIndex);
+  assert.equal(actual.block.operationsRoot,expected.block.operationsRoot);
+  assert.equal(actual.block.blockHash,expected.block.blockHash);
+  assert.equal(indexReads,0,"untrusted array index getter must not execute");
+  assert.equal(f.verify().productionConsensus,false);
+});
