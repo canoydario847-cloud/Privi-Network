@@ -18,32 +18,78 @@ const {
 
 function need(ok,message){if(!ok)throw Error(message);}
 
+// Capture authenticated evidence from own data descriptors exactly once.
+// Never re-read caller-controlled getters, Proxy get traps or iterators after
+// signature verification: the report must describe the SAME signed bytes.
+function snapshotRecord(value,fields,label,allowMarker=false) {
+  need(value && typeof value==="object" && !Array.isArray(value) &&
+       Object.getPrototypeOf(value)===Object.prototype,
+       "Noncanonical PoP research "+label);
+  const keys=Reflect.ownKeys(value);
+  const marker=allowMarker && Object.getOwnPropertyDescriptor(value,"researchOnly");
+  const hasMarker=!!marker;
+  need(keys.length===fields.length+(hasMarker?1:0) &&
+       (!hasMarker || (Object.hasOwn(marker,"value") &&
+         marker.value===true && marker.enumerable)),
+       "Noncanonical PoP research "+label);
+  const out={};
+  for(const field of fields){
+    const d=Object.getOwnPropertyDescriptor(value,field);
+    need(d && Object.hasOwn(d,"value") && d.enumerable,
+         "Noncanonical PoP research "+label);
+    out[field]=d.value;
+  }
+  if(hasMarker)out.researchOnly=true;
+  return out;
+}
+function snapshotCertificate(committee,input) {
+  const envelope=snapshotRecord(input,["proposal","votes"],"certificate");
+  const proposal=snapshotRecord(envelope.proposal,
+    ["height","round","previousBlockHash","blockHash","proposerId","signature"],
+    "proposal");
+  const votes=envelope.votes;
+  need(Array.isArray(votes) && Object.getPrototypeOf(votes)===Array.prototype,
+       "Noncanonical PoP research votes");
+  const length=Object.getOwnPropertyDescriptor(votes,"length")?.value;
+  need(Number.isSafeInteger(length) && length>=0 &&
+       length<=committee.validators.length &&
+       Reflect.ownKeys(votes).length===length+1,
+       "Noncanonical PoP research votes");
+  const copied=[];
+  for(let i=0;i<length;i++){
+    const d=Object.getOwnPropertyDescriptor(votes,String(i));
+    need(d && Object.hasOwn(d,"value") && d.enumerable,
+         "Noncanonical PoP research votes");
+    copied.push(snapshotRecord(d.value,["validatorId","signature"],
+                               "vote",true));
+  }
+  return {proposal,votes:copied};
+}
+
 function verifyResearchCertificatePair(committee,left,right) {
   assertValidatedCommittee(committee);
-  need(left && typeof left==="object" && !Array.isArray(left) &&
-       right && typeof right==="object" && !Array.isArray(right),
-       "PoP research conflict audit requires two certificate objects");
-  need(left.proposal && typeof left.proposal==="object" &&
-       right.proposal && typeof right.proposal==="object",
-       "PoP research certificate missing proposal");
+  // Snapshots are plain data objects, so subsequent reads cannot change
+  // the signer set or the bytes used to construct double-sign evidence.
+  const firstInput=snapshotCertificate(committee,left);
+  const secondInput=snapshotCertificate(committee,right);
 
   // These verify the entire signed proposal, each signer, epoch, round,
   // chain/genesis, per-certificate uniqueness, and quorum before any report.
-  const first=verifyCertificate(committee,left.proposal,left.votes);
-  const second=verifyCertificate(committee,right.proposal,right.votes);
+  const first=verifyCertificate(committee,firstInput.proposal,firstInput.votes);
+  const second=verifyCertificate(committee,secondInput.proposal,secondInput.votes);
   need(first.height===second.height,
        "PoP conflicting certificates must refer to the same height");
 
-  const differentBlock=left.proposal.blockHash!==right.proposal.blockHash;
+  const differentBlock=firstInput.proposal.blockHash!==secondInput.proposal.blockHash;
   const differentParent=
-    left.proposal.previousBlockHash!==right.proposal.previousBlockHash;
+    firstInput.proposal.previousBlockHash!==secondInput.proposal.previousBlockHash;
   // Changing the *round alone* without changing block or parent does not
   // violate the persistent research height lock.
   const incompatible=differentBlock||differentParent;
-  const secondSigners=new Map(right.votes.map(v=>[v.validatorId,v]));
+  const secondSigners=new Map(secondInput.votes.map(v=>[v.validatorId,v]));
   // Signer fingerprints are fixed-width lowercase ASCII hex. Evidence order
   // must not depend on host ICU locale or environment language settings.
-  const intersection=left.votes.filter(v=>secondSigners.has(v.validatorId))
+  const intersection=firstInput.votes.filter(v=>secondSigners.has(v.validatorId))
     .sort((a,b)=>a.validatorId < b.validatorId ? -1 :
                  a.validatorId > b.validatorId ? 1 : 0);
 
@@ -53,12 +99,12 @@ function verifyResearchCertificatePair(committee,left,right) {
   need(intersection.length>=expectedMinimum,
        "PoP certificate intersection is below required quorum overlap");
 
-  const leftFields=proposalFields(committee,left.proposal.height,
-    left.proposal.round,left.proposal.previousBlockHash,
-    left.proposal.blockHash,left.proposal.proposerId);
-  const rightFields=proposalFields(committee,right.proposal.height,
-    right.proposal.round,right.proposal.previousBlockHash,
-    right.proposal.blockHash,right.proposal.proposerId);
+  const leftFields=proposalFields(committee,firstInput.proposal.height,
+    firstInput.proposal.round,firstInput.proposal.previousBlockHash,
+    firstInput.proposal.blockHash,firstInput.proposal.proposerId);
+  const rightFields=proposalFields(committee,secondInput.proposal.height,
+    secondInput.proposal.round,secondInput.proposal.previousBlockHash,
+    secondInput.proposal.blockHash,secondInput.proposal.proposerId);
 
   // Preserve all signed fields and BOTH independently verified signatures,
   // sufficient to reproduce the signed-message verification offline given
@@ -93,8 +139,8 @@ function verifyResearchCertificatePair(committee,left,right) {
     firstRound:first.round,secondRound:second.round,
     firstBlockHash:first.blockHash,
     secondBlockHash:second.blockHash,
-    firstParentHash:left.proposal.previousBlockHash,
-    secondParentHash:right.proposal.previousBlockHash,
+    firstParentHash:firstInput.proposal.previousBlockHash,
+    secondParentHash:secondInput.proposal.previousBlockHash,
     incompatibleCommitments:incompatible,
     intersectingSignerCount:intersection.length,
     minimumGuaranteedIntersection:expectedMinimum,
