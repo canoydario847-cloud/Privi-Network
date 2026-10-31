@@ -548,3 +548,22 @@ test("research quorum intersection bound holds across admitted committee sizes",
     assert.equal(lastProof.productionConsensus,false);
   }
 });
+
+test("validly signed admissions cannot reuse an operator or fault domain",()=>{
+  const f=fixture(4);
+  for(const collision of ["operatorId","faultDomain"]){
+    const registry=structuredClone(f.registry);
+    const first=registry.validators[0],second=registry.validators[1];
+    // Both admissions remain genuinely signed by the governance root.
+    // A duplicate organizational or failure-domain identity cannot count
+    // as two independent research votes merely by changing the signature.
+    second[collision]=first[collision];
+    const fields=[registry.chainId,registry.genesisHash,registry.epoch,
+      second.operatorId,second.faultDomain,second.companyId,
+      second.positionSequence,second.id,second.anchorBlockHash];
+    second.admissionSignature=sign(f.gov,"admit",fields);
+    assert.throws(()=>parseRegistry(registry,f.gov.publicKeyB64),
+      /Duplicated validator, operator, failure domain, or PoP position/);
+  }
+  assert.equal(parseRegistry(f.registry,f.gov.publicKeyB64).quorum,3);
+});
