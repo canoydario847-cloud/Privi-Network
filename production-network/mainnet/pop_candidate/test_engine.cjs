@@ -738,3 +738,30 @@ test("research certificate metadata cannot change after proposal signature verif
   assert.equal(proof.finalized,false);
   assert.equal(proof.productionConsensus,false);
 });
+
+test("research admission uses validator descriptors, not Proxy iteration or index reads",()=>{
+  const f=fixture(4);
+  let iteratorReads=0,indexReads=0;
+  // All four declared roster entries are invalid. A hostile iterator or
+  // index getter must not substitute four separately signed admissions.
+  const forged=new Proxy([null,null,null,null],{
+    get(target,key,receiver){
+      if(key===Symbol.iterator){
+        iteratorReads++;
+        return function*(){yield* f.registry.validators;};
+      }
+      if(typeof key==="string" && /^[0-3]$/.test(key)){
+        indexReads++;
+        return f.registry.validators[Number(key)];
+      }
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  assert.throws(()=>parseRegistry({...f.registry,validators:forged},f.gov.publicKeyB64),
+    /Noncanonical PoP validator/);
+  assert.equal(iteratorReads,0,"unsigned validator iterator must never execute");
+  assert.equal(indexReads,0,"unsigned validator index getter must never execute");
+  const admitted=parseRegistry(f.registry,f.gov.publicKeyB64);
+  assert.equal(admitted.quorum,3);
+  assert.equal(admitted.validators.length,4);
+});
