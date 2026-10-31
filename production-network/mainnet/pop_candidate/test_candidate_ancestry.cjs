@@ -248,3 +248,32 @@ test("rejects malformed checkpoint, overflow and incomplete research certificate
   assert.throws(()=>verifyCandidateAncestry(f.committee,f.checkpoint,
     [{proposal:null,votes:[]}]),/missing candidate proposal/);
 });
+
+test("research certificate batches reject unsigned metadata, holes and index getters",()=>{
+  const f=makeFixture(),items=f.sequence(2);
+  let getterReads=0;
+  const decorated=[...items];
+  decorated.finalized=true;
+  const hidden=[...items];
+  Object.defineProperty(hidden,"productionConsensus",{value:true});
+  const symbolic=[...items];
+  symbolic[Symbol("mainnet")]=true;
+  const accessor=[...items];
+  Object.defineProperty(accessor,"0",{
+    enumerable:true,configurable:true,
+    get(){getterReads++;throw Error("untrusted certificate index getter executed");}
+  });
+  const sparse=[...items];
+  delete sparse[1];
+  const inherited=[...items];
+  Object.setPrototypeOf(inherited,Object.create(Array.prototype));
+  for(const untrusted of [decorated,hidden,symbolic,accessor,sparse,inherited]){
+    assert.throws(()=>verifyCandidateAncestry(f.committee,f.checkpoint,untrusted),
+      /dense plain data array/);
+  }
+  assert.equal(getterReads,0,"untrusted certificate index getter must not execute");
+  const proof=verifyCandidateAncestry(f.committee,f.checkpoint,items);
+  assert.equal(proof.verifiedCandidateCertificates,2);
+  assert.equal(proof.finalized,false);
+  assert.equal(proof.productionConsensus,false);
+});
