@@ -53,6 +53,29 @@ function fixture(count=4){
   return {gov,keys,registry,committee,bundle};
 }
 
+test("noncanonical SPKI aliases cannot duplicate a research validator signing key",()=>{
+  const f=fixture(4),registry=structuredClone(f.registry);
+  const original=Buffer.from(registry.validators[0].keySpkiBase64,"base64");
+  const aliased=Buffer.concat([original,Buffer.from([0x00])]);
+  // Node accepts this DER input as the same Ed25519 key despite trailing data.
+  assert.equal(crypto.createPublicKey({key:aliased,format:"der",type:"spki"})
+    .export({type:"spki",format:"der"}).equals(original),true);
+  const second=registry.validators[1];
+  second.keySpkiBase64=aliased.toString("base64");
+  second.id=hash(aliased);
+  const fields=[registry.chainId,registry.genesisHash,registry.epoch,
+    second.operatorId,second.faultDomain,second.companyId,
+    second.positionSequence,second.id,second.anchorBlockHash];
+  second.admissionSignature=sign(f.gov,"admit",fields);
+  assert.throws(()=>parseRegistry(registry,f.gov.publicKeyB64),
+    /Noncanonical Ed25519 SPKI encoding/);
+  const aliasedGovernance=Buffer.concat([
+    Buffer.from(f.gov.publicKeyB64,"base64"),Buffer.from([0x00])]).toString("base64");
+  assert.throws(()=>parseRegistry(f.registry,aliasedGovernance),
+    /Noncanonical Ed25519 SPKI encoding/);
+  assert.equal(parseRegistry(f.registry,f.gov.publicKeyB64).quorum,3);
+});
+
 test("four unique PoP position admissions yield exact three-of-four quorum",()=>{
   const f=fixture();
   assert.equal(f.committee.quorum,3);
