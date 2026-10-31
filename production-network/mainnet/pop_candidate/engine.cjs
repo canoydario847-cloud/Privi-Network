@@ -271,12 +271,17 @@ function verifyCertificate(committee, proposal, votes) {
                    descriptor.enumerable;
           }),
           "PoP vote requires plain own canonical data fields without extras");
-    const signer=nativeMapGet.call(committee.byId,vote.validatorId);
+    // Snapshot each untrusted vote field exactly once. A Proxy can pass
+    // own-data-descriptor checks yet return a different validatorId on
+    // successive reads, otherwise counting one valid signature many times.
+    const validatorId=vote.validatorId;
+    const voteSignature=vote.signature;
+    const signer=nativeMapGet.call(committee.byId,validatorId);
     check(!!signer,"Unadmitted PoP voter");
-    check(!seen.has(vote.validatorId),"Duplicate PoP voter");
-    check(verify(signer.pub,"commit",voteFields(fields,vote.validatorId),vote.signature),
+    check(!seen.has(validatorId),"Duplicate PoP voter");
+    check(verify(signer.pub,"commit",voteFields(fields,validatorId),voteSignature),
           "Forged or wrong-epoch/chain/round PoP vote");
-    seen.add(vote.validatorId);
+    seen.add(validatorId);
   }
   check(seen.size>=committee.quorum,
         "Insufficient independently signed PoP quorum");

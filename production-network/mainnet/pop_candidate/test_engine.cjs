@@ -614,3 +614,33 @@ test("research signer map overrides cannot redirect certificate verification",()
   assert.equal(verifyCertificate(f.committee,proposal,votes).finalized,false);
   assert.equal(intercepted,0);
 });
+
+test("research quorum cannot be inflated by changing proxy vote identities",()=>{
+  const f=fixture(4),{proposal,votes}=f.bundle();
+  const signed=votes[0];
+  const aliases=f.committee.validators.map(v=>v.id)
+    .filter(id=>id!==signed.validatorId);
+  assert.equal(aliases.length,3);
+  // Each proxy presents the genuine signer's ID to the key lookup and
+  // signature verifier, but three distinct IDs to duplicate detection.
+  // Old code reread validatorId four times and accepted a forged quorum.
+  const forgedVotes=aliases.map(alias=>{
+    let reads=0;
+    return new Proxy({...signed},{
+      get(target,key,receiver){
+        if(key==="validatorId"){
+          reads++;
+          return (reads===1 || reads===3) ? signed.validatorId : alias;
+        }
+        return Reflect.get(target,key,receiver);
+      }
+    });
+  });
+  assert.throws(()=>verifyCertificate(f.committee,proposal,forgedVotes),
+    /Duplicate PoP voter|Forged or wrong-epoch\/chain\/round PoP vote/,
+    "one Ed25519 signature cannot count as three independent voters");
+  const authentic=verifyCertificate(f.committee,proposal,votes);
+  assert.equal(authentic.signers,3);
+  assert.equal(authentic.finalized,false);
+  assert.equal(authentic.productionConsensus,false);
+});
