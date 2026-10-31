@@ -1,0 +1,174 @@
+"use strict";
+const test=require("node:test");
+const assert=require("node:assert/strict");
+const crypto=require("node:crypto");
+const {hash,signedMessage,parseRegistry,positionStamp,TRUSTED_MODE} = require("./engine.cjs");
+const {analyzeEpochOverlap}=require("./epoch_overlap.cjs");
+
+function makeSigner() {
+  const pair=crypto.generateKeyPairSync("ed25519");
+  const der=pair.publicKey.export({type:"spki",format:"der"});
+  return {id:hash(der),pub:der.toString("base64"),privateKey:pair.privateKey};
+}
+function fixture(n) {
+  const gov=makeSigner(),keys=Array.from({length:n},makeSigner);
+  const chainId="privi-pop-research-overlap-v1",genesisHash="0x"+"a".repeat(64);
+  function committee(signers,epoch,options={}) {
+    const usedChain=options.chainId||chainId;
+    const usedGenesis=options.genesisHash||genesisHash;
+    const signer=options.governanceSigner||gov;
+    const validators=signers.map((key,i)=>{
+      const operatorId=(options.changeOperatorAt===i?"ALTERNATE_OPERATOR_":"OPERATOR_")+i;
+      const faultDomain="host"+i+".separate-operator.example";
+      const companyId="ORG_"+i;
+      const positionSequence=options.changePositionAt===i ? i+100 : i+1;
+      const anchorBlockHash=hash(Buffer.from("research-position-anchor-"+i+
+        (options.changeAnchorAt===i ? "-replacement" : "")));
+      const positionHash=hash(Buffer.from(positionStamp(companyId,positionSequence)));
+      const fields=[usedChain,usedGenesis,epoch,operatorId,faultDomain,
+                    companyId,positionSequence,key.id,anchorBlockHash];
+      return {id:key.id,keySpkiBase64:key.pub,operatorId,faultDomain,
+              companyId,positionSequence,anchorBlockHash,positionHash,
+              admissionSignature:crypto.sign(null,
+                signedMessage("admit",fields),signer.privateKey).toString("base64")};
+    });
+    return parseRegistry({chainId:usedChain,genesisHash:usedGenesis,epoch,
+      mode:TRUSTED_MODE,validators},signer.pub);
+  }
+  return {keys,committee,governance:gov};
+}
+
+test("4-of-4 stable identities meet necessary adjacent-epoch overlap, but cannot authorize handoff",()=>{
+  const f=fixture(4),one=f.committee(f.keys,1),two=f.committee(f.keys,2);
+  const result=analyzeEpochOverlap(one,two);
+  assert.equal(result.minimalCommonQuorumSigners,2);
+  assert.equal(result.assumedMaxFaultySharedSigners,1);
+  assert.equal(result.unchangedSigners,4);
+  assert.equal(result.overlapNecessaryCondition,true);
+  assert.equal(result.permitsEpochTransition,false);
+  assert.equal(result.productionConsensus,false);
+  assert.equal(result.researchOnly,true);
+  assert.equal(Object.isFrozen(result),true);
+});
+
+test("7-of-7 stable identities meet only a necessary 5-of-7 quorum intersection",()=>{
+  const f=fixture(7),old=f.committee(f.keys,7),next=f.committee(f.keys,8);
+  const result=analyzeEpochOverlap(old,next);
+  assert.equal(old.quorum,5);
+  assert.equal(next.quorum,5);
+  assert.equal(result.minimalCommonQuorumSigners,3);
+  assert.equal(result.assumedMaxFaultySharedSigners,2);
+  assert.equal(result.permitsEpochTransition,false);
+});
+
+test("even one 4-validator signer replacement can destroy guaranteed honest cross-epoch intersection",()=>{
+  const f=fixture(4),old=f.committee(f.keys,10);
+  const rotated=[...f.keys];
+  rotated[0]=makeSigner();
+  const next=f.committee(rotated,11);
+  assert.throws(()=>analyzeEpochOverlap(old,next),/unsafe cross-epoch quorum overlap/);
+});
+
+test("one of seven changed signers fails conservative overlap under f=2",()=>{
+  const f=fixture(7),old=f.committee(f.keys,1);
+  const next=f.committee([...f.keys.slice(0,6),makeSigner()],2);
+  assert.throws(()=>analyzeEpochOverlap(old,next),/unsafe cross-epoch quorum overlap/);
+});
+
+test("identical key with newly claimed operator is not a stable shared identity",()=>{
+  const f=fixture(4);
+  const old=f.committee(f.keys,1),next=f.committee(f.keys,2,{changeOperatorAt:0});
+  assert.throws(()=>analyzeEpochOverlap(old,next),/unsafe cross-epoch quorum overlap/);
+});
+
+test("governance-signed PoP position reassignment is not a stable epoch signer",()=>{
+  const f=fixture(4),previous=f.committee(f.keys,12);
+  // Keep the SAME four Ed25519 keys, operators, fault domains and governance
+  // authority. Re-sign one different position for the next epoch: a valid
+  // admission is not proof that the same participation identity persisted.
+  const next=f.committee(f.keys,13,{changePositionAt:0});
+  assert.equal(previous.validators.length,next.validators.length);
+  assert.deepEqual(previous.validators.map(v=>v.id),next.validators.map(v=>v.id));
+  assert.equal(previous.governanceKeyId,next.governanceKeyId);
+  assert.notEqual(previous.validators.find(v=>v.stamp.includes("ORG_0")).stamp,
+                  next.validators.find(v=>v.stamp.includes("ORG_0")).stamp);
+  assert.throws(()=>analyzeEpochOverlap(previous,next),
+    /unsafe cross-epoch quorum overlap/);
+  assert.equal(analyzeEpochOverlap(previous,f.committee(f.keys,13)).permitsEpochTransition,false);
+});
+
+test("governance-signed change to a PoP anchor is not stable cross-epoch identity",()=>{
+  const f=fixture(4),old=f.committee(f.keys,20);
+  // Even valid fresh governance signatures cannot quietly replace the
+  // position's anchored block commitment during a committee handoff.
+  const changed=f.committee(f.keys,21,{changeAnchorAt:0});
+  const original=old.validators.find(v=>v.stamp==="PoP:ORG_0:VALIDATOR/AUTH:000001");
+  const updated=changed.validators.find(v=>v.stamp===original.stamp);
+  assert.equal(old.governanceKeyId,changed.governanceKeyId);
+  assert.equal(original.id,updated.id);
+  assert.equal(original.positionHash,updated.positionHash);
+  assert.notEqual(original.anchorBlockHash,updated.anchorBlockHash);
+  assert.throws(()=>analyzeEpochOverlap(old,changed),
+    /unsafe cross-epoch quorum overlap/);
+  assert.equal(analyzeEpochOverlap(old,f.committee(f.keys,21)).permitsEpochTransition,false);
+});
+
+test("four-to-seven committee expansion has no proven honest quorum intersection",()=>{
+  const f=fixture(7),a=f.committee(f.keys.slice(0,4),1);
+  const b=f.committee(f.keys,2);
+  assert.throws(()=>analyzeEpochOverlap(a,b),/unsafe cross-epoch quorum overlap/);
+});
+
+test("rejects epoch jumps, rollback, unchanged epoch, and changed chain or genesis",()=>{
+  const f=fixture(4),a=f.committee(f.keys,4);
+  for (const epoch of [3,4,6,7]) {
+    assert.throws(()=>analyzeEpochOverlap(a,f.committee(f.keys,epoch)),/one forward epoch/);
+  }
+  assert.throws(()=>analyzeEpochOverlap(a,f.committee(f.keys,5,{chainId:"privi-pop-research-elsewhere"})),
+    /chain or genesis/);
+  assert.throws(()=>analyzeEpochOverlap(a,f.committee(f.keys,5,{genesisHash:"0x"+"c".repeat(64)})),
+    /chain or genesis/);
+});
+
+test("rejects forged admission wrappers and mutated member maps, even with copied keys",()=>{
+  const f=fixture(4),a=f.committee(f.keys,1),b=f.committee(f.keys,2);
+  assert.throws(()=>analyzeEpochOverlap(a,{...b}),/Unverified PoP committee/);
+  assert.throws(()=>analyzeEpochOverlap({...a},b),/Unverified PoP committee/);
+  const first=b.validators[0],original=b.byId.get(first.id);
+  try {
+    b.byId.set(first.id,{...first});
+    assert.throws(()=>analyzeEpochOverlap(a,b),/membership changed/);
+  } finally { b.byId.set(first.id,original); }
+  assert.equal(analyzeEpochOverlap(a,b).overlapNecessaryCondition,true);
+});
+
+
+test("genuine signatures under different governance roots cannot authorize adjacent-epoch preflight",()=>{
+  const f=fixture(4);
+  const original=f.committee(f.keys,1);
+  const replacementRoot=makeSigner();
+  const replacement=f.committee(f.keys,2,{governanceSigner:replacementRoot});
+  assert.notEqual(original.governanceKeyId,replacement.governanceKeyId);
+  assert.equal(original.governanceKeyId,f.governance.id);
+  assert.equal(replacement.governanceKeyId,replacementRoot.id);
+  // Both committees have independently valid admissions and identical
+  // validator signatures, but there is no signed governance handoff.
+  assert.equal(original.validators.length,4);
+  assert.equal(replacement.validators.length,4);
+  assert.throws(()=>analyzeEpochOverlap(original,replacement),
+    /governance authority change requires separately reviewed root handoff/);
+  const unchangedRoot=f.committee(f.keys,2);
+  assert.equal(analyzeEpochOverlap(original,unchangedRoot).permitsEpochTransition,false);
+});
+
+test("governance root cannot be overwritten on an admitted committee",()=>{
+  const f=fixture(4);
+  const old=f.committee(f.keys,1);
+  assert.equal(Object.isFrozen(old),true);
+  assert.throws(()=>{old.governanceKeyId="0x"+"f".repeat(64);},TypeError);
+});
+
+test("self-comparison is not an admitted epoch transition",()=>{
+  const f=fixture(4),a=f.committee(f.keys,1);
+  assert.throws(()=>analyzeEpochOverlap(a,a),/distinct admitted/);
+});

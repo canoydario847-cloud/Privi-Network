@@ -39,8 +39,8 @@ function fixture(){
   })};
   const committee=parseRegistry(registry,gov.pub);
   const keysById=new Map(keys.map(k=>[k.id,k.privateKey]));
-  function proposal(height=5,round=0,blockHash="0x"+"c".repeat(64)){
-    const previousBlockHash="0x"+"b".repeat(64);
+  function proposal(height=5,round=0,blockHash="0x"+"c".repeat(64),
+                    previousBlockHash="0x"+"b".repeat(64)){
     const proposerId=proposer(committee,height,round);
     const fields=proposalFields(committee,height,round,previousBlockHash,blockHash,proposerId);
     return {height,round,blockHash,previousBlockHash,proposerId,
@@ -66,7 +66,7 @@ test("3-of-4 genuine votes are reserved on disk before signature release",()=>{
       });
       assert.equal(vote.validatorId,validator.id);
       assert.equal(vote.researchOnly,true);
-      const r=recordFor(f.committee,p.height,validator.id,p.blockHash);
+      const r=recordFor(f.committee,p.height,validator.id,p.blockHash,p.previousBlockHash);
       const file=path.join(dir,lockedFileName(r));
       const saved=JSON.parse(fs.readFileSync(file,"utf8"));
       assert.deepEqual(saved,r);
@@ -75,6 +75,35 @@ test("3-of-4 genuine votes are reserved on disk before signature release",()=>{
     }
     assert.equal(verifyCertificate(f.committee,p,votes).valid,true);
   } finally { for(const dir of dirs)fs.rmSync(dir,{recursive:true,force:true}); }
+});
+
+test("research signer vote cannot acquire unsigned finality metadata after signing",()=>{
+  const f=fixture(),p=f.proposal(62),dirs=[],votes=[];
+  try {
+    for(const validator of f.committee.validators.slice(0,3)){
+      const dir=tempRoot();
+      dirs.push(dir);
+      const vote=signCommitWithResearchLock({
+        lockDirectory:dir,committee:f.committee,proposal:p,
+        privateKey:f.keysById.get(validator.id)
+      });
+      const originalSignature=vote.signature;
+      assert.equal(Object.isFrozen(vote),true);
+      assert.deepEqual(Object.keys(vote).sort(),
+                       ["researchOnly","signature","validatorId"].sort());
+      assert.throws(()=>{vote.finalized=true;},TypeError);
+      assert.throws(()=>{vote.productionConsensus=true;},TypeError);
+      assert.throws(()=>{vote.signature="forged";},TypeError);
+      assert.throws(()=>Object.defineProperty(vote,"finalized",{value:true}),TypeError);
+      assert.equal(vote.signature,originalSignature);
+      assert.equal(vote.researchOnly,true);
+      votes.push(vote);
+    }
+    const certificate=verifyCertificate(f.committee,p,votes);
+    assert.equal(certificate.valid,true);
+    assert.equal(certificate.finalized,false);
+    assert.equal(certificate.productionConsensus,false);
+  } finally {for(const dir of dirs)fs.rmSync(dir,{recursive:true,force:true});}
 });
 
 test("same height cannot sign conflicting block even across round or process restart",()=>{
@@ -93,27 +122,82 @@ test("same height cannot sign conflicting block even across round or process res
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });
 
+test("research signer refuses same candidate block hash with a different signed parent",()=>{
+  const f=fixture(),dir=tempRoot();
+  try{
+    const id=f.committee.validators[0].id;
+    const privateKey=f.keysById.get(id);
+    const first=f.proposal(19,0,"0x"+"c".repeat(64),"0x"+"a".repeat(64));
+    const second=f.proposal(19,1,"0x"+"c".repeat(64),"0x"+"b".repeat(64));
+    const input={lockDirectory:dir,committee:f.committee,privateKey};
+    const signed=signCommitWithResearchLock({...input,proposal:first});
+    const savedPath=path.join(dir,lockedFileName(recordFor(f.committee,19,id,
+                                  first.blockHash,first.previousBlockHash)));
+    assert.equal(signed.researchOnly,true);
+    assert.equal(JSON.parse(fs.readFileSync(savedPath,"utf8")).previousBlockHash,
+                 first.previousBlockHash);
+    assert.throws(()=>signCommitWithResearchLock({...input,proposal:second}),
+                  /conflicting parent at locked height/);
+    assert.equal(fs.readdirSync(dir).length,1);
+    assert.equal(JSON.parse(fs.readFileSync(savedPath,"utf8")).previousBlockHash,
+                 first.previousBlockHash,"rejected vote must preserve first durable lock");
+    const replay=signCommitWithResearchLock({...input,proposal:first});
+    assert.equal(replay.signature,signed.signature);
+  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test("research signer refuses missing parent commitment before writing lock",()=>{
+  const f=fixture(),dir=tempRoot();
+  try{
+    const p=f.proposal(),v=f.committee.validators[0];
+    assert.throws(()=>recordFor(f.committee,p.height,v.id,p.blockHash),
+                  /previous-block hash/);
+    assert.throws(()=>reservePosition(dir,f.committee,p.height,v.id,p.blockHash),
+                  /previous-block hash/);
+    assert.deepEqual(fs.readdirSync(dir),[]);
+  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test("legacy parentless lock cannot be silently upgraded or reused",()=>{
+  const f=fixture(),dir=tempRoot();
+  try{
+    const p=f.proposal(),v=f.committee.validators[0];
+    const input={lockDirectory:dir,committee:f.committee,proposal:p,
+                 privateKey:f.keysById.get(v.id)};
+    signCommitWithResearchLock(input);
+    const file=path.join(dir,lockedFileName(recordFor(f.committee,
+                 p.height,v.id,p.blockHash,p.previousBlockHash)));
+    const record=JSON.parse(fs.readFileSync(file,"utf8"));
+    delete record.previousBlockHash;
+    record.format="PriviPoPResearchHeightLock/v1";
+    fs.writeFileSync(file,JSON.stringify(record)+"\n");
+    assert.throws(()=>signCommitWithResearchLock(input),/inconsistent/);
+    assert.equal(JSON.parse(fs.readFileSync(file,"utf8")).format,
+                 "PriviPoPResearchHeightLock/v1");
+  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
 test("same-height vote lock does not reset when a research committee epoch changes",()=>{
   const f=fixture(),dir=tempRoot();
   try {
     const id=f.committee.validators[0].id;
     const oldHash="0x"+"e".repeat(64),nextHash="0x"+"f".repeat(64);
-    const prior=recordFor(f.committee,25,id,oldHash);
+    const prior=recordFor(f.committee,25,id,oldHash,"0x"+"b".repeat(64));
     const changed={...f.committee,epoch:f.committee.epoch+1};
-    const next=recordFor(changed,25,id,nextHash);
+    const next=recordFor(changed,25,id,nextHash,"0x"+"b".repeat(64));
     assert.equal(lockedFileName(prior),lockedFileName(next),
       "same signer and height MUST share the lock across epochs");
-    reservePosition(dir,f.committee,25,id,oldHash);
-    assert.throws(()=>reservePosition(dir,changed,25,id,nextHash),
+    reservePosition(dir,f.committee,25,id,oldHash,"0x"+"b".repeat(64));
+    assert.throws(()=>reservePosition(dir,changed,25,id,nextHash,"0x"+"b".repeat(64)),
       /equivocation|inconsistent/);
-    assert.throws(()=>reservePosition(dir,changed,25,id,oldHash),
+    assert.throws(()=>reservePosition(dir,changed,25,id,oldHash,"0x"+"b".repeat(64)),
       /inconsistent/,"unreviewed epoch migration cannot silently reset old signer state");
     const saved=JSON.parse(fs.readFileSync(path.join(dir,lockedFileName(prior)),"utf8"));
     assert.equal(saved.epoch,f.committee.epoch);
     assert.equal(saved.blockHash,oldHash);
     assert.equal(fs.readdirSync(dir).length,1);
     // A NEW height remains signable even in the changed research epoch.
-    assert.equal(reservePosition(dir,changed,26,id,nextHash).alreadyReserved,false);
+    assert.equal(reservePosition(dir,changed,26,id,nextHash,"0x"+"b".repeat(64)).alreadyReserved,false);
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });
 
@@ -124,11 +208,137 @@ test("corrupt lock state must fail closed and remain present for audit",()=>{
     const input={lockDirectory:dir,committee:f.committee,proposal:p,
                  privateKey:f.keysById.get(v.id)};
     signCommitWithResearchLock(input);
-    const file=path.join(dir,lockedFileName(recordFor(f.committee,p.height,v.id,p.blockHash)));
+    const file=path.join(dir,lockedFileName(recordFor(f.committee,p.height,v.id,p.blockHash,p.previousBlockHash)));
     fs.writeFileSync(file,"broken-json");
     assert.throws(()=>signCommitWithResearchLock(input),/corrupt/);
     assert.equal(fs.readFileSync(file,"utf8"),"broken-json");
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test("ambiguous duplicate-key and noncanonical persisted locks cannot release votes",()=>{
+  const f=fixture();
+  const p=f.proposal(41),v=f.committee.validators[0];
+  const inputKey=f.keysById.get(v.id);
+  const mutations=[
+    ["earlier forged blockHash masked by duplicate JSON key",original=>
+      '{"blockHash":"0x'+"f".repeat(64)+'",'+original.slice(1)],
+    ["equivalent JSON with different whitespace",original=>
+      JSON.stringify(JSON.parse(original),null,2)+"\n"],
+    ["appended trailing whitespace",original=>original+" \n"],
+  ];
+  for(const [kind,mutate] of mutations) {
+    const dir=tempRoot();
+    const input={lockDirectory:dir,committee:f.committee,proposal:p,
+                 privateKey:inputKey};
+    try {
+      const first=signCommitWithResearchLock(input);
+      assert.equal(first.researchOnly,true);
+      const record=recordFor(f.committee,p.height,v.id,p.blockHash,p.previousBlockHash);
+      const file=path.join(dir,lockedFileName(record));
+      const original=fs.readFileSync(file,"utf8");
+      const tampered=mutate(original);
+      assert.deepEqual(JSON.parse(tampered),JSON.parse(original),
+        "mutation must have the same decoded fields to demonstrate JSON parsing ambiguity");
+      fs.writeFileSync(file,tampered);
+      assert.throws(()=>signCommitWithResearchLock(input),
+        /corrupt or noncanonical/,kind);
+      assert.equal(fs.readFileSync(file,"utf8"),tampered,
+        "ambiguous height lock must remain for forensic review");
+    } finally {
+      fs.rmSync(dir,{recursive:true,force:true});
+    }
+  }
+});
+
+test("existing lock replay re-syncs file and directory before signing",()=>{
+  const f=fixture(),dir=tempRoot();
+  const p=f.proposal(),v=f.committee.validators[0];
+  const input={lockDirectory:dir,committee:f.committee,proposal:p,
+               privateKey:f.keysById.get(v.id)};
+  const originalSync=fs.fsyncSync;
+  try {
+    const first=signCommitWithResearchLock(input);
+    const observed=[];
+    fs.fsyncSync=function(fd){
+      observed.push(fs.fstatSync(fd).isDirectory()?"directory":"file");
+      return originalSync(fd);
+    };
+    const repeated=signCommitWithResearchLock(input);
+    assert.equal(repeated.signature,first.signature);
+    assert.deepEqual(observed,["file","directory"],
+      "existing height lock must be durable before replayed signature");
+  } finally {
+    fs.fsyncSync=originalSync;
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
+});
+
+test("failed existing-lock directory sync refuses a signature, then permits retry",()=>{
+  const f=fixture(),dir=tempRoot();
+  const p=f.proposal(),v=f.committee.validators[0];
+  const input={lockDirectory:dir,committee:f.committee,proposal:p,
+               privateKey:f.keysById.get(v.id)};
+  const originalSync=fs.fsyncSync;
+  try {
+    const signed=signCommitWithResearchLock(input);
+    const file=path.join(dir,lockedFileName(recordFor(f.committee,p.height,v.id,p.blockHash,p.previousBlockHash)));
+    fs.fsyncSync=function(fd){
+      if (fs.fstatSync(fd).isDirectory()) throw Error("simulated directory sync failure");
+      return originalSync(fd);
+    };
+    assert.throws(()=>signCommitWithResearchLock(input),/directory sync failure/);
+    assert.ok(fs.existsSync(file),"failed sync must retain lock for operator recovery");
+    fs.fsyncSync=originalSync;
+    assert.equal(signCommitWithResearchLock(input).signature,signed.signature);
+  } finally {
+    fs.fsyncSync=originalSync;
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
+});
+
+test("hard-linked existing lock must fail closed",()=>{
+  const f=fixture(),dir=tempRoot();
+  try {
+    const p=f.proposal(),v=f.committee.validators[0];
+    const input={lockDirectory:dir,committee:f.committee,proposal:p,
+                 privateKey:f.keysById.get(v.id)};
+    const signed=signCommitWithResearchLock(input);
+    const file=path.join(dir,lockedFileName(recordFor(f.committee,p.height,v.id,p.blockHash,p.previousBlockHash)));
+    const alias=path.join(dir,"linked-lock.json");
+    fs.linkSync(file,alias);
+    assert.equal(fs.statSync(file).nlink,2);
+    assert.throws(()=>signCommitWithResearchLock(input),/hard-linked/);
+    assert.ok(fs.existsSync(file));
+    fs.unlinkSync(alias);
+    assert.equal(signCommitWithResearchLock(input).signature,signed.signature);
+  } finally {fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test("existing height lock opens nonblocking so a named pipe cannot stall the research signer",()=>{
+  const f=fixture(),dir=tempRoot();
+  const p=f.proposal(),v=f.committee.validators[0];
+  const input={lockDirectory:dir,committee:f.committee,proposal:p,
+               privateKey:f.keysById.get(v.id)};
+  const originalOpen=fs.openSync;
+  try {
+    signCommitWithResearchLock(input);
+    const file=path.join(dir,lockedFileName(recordFor(f.committee,
+      p.height,v.id,p.blockHash,p.previousBlockHash)));
+    let checked=false;
+    fs.openSync=function(target,flags,...rest) {
+      if (target===file && (flags & fs.constants.O_CREAT)===0) {
+        checked=true;
+        assert.ok((flags & fs.constants.O_NONBLOCK)!==0,
+          "existing lock must be opened with O_NONBLOCK before inode validation");
+      }
+      return originalOpen(target,flags,...rest);
+    };
+    assert.ok(signCommitWithResearchLock(input).signature);
+    assert.equal(checked,true);
+  } finally {
+    fs.openSync=originalOpen;
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
 });
 
 test("insecure path and symlinked root are forbidden",()=>{
@@ -145,6 +355,61 @@ test("insecure path and symlinked root are forbidden",()=>{
     assert.throws(()=>signCommitWithResearchLock({...input,lockDirectory:tmp}),/symlink/);
   } finally {
     fs.rmSync(tmp,{force:true});
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
+});
+
+test("symlinked ancestor of research vote lock is rejected",()=>{
+  const f=fixture(),root=tempRoot();
+  try {
+    const actual=path.join(root,"actual");
+    fs.mkdirSync(actual,{mode:0o700});
+    const alias=path.join(root,"alias");
+    fs.symlinkSync(actual,alias,"dir");
+    const nested=path.join(alias,"locks");
+    fs.mkdirSync(nested,{mode:0o700});
+    const v=f.committee.validators[0],p=f.proposal();
+    assert.throws(()=>signCommitWithResearchLock({
+      lockDirectory:nested,committee:f.committee,proposal:p,
+      privateKey:f.keysById.get(v.id)
+    }),/symlink/);
+    assert.deepEqual(fs.readdirSync(path.join(actual,"locks")),[]);
+  } finally {fs.rmSync(root,{recursive:true,force:true});}
+});
+
+
+test("caller-supplied committee cannot obtain a research signature or reserve a height",()=>{
+  const f=fixture(),dir=tempRoot();
+  try {
+    const p=f.proposal(),v=f.committee.validators[0];
+    const input={lockDirectory:dir,proposal:p,privateKey:f.keysById.get(v.id)};
+    const cloned={...f.committee};
+    // A shallow copy preserves the proposer, signatures and key map.
+    // It does not carry proof that the actual governance root admitted it.
+    assert.throws(()=>signCommitWithResearchLock({...input,committee:cloned}),
+                  /Unverified PoP committee/);
+    assert.deepEqual(fs.readdirSync(dir),[],"forged committee cannot leave signing state");
+    const forgedQuorum={...f.committee,quorum:1};
+    assert.throws(()=>signCommitWithResearchLock({...input,committee:forgedQuorum}),
+                  /Unverified PoP committee/);
+    assert.deepEqual(fs.readdirSync(dir),[]);
+    // A genuine admitted committee can still produce a research-only signature.
+    assert.ok(signCommitWithResearchLock({...input,committee:f.committee}).signature);
+  } finally {fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test("mutated signer-map cannot obtain a research signature",()=>{
+  const f=fixture(),dir=tempRoot(),p=f.proposal();
+  const proposer=f.committee.byId.get(p.proposerId);
+  const voter=f.committee.validators[0];
+  const input={lockDirectory:dir,committee:f.committee,proposal:p,
+               privateKey:f.keysById.get(voter.id)};
+  try {
+    f.committee.byId.set(p.proposerId,{...proposer});
+    assert.throws(()=>signCommitWithResearchLock(input),/membership changed/);
+    assert.deepEqual(fs.readdirSync(dir),[]);
+  } finally {
+    f.committee.byId.set(p.proposerId,proposer);
     fs.rmSync(dir,{recursive:true,force:true});
   }
 });
@@ -171,8 +436,266 @@ test("research-only network and false committee are refused",()=>{
   try {
     const p=f.proposal(),v=f.committee.validators[0];
     const fake={...f.committee,mode:"production"};
-    assert.throws(()=>reservePosition(dir,fake,p.height,v.id,p.blockHash),/RESEARCH ONLY/);
+    assert.throws(()=>reservePosition(dir,fake,p.height,v.id,p.blockHash,p.previousBlockHash),/RESEARCH ONLY/);
     const another={...f.committee,chainId:"ethereum"};
-    assert.throws(()=>reservePosition(dir,another,p.height,v.id,p.blockHash),/Native Privi research/);
+    assert.throws(()=>reservePosition(dir,another,p.height,v.id,p.blockHash,p.previousBlockHash),/Native Privi research/);
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test("foreign-owned signer state fails closed before releasing research signatures",()=>{
+  if(typeof process.getuid!=="function") return; // POSIX-only research lock implementation
+  const f=fixture(),dir=tempRoot(),p=f.proposal(),v=f.committee.validators[0];
+  const input={lockDirectory:dir,committee:f.committee,proposal:p,
+               privateKey:f.keysById.get(v.id)};
+  const originalLstat=fs.lstatSync,originalFstat=fs.fstatSync;
+  const foreignUid=process.getuid()+1;
+  try {
+    // Simulate a foreign-owned 0700 directory without requiring root/chown.
+    fs.lstatSync=function(target,...args) {
+      const stat=originalLstat(target,...args);
+      return target===dir ? Object.create(stat,{uid:{value:foreignUid}}) : stat;
+    };
+    assert.throws(()=>signCommitWithResearchLock(input),/owned by current process/);
+    assert.deepEqual(fs.readdirSync(dir),[],"foreign directory must receive no lock");
+    fs.lstatSync=originalLstat;
+
+    const first=signCommitWithResearchLock(input);
+    const record=recordFor(f.committee,p.height,v.id,p.blockHash,p.previousBlockHash);
+    const file=path.join(dir,lockedFileName(record));
+    const original=fs.readFileSync(file);
+    // Replay must also refuse an existing inode that belongs to another UID.
+    fs.fstatSync=function(fd) {
+      const stat=originalFstat(fd);
+      return stat.isFile() ? Object.create(stat,{uid:{value:foreignUid}}) : stat;
+    };
+    assert.throws(()=>signCommitWithResearchLock(input),/owned by current process/);
+    assert.deepEqual(fs.readFileSync(file),original,
+      "foreign-owned lock rejection must preserve existing forensic state");
+    fs.fstatSync=originalFstat;
+    assert.equal(signCommitWithResearchLock(input).signature,first.signature);
+  } finally {
+    fs.lstatSync=originalLstat;
+    fs.fstatSync=originalFstat;
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
+});
+
+test("new-lock fsync failure preserves the research height lock without releasing a vote",()=>{
+  const f=fixture(),dir=tempRoot(),p=f.proposal(57,0,"0x"+"c".repeat(64));
+  const voter=f.committee.validators[0];
+  const input={lockDirectory:dir,committee:f.committee,proposal:p,
+               privateKey:f.keysById.get(voter.id)};
+  const originalFsync=fs.fsyncSync;
+  let failed=false;
+  try {
+    // Inject a failed initial file fsync after O_EXCL creation and writing.
+    // The signer must not return a signature for an unconfirmed reservation.
+    fs.fsyncSync=function(fd) {
+      if(!failed) {
+        failed=true;
+        throw Object.assign(new Error("simulated new-lock fsync EIO"),{code:"EIO"});
+      }
+      return originalFsync(fd);
+    };
+    assert.throws(()=>signCommitWithResearchLock(input),/simulated new-lock fsync EIO/);
+    fs.fsyncSync=originalFsync;
+    assert.equal(failed,true);
+    const record=recordFor(f.committee,p.height,voter.id,
+                           p.blockHash,p.previousBlockHash);
+    const lockFile=path.join(dir,lockedFileName(record));
+    assert.deepEqual(fs.readdirSync(dir),[path.basename(lockFile)],
+      "failed fsync must retain the exclusive reservation for recovery");
+    assert.deepEqual(JSON.parse(fs.readFileSync(lockFile,"utf8")),record);
+    const conflict=f.proposal(57,1,"0x"+"d".repeat(64));
+    assert.throws(()=>signCommitWithResearchLock({...input,proposal:conflict}),
+                  /equivocation/,
+                  "failed fsync must not permit a different block at the same height");
+    // A same-proposal retry may sign only after the existing file AND
+    // directory have been re-synced by the guarded replay path.
+    const resumed=signCommitWithResearchLock(input);
+    assert.equal(resumed.researchOnly,true);
+    assert.equal(typeof resumed.signature,"string");
+    assert.deepEqual(JSON.parse(fs.readFileSync(lockFile,"utf8")),record);
+  } finally {
+    fs.fsyncSync=originalFsync;
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
+});
+
+test("new-lock directory fsync failure retains exclusive reservation and requires durable replay",()=>{
+  const f=fixture(),dir=tempRoot(),p=f.proposal(58,0,"0x"+"c".repeat(64));
+  const voter=f.committee.validators[0];
+  const input={lockDirectory:dir,committee:f.committee,proposal:p,
+               privateKey:f.keysById.get(voter.id)};
+  const originalFsync=fs.fsyncSync;
+  const observed=[];
+  let failed=false;
+  try {
+    // The new file's own fsync can succeed while syncing the containing
+    // directory fails. No research vote may escape until both are durable.
+    fs.fsyncSync=function(fd) {
+      const kind=fs.fstatSync(fd).isDirectory()?"directory":"file";
+      observed.push(kind);
+      if(kind==="directory" && !failed) {
+        failed=true;
+        throw Object.assign(new Error("simulated new-lock directory fsync EIO"),{code:"EIO"});
+      }
+      return originalFsync(fd);
+    };
+    assert.throws(()=>signCommitWithResearchLock(input),
+                  /simulated new-lock directory fsync EIO/);
+    assert.deepEqual(observed,["file","directory"],
+      "new reservation must sync file before directory");
+    fs.fsyncSync=originalFsync;
+
+    const record=recordFor(f.committee,p.height,voter.id,
+                           p.blockHash,p.previousBlockHash);
+    const file=path.join(dir,lockedFileName(record));
+    assert.deepEqual(fs.readdirSync(dir),[path.basename(file)],
+      "failed directory sync must retain the original exclusive lock");
+    assert.deepEqual(JSON.parse(fs.readFileSync(file,"utf8")),record);
+    const conflict=f.proposal(58,1,"0x"+"d".repeat(64));
+    assert.throws(()=>signCommitWithResearchLock({...input,proposal:conflict}),
+                  /equivocation/,
+                  "directory sync failure must not reopen the locked height");
+
+    const replaySync=[];
+    fs.fsyncSync=function(fd) {
+      replaySync.push(fs.fstatSync(fd).isDirectory()?"directory":"file");
+      return originalFsync(fd);
+    };
+    const recovered=signCommitWithResearchLock(input);
+    assert.equal(recovered.researchOnly,true);
+    assert.equal(typeof recovered.signature,"string");
+    assert.deepEqual(replaySync,["file","directory"],
+      "same-proposal recovery must re-sync both persisted lock and directory");
+    assert.deepEqual(JSON.parse(fs.readFileSync(file,"utf8")),record);
+  } finally {
+    fs.fsyncSync=originalFsync;
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
+});
+
+test("partial new-lock write failure leaves a forensic lock and refuses both retries",()=>{
+  const f=fixture(),dir=tempRoot(),p=f.proposal(59,0,"0x"+"c".repeat(64));
+  const voter=f.committee.validators[0];
+  const input={lockDirectory:dir,committee:f.committee,proposal:p,
+               privateKey:f.keysById.get(voter.id)};
+  const originalWrite=fs.writeSync;
+  let writes=0;
+  try {
+    // Simulate a short, successful first write followed by EIO. The guard
+    // must never treat the truncated height lock as an unused reservation.
+    fs.writeSync=function(fd,buffer,offset,length,position) {
+      writes++;
+      if(writes===1) {
+        return originalWrite(fd,buffer,offset,Math.max(1,Math.floor(length/2)),position);
+      }
+      throw Object.assign(new Error("simulated partial height-lock write EIO"),{code:"EIO"});
+    };
+    assert.throws(()=>signCommitWithResearchLock(input),
+                  /simulated partial height-lock write EIO/);
+    fs.writeSync=originalWrite;
+    assert.equal(writes,2);
+    const record=recordFor(f.committee,p.height,voter.id,
+                           p.blockHash,p.previousBlockHash);
+    const file=path.join(dir,lockedFileName(record));
+    const bytes=fs.readFileSync(file);
+    assert.deepEqual(fs.readdirSync(dir),[path.basename(file)]);
+    assert.ok(bytes.length>0 && bytes.length<Buffer.byteLength(JSON.stringify(record)+"\n"),
+              "incomplete lock must be retained, not silently repaired or removed");
+    assert.throws(()=>signCommitWithResearchLock(input),/corrupt/,
+                  "same-proposal retry must refuse a truncated reservation");
+    const conflict=f.proposal(59,1,"0x"+"d".repeat(64));
+    assert.throws(()=>signCommitWithResearchLock({...input,proposal:conflict}),/corrupt/,
+                  "conflicting candidate must not escape an incomplete height lock");
+    assert.deepEqual(fs.readFileSync(file),bytes,
+                     "failed retries must preserve the exact forensic lock bytes");
+  } finally {
+    fs.writeSync=originalWrite;
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
+});
+
+test("zero-byte new-lock write fails closed and retains the empty reservation",()=>{
+  const f=fixture(),dir=tempRoot(),p=f.proposal(60,0,"0x"+"c".repeat(64));
+  const voter=f.committee.validators[0];
+  const input={lockDirectory:dir,committee:f.committee,proposal:p,
+               privateKey:f.keysById.get(voter.id)};
+  const originalWrite=fs.writeSync;
+  let attempted=0;
+  try {
+    // A filesystem can report zero progress without throwing EIO. Do not
+    // spin, discard the exclusive lock, or release a research vote.
+    fs.writeSync=function(){attempted++;return 0;};
+    assert.throws(()=>signCommitWithResearchLock(input),/PoP lock write failed/);
+    fs.writeSync=originalWrite;
+    assert.equal(attempted,1,"zero progress must fail immediately");
+    const record=recordFor(f.committee,p.height,voter.id,
+                           p.blockHash,p.previousBlockHash);
+    const file=path.join(dir,lockedFileName(record));
+    assert.deepEqual(fs.readdirSync(dir),[path.basename(file)]);
+    assert.equal(fs.readFileSync(file).length,0,
+                 "failed write must retain empty lock for forensic recovery");
+    assert.throws(()=>signCommitWithResearchLock(input),/corrupt/,
+                  "same candidate cannot replay an incomplete reservation");
+    const conflict=f.proposal(60,1,"0x"+"d".repeat(64));
+    assert.throws(()=>signCommitWithResearchLock({...input,proposal:conflict}),/corrupt/,
+                  "conflicting candidate cannot escape an incomplete reservation");
+    assert.equal(fs.readFileSync(file).length,0,
+                 "rejected retries must not repair or delete the damaged lock");
+  } finally {
+    fs.writeSync=originalWrite;
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
+});
+
+
+test("existing-lock file fsync failure refuses vote and requires durable replay",()=>{
+  const f=fixture(),dir=tempRoot(),p=f.proposal(61,0,"0x"+"c".repeat(64));
+  const voter=f.committee.validators[0];
+  const input={lockDirectory:dir,committee:f.committee,proposal:p,
+               privateKey:f.keysById.get(voter.id)};
+  const originalFsync=fs.fsyncSync;
+  try {
+    const first=signCommitWithResearchLock(input);
+    const record=recordFor(f.committee,p.height,voter.id,
+                           p.blockHash,p.previousBlockHash);
+    const file=path.join(dir,lockedFileName(record));
+    const originalBytes=fs.readFileSync(file);
+    let fileSyncs=0,directorySyncs=0;
+    fs.fsyncSync=function(fd) {
+      if(fs.fstatSync(fd).isDirectory()) {
+        directorySyncs++;
+        return originalFsync(fd);
+      }
+      fileSyncs++;
+      throw Object.assign(new Error("simulated existing-lock file fsync EIO"),
+                          {code:"EIO"});
+    };
+    assert.throws(()=>signCommitWithResearchLock(input),
+                  /simulated existing-lock file fsync EIO/,
+                  "a failed replay fsync must not release a research vote");
+    assert.equal(fileSyncs,1);
+    assert.equal(directorySyncs,0,
+                 "directory sync cannot make a failed file sync safe");
+    fs.fsyncSync=originalFsync;
+    assert.deepEqual(fs.readFileSync(file),originalBytes,
+                     "failed replay must preserve original signer lock bytes");
+    const conflict=f.proposal(61,1,"0x"+"d".repeat(64));
+    assert.throws(()=>signCommitWithResearchLock({...input,proposal:conflict}),
+                  /equivocation/,
+                  "failed replay cannot unlock conflicting same-height votes");
+    const replaySync=[];
+    fs.fsyncSync=function(fd) {
+      replaySync.push(fs.fstatSync(fd).isDirectory()?"directory":"file");
+      return originalFsync(fd);
+    };
+    assert.equal(signCommitWithResearchLock(input).signature,first.signature);
+    assert.deepEqual(replaySync,["file","directory"],
+                     "recovery must sync both original file and directory");
+  } finally {
+    fs.fsyncSync=originalFsync;
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
 });
