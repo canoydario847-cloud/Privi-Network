@@ -227,14 +227,21 @@ function verifyProposal(committee, proposal) {
   // six canonical research fields, never a caller's added finality claims.
   const required=["height","round","previousBlockHash","blockHash","proposerId","signature"];
   check(Object.getPrototypeOf(proposal)===Object.prototype &&
-        Reflect.ownKeys(proposal).length===required.length &&
-        required.every(field=>{
-          const descriptor=Object.getOwnPropertyDescriptor(proposal,field);
-          return descriptor && Object.hasOwn(descriptor,"value") &&
-                 descriptor.enumerable;
-        }),
+        Reflect.ownKeys(proposal).length===required.length,
         "PoP proposal requires plain own canonical data fields without extras");
-  const {height,round,previousBlockHash,blockHash,proposerId,signature:proposalSig}=proposal;
+  // Capture the same descriptor values that passed structural validation.
+  // A Proxy get trap must not swap a different signed proposal into quorum
+  // verification while its declared own data fields describe another block.
+  const canonical={};
+  for(const field of required){
+    const descriptor=Object.getOwnPropertyDescriptor(proposal,field);
+    check(descriptor && Object.hasOwn(descriptor,"value") &&
+          descriptor.enumerable,
+          "PoP proposal requires plain own canonical data fields without extras");
+    canonical[field]=descriptor.value;
+  }
+  const {height,round,previousBlockHash,blockHash,proposerId,
+    signature:proposalSig}=canonical;
   const fields=proposalFields(committee,height,round,
                               previousBlockHash,blockHash,proposerId);
   check(verify(nativeMapGet.call(committee.byId,proposerId).pub,"propose",fields,proposalSig),
