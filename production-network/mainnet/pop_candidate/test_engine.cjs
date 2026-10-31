@@ -128,6 +128,25 @@ test("research proposal verifier rejects getters and unsigned metadata before fi
   assert.equal(verifyCertificate(f.committee,proposal,votes).valid,true);
 });
 
+test("research proposal verifier uses descriptor snapshots, not Proxy get traps",()=>{
+  const f=fixture(),{proposal,votes}=f.bundle();
+  let reads=0;
+  const hostile=new Proxy({...proposal},{
+    get(_target,key){
+      reads++;
+      throw Error("unsigned proposal read: "+String(key));
+    }
+  });
+  const proof=verifyCertificate(f.committee,hostile,votes);
+  assert.equal(proof.valid,true);
+  assert.equal(proof.height,proposal.height);
+  assert.equal(proof.blockHash,proposal.blockHash);
+  assert.equal(proof.previousBlockHash,proposal.previousBlockHash);
+  assert.equal(proof.productionConsensus,false);
+  assert.equal(proof.finalized,false);
+  assert.equal(reads,0,"untrusted proposal getters must not execute");
+});
+
 test("research certificate rejects unsigned vote metadata and getters before field reads",()=>{
   const f=fixture(),{proposal,votes}=f.bundle();
   let getterReads=0;
