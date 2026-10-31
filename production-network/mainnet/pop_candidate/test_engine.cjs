@@ -458,3 +458,38 @@ test("research certificate refuses vote array metadata and index accessors",()=>
   assert.equal(proof.finalized,false);
   assert.equal(proof.productionConsensus,false);
 });
+
+test("governance admission rejects unsigned roster metadata and accessor traps",()=>{
+  const f=fixture();
+  const extra=structuredClone(f.registry);
+  extra.productionFinalized=true;
+  assert.throws(()=>parseRegistry(extra,f.gov.publicKeyB64),/Noncanonical PoP registry/);
+  const hidden=structuredClone(f.registry);
+  Object.defineProperty(hidden,"live",{value:true});
+  assert.throws(()=>parseRegistry(hidden,f.gov.publicKeyB64),/Noncanonical PoP registry/);
+  const symbol=structuredClone(f.registry);
+  symbol[Symbol("finality")]=true;
+  assert.throws(()=>parseRegistry(symbol,f.gov.publicKeyB64),/Noncanonical PoP registry/);
+  const inherited=Object.assign(Object.create({productionFinalized:true}),f.registry);
+  assert.throws(()=>parseRegistry(inherited,f.gov.publicKeyB64),/Noncanonical PoP registry/);
+  const getter=structuredClone(f.registry);
+  let registryGetterReads=0;
+  Object.defineProperty(getter,"validators",{enumerable:true,get(){
+    registryGetterReads++;
+    throw Error("untrusted registry getter executed");
+  }});
+  assert.throws(()=>parseRegistry(getter,f.gov.publicKeyB64),/Noncanonical PoP registry/);
+  assert.equal(registryGetterReads,0);
+  const memberExtra=structuredClone(f.registry);
+  memberExtra.validators[0].productionFinalized=true;
+  assert.throws(()=>parseRegistry(memberExtra,f.gov.publicKeyB64),/Noncanonical PoP validator/);
+  const memberGetter=structuredClone(f.registry);
+  let validatorGetterReads=0;
+  Object.defineProperty(memberGetter.validators[0],"operatorId",{enumerable:true,get(){
+    validatorGetterReads++;
+    throw Error("untrusted validator getter executed");
+  }});
+  assert.throws(()=>parseRegistry(memberGetter,f.gov.publicKeyB64),/Noncanonical PoP validator/);
+  assert.equal(validatorGetterReads,0);
+  assert.equal(parseRegistry(structuredClone(f.registry),f.gov.publicKeyB64).quorum,3);
+});
