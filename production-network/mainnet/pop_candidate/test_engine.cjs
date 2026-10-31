@@ -519,3 +519,32 @@ test("governance admission rejects decorated, sparse and accessor validator arra
   assert.equal(getterReads,0,"admission must not read an untrusted index getter");
   assert.equal(parseRegistry(f.registry,f.gov.publicKeyB64).quorum,3);
 });
+
+test("research quorum intersection bound holds across admitted committee sizes",()=>{
+  // These are arithmetic safety prerequisites for the RESEARCH certificate
+  // format, not evidence of honest operators or production BFT finality.
+  for(const count of [4,5,6,7,10,31]){
+    const f=fixture(count);
+    const quorum=Math.floor(2*count/3)+1;
+    const assumedByzantine=Math.floor((count-1)/3);
+    assert.equal(f.committee.quorum,quorum);
+    assert.ok(2*quorum-count>assumedByzantine,
+      "two research quorums must intersect in more than f signer IDs");
+    const {proposal,votes}=f.bundle(13,0,undefined,undefined,count);
+    const first=votes.slice(0,quorum);
+    const last=votes.slice(-quorum);
+    const firstProof=verifyCertificate(f.committee,proposal,first);
+    const lastProof=verifyCertificate(f.committee,proposal,last);
+    assert.equal(firstProof.signers,quorum);
+    assert.equal(lastProof.signers,quorum);
+    const intersection=first.filter(v=>
+      last.some(other=>other.validatorId===v.validatorId)).length;
+    assert.equal(intersection,2*quorum-count,
+      "extremal quorums must realize the mathematical intersection bound");
+    assert.throws(()=>
+      verifyCertificate(f.committee,proposal,votes.slice(0,quorum-1)),
+      /quorum/,"one fewer vote must not form a certificate");
+    assert.equal(firstProof.finalized,false);
+    assert.equal(lastProof.productionConsensus,false);
+  }
+});
