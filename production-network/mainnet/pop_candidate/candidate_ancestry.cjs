@@ -39,27 +39,36 @@ function verifyCandidateAncestry(committee, checkpoint, certificates) {
        "PoP research checkpoint height must be a nonnegative safe integer");
   need(typeof checkpoint.blockHash==="string" && HASH.test(checkpoint.blockHash),
        "PoP research checkpoint hash must be a canonical 32-byte hash");
-  need(Array.isArray(certificates) && certificates.length>=1 &&
-       certificates.length<=MAX_CERTIFICATES,
+  // Read the declared array length from its descriptor, not a Proxy get trap.
+  // Only the explicit certificate slots may contribute to signed ancestry.
+  const lengthDescriptor=Array.isArray(certificates) &&
+    Object.getOwnPropertyDescriptor(certificates,"length");
+  const certificateCount=lengthDescriptor && lengthDescriptor.value;
+  need(Number.isSafeInteger(certificateCount) && certificateCount>=1 &&
+       certificateCount<=MAX_CERTIFICATES,
        "PoP research certificate list must contain 1..256 entries");
 
   // The certificate batch is untrusted, unsigned input. Reject inherited
   // array prototypes, hidden/symbolic metadata, holes, and index getters
   // before .entries() can execute an attacker-controlled accessor.
   need(Object.getPrototypeOf(certificates)===Array.prototype &&
-       Reflect.ownKeys(certificates).length===certificates.length+1 &&
-       Array.from({length:certificates.length},(_,i)=>{
-         const descriptor=Object.getOwnPropertyDescriptor(certificates,String(i));
-         return descriptor && Object.hasOwn(descriptor,"value") &&
-                descriptor.enumerable;
-       }).every(Boolean),
+       Reflect.ownKeys(certificates).length===certificateCount+1,
        "PoP research certificate batch requires a dense plain data array without metadata or accessors");
+  // Snapshot each validated own data descriptor exactly once. Array.entries()
+  // and index reads can be overridden by a Proxy to inject different proofs.
+  const canonicalCertificates=[];
+  for(let i=0;i<certificateCount;i++){
+    const descriptor=Object.getOwnPropertyDescriptor(certificates,String(i));
+    need(descriptor && Object.hasOwn(descriptor,"value") && descriptor.enumerable,
+         "PoP research certificate batch requires a dense plain data array without metadata or accessors");
+    canonicalCertificates.push(descriptor.value);
+  }
 
   let height=checkpoint.height,head=checkpoint.blockHash;
   let lastRound=0;
   let signedVotes=0;
   const heights=new Set(), hashes=new Set([head]);
-  for(const [index,certificate] of certificates.entries()) {
+  for(const [index,certificate] of canonicalCertificates.entries()) {
     need(certificate && typeof certificate==="object" && !Array.isArray(certificate),
          "PoP malformed research certificate at index "+index);
     // A signed candidate envelope must not execute caller-supplied getters
@@ -112,7 +121,7 @@ function verifyCandidateAncestry(committee, checkpoint, certificates) {
     endingHeight:height,
     endingBlockHash:head,
     endingRound:lastRound,
-    verifiedCandidateCertificates:certificates.length,
+    verifiedCandidateCertificates:canonicalCertificates.length,
     checkedSignatures:signedVotes,
     warning:"Only validates local signed research candidates against a CALLER-SUPPLIED checkpoint; not canonical chain state or native financial finality"
   });
