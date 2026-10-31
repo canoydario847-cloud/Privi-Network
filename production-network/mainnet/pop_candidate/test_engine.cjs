@@ -644,3 +644,35 @@ test("research quorum cannot be inflated by changing proxy vote identities",()=>
   assert.equal(authentic.finalized,false);
   assert.equal(authentic.productionConsensus,false);
 });
+
+test("research certificate metadata cannot change after proposal signature verification",()=>{
+  const f=fixture(),{proposal,votes}=f.bundle();
+  const alternate={
+    height:proposal.height+1,round:proposal.round+1,
+    previousBlockHash:"0x"+"d".repeat(64),
+    blockHash:"0x"+"e".repeat(64)
+  };
+  const reads=new Map();
+  // Proxy descriptors remain canonical data descriptors; the getter trap
+  // supplies valid signed values once and different values on later reads.
+  const shifting=new Proxy({...proposal},{
+    get(target,key,receiver){
+      if(Object.hasOwn(alternate,key)){
+        const count=reads.get(key)||0;
+        reads.set(key,count+1);
+        return count===0 ? Reflect.get(target,key,receiver) : alternate[key];
+      }
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  const proof=verifyCertificate(f.committee,shifting,votes);
+  assert.equal(proof.valid,true);
+  for(const key of Object.keys(alternate)){
+    assert.equal(proof[key],proposal[key],
+      "certificate "+key+" must be bound to signed proposal fields");
+    assert.equal(reads.get(key),1,
+      "verified proposal "+key+" must not be reread from untrusted input");
+  }
+  assert.equal(proof.finalized,false);
+  assert.equal(proof.productionConsensus,false);
+});

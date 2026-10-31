@@ -290,9 +290,11 @@ function verifyCertificate(committee, proposal, votes) {
     protocol:"Point of Position candidate (not live consensus)",
     chainId:committee.chainId,genesisHash:committee.genesisHash,
     governanceKeyId:committee.governanceKeyId,epoch:committee.epoch,
-    height:proposal.height,round:proposal.round,
-    previousBlockHash:proposal.previousBlockHash,
-    blockHash:proposal.blockHash,signers:seen.size,quorum:committee.quorum,
+    // Bind reported certificate metadata to the same snapshot verified by
+    // the proposer signature. Untrusted Proxy getters can change on reread.
+    height:fields[3],round:fields[4],
+    previousBlockHash:fields[5],
+    blockHash:fields[6],signers:seen.size,quorum:committee.quorum,
     // Attribute the verified research votes to exact admitted signer identities.
     // Sort independently of input vote order and freeze the nested array:
     // freezing the outer certificate alone would not protect its members.
