@@ -45,6 +45,11 @@ function publicKey(derB64) {
         "Invalid Ed25519 public key encoding");
   const key = crypto.createPublicKey({key:buf,format:"der",type:"spki"});
   check(key.asymmetricKeyType === "ed25519", "PoP requires Ed25519 position signers");
+  // Node/OpenSSL may accept trailing bytes after a valid SPKI DER object.
+  // Hashing those bytes would assign distinct validator IDs to ONE signing key,
+  // allowing a single Ed25519 key to masquerade as multiple research voters.
+  check(key.export({type:"spki",format:"der"}).equals(buf),
+        "Noncanonical Ed25519 SPKI encoding");
   return {key, id: hash(buf), der:buf};
 }
 function signature(signatureB64) {
