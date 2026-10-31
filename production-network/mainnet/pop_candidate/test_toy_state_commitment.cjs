@@ -224,3 +224,32 @@ test("unexpected block fields, signed-header changes and mismatched parent are r
   b.blocks[1]={...b.blocks[1],previousBlockHash:"0x"+"a".repeat(64)};
   assert.throws(()=>f.verify(b),/candidate header/);
 });
+
+test("toy research commitments reject unsigned record metadata and accessors before reading",()=>{
+  const f=fixture();
+  const op={kind:"increment",account:"agent_a",amount:2,nonce:1};
+  let getterReads=0;
+  const accessor={...op};
+  Object.defineProperty(accessor,"amount",{
+    enumerable:true,get(){getterReads++;return op.amount;}
+  });
+  const hidden={...op};
+  Object.defineProperty(hidden,"finalized",{value:true,enumerable:false});
+  const symbolic={...op};
+  symbolic[Symbol("productionConsensus")]=true;
+  for(const bad of [accessor,hidden,symbol]){
+    assert.throws(()=>f.build([[bad]]),/invalid or unexpected fields/);
+  }
+  assert.equal(getterReads,0,"operation getter must never execute");
+  const stateRecord={nonce:0,value:2};
+  Object.defineProperty(stateRecord,"value",{
+    enumerable:true,get(){getterReads++;return 2;}
+  });
+  assert.throws(()=>stateRoot({agent_a:stateRecord}),/invalid or unexpected fields/);
+  assert.equal(getterReads,0,"state record getter must never execute");
+  const sample=f.build();
+  const disguised={...sample.blocks[0]};
+  Object.defineProperty(disguised,"finalized",{value:true,enumerable:false});
+  sample.blocks[0]=disguised;
+  assert.throws(()=>f.verify(sample),/invalid or unexpected fields/);
+});
