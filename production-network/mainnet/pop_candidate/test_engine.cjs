@@ -567,3 +567,22 @@ test("validly signed admissions cannot reuse an operator or fault domain",()=>{
   }
   assert.equal(parseRegistry(f.registry,f.gov.publicKeyB64).quorum,3);
 });
+
+test("research governance admissions cannot replay across signed chain, genesis or epoch",()=>{
+  const f=fixture();
+  // Each replacement is syntactically valid; only the governance signature
+  // binds it to the original chain/genesis/epoch. No mainnet authority implied.
+  const changes=[
+    ["chainId","privi-pop-research-foreign-v1"],
+    ["genesisHash","0x"+"e".repeat(64)],
+    ["epoch",f.registry.epoch+1]
+  ];
+  for(const [field,replacement] of changes){
+    const altered=structuredClone(f.registry);
+    altered[field]=replacement;
+    assert.throws(()=>parseRegistry(altered,f.gov.publicKeyB64),
+      /admission signature invalid or absent/,
+      "signed admission must not replay after changing "+field);
+  }
+  assert.equal(parseRegistry(f.registry,f.gov.publicKeyB64).quorum,3);
+});
