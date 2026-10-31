@@ -104,22 +104,28 @@ function parseRegistry(registry, governanceKey) {
         "Invalid PoP research genesis");
   requireNumber(epoch,"epoch");
   check(mode === TRUSTED_MODE,"Cannot run candidate as mainnet consensus");
-  check(Array.isArray(validators) && validators.length >= 4 &&
-        validators.length <= 31,"PoP requires 4..31 attested research validators");
-  // A signed registry cannot authenticate arbitrary array metadata. Validate
-  // every own index descriptor before iteration so sparse rosters, getters,
-  // inherited slots and unsigned finality flags cannot influence admission.
+  check(Array.isArray(validators),"PoP requires 4..31 attested research validators");
+  // Read the actual array length and index data descriptors once. A Proxy
+  // may invent a different length, index value, or Symbol.iterator via get
+  // traps; none of those values may determine the admitted signer roster.
+  const lengthDescriptor=Object.getOwnPropertyDescriptor(validators,"length");
+  const validatorCount=lengthDescriptor && lengthDescriptor.value;
+  check(Number.isSafeInteger(validatorCount) && validatorCount>=4 &&
+        validatorCount<=31,"PoP requires 4..31 attested research validators");
+  const admittedRecords=[];
   check(Object.getPrototypeOf(validators) === Array.prototype &&
-        Reflect.ownKeys(validators).length === validators.length + 1 &&
-        Array.from({length:validators.length},(_,i)=>{
+        Reflect.ownKeys(validators).length === validatorCount + 1 &&
+        Array.from({length:validatorCount},(_,i)=>{
           const d=Object.getOwnPropertyDescriptor(validators,String(i));
-          return d && Object.hasOwn(d,"value") && d.enumerable;
+          if(!d || !Object.hasOwn(d,"value") || !d.enumerable)return false;
+          admittedRecords.push(d.value);
+          return true;
         }).every(Boolean),
         "Noncanonical PoP validator roster: dense plain data array required");
   const gov = publicKey(governanceKey);
   const ids = new Set(), operators = new Set(), domains=new Set(), positions=new Set();
   const validated=[];
-  for (const v of validators) {
+  for (const v of admittedRecords) {
     canonicalOwnData(v,
       ["id","keySpkiBase64","operatorId","faultDomain","companyId",
        "positionSequence","anchorBlockHash","positionHash","admissionSignature"],
