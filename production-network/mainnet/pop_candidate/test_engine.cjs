@@ -493,3 +493,29 @@ test("governance admission rejects unsigned roster metadata and accessor traps",
   assert.equal(validatorGetterReads,0);
   assert.equal(parseRegistry(structuredClone(f.registry),f.gov.publicKeyB64).quorum,3);
 });
+
+test("governance admission rejects decorated, sparse and accessor validator arrays",()=>{
+  const f=fixture(4);
+  let getterReads=0;
+  const extra=[...f.registry.validators];
+  extra.productionFinalized=true;
+  const hidden=[...f.registry.validators];
+  Object.defineProperty(hidden,"finality",{value:true});
+  const symbolic=[...f.registry.validators];
+  symbolic[Symbol("mainnet")]=true;
+  const accessor=[...f.registry.validators];
+  Object.defineProperty(accessor,"0",{
+    enumerable:true,configurable:true,
+    get(){getterReads++;throw Error("untrusted validator index getter executed");}
+  });
+  const sparse=[...f.registry.validators];
+  delete sparse[1];
+  const inherited=[...f.registry.validators];
+  Object.setPrototypeOf(inherited,Object.create(Array.prototype));
+  for(const validators of [extra,hidden,symbolic,accessor,sparse,inherited]){
+    assert.throws(()=>parseRegistry({...f.registry,validators},f.gov.publicKeyB64),
+      /Noncanonical PoP validator roster/);
+  }
+  assert.equal(getterReads,0,"admission must not read an untrusted index getter");
+  assert.equal(parseRegistry(f.registry,f.gov.publicKeyB64).quorum,3);
+});
