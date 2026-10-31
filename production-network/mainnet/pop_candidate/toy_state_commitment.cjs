@@ -22,13 +22,17 @@ function need(ok,why){if(!ok)throw Error(why);}
 function plain(x){return x!==null&&typeof x==="object"&&!Array.isArray(x)&&
   Object.getPrototypeOf(x)===Object.prototype;}
 function exactFields(obj,fields,label){
-  // Commitments must reject unsigned hidden/symbol metadata and accessors
-  // before reading any operation, state-record or block field.
-  need(plain(obj)&&Reflect.ownKeys(obj).length===fields.length&&
-       fields.every(k=>{
-         const d=Object.getOwnPropertyDescriptor(obj,k);
-         return d&&Object.hasOwn(d,"value")&&d.enumerable;
-       }),"PoP toy "+label+" invalid or unexpected fields");
+  // Capture each declared data descriptor once. Checking descriptors and
+  // later reading op fields via a Proxy getter could execute different data.
+  const error="PoP toy "+label+" invalid or unexpected fields";
+  need(plain(obj)&&Reflect.ownKeys(obj).length===fields.length,error);
+  const values=Object.create(null);
+  for(const key of fields){
+    const d=Object.getOwnPropertyDescriptor(obj,key);
+    need(d&&Object.hasOwn(d,"value")&&d.enumerable,error);
+    values[key]=d.value;
+  }
+  return Object.freeze(values);
 }
 function integer(x,label,allowZero=true){
   need(Number.isSafeInteger(x)&&x>=(allowZero?0:1),
@@ -89,8 +93,10 @@ function applyOps(state,operations){
     accepted.push(d.value);
   }
   const next=normalizedState(state),serialized=[];
-  for(const op of accepted){
-    exactFields(op,OP_FIELDS,"operation");
+  for(const suppliedOp of accepted){
+    // The validated descriptor snapshot, not Proxy property reads, determines
+    // the exact nonfinancial operation committed to the toy state root.
+    const op=exactFields(suppliedOp,OP_FIELDS,"operation");
     need(op.kind==="increment","PoP toy unsupported/non-financial operation");
     need(typeof op.account==="string"&&ACCOUNT.test(op.account),
          "PoP toy invalid operation account");
