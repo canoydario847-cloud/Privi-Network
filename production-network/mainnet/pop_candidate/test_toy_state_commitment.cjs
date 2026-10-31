@@ -237,7 +237,7 @@ test("toy research commitments reject unsigned record metadata and accessors bef
   Object.defineProperty(hidden,"finalized",{value:true,enumerable:false});
   const symbolic={...op};
   symbolic[Symbol("productionConsensus")]=true;
-  for(const bad of [accessor,hidden,symbol]){
+  for(const bad of [accessor,hidden,symbolic]){
     assert.throws(()=>f.build([[bad]]),/invalid or unexpected fields/);
   }
   assert.equal(getterReads,0,"operation getter must never execute");
