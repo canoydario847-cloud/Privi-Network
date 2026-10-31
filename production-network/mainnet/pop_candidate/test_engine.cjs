@@ -482,6 +482,45 @@ test("research certificate refuses vote array metadata and index accessors",()=>
   assert.equal(proof.productionConsensus,false);
 });
 
+test("research quorum uses declared vote descriptors, never Proxy iteration",()=>{
+  const f=fixture(4),{proposal,votes}=f.bundle();
+  let iteratorReads=0;
+  // A Proxy of [] has a canonical zero-length array descriptor, but its
+  // get trap can invent a quorum through Symbol.iterator. The declared
+  // certificate must remain empty regardless of those synthetic votes.
+  const phantom=new Proxy([],{
+    get(target,key,receiver){
+      if(key===Symbol.iterator){
+        iteratorReads++;
+        return function*(){yield* votes;};
+      }
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  assert.throws(()=>verifyCertificate(f.committee,proposal,phantom),
+    /Insufficient independently signed PoP quorum/);
+  assert.equal(iteratorReads,0,"untrusted vote iterator must not execute");
+
+  // Index get traps must not replace the validated own data descriptors
+  // with different votes after structural checks have passed.
+  const altered=[...votes];
+  altered[0]={validatorId:"0x"+"f".repeat(64),signature:votes[0].signature};
+  let indexReads=0;
+  const swapped=new Proxy(altered,{
+    get(target,key,receiver){
+      if(key==="0"){indexReads++;return votes[0];}
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  assert.throws(()=>verifyCertificate(f.committee,proposal,swapped),
+    /Unadmitted PoP voter/);
+  assert.equal(indexReads,0,"untrusted vote index getter must not execute");
+  const valid=verifyCertificate(f.committee,proposal,[...votes]);
+  assert.equal(valid.signers,3);
+  assert.equal(valid.finalized,false);
+  assert.equal(valid.productionConsensus,false);
+});
+
 test("governance admission rejects unsigned roster metadata and accessor traps",()=>{
   const f=fixture();
   const extra=structuredClone(f.registry);
