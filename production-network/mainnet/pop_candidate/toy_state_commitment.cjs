@@ -35,12 +35,20 @@ function integer(x,label,allowZero=true){
        "PoP toy invalid safe integer: "+label);
 }
 function normalizedState(input){
-  need(plain(input)&&Object.keys(input).length<=MAX_ACCOUNTS,
+  need(plain(input),"PoP toy state must have at most 128 plain-object accounts");
+  // A starting-state commitment must not silently ignore nonenumerable or
+  // symbol metadata, nor execute an untrusted account getter before hashing.
+  const accounts=Reflect.ownKeys(input);
+  need(accounts.length<=MAX_ACCOUNTS,
        "PoP toy state must have at most 128 plain-object accounts");
   const output=new Map();
-  for(const account of Object.keys(input)){
+  for(const account of accounts){
+    const descriptor=Object.getOwnPropertyDescriptor(input,account);
+    need(typeof account==="string" && descriptor &&
+         Object.hasOwn(descriptor,"value") && descriptor.enumerable,
+         "PoP toy state requires plain enumerable own account data fields");
     need(ACCOUNT.test(account),"PoP toy invalid account key");
-    const entry=input[account];
+    const entry=descriptor.value;
     exactFields(entry,["nonce","value"],"state record");
     integer(entry.value,"state value");integer(entry.nonce,"state nonce");
     output.set(account,{value:entry.value,nonce:entry.nonce});
