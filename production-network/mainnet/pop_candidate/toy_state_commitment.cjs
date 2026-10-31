@@ -22,8 +22,13 @@ function need(ok,why){if(!ok)throw Error(why);}
 function plain(x){return x!==null&&typeof x==="object"&&!Array.isArray(x)&&
   Object.getPrototypeOf(x)===Object.prototype;}
 function exactFields(obj,fields,label){
-  need(plain(obj)&&Object.keys(obj).length===fields.length&&
-       fields.every(k=>Object.hasOwn(obj,k)),"PoP toy "+label+" invalid or unexpected fields");
+  // Commitments must reject unsigned hidden/symbol metadata and accessors
+  // before reading any operation, state-record or block field.
+  need(plain(obj)&&Reflect.ownKeys(obj).length===fields.length&&
+       fields.every(k=>{
+         const d=Object.getOwnPropertyDescriptor(obj,k);
+         return d&&Object.hasOwn(d,"value")&&d.enumerable;
+       }),"PoP toy "+label+" invalid or unexpected fields");
 }
 function integer(x,label,allowZero=true){
   need(Number.isSafeInteger(x)&&x>=(allowZero?0:1),
