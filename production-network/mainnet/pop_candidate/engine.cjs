@@ -73,9 +73,20 @@ function admissionFields(chainId, genesisHash, epoch, operator, faultDomain,
   return [chainId,genesisHash,epoch,operator,faultDomain,company,
           positionSeq,validatorId,anchorBlockHash];
 }
+function canonicalOwnData(record, required, label) {
+  // Admission signatures cover a fixed roster, not caller-added authority
+  // flags. Reject getters before reading even a legitimate signed field.
+  check(record && typeof record === "object" && !Array.isArray(record) &&
+        Object.getPrototypeOf(record) === Object.prototype &&
+        Reflect.ownKeys(record).length === required.length &&
+        required.every(field => {
+          const d=Object.getOwnPropertyDescriptor(record,field);
+          return d && Object.hasOwn(d,"value") && d.enumerable;
+        }), "Noncanonical PoP " + label + " record: unsigned fields or accessors");
+}
 function parseRegistry(registry, governanceKey) {
-  check(registry && typeof registry === "object" && !Array.isArray(registry),
-        "PoP registry missing");
+  canonicalOwnData(registry,
+    ["chainId","genesisHash","epoch","mode","validators"],"registry");
   const {chainId,genesisHash,epoch,mode,validators}=registry;
   check(typeof chainId === "string" && CHAIN.test(chainId), "Unexpected PoP research chain");
   check(typeof genesisHash === "string" && HEX.test(genesisHash),
@@ -88,7 +99,10 @@ function parseRegistry(registry, governanceKey) {
   const ids = new Set(), operators = new Set(), domains=new Set(), positions=new Set();
   const validated=[];
   for (const v of validators) {
-    check(v && typeof v==="object" && !Array.isArray(v), "Invalid validator");
+    canonicalOwnData(v,
+      ["id","keySpkiBase64","operatorId","faultDomain","companyId",
+       "positionSequence","anchorBlockHash","positionHash","admissionSignature"],
+      "validator");
     const {id,keySpkiBase64,operatorId,faultDomain,companyId,positionSequence,
       anchorBlockHash,positionHash,admissionSignature}=v;
     const pub=publicKey(keySpkiBase64);
