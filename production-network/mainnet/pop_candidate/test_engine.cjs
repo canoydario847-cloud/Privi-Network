@@ -586,3 +586,31 @@ test("research governance admissions cannot replay across signed chain, genesis 
   }
   assert.equal(parseRegistry(f.registry,f.gov.publicKeyB64).quorum,3);
 });
+
+test("research signer map overrides cannot redirect certificate verification",()=>{
+  const f=fixture(4),{proposal,votes}=f.bundle();
+  const map=f.committee.byId;
+  let intercepted=0;
+  // A frozen committee does not freeze the mutable Map it contains.
+  // Instance methods and accessors must not influence authenticated lookup.
+  Object.defineProperties(map,{
+    get:{value(){intercepted++;throw Error("untrusted map get executed");}},
+    has:{value(){intercepted++;throw Error("untrusted map has executed");}},
+    size:{get(){intercepted++;throw Error("untrusted map size executed");}}
+  });
+  assert.equal(proposer(f.committee,proposal.height,proposal.round),
+               proposal.proposerId);
+  assert.equal(verifyCertificate(f.committee,proposal,votes).valid,true);
+  assert.equal(intercepted,0,"shadowed map methods must never execute");
+  const member=f.committee.validators[0];
+  const original=Map.prototype.get.call(map,member.id);
+  try {
+    Map.prototype.set.call(map,member.id,{...original});
+    assert.throws(()=>verifyCertificate(f.committee,proposal,votes),
+                  /membership changed/,"shadowed get cannot conceal altered membership");
+  } finally {
+    Map.prototype.set.call(map,member.id,original);
+  }
+  assert.equal(verifyCertificate(f.committee,proposal,votes).finalized,false);
+  assert.equal(intercepted,0);
+});

@@ -27,6 +27,12 @@ const TRUSTED_MODE = "attested-position-research-not-live-consensus";
 // Proof objects must originate from validated governance admissions, not a
 // caller-supplied object with an arbitrary reduced signature threshold.
 const validatedCommittees = new WeakSet();
+// The admitted signer map is mutable despite the frozen committee wrapper.
+// Pin native Map accessors so per-instance get/has/size overrides cannot
+// redirect research signature verification to attacker-supplied keys.
+const nativeMapGet = Map.prototype.get;
+const nativeMapHas = Map.prototype.has;
+const nativeMapSize = Object.getOwnPropertyDescriptor(Map.prototype,"size").get;
 function check(ok, why) { if (!ok) throw Error(why); }
 function hash(data) {
   return "0x" + crypto.createHash("sha256").update(data).digest("hex");
@@ -180,7 +186,7 @@ function proposalFields(committee,height,round,previousBlockHash,blockHash,propo
         "Invalid previous PoP block hash");
   check(typeof blockHash==="string" && HEX.test(blockHash) &&
         blockHash!==previousBlockHash,"Invalid current PoP block hash");
-  check(committee.byId.has(proposerId) &&
+  check(nativeMapHas.call(committee.byId,proposerId) &&
         proposer(committee,height,round)===proposerId, "Invalid PoP proposer");
   return [committee.chainId,committee.genesisHash,committee.epoch,height,
           round,previousBlockHash,blockHash,proposerId];
@@ -194,10 +200,10 @@ function assertValidatedCommittee(committee) {
   const count=committee.validators.length;
   check(count>=4 && count<=31 &&
         committee.quorum===Math.floor(2*count/3)+1 &&
-        committee.byId instanceof Map && committee.byId.size===count,
+        committee.byId instanceof Map && nativeMapSize.call(committee.byId)===count,
         "PoP committee quorum or membership metadata inconsistent");
   for(const validator of committee.validators) {
-    check(committee.byId.get(validator.id)===validator,
+    check(nativeMapGet.call(committee.byId,validator.id)===validator,
           "PoP committee membership changed after admission");
   }
 }
@@ -220,7 +226,7 @@ function verifyProposal(committee, proposal) {
   const {height,round,previousBlockHash,blockHash,proposerId,signature:proposalSig}=proposal;
   const fields=proposalFields(committee,height,round,
                               previousBlockHash,blockHash,proposerId);
-  check(verify(committee.byId.get(proposerId).pub,"propose",fields,proposalSig),
+  check(verify(nativeMapGet.call(committee.byId,proposerId).pub,"propose",fields,proposalSig),
         "Unsigned/forged PoP proposal");
   return fields;
 }
@@ -265,7 +271,7 @@ function verifyCertificate(committee, proposal, votes) {
                    descriptor.enumerable;
           }),
           "PoP vote requires plain own canonical data fields without extras");
-    const signer=committee.byId.get(vote.validatorId);
+    const signer=nativeMapGet.call(committee.byId,vote.validatorId);
     check(!!signer,"Unadmitted PoP voter");
     check(!seen.has(vote.validatorId),"Duplicate PoP voter");
     check(verify(signer.pub,"commit",voteFields(fields,vote.validatorId),vote.signature),
