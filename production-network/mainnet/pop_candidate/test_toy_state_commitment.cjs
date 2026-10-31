@@ -345,3 +345,47 @@ test("toy operation-array proxies cannot substitute unsigned iterators or index 
   assert.equal(indexReads,0,"untrusted array index getter must not execute");
   assert.equal(f.verify().productionConsensus,false);
 });
+
+test("toy candidate block-list proxies cannot substitute iterator or numeric-index entries",()=>{
+  const f=fixture(),sample=f.build(),good=sample.blocks[0];
+  const unauthorized={...good,operations:[{
+    kind:"mint",account:"agent_a",amount:2,nonce:1
+  }]};
+  let iteratorReads=0,indexReads=0;
+  const disguised=new Proxy([unauthorized,sample.blocks[1]],{
+    get(target,key,receiver){
+      if(key===Symbol.iterator){
+        return function*(){iteratorReads++;yield good;yield sample.blocks[1];};
+      }
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  assert.throws(()=>f.verify({...sample,blocks:disguised}),
+    /unsupported\/non-financial operation/);
+  assert.equal(iteratorReads,0,"unsigned block iterator must never execute");
+
+  const indexed=new Proxy(sample.blocks,{
+    get(target,key,receiver){
+      if(key==="0"){
+        indexReads++;throw Error("untrusted block index getter executed");
+      }
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  assert.equal(f.verify({...sample,blocks:indexed}).endingHeight,7);
+  assert.equal(indexReads,0,"unsigned block index getter must never execute");
+
+  const accessor=[...sample.blocks];
+  Object.defineProperty(accessor,"0",{
+    enumerable:true,configurable:true,
+    get(){indexReads++;throw Error("untrusted block accessor executed");}
+  });
+  assert.throws(()=>f.verify({...sample,blocks:accessor}),
+    /dense plain array/);
+  assert.equal(indexReads,0,"block array accessor must never execute");
+  const decorated=[...sample.blocks];
+  decorated[Symbol("finalized")]=true;
+  assert.throws(()=>f.verify({...sample,blocks:decorated}),
+    /dense plain array/);
+  assert.equal(f.verify(sample).productionConsensus,false);
+});
