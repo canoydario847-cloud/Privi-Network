@@ -55,45 +55,51 @@ function verifyResearchCheckpoint(committee,checkpoint,trustedGovernancePublicKe
   // Inspect descriptors rather than reading untrusted properties: accessors
   // must never execute while verifying a purported governance attestation.
   // Reflect.ownKeys also rejects hidden metadata and symbol-keyed claims.
+  // Snapshot descriptor values once. A Proxy can pass own-data checks yet
+  // return a different height, hash or signature on later ordinary property
+  // reads. Verify and report only the exact fields captured here.
+  const signed=Object.create(null);
   need(Reflect.ownKeys(checkpoint).length===REQUIRED_FIELDS.length &&
        REQUIRED_FIELDS.every(field=>{
          const descriptor=Object.getOwnPropertyDescriptor(checkpoint,field);
-         return descriptor && Object.hasOwn(descriptor,"value") &&
-                descriptor.enumerable;
+         if(!descriptor || !Object.hasOwn(descriptor,"value") ||
+            !descriptor.enumerable)return false;
+         signed[field]=descriptor.value;
+         return true;
        }),
        "PoP signed checkpoint requires plain own data fields without extras");
-  need(checkpoint.schema===SCHEMA && checkpoint.mode===MODE,
+  need(signed.schema===SCHEMA && signed.mode===MODE,
        "PoP research checkpoint must not claim production finality");
-  need(checkpoint.chainId===committee.chainId &&
-       checkpoint.genesisHash===committee.genesisHash &&
-       checkpoint.epoch===committee.epoch,
+  need(signed.chainId===committee.chainId &&
+       signed.genesisHash===committee.genesisHash &&
+       signed.epoch===committee.epoch,
        "PoP signed checkpoint belongs to another chain, genesis or epoch");
   // JSON.stringify(-0) emits 0, so a signature for height 0 otherwise
   // authenticates two distinct JS representations. Require canonical zero.
-  need(Number.isSafeInteger(checkpoint.height) && checkpoint.height>=0 &&
-       !Object.is(checkpoint.height,-0) &&
-       checkpoint.height<Number.MAX_SAFE_INTEGER,
+  need(Number.isSafeInteger(signed.height) && signed.height>=0 &&
+       !Object.is(signed.height,-0) &&
+       signed.height<Number.MAX_SAFE_INTEGER,
        "PoP signed checkpoint height must be a nonnegative bounded integer");
-  need(typeof checkpoint.blockHash==="string" && HASH.test(checkpoint.blockHash),
+  need(typeof signed.blockHash==="string" && HASH.test(signed.blockHash),
        "PoP signed checkpoint requires canonical block hash");
 
-  need(checkpoint.committeeDigest===committeeDigest(committee),
+  need(signed.committeeDigest===committeeDigest(committee),
        "PoP signed checkpoint belongs to another admitted committee");
 
   // This key must come from an independent evaluator's pinned trust source,
   // not simply copied from the untrusted checkpoint or PR metadata.
   const trusted=publicKey(trustedGovernancePublicKey);
   need(trusted.id===committee.governanceKeyId &&
-       checkpoint.governanceKeyId===trusted.id,
+       signed.governanceKeyId===trusted.id,
        "PoP checkpoint signer is not the independently trusted committee authority");
-  const encoded=checkpoint.signatureB64;
+  const encoded=signed.signatureB64;
   need(typeof encoded==="string" &&
        /^[A-Za-z0-9+/]+={0,2}$/.test(encoded),
        "PoP checkpoint signature missing or not base64");
   const signature=Buffer.from(encoded,"base64");
   need(signature.length===64 && signature.toString("base64")===encoded,
        "PoP checkpoint Ed25519 signature must be canonical");
-  need(crypto.verify(null,signedMessage(SIGNING_TAG,checkpointFields(checkpoint)),
+  need(crypto.verify(null,signedMessage(SIGNING_TAG,checkpointFields(signed)),
                      trusted.key,signature),
        "PoP signed checkpoint issuer signature invalid");
   return Object.freeze({
@@ -101,12 +107,12 @@ function verifyResearchCheckpoint(committee,checkpoint,trustedGovernancePublicKe
     checkpointIssuerSignatureVerified:true,
     checkpointFinalityVerified:false,
     productionConsensus:false,
-    chainId:checkpoint.chainId,
-    genesisHash:checkpoint.genesisHash,
-    epoch:checkpoint.epoch,
+    chainId:signed.chainId,
+    genesisHash:signed.genesisHash,
+    epoch:signed.epoch,
     governanceKeyId:trusted.id,
-    height:checkpoint.height,
-    blockHash:checkpoint.blockHash,
+    height:signed.height,
+    blockHash:signed.blockHash,
     warning:"This authenticates a research governance CLAIM; not a finalized canonical block or a secure externally pinned trust root"
   });
 }
