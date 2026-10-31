@@ -734,8 +734,8 @@ test("research certificate metadata cannot change after proposal signature verif
     blockHash:"0x"+"e".repeat(64)
   };
   const reads=new Map();
-  // Proxy descriptors remain canonical data descriptors; the getter trap
-  // supplies valid signed values once and different values on later reads.
+  // Proxy descriptors remain canonical data descriptors. No getter trap
+  // should execute: verified fields come from the one descriptor snapshot.
   const shifting=new Proxy({...proposal},{
     get(target,key,receiver){
       if(Object.hasOwn(alternate,key)){
@@ -751,8 +751,8 @@ test("research certificate metadata cannot change after proposal signature verif
   for(const key of Object.keys(alternate)){
     assert.equal(proof[key],proposal[key],
       "certificate "+key+" must be bound to signed proposal fields");
-    assert.equal(reads.get(key),1,
-      "verified proposal "+key+" must not be reread from untrusted input");
+    assert.equal(reads.get(key)||0,0,
+      "verified proposal "+key+" must not invoke untrusted property getters");
   }
   assert.equal(proof.finalized,false);
   assert.equal(proof.productionConsensus,false);
