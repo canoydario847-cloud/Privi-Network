@@ -77,6 +77,35 @@ test("3-of-4 genuine votes are reserved on disk before signature release",()=>{
   } finally { for(const dir of dirs)fs.rmSync(dir,{recursive:true,force:true}); }
 });
 
+test("research signer vote cannot acquire unsigned finality metadata after signing",()=>{
+  const f=fixture(),p=f.proposal(62),dirs=[],votes=[];
+  try {
+    for(const validator of f.committee.validators.slice(0,3)){
+      const dir=tempRoot();
+      dirs.push(dir);
+      const vote=signCommitWithResearchLock({
+        lockDirectory:dir,committee:f.committee,proposal:p,
+        privateKey:f.keysById.get(validator.id)
+      });
+      const originalSignature=vote.signature;
+      assert.equal(Object.isFrozen(vote),true);
+      assert.deepEqual(Object.keys(vote).sort(),
+                       ["researchOnly","signature","validatorId"].sort());
+      assert.throws(()=>{vote.finalized=true;},TypeError);
+      assert.throws(()=>{vote.productionConsensus=true;},TypeError);
+      assert.throws(()=>{vote.signature="forged";},TypeError);
+      assert.throws(()=>Object.defineProperty(vote,"finalized",{value:true}),TypeError);
+      assert.equal(vote.signature,originalSignature);
+      assert.equal(vote.researchOnly,true);
+      votes.push(vote);
+    }
+    const certificate=verifyCertificate(f.committee,p,votes);
+    assert.equal(certificate.valid,true);
+    assert.equal(certificate.finalized,false);
+    assert.equal(certificate.productionConsensus,false);
+  } finally {for(const dir of dirs)fs.rmSync(dir,{recursive:true,force:true});}
+});
+
 test("same height cannot sign conflicting block even across round or process restart",()=>{
   const f=fixture(),dir=tempRoot();
   try {
