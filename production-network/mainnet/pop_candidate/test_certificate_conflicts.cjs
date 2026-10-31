@@ -202,3 +202,62 @@ test("tampered vote and proposal signatures fail closed, without claiming equivo
   assert.throws(()=>verifyResearchCertificatePair(f.committee,left,forged),
     /proposal|Unsigned/);
 });
+
+
+test("research conflict evidence uses authenticated snapshots, not changing Proxy reads",()=>{
+  const f=fixture();
+  const left=f.certificate({round:0,block:"0x"+"c".repeat(64),
+                            indexes:[0,1,2]});
+  const right=f.certificate({round:1,block:"0x"+"d".repeat(64),
+                             indexes:[1,2,3]});
+  let envelopeReads=0,proposalReads=0,voteReads=0;
+  const shiftingProposal=new Proxy(right.proposal,{
+    get(target,key,receiver){
+      proposalReads++;
+      if(key==="blockHash")return "0x"+"e".repeat(64);
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  const shiftingVotes=new Proxy(right.votes,{
+    get(target,key,receiver){
+      voteReads++;
+      if(key===Symbol.iterator)return function*(){};
+      if(key==="0")return right.votes[0];
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  const shiftingEnvelope=new Proxy({
+    proposal:shiftingProposal,votes:shiftingVotes
+  },{
+    get(target,key,receiver){
+      envelopeReads++;
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  const report=verifyResearchCertificatePair(f.committee,left,shiftingEnvelope);
+  assert.equal(envelopeReads,0,"envelope Proxy getters must not run");
+  assert.equal(proposalReads,0,"proposal Proxy getters must not run");
+  assert.equal(voteReads,0,"vote array Proxy getters must not run");
+  assert.equal(report.incompatibleCommitments,true);
+  assert.equal(report.secondBlockHash,right.proposal.blockHash);
+  assert.equal(report.secondParentHash,right.proposal.previousBlockHash);
+  assert.equal(report.doubleSignEvidence.length,2);
+  for(const evidence of report.doubleSignEvidence){
+    assert.equal(verifyEvidenceSignature(f.committee,evidence.validatorId,
+                                        "commit",evidence.first),true);
+    assert.equal(verifyEvidenceSignature(f.committee,evidence.validatorId,
+                                        "commit",evidence.second),true);
+  }
+  assert.equal(report.finalityProven,false);
+  assert.equal(report.slashingAuthorized,false);
+
+  let getterCalls=0;
+  const accessor={votes:right.votes};
+  Object.defineProperty(accessor,"proposal",{enumerable:true,get(){
+    getterCalls++;
+    throw Error("untrusted certificate getter executed");
+  }});
+  assert.throws(()=>verifyResearchCertificatePair(f.committee,left,accessor),
+                /Noncanonical PoP research certificate/);
+  assert.equal(getterCalls,0);
+});
