@@ -277,3 +277,43 @@ test("research certificate batches reject unsigned metadata, holes and index get
   assert.equal(proof.finalized,false);
   assert.equal(proof.productionConsensus,false);
 });
+
+test("research ancestry uses declared certificate slots, not Proxy iterators or index getters",()=>{
+  const f=makeFixture(),items=f.sequence(2);
+  let iteratorReads=0,indexReads=0;
+  const injected=new Proxy([items[0]],{
+    get(target,key,receiver){
+      if(key==="entries"){
+        iteratorReads++;
+        return ()=>items.entries();
+      }
+      if(key==="0"){
+        indexReads++;
+        return items[1];
+      }
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  const checked=verifyCandidateAncestry(f.committee,f.checkpoint,injected);
+  assert.equal(checked.verifiedCandidateCertificates,1);
+  assert.equal(checked.endingHeight,items[0].proposal.height);
+  assert.equal(checked.endingBlockHash,items[0].proposal.blockHash);
+  assert.equal(iteratorReads,0,"untrusted certificate iterator must not execute");
+  assert.equal(indexReads,0,"untrusted certificate index getter must not execute");
+
+  const swapped=new Proxy([items[0]],{
+    get(target,key,receiver){
+      if(key==="0"){
+        indexReads++;
+        return items[1];
+      }
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  const second=verifyCandidateAncestry(f.committee,f.checkpoint,swapped);
+  assert.equal(second.endingHeight,items[0].proposal.height);
+  assert.equal(second.verifiedCandidateCertificates,1);
+  assert.equal(indexReads,0,"validated certificate descriptor must be authoritative");
+  assert.equal(second.finalized,false);
+  assert.equal(second.productionConsensus,false);
+});
