@@ -246,18 +246,28 @@ function verifyCertificate(committee, proposal, votes) {
   // index getters and attached metadata (including hidden/symbol keys)
   // before iterating votes. A decorated array must not imply finality.
   check(Array.isArray(votes) &&
-        Object.getPrototypeOf(votes) === Array.prototype &&
-        votes.length <= committee.validators.length,
+        Object.getPrototypeOf(votes) === Array.prototype,
         "Malformed PoP vote certificate");
-  check(Reflect.ownKeys(votes).length === votes.length + 1 &&
-        Array.from({length:votes.length},(_,i)=>{
-          const descriptor=Object.getOwnPropertyDescriptor(votes,String(i));
-          return descriptor && Object.hasOwn(descriptor,"value") &&
-                 descriptor.enumerable;
-        }).every(Boolean),
+  // Snapshot own data descriptors rather than trusting Proxy get traps or
+  // Symbol.iterator. Otherwise an apparently empty vote array can yield an
+  // entirely different, signed quorum from a hostile iterator.
+  const lengthDescriptor=Object.getOwnPropertyDescriptor(votes,"length");
+  const count=lengthDescriptor && lengthDescriptor.value;
+  check(Number.isSafeInteger(count) && count>=0 &&
+        count<=committee.validators.length,
+        "Malformed PoP vote certificate");
+  check(Reflect.ownKeys(votes).length===count+1,
         "PoP votes require a dense plain array without unsigned metadata or accessors");
+  const canonicalVotes=[];
+  for(let i=0;i<count;i++){
+    const descriptor=Object.getOwnPropertyDescriptor(votes,String(i));
+    check(descriptor && Object.hasOwn(descriptor,"value") &&
+          descriptor.enumerable,
+          "PoP votes require a dense plain array without unsigned metadata or accessors");
+    canonicalVotes.push(descriptor.value);
+  }
   const seen=new Set();
-  for(const vote of votes) {
+  for(const vote of canonicalVotes) {
     check(vote && typeof vote==="object","Invalid PoP vote");
     // Signed commit fields do not authenticate arbitrary caller metadata.
     // Reject accessors, inherited values and extra finality claims before
