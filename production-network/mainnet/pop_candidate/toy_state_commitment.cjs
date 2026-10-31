@@ -72,19 +72,24 @@ function snapshot(map) {
   return Object.freeze(result);
 }
 function applyOps(state,operations){
-  need(Array.isArray(operations)&&operations.length>=1&&
-       operations.length<=MAX_OPS,"PoP toy requires 1..64 operations per block");
-  // Unsigned array metadata, sparse slots, inherited slots or index getters
-  // must not affect a research state commitment or execute before rejection.
+  const length=operations?.length;
+  need(Array.isArray(operations)&&Number.isSafeInteger(length)&&length>=1&&
+       length<=MAX_OPS,"PoP toy requires 1..64 operations per block");
+  // Read each validated own data descriptor exactly once. Iterating the
+  // caller's array or indexing it afterward could execute a Proxy's forged
+  // Symbol.iterator/index getter and commit to different unsigned operations.
   need(Object.getPrototypeOf(operations)===Array.prototype &&
-       Reflect.ownKeys(operations).length===operations.length+1 &&
-       Array.from({length:operations.length},(_,i)=>{
-         const d=Object.getOwnPropertyDescriptor(operations,String(i));
-         return d&&Object.hasOwn(d,"value")&&d.enumerable;
-       }).every(Boolean),
+       Reflect.ownKeys(operations).length===length+1,
        "PoP toy requires a dense plain operation array without unsigned metadata or accessors");
+  const accepted=[];
+  for(let i=0;i<length;i++){
+    const d=Object.getOwnPropertyDescriptor(operations,String(i));
+    need(d&&Object.hasOwn(d,"value")&&d.enumerable,
+         "PoP toy requires a dense plain operation array without unsigned metadata or accessors");
+    accepted.push(d.value);
+  }
   const next=normalizedState(state),serialized=[];
-  for(const op of operations){
+  for(const op of accepted){
     exactFields(op,OP_FIELDS,"operation");
     need(op.kind==="increment","PoP toy unsupported/non-financial operation");
     need(typeof op.account==="string"&&ACCOUNT.test(op.account),
