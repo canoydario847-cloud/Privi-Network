@@ -165,10 +165,12 @@ function signCommitWithResearchLock({lockDirectory,committee,proposal,privateKey
   reservePosition(lockDirectory,committee,height,validatorId,
                   proposal.blockHash,proposal.previousBlockHash);
   const bytes=signedMessage("commit",voteFields(fields,validatorId));
-  return {
+  // A signed research vote must not acquire mutable, unsigned claims such
+  // as finalized=true after leaving the signer. This is not finality proof.
+  return Object.freeze({
     validatorId,
     signature:crypto.sign(null,bytes,privateKey).toString("base64"),
     researchOnly:true
-  };
+  });
 }
 module.exports={recordFor,lockedFileName,reservePosition,signCommitWithResearchLock};
