@@ -43,6 +43,18 @@ function verifyCandidateAncestry(committee, checkpoint, certificates) {
        certificates.length<=MAX_CERTIFICATES,
        "PoP research certificate list must contain 1..256 entries");
 
+  // The certificate batch is untrusted, unsigned input. Reject inherited
+  // array prototypes, hidden/symbolic metadata, holes, and index getters
+  // before .entries() can execute an attacker-controlled accessor.
+  need(Object.getPrototypeOf(certificates)===Array.prototype &&
+       Reflect.ownKeys(certificates).length===certificates.length+1 &&
+       Array.from({length:certificates.length},(_,i)=>{
+         const descriptor=Object.getOwnPropertyDescriptor(certificates,String(i));
+         return descriptor && Object.hasOwn(descriptor,"value") &&
+                descriptor.enumerable;
+       }).every(Boolean),
+       "PoP research certificate batch requires a dense plain data array without metadata or accessors");
+
   let height=checkpoint.height,head=checkpoint.blockHash;
   let lastRound=0;
   let signedVotes=0;
