@@ -253,3 +253,28 @@ test("toy research commitments reject unsigned record metadata and accessors bef
   sample.blocks[0]=disguised;
   assert.throws(()=>f.verify(sample),/invalid or unexpected fields/);
 });
+
+test("toy starting-state root rejects hidden metadata and account getters",()=>{
+  const account={value:2,nonce:0};
+  const canonical={agent_a:account};
+  const expected=stateRoot(canonical);
+  let getterReads=0;
+  const accessor={};
+  Object.defineProperty(accessor,"agent_a",{
+    enumerable:true,get(){getterReads++;return account;}
+  });
+  const hidden={agent_a:account};
+  Object.defineProperty(hidden,"agent_b",{
+    enumerable:false,value:{value:0,nonce:0}
+  });
+  const symbolic={agent_a:account};
+  symbolic[Symbol("productionFinality")]=true;
+  for(const invalid of [accessor,hidden,symbolic]){
+    assert.throws(()=>stateRoot(invalid),
+      /plain enumerable own account data fields/);
+  }
+  assert.equal(getterReads,0,"account getter must never execute");
+  assert.equal(stateRoot({agent_a:{nonce:0,value:2}}),expected);
+  const f=fixture();
+  assert.equal(f.verify().productionConsensus,false);
+});
