@@ -95,6 +95,16 @@ function parseRegistry(registry, governanceKey) {
   check(mode === TRUSTED_MODE,"Cannot run candidate as mainnet consensus");
   check(Array.isArray(validators) && validators.length >= 4 &&
         validators.length <= 31,"PoP requires 4..31 attested research validators");
+  // A signed registry cannot authenticate arbitrary array metadata. Validate
+  // every own index descriptor before iteration so sparse rosters, getters,
+  // inherited slots and unsigned finality flags cannot influence admission.
+  check(Object.getPrototypeOf(validators) === Array.prototype &&
+        Reflect.ownKeys(validators).length === validators.length + 1 &&
+        Array.from({length:validators.length},(_,i)=>{
+          const d=Object.getOwnPropertyDescriptor(validators,String(i));
+          return d && Object.hasOwn(d,"value") && d.enumerable;
+        }).every(Boolean),
+        "Noncanonical PoP validator roster: dense plain data array required");
   const gov = publicKey(governanceKey);
   const ids = new Set(), operators = new Set(), domains=new Set(), positions=new Set();
   const validated=[];
