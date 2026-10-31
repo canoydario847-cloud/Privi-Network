@@ -389,3 +389,40 @@ test("toy candidate block-list proxies cannot substitute iterator or numeric-ind
     /dense plain array/);
   assert.equal(f.verify(sample).productionConsensus,false);
 });
+
+test("toy operation fields are bound to descriptor snapshots, never Proxy property reads",()=>{
+  const f=fixture();
+  const good={kind:"increment",account:"agent_a",amount:2,nonce:1};
+  const fieldNames=new Set(["kind","account","amount","nonce"]);
+  let unsignedReads=0;
+  // A forged property getter must not disguise an unauthorized descriptor
+  // as an increment that the deterministic state verifier would accept.
+  const forged=new Proxy({...good,kind:"mint"},{
+    get(target,key,receiver){
+      if(fieldNames.has(key)){unsignedReads++;return good[key];}
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  assert.throws(()=>computeResearchBlock(f.committee,f.startingState,6,
+    f.checkpoint.blockHash,[forged]),/unsupported\/non-financial operation/);
+  assert.equal(unsignedReads,0,"unsigned operation getters must not execute");
+  // Conversely, valid declared descriptor data must remain usable even if
+  // an attacker makes direct property reads throw or return other values.
+  const hostileGetter=new Proxy({...good},{
+    get(target,key,receiver){
+      if(fieldNames.has(key)){
+        unsignedReads++;
+        throw Error("unsigned operation property read executed");
+      }
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  const expected=computeResearchBlock(f.committee,f.startingState,6,
+    f.checkpoint.blockHash,[good]);
+  const actual=computeResearchBlock(f.committee,f.startingState,6,
+    f.checkpoint.blockHash,[hostileGetter]);
+  assert.equal(actual.block.operationsRoot,expected.block.operationsRoot);
+  assert.equal(actual.block.blockHash,expected.block.blockHash);
+  assert.equal(unsignedReads,0,"no operation property read may escape validation");
+  assert.equal(f.verify().productionConsensus,false);
+});
