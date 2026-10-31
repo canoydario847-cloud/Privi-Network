@@ -74,6 +74,15 @@ function snapshot(map) {
 function applyOps(state,operations){
   need(Array.isArray(operations)&&operations.length>=1&&
        operations.length<=MAX_OPS,"PoP toy requires 1..64 operations per block");
+  // Unsigned array metadata, sparse slots, inherited slots or index getters
+  // must not affect a research state commitment or execute before rejection.
+  need(Object.getPrototypeOf(operations)===Array.prototype &&
+       Reflect.ownKeys(operations).length===operations.length+1 &&
+       Array.from({length:operations.length},(_,i)=>{
+         const d=Object.getOwnPropertyDescriptor(operations,String(i));
+         return d&&Object.hasOwn(d,"value")&&d.enumerable;
+       }).every(Boolean),
+       "PoP toy requires a dense plain operation array without unsigned metadata or accessors");
   const next=normalizedState(state),serialized=[];
   for(const op of operations){
     exactFields(op,OP_FIELDS,"operation");
