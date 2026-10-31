@@ -138,17 +138,31 @@ function verifyResearchStateSequence(committee,signedCheckpoint,
   const initialRoot=stateRoot(startingState);
   need(initialRoot===expectedStartingStateRoot,
        "PoP toy starting state does not match independently supplied expected root");
-  need(Array.isArray(blocks)&&blocks.length>=1&&blocks.length<=MAX_BLOCKS,
+  // Capture only declared array entries. A caller-controlled Proxy must not
+  // substitute signed candidates through an iterator or numeric index getter.
+  need(Array.isArray(blocks),"PoP toy block list must have 1..64 entries");
+  const blockCount=Object.getOwnPropertyDescriptor(blocks,"length")?.value;
+  need(Number.isSafeInteger(blockCount)&&blockCount>=1&&blockCount<=MAX_BLOCKS,
        "PoP toy block list must have 1..64 entries");
-  need(Array.isArray(certificates)&&blocks.length===certificates.length,
+  need(Object.getPrototypeOf(blocks)===Array.prototype&&
+       Reflect.ownKeys(blocks).length===blockCount+1,
+       "PoP toy block list requires a dense plain array without unsigned metadata or accessors");
+  const acceptedBlocks=[];
+  for(let index=0;index<blockCount;index++){
+    const d=Object.getOwnPropertyDescriptor(blocks,String(index));
+    need(d&&Object.hasOwn(d,"value")&&d.enumerable,
+         "PoP toy block list requires a dense plain array without unsigned metadata or accessors");
+    acceptedBlocks.push(d.value);
+  }
+  need(Array.isArray(certificates)&&blockCount===certificates.length,
        "PoP toy block/certificate count mismatch");
   // This authenticates an issuer assertion, and verifies each committee
   // Ed25519 quorum + contiguous candidate hash before toy execution.
   const candidateProof=verifyAttestedCandidateAncestry(
     committee,signedCheckpoint,trustedGovernancePublicKey,certificates);
   let nextState=snapshot(normalizedState(startingState));
-  for(let index=0;index<blocks.length;index++){
-    const actual=blocks[index],signed=certificates[index].proposal;
+  for(let index=0;index<acceptedBlocks.length;index++){
+    const actual=acceptedBlocks[index],signed=certificates[index].proposal;
     exactFields(actual,BLOCK_FIELDS,"candidate block");
     const expected=computeResearchBlock(
       committee,nextState,signed.height,signed.previousBlockHash,
@@ -174,7 +188,7 @@ function verifyResearchStateSequence(committee,signedCheckpoint,
     validatesLiveCosmosEvmState:false,
     checkpointFinalityVerified:false,
     startingStateExternallyAuthenticated:false,
-    verifiedToyTransitions:blocks.length,
+    verifiedToyTransitions:acceptedBlocks.length,
     endingHeight:candidateProof.endingHeight,
     endingBlockHash:candidateProof.endingBlockHash,
     startingStateRoot:initialRoot,
