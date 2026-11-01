@@ -495,3 +495,30 @@ test("toy state and signed candidate digests ignore inherited array toJSON pollu
   }
   assert.equal(f.verify().productionConsensus,false);
 });
+
+test("toy starting-state root ignores a poisoned inherited Array iterator",()=>{
+  const state={
+    agent_z:{value:17,nonce:2},
+    agent_a:{value:3,nonce:1}
+  };
+  const expected=stateRoot(state);
+  const original=Object.getOwnPropertyDescriptor(Array.prototype,Symbol.iterator);
+  let calls=0,actual;
+  try {
+    Object.defineProperty(Array.prototype,Symbol.iterator,{
+      configurable:true,writable:true,
+      value:function*(){
+        calls++;
+        yield "attacker-substituted-array-entry";
+      }
+    });
+    // Capture results before asserting: the test harness itself may iterate
+    // arrays, but no inherited array iterator may affect this state digest.
+    actual=stateRoot(state);
+  } finally {
+    if(original)Object.defineProperty(Array.prototype,Symbol.iterator,original);
+    else delete Array.prototype[Symbol.iterator];
+  }
+  assert.equal(actual,expected);
+  assert.equal(calls,0,"state-root canonicalization must not invoke an inherited array iterator");
+});
