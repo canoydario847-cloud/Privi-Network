@@ -96,21 +96,34 @@ function verifyCandidateAncestry(committee, checkpoint, certificates) {
     need(proposal && typeof proposal==="object" && !Array.isArray(proposal),
          "PoP missing candidate proposal at index "+index);
 
-    // verifyCertificate snapshots the signed proposal fields from own data
-    // descriptors. Its verified result, not Proxy property reads, must drive
-    // ancestry, height continuity and the reported chain head.
+    // Check continuity using the signed proposal's own data descriptors.
+    // Keep these pre-verification error boundaries for malformed ancestry,
+    // without allowing Proxy get traps to invent a different parent/height.
+    const signed=Object.create(null);
+    for(const field of ["height","round","previousBlockHash","blockHash"]){
+      const descriptor=Object.getOwnPropertyDescriptor(proposal,field);
+      need(descriptor && Object.hasOwn(descriptor,"value") &&
+           descriptor.enumerable,
+           "PoP research candidate requires own signed data fields");
+      signed[field]=descriptor.value;
+    }
+    need(height<Number.MAX_SAFE_INTEGER && signed.height===height+1,
+         "PoP research certificate height gap, rollback or reorder at index "+index);
+    need(signed.previousBlockHash===head,
+         "PoP research certificate parent hash mismatch at index "+index);
+    need(!heights.has(signed.height),
+         "PoP research duplicate height at index "+index);
+    need(!hashes.has(signed.blockHash),
+         "PoP research duplicate or cyclic block hash at index "+index);
+
+    // Only verified Ed25519 proposal/quorum metadata may update ancestry.
     const checked=verifyCertificate(committee,proposal,votes);
     need(checked.valid===true && checked.productionConsensus===false &&
-         checked.chainId===committee.chainId && checked.epoch===committee.epoch,
+         checked.chainId===committee.chainId && checked.epoch===committee.epoch &&
+         checked.height===signed.height && checked.round===signed.round &&
+         checked.previousBlockHash===signed.previousBlockHash &&
+         checked.blockHash===signed.blockHash,
          "PoP malformed signed candidate proof at index "+index);
-    need(height<Number.MAX_SAFE_INTEGER && checked.height===height+1,
-         "PoP research certificate height gap, rollback or reorder at index "+index);
-    need(checked.previousBlockHash===head,
-         "PoP research certificate parent hash mismatch at index "+index);
-    need(!heights.has(checked.height),
-         "PoP research duplicate height at index "+index);
-    need(!hashes.has(checked.blockHash),
-         "PoP research duplicate or cyclic block hash at index "+index);
     heights.add(checked.height);
     hashes.add(checked.blockHash);
     height=checked.height;
