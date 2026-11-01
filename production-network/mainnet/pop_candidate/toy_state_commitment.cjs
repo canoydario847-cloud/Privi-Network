@@ -170,8 +170,10 @@ function verifyResearchStateSequence(committee,signedCheckpoint,
     committee,signedCheckpoint,trustedGovernancePublicKey,certificates);
   let nextState=snapshot(normalizedState(startingState));
   for(let index=0;index<acceptedBlocks.length;index++){
-    const actual=acceptedBlocks[index],signed=certificates[index].proposal;
-    exactFields(actual,BLOCK_FIELDS,"candidate block");
+    // Use the same validated descriptor snapshot for every header and operation
+    // comparison. Re-reading caller-controlled Proxy fields would bypass checks.
+    const actual=exactFields(acceptedBlocks[index],BLOCK_FIELDS,"candidate block");
+    const signed=certificates[index].proposal;
     const expected=computeResearchBlock(
       committee,nextState,signed.height,signed.previousBlockHash,
       actual.operations
