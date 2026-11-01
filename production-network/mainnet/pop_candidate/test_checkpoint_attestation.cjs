@@ -309,3 +309,31 @@ test("checkpoint signature and reported metadata use one canonical descriptor sn
   assert.throws(()=>verifyResearchCheckpoint(f.committee,forgedDescriptor,
                 f.governance.publicKey),/issuer signature invalid/);
 });
+
+test("research checkpoint digest cannot be collapsed by inherited array toJSON",()=>{
+  const original=fixture(),alternate=fixture(4,original.governance);
+  const baseline=committeeDigest(original.committee);
+  const other=committeeDigest(alternate.committee);
+  assert.notEqual(baseline,other,"distinct admitted rosters must have different digests");
+  const prior=Object.getOwnPropertyDescriptor(Array.prototype,"toJSON");
+  try {
+    Object.defineProperty(Array.prototype,"toJSON",{
+      configurable:true,writable:true,
+      value(){return ["attacker-selected-common-roster"];}
+    });
+    assert.equal(committeeDigest(original.committee),baseline,
+      "prototype pollution must not change a signed checkpoint's committee digest");
+    assert.equal(committeeDigest(alternate.committee),other,
+      "prototype pollution must not change a different committee digest");
+    assert.notEqual(committeeDigest(original.committee),
+                    committeeDigest(alternate.committee));
+    assert.throws(()=>verifyResearchCheckpoint(alternate.committee,
+      original.checkpoint,original.governance.publicKey),/another admitted committee/);
+    assert.equal(verifyResearchCheckpoint(original.committee,
+      original.checkpoint,original.governance.publicKey)
+      .checkpointIssuerSignatureVerified,true);
+  } finally {
+    if(prior)Object.defineProperty(Array.prototype,"toJSON",prior);
+    else delete Array.prototype.toJSON;
+  }
+});
