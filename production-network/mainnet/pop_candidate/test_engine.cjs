@@ -809,3 +809,33 @@ test("research quorum verifies vote descriptors without Proxy getter substitutio
   assert.equal(valid.finalized,false);
   assert.equal(valid.productionConsensus,false);
 });
+
+test("research admissions bind registry and validator descriptor snapshots against Proxy substitution",()=>{
+  const f=fixture(4);
+  let registryReads=0;
+  // Declared chain ID is not the one authenticated by governance signatures.
+  // A hostile getter used to swap in the signed ID during verification.
+  const registry=new Proxy({...f.registry,chainId:"privi-pop-research-forged-v1"},{
+    get(target,key,receiver){
+      if(key==="chainId"){registryReads++;return f.registry.chainId;}
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  assert.throws(()=>parseRegistry(registry,f.gov.publicKeyB64),
+    /admission signature invalid or absent/);
+  assert.equal(registryReads,0,"registry Proxy getter must never execute");
+
+  let validatorReads=0;
+  const validators=[...f.registry.validators];
+  const signed=validators[0];
+  validators[0]=new Proxy({...signed,operatorId:"UNSIGNED_OPERATOR"},{
+    get(target,key,receiver){
+      if(key==="operatorId"){validatorReads++;return signed.operatorId;}
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  assert.throws(()=>parseRegistry({...f.registry,validators},f.gov.publicKeyB64),
+    /admission signature invalid or absent/);
+  assert.equal(validatorReads,0,"validator Proxy getter must never execute");
+  assert.equal(parseRegistry(f.registry,f.gov.publicKeyB64).quorum,3);
+});
