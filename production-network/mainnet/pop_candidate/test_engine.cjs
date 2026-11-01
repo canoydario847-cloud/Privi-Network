@@ -962,3 +962,35 @@ test("research signatures cannot be rebound by inherited Array.toJSON",()=>{
     else delete Array.prototype.toJSON;
   }
 });
+
+test("research vote snapshot ignores poisoned Array.prototype iterator",()=>{
+  const f=fixture(4),{proposal,votes}=f.bundle();
+  // All declared votes have unadmitted signer IDs. An inherited iterator
+  // must not replace their descriptor snapshots with three authentic votes.
+  const forged=votes.map(v=>({
+    validatorId:"0x"+"f".repeat(64),signature:v.signature
+  }));
+  const original=Object.getOwnPropertyDescriptor(Array.prototype,Symbol.iterator);
+  let hijacks=0;
+  try {
+    Object.defineProperty(Array.prototype,Symbol.iterator,{
+      configurable:true,writable:true,
+      value:function(){
+        if(this.length===forged.length && this[0]===forged[0]){
+          hijacks++;
+          return original.value.call(votes);
+        }
+        return original.value.call(this);
+      }
+    });
+    assert.throws(()=>verifyCertificate(f.committee,proposal,forged),
+      /Unadmitted PoP voter/);
+    assert.equal(hijacks,0,"quorum evaluation must not invoke inherited vote iterator");
+  } finally {
+    Object.defineProperty(Array.prototype,Symbol.iterator,original);
+  }
+  const proof=verifyCertificate(f.committee,proposal,votes);
+  assert.equal(proof.signers,3);
+  assert.equal(proof.finalized,false);
+  assert.equal(proof.productionConsensus,false);
+});
