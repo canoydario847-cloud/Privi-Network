@@ -68,7 +68,7 @@ function signedMessage(tag, fields) {
   let encoded = "[";
   for (let i = 0; i < fields.length; i++) {
     const field = fields[i];
-    check(typeof field === "string" || Number.isSafeInteger(field),
+    check(typeof field === "string" || typeof field === "number",
           "Invalid PoP signed field type");
     if (i) encoded += ",";
     encoded += JSON.stringify(field);
