@@ -881,3 +881,34 @@ test("research 31-member quorum boundary is 21 signatures and 32 members fail cl
   assert.equal(proof.productionConsensus,false);
   assert.throws(()=>fixture(32),/PoP requires 4..31 attested research validators/);
 });
+
+
+test("research vote lock ignores inherited JSON hooks when preventing double-signs",()=>{
+  const f=fixture(4),lock=new ResearchVoteLock();
+  const validatorId=f.keys[0].id,height=22,epoch=1;
+  const parent="0x"+"a".repeat(64);
+  const block="0x"+"b".repeat(64);
+  const conflict="0x"+"c".repeat(64);
+  const original=Object.getOwnPropertyDescriptor(Array.prototype,"toJSON");
+  let hookCalls=0;
+  try {
+    Object.defineProperty(Array.prototype,"toJSON",{
+      configurable:true,writable:true,
+      value(){hookCalls++;return ["untrusted-key-"+hookCalls];}
+    });
+    lock.accept(epoch,height,0,validatorId,block,parent);
+    assert.throws(()=>lock.accept(epoch,height,1,validatorId,conflict,parent),
+      /conflicting-height double-sign rejected/);
+    assert.throws(()=>lock.accept(epoch+1,height,0,validatorId,block,parent),
+      /same-height epoch transition rejected/);
+    assert.equal(hookCalls,0,"lock key derivation must not call inherited JSON hooks");
+  } finally {
+    if(original)Object.defineProperty(Array.prototype,"toJSON",original);
+    else delete Array.prototype.toJSON;
+  }
+  // A matching same-epoch commitment remains idempotent after restoring
+  // the runtime; this is only an in-memory research guard, not finality.
+  lock.accept(epoch,height,2,validatorId,block,parent);
+  assert.throws(()=>lock.accept(epoch,height,3,validatorId,conflict,parent),
+    /conflicting-height double-sign rejected/);
+});
