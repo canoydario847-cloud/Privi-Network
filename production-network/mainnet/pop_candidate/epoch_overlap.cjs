@@ -14,13 +14,17 @@ const {assertValidatedCommittee} = require("./engine.cjs");
 function requireCondition(ok, reason) {
   if(!ok) throw Error(reason);
 }
-function stableIdentity(validator) {
-  // A key reused with changed operator/fault-domain/PoP position evidence
-  // is NOT counted as an independently established common signer.
-  return [
-    validator.id,validator.operatorId,validator.faultDomain,
-    validator.stamp,validator.positionHash,validator.anchorBlockHash
-  ];
+function sameStableIdentity(a, b) {
+  // Compare the six admitted primitive identity fields directly. Serializing
+  // temporary arrays with JSON.stringify can invoke a polluted inherited
+  // Array.prototype.toJSON, falsely treating changed fault domains or PoP
+  // positions as stable across epochs.
+  return a.id === b.id &&
+    a.operatorId === b.operatorId &&
+    a.faultDomain === b.faultDomain &&
+    a.stamp === b.stamp &&
+    a.positionHash === b.positionHash &&
+    a.anchorBlockHash === b.anchorBlockHash;
 }
 function analyzeEpochOverlap(previous, next) {
   assertValidatedCommittee(previous);
@@ -39,8 +43,7 @@ function analyzeEpochOverlap(previous, next) {
   let shared=0;
   for(const updated of next.validators) {
     const old=oldById.get(updated.id);
-    if(old && JSON.stringify(stableIdentity(old)) ===
-              JSON.stringify(stableIdentity(updated))) shared++;
+    if(old && sameStableIdentity(old, updated)) shared++;
   }
   const nOld=previous.validators.length,nNew=next.validators.length;
   const maxFaulty=Math.max(Math.floor((nOld-1)/3),Math.floor((nNew-1)/3));
