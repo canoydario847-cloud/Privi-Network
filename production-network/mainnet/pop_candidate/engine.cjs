@@ -289,21 +289,19 @@ function verifyCertificate(committee, proposal, votes) {
     const keys=Reflect.ownKeys(vote);
     const required=["validatorId","signature"];
     const marker=Object.getOwnPropertyDescriptor(vote,"researchOnly");
+    // Snapshot the exact own data descriptors used for validation. A Proxy
+    // getter may supply a signed quorum different from its declared votes.
+    const fieldDescriptors=required.map(field=>
+      Object.getOwnPropertyDescriptor(vote,field));
     check(Object.getPrototypeOf(vote)===Object.prototype &&
           (keys.length===2 || (keys.length===3 && marker &&
             Object.hasOwn(marker,"value") && marker.value===true &&
             marker.enumerable)) &&
-          required.every(field=>{
-            const descriptor=Object.getOwnPropertyDescriptor(vote,field);
-            return descriptor && Object.hasOwn(descriptor,"value") &&
-                   descriptor.enumerable;
-          }),
+          fieldDescriptors.every(descriptor=>
+            descriptor && Object.hasOwn(descriptor,"value") &&
+            descriptor.enumerable),
           "PoP vote requires plain own canonical data fields without extras");
-    // Snapshot each untrusted vote field exactly once. A Proxy can pass
-    // own-data-descriptor checks yet return a different validatorId on
-    // successive reads, otherwise counting one valid signature many times.
-    const validatorId=vote.validatorId;
-    const voteSignature=vote.signature;
+    const [validatorId,voteSignature]=fieldDescriptors.map(descriptor=>descriptor.value);
     const signer=nativeMapGet.call(committee.byId,validatorId);
     check(!!signer,"Unadmitted PoP voter");
     check(!seen.has(validatorId),"Duplicate PoP voter");
