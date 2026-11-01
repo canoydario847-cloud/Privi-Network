@@ -269,3 +269,30 @@ test("31-to-30 research committee contraction retains only necessary overlap",()
   assert.throws(()=>analyzeEpochOverlap(previous,unsafe),
     /unsafe cross-epoch quorum overlap/);
 });
+
+test("four-to-five research committee expansion preserves only a necessary overlap bound",()=>{
+  // Q4=3 and Q5=4. Retaining the four admitted signing identities gives
+  // a five-signer union and at least 3+4-5=2 common quorum signers,
+  // above the conservative max Byzantine bound f=1.
+  const f=fixture(5);
+  const previous=f.committee(f.keys.slice(0,4),100);
+  const expanded=f.committee(f.keys,101);
+  const evidence=analyzeEpochOverlap(previous,expanded);
+  assert.equal(previous.quorum,3);
+  assert.equal(expanded.quorum,4);
+  assert.equal(evidence.unchangedSigners,4);
+  assert.equal(evidence.minimalCommonQuorumSigners,2);
+  assert.equal(evidence.assumedMaxFaultySharedSigners,1);
+  assert.equal(evidence.overlapNecessaryCondition,true);
+  assert.equal(evidence.permitsEpochTransition,false);
+  assert.equal(evidence.productionConsensus,false);
+  assert.equal(evidence.researchOnly,true);
+
+  // Replacing one old signer while adding two new ones leaves only three
+  // stable signers in a six-signer union: guaranteed intersection is one,
+  // which cannot prove an honest signer against f=1.
+  const replaced=[...f.keys.slice(0,3),makeSigner(),f.keys[4]];
+  const unsafe=f.committee(replaced,101);
+  assert.throws(()=>analyzeEpochOverlap(previous,unsafe),
+    /unsafe cross-epoch quorum overlap/);
+});
