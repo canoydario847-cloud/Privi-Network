@@ -27,7 +27,9 @@ function exactFields(obj,fields,label){
   const error="PoP toy "+label+" invalid or unexpected fields";
   need(plain(obj)&&Reflect.ownKeys(obj).length===fields.length,error);
   const values=Object.create(null);
-  for(const key of fields){
+  // A poisoned inherited Array iterator must not replace the field schema.
+  for(let i=0;i<fields.length;i++){
+    const key=fields[i];
     const d=Object.getOwnPropertyDescriptor(obj,key);
     need(d&&Object.hasOwn(d,"value")&&d.enumerable,error);
     values[key]=d.value;
@@ -46,7 +48,10 @@ function normalizedState(input){
   need(accounts.length<=MAX_ACCOUNTS,
        "PoP toy state must have at most 128 plain-object accounts");
   const output=new Map();
-  for(const account of accounts){
+  // Reflect.ownKeys returns an Array; read its keys by index, not its
+  // mutable inherited iterator, before committing to a starting-state root.
+  for(let i=0;i<accounts.length;i++){
+    const account=accounts[i];
     const descriptor=Object.getOwnPropertyDescriptor(input,account);
     need(typeof account==="string" && descriptor &&
          Object.hasOwn(descriptor,"value") && descriptor.enumerable,
@@ -62,8 +67,11 @@ function normalizedState(input){
   return output;
 }
 function stateEntries(map){
-  return [...map.entries()].sort(([a],[b])=>a<b?-1:a>b?1:0)
-    .map(([name,v])=>[name,v.value,v.nonce]);
+  // Map entries are arrays; destructuring them invokes an inherited Array
+  // iterator that a hostile runtime can replace. Read validated pairs by index.
+  return [...map.entries()].sort((left,right)=>
+    left[0]<right[0]?-1:left[0]>right[0]?1:0)
+    .map(entry=>[entry[0],entry[1].value,entry[1].nonce]);
 }
 // Only internally constructed arrays of canonical primitive fields reach this
 // encoder. JSON.stringify(array) calls an inherited Array.prototype.toJSON,
