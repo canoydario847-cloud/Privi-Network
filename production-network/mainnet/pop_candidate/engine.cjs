@@ -61,8 +61,20 @@ function signature(signatureB64) {
   return buf;
 }
 function signedMessage(tag, fields) {
-  // Array order is explicit and fixed: no JS object serialization ambiguity.
-  return Buffer.from(PREFIX + "\n" + tag + "\n" + JSON.stringify(fields), "utf8");
+  // Encode the primitive signed fields without serializing an Array object.
+  // JSON.stringify(fields) invokes an inherited Array.prototype.toJSON hook,
+  // which can replace ALL signed fields with attacker-controlled bytes.
+  check(Array.isArray(fields), "Invalid PoP signed field list");
+  let encoded = "[";
+  for (let i = 0; i < fields.length; i++) {
+    const field = fields[i];
+    check(typeof field === "string" || Number.isSafeInteger(field),
+          "Invalid PoP signed field type");
+    if (i) encoded += ",";
+    encoded += JSON.stringify(field);
+  }
+  encoded += "]";
+  return Buffer.from(PREFIX + "\n" + tag + "\n" + encoded, "utf8");
 }
 function verify(pub, tag, fields, sig) {
   return crypto.verify(null, signedMessage(tag, fields), pub, signature(sig));
