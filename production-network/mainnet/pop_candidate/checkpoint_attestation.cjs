@@ -30,13 +30,35 @@ function need(value,reason){if(!value)throw Error(reason);}
 // valid committee admitted by the same governance root for the same epoch.
 function committeeDigest(committee){
   assertValidatedCommittee(committee);
-  return hash(Buffer.from(JSON.stringify([
+  // Keep the original nested JSON array wire format, but serialize only
+  // primitive fields. JSON.stringify(Array) can invoke an inherited
+  // Array.prototype.toJSON hook and collapse different admitted rosters
+  // into one digest, allowing a signed checkpoint to be replayed.
+  const header=[
     "PriviPoPResearchCommittee/v1",committee.chainId,committee.genesisHash,
-    committee.epoch,committee.governanceKeyId,committee.quorum,
-    committee.validators.map(v=>[
+    committee.epoch,committee.governanceKeyId,committee.quorum
+  ];
+  let encoded="[";
+  for(let i=0;i<header.length;i++){
+    if(i)encoded+=",";
+    encoded+=JSON.stringify(header[i]);
+  }
+  encoded+=",[";
+  for(let i=0;i<committee.validators.length;i++){
+    if(i)encoded+=",";
+    const v=committee.validators[i];
+    const identity=[
       v.id,v.operatorId,v.faultDomain,v.stamp,v.positionHash,v.anchorBlockHash
-    ])
-  ]),"utf8"));
+    ];
+    encoded+="[";
+    for(let j=0;j<identity.length;j++){
+      if(j)encoded+=",";
+      encoded+=JSON.stringify(identity[j]);
+    }
+    encoded+="]";
+  }
+  encoded+="]]";
+  return hash(Buffer.from(encoded,"utf8"));
 }
 
 function checkpointFields(checkpoint){
