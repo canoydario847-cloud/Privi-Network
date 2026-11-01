@@ -85,20 +85,23 @@ function admissionFields(chainId, genesisHash, epoch, operator, faultDomain,
           positionSeq,validatorId,anchorBlockHash];
 }
 function canonicalOwnData(record, required, label) {
-  // Admission signatures cover a fixed roster, not caller-added authority
-  // flags. Reject getters before reading even a legitimate signed field.
+  // Verify and snapshot declared own data descriptors. A Proxy get trap
+  // must not substitute a signed registry or validator after validation.
+  const error="Noncanonical PoP " + label + " record: unsigned fields or accessors";
   check(record && typeof record === "object" && !Array.isArray(record) &&
         Object.getPrototypeOf(record) === Object.prototype &&
-        Reflect.ownKeys(record).length === required.length &&
-        required.every(field => {
-          const d=Object.getOwnPropertyDescriptor(record,field);
-          return d && Object.hasOwn(d,"value") && d.enumerable;
-        }), "Noncanonical PoP " + label + " record: unsigned fields or accessors");
+        Reflect.ownKeys(record).length === required.length, error);
+  const snapshot=Object.create(null);
+  for(const field of required) {
+    const d=Object.getOwnPropertyDescriptor(record,field);
+    check(d && Object.hasOwn(d,"value") && d.enumerable,error);
+    snapshot[field]=d.value;
+  }
+  return snapshot;
 }
 function parseRegistry(registry, governanceKey) {
-  canonicalOwnData(registry,
+  const {chainId,genesisHash,epoch,mode,validators}=canonicalOwnData(registry,
     ["chainId","genesisHash","epoch","mode","validators"],"registry");
-  const {chainId,genesisHash,epoch,mode,validators}=registry;
   check(typeof chainId === "string" && CHAIN.test(chainId), "Unexpected PoP research chain");
   check(typeof genesisHash === "string" && HEX.test(genesisHash),
         "Invalid PoP research genesis");
@@ -126,12 +129,11 @@ function parseRegistry(registry, governanceKey) {
   const ids = new Set(), operators = new Set(), domains=new Set(), positions=new Set();
   const validated=[];
   for (const v of admittedRecords) {
-    canonicalOwnData(v,
+    const {id,keySpkiBase64,operatorId,faultDomain,companyId,positionSequence,
+      anchorBlockHash,positionHash,admissionSignature}=canonicalOwnData(v,
       ["id","keySpkiBase64","operatorId","faultDomain","companyId",
        "positionSequence","anchorBlockHash","positionHash","admissionSignature"],
       "validator");
-    const {id,keySpkiBase64,operatorId,faultDomain,companyId,positionSequence,
-      anchorBlockHash,positionHash,admissionSignature}=v;
     const pub=publicKey(keySpkiBase64);
     check(id===pub.id, "Validator ID must bind actual Ed25519 public key");
     check(typeof operatorId==="string" && ORGANIZATION.test(operatorId),
