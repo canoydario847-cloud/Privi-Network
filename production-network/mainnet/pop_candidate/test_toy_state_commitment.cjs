@@ -522,3 +522,43 @@ test("toy starting-state root ignores a poisoned inherited Array iterator",()=>{
   assert.equal(actual,expected);
   assert.equal(calls,0,"state-root canonicalization must not invoke an inherited array iterator");
 });
+
+test("toy counter transitions ignore poisoned inherited array iterators",()=>{
+  const f=fixture();
+  const operations=[{kind:"increment",account:"agent_a",amount:3,nonce:1}];
+  const expected=computeResearchBlock(f.committee,f.startingState,6,
+                                      f.checkpoint.blockHash,operations);
+  const prior=Object.getOwnPropertyDescriptor(Array.prototype,Symbol.iterator);
+  const originalIterator=prior.value;
+  let intercepted=0,actual;
+  try {
+    Object.defineProperty(Array.prototype,Symbol.iterator,{
+      configurable:true,writable:true,
+      value:function(){
+        const first=Object.getOwnPropertyDescriptor(this,"0")?.value;
+        const second=Object.getOwnPropertyDescriptor(this,"1")?.value;
+        // Detect both an operation snapshot and a Map's [account, record]
+        // entry; neither may be read through this inherited hook.
+        if((this.length===1&&first?.kind==="increment")||
+           (this.length===2&&typeof first==="string"&&second&&
+            typeof second==="object"&&
+            Number.isSafeInteger(second.value)&&Number.isSafeInteger(second.nonce))){
+          intercepted++;
+          throw Error("poisoned inherited array iterator used in toy execution");
+        }
+        return originalIterator.call(this);
+      }
+    });
+    actual=computeResearchBlock(f.committee,f.startingState,6,
+                                f.checkpoint.blockHash,operations);
+  } finally {
+    Object.defineProperty(Array.prototype,Symbol.iterator,prior);
+  }
+  assert.equal(intercepted,0,
+    "validated operations and Map entry pairs must not invoke Array.iterator");
+  assert.equal(actual.block.operationsRoot,expected.block.operationsRoot);
+  assert.equal(actual.block.stateRoot,expected.block.stateRoot);
+  assert.equal(actual.block.blockHash,expected.block.blockHash);
+  assert.equal(actual.nextState.agent_a.value,5);
+  assert.equal(actual.nextState.agent_a.nonce,1);
+});
