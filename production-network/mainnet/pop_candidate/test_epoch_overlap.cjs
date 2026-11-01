@@ -172,3 +172,45 @@ test("self-comparison is not an admitted epoch transition",()=>{
   const f=fixture(4),a=f.committee(f.keys,1);
   assert.throws(()=>analyzeEpochOverlap(a,a),/distinct admitted/);
 });
+
+test("31-member research committee loses guaranteed honest overlap after one signer rotation",()=>{
+  // At the maximum admitted research size, Q=21 and f=10. Identical
+  // committees guarantee 11 common quorum signatures; replacing one
+  // signer reduces that lower bound to 10, which is NOT greater than f.
+  // This is a necessary arithmetic screen, not production finality.
+  const f=fixture(31),previous=f.committee(f.keys,40);
+  const stable=f.committee(f.keys,41);
+  assert.equal(previous.quorum,21);
+  assert.equal(stable.quorum,21);
+  const evidence=analyzeEpochOverlap(previous,stable);
+  assert.equal(evidence.minimalCommonQuorumSigners,11);
+  assert.equal(evidence.assumedMaxFaultySharedSigners,10);
+  assert.equal(evidence.permitsEpochTransition,false);
+  assert.equal(evidence.productionConsensus,false);
+
+  const rotated=[...f.keys];
+  rotated[30]=makeSigner();
+  const replacement=f.committee(rotated,41);
+  assert.equal(replacement.quorum,21);
+  assert.throws(()=>analyzeEpochOverlap(previous,replacement),
+    /unsafe cross-epoch quorum overlap/,
+    "a 10-signer worst-case intersection cannot establish an honest signer");
+});
+
+test("30-member one-signer rotation passes only the necessary research overlap bound",()=>{
+  // This neighboring committee size has Q=21 and f=9. One rotation
+  // leaves at least 11 common signatures, which clears this arithmetic
+  // prerequisite but still NEVER permits an epoch handoff or mainnet.
+  const f=fixture(30),previous=f.committee(f.keys,70);
+  const rotated=[...f.keys];
+  rotated[29]=makeSigner();
+  const next=f.committee(rotated,71);
+  const evidence=analyzeEpochOverlap(previous,next);
+  assert.equal(previous.quorum,21);
+  assert.equal(next.quorum,21);
+  assert.equal(evidence.unchangedSigners,29);
+  assert.equal(evidence.minimalCommonQuorumSigners,11);
+  assert.equal(evidence.assumedMaxFaultySharedSigners,9);
+  assert.equal(evidence.permitsEpochTransition,false);
+  assert.equal(evidence.productionConsensus,false);
+});
