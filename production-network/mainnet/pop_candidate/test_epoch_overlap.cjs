@@ -241,3 +241,31 @@ test("30-to-31 research committee expansion preserves only a necessary overlap b
   assert.throws(()=>analyzeEpochOverlap(previous,unsafe),
     /unsafe cross-epoch quorum overlap/);
 });
+
+test("31-to-30 research committee contraction retains only necessary overlap",()=>{
+  // Q31=Q30=21, with f=max(10,9)=10. Dropping one of 31 signers
+  // leaves 30 stable identities and a 31-member union, so two quorums
+  // share at least 21+21-31=11 signers. This does NOT authorize handoff.
+  const f=fixture(31);
+  const previous=f.committee(f.keys,90);
+  const contracted=f.committee(f.keys.slice(0,30),91);
+  const evidence=analyzeEpochOverlap(previous,contracted);
+  assert.equal(previous.quorum,21);
+  assert.equal(contracted.quorum,21);
+  assert.equal(evidence.priorValidators,31);
+  assert.equal(evidence.nextValidators,30);
+  assert.equal(evidence.unchangedSigners,30);
+  assert.equal(evidence.minimalCommonQuorumSigners,11);
+  assert.equal(evidence.assumedMaxFaultySharedSigners,10);
+  assert.equal(evidence.permitsEpochTransition,false);
+  assert.equal(evidence.productionConsensus,false);
+  assert.equal(evidence.researchOnly,true);
+
+  // Dropping one signer AND replacing another leaves only 29 stable
+  // identities in a 32-member union: guaranteed intersection 10,
+  // not strictly above the conservative Byzantine bound f=10.
+  const replaced=[...f.keys.slice(0,29),makeSigner()];
+  const unsafe=f.committee(replaced,91);
+  assert.throws(()=>analyzeEpochOverlap(previous,unsafe),
+    /unsafe cross-epoch quorum overlap/);
+});
