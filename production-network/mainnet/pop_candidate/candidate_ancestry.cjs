@@ -74,43 +74,48 @@ function verifyCandidateAncestry(committee, checkpoint, certificates) {
   let lastRound=0;
   let signedVotes=0;
   const heights=new Set(), hashes=new Set([head]);
-  for(const [index,certificate] of canonicalCertificates.entries()) {
+  // Use numeric slots, not an inherited Array.prototype.entries method.
+  for(let index=0;index<canonicalCertificates.length;index++) {
+    const certificate=canonicalCertificates[index];
     need(certificate && typeof certificate==="object" && !Array.isArray(certificate),
          "PoP malformed research certificate at index "+index);
-    // A signed candidate envelope must not execute caller-supplied getters
-    // or accept inherited, hidden or symbol-keyed finality metadata.
+    // The envelope may be a Proxy whose get trap returns different proofs
+    // than the own data descriptors that passed structural validation.
+    const envelope=Object.create(null);
     need(Object.getPrototypeOf(certificate)===Object.prototype &&
          Reflect.ownKeys(certificate).length===2 &&
          ["proposal","votes"].every(field=>{
            const descriptor=Object.getOwnPropertyDescriptor(certificate,field);
-           return descriptor && Object.hasOwn(descriptor,"value") &&
-                  descriptor.enumerable;
+           if(!descriptor || !Object.hasOwn(descriptor,"value") ||
+              !descriptor.enumerable) return false;
+           envelope[field]=descriptor.value;
+           return true;
          }),
          "PoP research certificate requires plain own proposal and votes data fields");
-    const {proposal,votes}=certificate;
+    const {proposal,votes}=envelope;
     need(proposal && typeof proposal==="object" && !Array.isArray(proposal),
          "PoP missing candidate proposal at index "+index);
-    need(height<Number.MAX_SAFE_INTEGER && proposal.height===height+1,
-         "PoP research certificate height gap, rollback or reorder at index "+index);
-    need(proposal.previousBlockHash===head,
-         "PoP research certificate parent hash mismatch at index "+index);
-    need(!heights.has(proposal.height),
-         "PoP research duplicate height at index "+index);
-    need(!hashes.has(proposal.blockHash),
-         "PoP research duplicate or cyclic block hash at index "+index);
 
-    // Re-verify original Ed25519 votes, proposer, epoch, chain/genesis,
-    // distinct quorum and exact candidate proposal at EVERY height.
+    // verifyCertificate snapshots the signed proposal fields from own data
+    // descriptors. Its verified result, not Proxy property reads, must drive
+    // ancestry, height continuity and the reported chain head.
     const checked=verifyCertificate(committee,proposal,votes);
     need(checked.valid===true && checked.productionConsensus===false &&
-         checked.height===proposal.height && checked.blockHash===proposal.blockHash &&
          checked.chainId===committee.chainId && checked.epoch===committee.epoch,
          "PoP malformed signed candidate proof at index "+index);
-    heights.add(proposal.height);
-    hashes.add(proposal.blockHash);
-    height=proposal.height;
-    head=proposal.blockHash;
-    lastRound=proposal.round;
+    need(height<Number.MAX_SAFE_INTEGER && checked.height===height+1,
+         "PoP research certificate height gap, rollback or reorder at index "+index);
+    need(checked.previousBlockHash===head,
+         "PoP research certificate parent hash mismatch at index "+index);
+    need(!heights.has(checked.height),
+         "PoP research duplicate height at index "+index);
+    need(!hashes.has(checked.blockHash),
+         "PoP research duplicate or cyclic block hash at index "+index);
+    heights.add(checked.height);
+    hashes.add(checked.blockHash);
+    height=checked.height;
+    head=checked.blockHash;
+    lastRound=checked.round;
     signedVotes+=checked.signers;
   }
   return Object.freeze({
