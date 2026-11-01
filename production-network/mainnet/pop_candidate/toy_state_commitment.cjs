@@ -65,8 +65,25 @@ function stateEntries(map){
   return [...map.entries()].sort(([a],[b])=>a<b?-1:a>b?1:0)
     .map(([name,v])=>[name,v.value,v.nonce]);
 }
+// Only internally constructed arrays of canonical primitive fields reach this
+// encoder. JSON.stringify(array) calls an inherited Array.prototype.toJSON,
+// allowing runtime prototype pollution to change a committed state/block hash.
+function canonicalDigestJSON(value){
+  if(Array.isArray(value)){
+    let encoded="[";
+    for(let i=0;i<value.length;i++){
+      if(i)encoded+=",";
+      encoded+=canonicalDigestJSON(value[i]);
+    }
+    return encoded+"]";
+  }
+  need(typeof value==="string" ||
+       (typeof value==="number"&&Number.isSafeInteger(value)),
+       "PoP toy digest requires canonical primitive fields");
+  return JSON.stringify(value);
+}
 function digest(label,value){
-  return hash(Buffer.from(APP_DOMAIN+"\n"+label+"\n"+JSON.stringify(value),"utf8"));
+  return hash(Buffer.from(APP_DOMAIN+"\n"+label+"\n"+canonicalDigestJSON(value),"utf8"));
 }
 function stateRoot(state){
   return digest("state",stateEntries(normalizedState(state)));
