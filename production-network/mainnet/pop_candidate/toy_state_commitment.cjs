@@ -99,7 +99,12 @@ function stateRoot(state){
 function snapshot(map) {
   // Keep ordinary JSON-compatible objects for strict revalidation on each height.
   const result={};
-  for(const [k,v] of map)result[k]=Object.freeze({value:v.value,nonce:v.nonce});
+  // Map iteration yields entry arrays. Destructuring those arrays invokes
+  // mutable Array.prototype[Symbol.iterator], which is not consensus-safe.
+  for(const entry of map){
+    const k=entry[0],v=entry[1];
+    result[k]=Object.freeze({value:v.value,nonce:v.nonce});
+  }
   return Object.freeze(result);
 }
 function applyOps(state,operations){
@@ -120,7 +125,10 @@ function applyOps(state,operations){
     accepted.push(d.value);
   }
   const next=normalizedState(state),serialized=[];
-  for(const suppliedOp of accepted){
+  // Do not invoke a mutable inherited iterator on the accepted operation
+  // snapshot: a polluted iterator could substitute unsigned operations.
+  for(let index=0;index<accepted.length;index++){
+    const suppliedOp=accepted[index];
     // The validated descriptor snapshot, not Proxy property reads, determines
     // the exact nonfinancial operation committed to the toy state root.
     const op=exactFields(suppliedOp,OP_FIELDS,"operation");
