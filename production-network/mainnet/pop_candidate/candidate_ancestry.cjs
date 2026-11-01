@@ -25,19 +25,25 @@ function verifyCandidateAncestry(committee, checkpoint, certificates) {
        "PoP research checkpoint object required");
   // Caller-supplied anchors must not obtain their fields from prototypes or
   // execute accessor code while the ancestry verifier checks signatures.
+  // A Proxy may advertise valid own data descriptors yet return different
+  // values through ordinary property reads. Only descriptor values are used.
+  const anchor=Object.create(null);
   need(Object.getPrototypeOf(checkpoint)===Object.prototype &&
        Reflect.ownKeys(checkpoint).length===2 &&
        ["height","blockHash"].every(field=>{
          const descriptor=Object.getOwnPropertyDescriptor(checkpoint,field);
-         return descriptor && Object.hasOwn(descriptor,"value") &&
-                descriptor.enumerable;
+         if(!descriptor || !Object.hasOwn(descriptor,"value") ||
+            !descriptor.enumerable) return false;
+         anchor[field]=descriptor.value;
+         return true;
        }),
        "PoP research checkpoint requires plain own height and blockHash data fields");
+  const checkpointHeight=anchor.height,checkpointHash=anchor.blockHash;
   // JSON encodes -0 as 0; reject noncanonical zero in untrusted anchors.
-  need(Number.isSafeInteger(checkpoint.height) && checkpoint.height>=0 &&
-       !Object.is(checkpoint.height,-0),
+  need(Number.isSafeInteger(checkpointHeight) && checkpointHeight>=0 &&
+       !Object.is(checkpointHeight,-0),
        "PoP research checkpoint height must be a nonnegative safe integer");
-  need(typeof checkpoint.blockHash==="string" && HASH.test(checkpoint.blockHash),
+  need(typeof checkpointHash==="string" && HASH.test(checkpointHash),
        "PoP research checkpoint hash must be a canonical 32-byte hash");
   // Read the declared array length from its descriptor, not a Proxy get trap.
   // Only the explicit certificate slots may contribute to signed ancestry.
@@ -64,7 +70,7 @@ function verifyCandidateAncestry(committee, checkpoint, certificates) {
     canonicalCertificates.push(descriptor.value);
   }
 
-  let height=checkpoint.height,head=checkpoint.blockHash;
+  let height=checkpointHeight,head=checkpointHash;
   let lastRound=0;
   let signedVotes=0;
   const heights=new Set(), hashes=new Set([head]);
@@ -116,8 +122,8 @@ function verifyCandidateAncestry(committee, checkpoint, certificates) {
     chainId:committee.chainId,
     epoch:committee.epoch,
     governanceKeyId:committee.governanceKeyId,
-    checkpointHeight:checkpoint.height,
-    checkpointHash:checkpoint.blockHash,
+    checkpointHeight,
+    checkpointHash,
     endingHeight:height,
     endingBlockHash:head,
     endingRound:lastRound,
