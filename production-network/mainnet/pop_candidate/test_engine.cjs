@@ -309,6 +309,32 @@ test("research proposer seed is domain-separated and bound to the signed roster"
   }
 });
 
+test("research proposer election ignores poisoned inherited Array.toJSON",()=>{
+  const f=fixture(7),height=63;
+  const rounds=[0,1,2,3,4,5,6,7,17,31];
+  const expected=rounds.map(round=>proposer(f.committee,height,round));
+  const original=Object.getOwnPropertyDescriptor(Array.prototype,"toJSON");
+  try {
+    Object.defineProperty(Array.prototype,"toJSON",{
+      configurable:true,writable:true,
+      value(){return ["attacker-controlled-election-roster"];}
+    });
+    for(let i=0;i<rounds.length;i++){
+      const round=rounds[i];
+      assert.equal(proposer(f.committee,height,round),expected[i],
+        "research proposer must be bound to canonical admitted roster");
+      const {proposal,votes}=f.bundle(height,round);
+      const proof=verifyCertificate(f.committee,proposal,votes);
+      assert.equal(proof.valid,true);
+      assert.equal(proof.finalized,false);
+      assert.equal(proof.productionConsensus,false);
+    }
+  } finally {
+    if(original)Object.defineProperty(Array.prototype,"toJSON",original);
+    else delete Array.prototype.toJSON;
+  }
+});
+
 test("research proposer roster ordering is ASCII-canonical, not locale-dependent",()=>{
   const f=fixture(7);
   const expected=f.registry.validators.map(v=>v.id).sort();
