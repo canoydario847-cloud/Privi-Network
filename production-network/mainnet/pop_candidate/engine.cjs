@@ -197,11 +197,19 @@ function proposer(committee,height,round) {
   // signer roster, not only epoch and committee size. This is NOT a
   // randomness beacon, anti-censorship proof, or production leader election.
   const rosterIds=committee.validators.map(v=>v.id); // sorted at admission
-  const seed=hash(Buffer.from(JSON.stringify([
+  // Preserve the v2 election seed byte-for-byte while serializing only
+  // primitive values. JSON.stringify on an Array invokes an inherited
+  // Array.prototype.toJSON hook and can let a poisoned runtime silently
+  // change the proposer election independently of the admitted roster.
+  const prefix=[
     "Privi/PoP/Research/ProposerElection/v2",
     committee.chainId,committee.genesisHash,committee.epoch,
-    committee.governanceKeyId,rosterIds,height,round
-  ]),"utf8"));
+    committee.governanceKeyId
+  ].map(value=>JSON.stringify(value)).join(",");
+  const roster=rosterIds.map(id=>JSON.stringify(id)).join(",");
+  const seedBytes="["+prefix+",["+roster+"],"+
+                  JSON.stringify(height)+","+JSON.stringify(round)+"]";
+  const seed=hash(Buffer.from(seedBytes,"utf8"));
   const slot=Number(BigInt(seed)%BigInt(committee.validators.length));
   return committee.validators[slot].id;
 }
