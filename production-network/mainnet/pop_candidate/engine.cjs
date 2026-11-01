@@ -360,7 +360,10 @@ class ResearchVoteLock {
     // must not reset a previous same-height signing commitment. Parent hash
     // must also match: identical child hashes with different claimed ancestry
     // are conflicting signed statements, even when rounds differ.
-    const key=JSON.stringify([height,validatorId]);
+    // A poisoned Array.prototype.toJSON can make serialized lock keys change
+    // between calls and permit conflicting same-height votes. The validated
+    // safe-integer height and fixed-width hex signer ID are unambiguous here.
+    const key=height+":"+validatorId;
     const old=this.#commits.get(key);
     check(!old || old.epoch===epoch,"PoP unreviewed same-height epoch transition rejected");
     check(!old || old.blockHash===blockHash,"PoP conflicting-height double-sign rejected");
