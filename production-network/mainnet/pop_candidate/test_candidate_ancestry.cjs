@@ -338,3 +338,56 @@ test("research ancestry uses declared certificate slots, not Proxy iterators or 
   assert.equal(second.finalized,false);
   assert.equal(second.productionConsensus,false);
 });
+
+
+test("research ancestry uses verified signed fields and envelope descriptors, not Proxy reads",()=>{
+  const f=makeFixture(),items=f.sequence(2);
+  let reads=0;
+  const signedProposal=new Proxy({...items[0].proposal},{
+    get(){reads++;throw Error("untrusted signed proposal get trap");}
+  });
+  const envelope=new Proxy({proposal:signedProposal,votes:items[0].votes},{
+    get(){reads++;throw Error("untrusted certificate envelope get trap");}
+  });
+  const proof=verifyCandidateAncestry(f.committee,f.checkpoint,[envelope,items[1]]);
+  assert.equal(proof.endingHeight,items[1].proposal.height);
+  assert.equal(proof.endingBlockHash,items[1].proposal.blockHash);
+  assert.equal(proof.checkedSignatures,2*f.committee.quorum);
+  assert.equal(reads,0,"untrusted Proxy property reads must not execute");
+  assert.equal(proof.finalized,false);
+  assert.equal(proof.productionConsensus,false);
+
+  // This candidate has valid signatures, but signs a parent disconnected
+  // from the caller-supplied checkpoint. A Proxy cannot claim another parent.
+  const disconnected=f.certificate(items[0].proposal.height,
+    "0x"+"f".repeat(64),items[0].proposal.blockHash,items[0].proposal.round);
+  const forgedView=new Proxy({...disconnected.proposal},{
+    get(target,key,receiver){
+      reads++;
+      if(key==="previousBlockHash")return f.checkpoint.blockHash;
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  assert.throws(()=>verifyCandidateAncestry(f.committee,f.checkpoint,
+    [{proposal:forgedView,votes:disconnected.votes}]),/parent hash mismatch/);
+  assert.equal(reads,0,"signed parent checks must never consult Proxy getters");
+});
+
+test("research ancestry ignores inherited Array.entries overrides",()=>{
+  const f=makeFixture(),items=f.sequence(2);
+  const original=Object.getOwnPropertyDescriptor(Array.prototype,"entries");
+  try {
+    Object.defineProperty(Array.prototype,"entries",{
+      configurable:true,writable:true,
+      value(){throw Error("untrusted inherited entries invoked");}
+    });
+    const proof=verifyCandidateAncestry(f.committee,f.checkpoint,items);
+    assert.equal(proof.verifiedCandidateCertificates,2);
+    assert.equal(proof.endingBlockHash,items[1].proposal.blockHash);
+    assert.equal(proof.productionConsensus,false);
+    assert.equal(proof.finalized,false);
+  } finally {
+    if(original)Object.defineProperty(Array.prototype,"entries",original);
+    else delete Array.prototype.entries;
+  }
+});
