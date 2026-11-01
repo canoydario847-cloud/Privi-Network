@@ -994,3 +994,45 @@ test("research vote snapshot ignores poisoned Array.prototype iterator",()=>{
   assert.equal(proof.finalized,false);
   assert.equal(proof.productionConsensus,false);
 });
+
+test("research vote signatures cannot be rebound by inherited Array iterator",()=>{
+  const f=fixture(4),{proposal,votes}=f.bundle();
+  const otherHash="0x"+"d".repeat(64);
+  const otherFields=proposalFields(f.committee,proposal.height,proposal.round,
+    proposal.previousBlockHash,otherHash,proposal.proposerId);
+  const signerById=new Map(f.keys.map(key=>[key.id,key]));
+  // These votes authenticate a DIFFERENT block from the valid proposal.
+  const otherVotes=votes.map(v=>({
+    validatorId:v.validatorId,
+    signature:sign(signerById.get(v.validatorId),"commit",
+      voteFields(otherFields,v.validatorId))
+  }));
+  assert.throws(()=>verifyCertificate(f.committee,proposal,otherVotes),
+    /Forged or wrong-epoch\/chain\/round PoP vote/);
+  const original=Object.getOwnPropertyDescriptor(Array.prototype,Symbol.iterator);
+  let substitutions=0;
+  try {
+    Object.defineProperty(Array.prototype,Symbol.iterator,{
+      configurable:true,writable:true,
+      value:function(){
+        if(Array.isArray(this) && this.length===8 &&
+           this[0]===f.committee.chainId && this[6]===proposal.blockHash){
+          substitutions++;
+          const changed=new Array(8);
+          for(let i=0;i<8;i++)changed[i]=i===6?otherHash:this[i];
+          return original.value.call(changed);
+        }
+        return original.value.call(this);
+      }
+    });
+    // An inherited iterator must not rebind the proposal's block A to
+    // signatures issued for block B. Old spread-based voteFields fails here.
+    assert.throws(()=>verifyCertificate(f.committee,proposal,otherVotes),
+      /Forged or wrong-epoch\/chain\/round PoP vote/);
+    assert.equal(substitutions,0,
+      "verified vote fields must never invoke inherited array iteration");
+  } finally {
+    Object.defineProperty(Array.prototype,Symbol.iterator,original);
+  }
+  assert.equal(verifyCertificate(f.committee,proposal,votes).valid,true);
+});

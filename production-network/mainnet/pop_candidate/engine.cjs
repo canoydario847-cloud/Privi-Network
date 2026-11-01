@@ -271,7 +271,15 @@ function verifyProposal(committee, proposal) {
   return fields;
 }
 function voteFields(proposalFields, validatorId) {
-  return [...proposalFields,validatorId];
+  // A hostile inherited Array.prototype[Symbol.iterator] could substitute
+  // a different signed block hash when spreading the verified proposal.
+  // Copy the eight internally validated fields by index instead.
+  check(Array.isArray(proposalFields) && proposalFields.length===8,
+        "Invalid PoP proposal vote fields");
+  const fields=new Array(9);
+  for(let i=0;i<8;i++)fields[i]=proposalFields[i];
+  fields[8]=validatorId;
+  return fields;
 }
 function verifyCertificate(committee, proposal, votes) {
   // verifyProposal enforces attested committee identity and frozen membership
