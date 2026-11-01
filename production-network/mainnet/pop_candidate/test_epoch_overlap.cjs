@@ -346,3 +346,32 @@ test("governance-signed fault-domain reassignment must not count as stable epoch
   assert.equal(evidence.permitsEpochTransition,false);
   assert.equal(evidence.productionConsensus,false);
 });
+
+
+test("research epoch overlap cannot be spoofed by inherited Array.prototype.toJSON",()=>{
+  const f=fixture(4);
+  const previous=f.committee(f.keys,130);
+  const relocated=f.committee(f.keys,131,{changeFaultDomainAt:0});
+  const stable=f.committee(f.keys,131);
+  // JSON.stringify([identity fields]) used to consult this inherited hook.
+  // An attacker who can poison the runtime's Array prototype could make
+  // different admitted identities serialize identically and bypass the
+  // necessary cross-epoch quorum-intersection rejection.
+  const original=Object.getOwnPropertyDescriptor(Array.prototype,"toJSON");
+  try {
+    Object.defineProperty(Array.prototype,"toJSON",{
+      configurable:true,writable:true,
+      value(){return ["same-identity-for-every-validator"];}
+    });
+    assert.throws(()=>analyzeEpochOverlap(previous,relocated),
+      /unsafe cross-epoch quorum overlap/);
+    const evidence=analyzeEpochOverlap(previous,stable);
+    assert.equal(evidence.unchangedSigners,4);
+    assert.equal(evidence.minimalCommonQuorumSigners,2);
+    assert.equal(evidence.permitsEpochTransition,false);
+    assert.equal(evidence.productionConsensus,false);
+  } finally {
+    if(original)Object.defineProperty(Array.prototype,"toJSON",original);
+    else delete Array.prototype.toJSON;
+  }
+});
