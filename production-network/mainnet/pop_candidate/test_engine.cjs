@@ -784,3 +784,28 @@ test("research admission uses validator descriptors, not Proxy iteration or inde
   assert.equal(admitted.quorum,3);
   assert.equal(admitted.validators.length,4);
 });
+
+test("research quorum verifies vote descriptors without Proxy getter substitution",()=>{
+  const f=fixture(4),{proposal,votes}=f.bundle();
+  let reads=0;
+  // The declared voters are unadmitted, but a hostile get trap supplies
+  // three genuine signed votes. Only the declared descriptor data may count.
+  const forged=votes.map(signed=>new Proxy({
+    validatorId:"0x"+"f".repeat(64),signature:signed.signature
+  },{
+    get(target,key,receiver){
+      if(key==="validatorId"){
+        reads++;
+        return signed.validatorId;
+      }
+      return Reflect.get(target,key,receiver);
+    }
+  }));
+  assert.throws(()=>verifyCertificate(f.committee,proposal,forged),
+    /Unadmitted PoP voter/);
+  assert.equal(reads,0,"vote getter must never substitute a signed voter");
+  const valid=verifyCertificate(f.committee,proposal,votes);
+  assert.equal(valid.signers,3);
+  assert.equal(valid.finalized,false);
+  assert.equal(valid.productionConsensus,false);
+});
