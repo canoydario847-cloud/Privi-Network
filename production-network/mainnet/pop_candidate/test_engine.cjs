@@ -839,3 +839,23 @@ test("research admissions bind registry and validator descriptor snapshots again
   assert.equal(validatorReads,0,"validator Proxy getter must never execute");
   assert.equal(parseRegistry(f.registry,f.gov.publicKeyB64).quorum,3);
 });
+
+test("research 31-member quorum boundary is 21 signatures and 32 members fail closed",()=>{
+  // Research committee admission has a hard 31-member bound. A 20-of-31
+  // certificate is below >2/3 even if every signature is authentic.
+  const f=fixture(31);
+  assert.equal(f.committee.validators.length,31);
+  assert.equal(f.committee.quorum,21);
+  const {proposal,votes}=f.bundle(11,0,undefined,undefined,31);
+  assert.equal(votes.length,31);
+  assert.throws(()=>verifyCertificate(f.committee,proposal,votes.slice(0,20)),
+    /Insufficient independently signed PoP quorum/);
+  const proof=verifyCertificate(f.committee,proposal,votes.slice(0,21));
+  assert.equal(proof.valid,true);
+  assert.equal(proof.signers,21);
+  assert.equal(proof.quorum,21);
+  assert.equal(proof.signerIds.length,21);
+  assert.equal(proof.finalized,false);
+  assert.equal(proof.productionConsensus,false);
+  assert.throws(()=>fixture(32),/PoP requires 4..31 attested research validators/);
+});
