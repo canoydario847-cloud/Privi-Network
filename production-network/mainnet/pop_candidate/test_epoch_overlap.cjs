@@ -19,7 +19,7 @@ function fixture(n) {
     const signer=options.governanceSigner||gov;
     const validators=signers.map((key,i)=>{
       const operatorId=(options.changeOperatorAt===i?"ALTERNATE_OPERATOR_":"OPERATOR_")+i;
-      const faultDomain="host"+i+".separate-operator.example";
+      const faultDomain=(options.changeFaultDomainAt===i?"relocated-host":"host"+i)+".separate-operator.example";
       const companyId="ORG_"+i;
       const positionSequence=options.changePositionAt===i ? i+100 : i+1;
       const anchorBlockHash=hash(Buffer.from("research-position-anchor-"+i+
@@ -324,4 +324,25 @@ test("five-to-four research committee contraction preserves only a necessary ove
   const unsafe=f.committee(replaced,111);
   assert.throws(()=>analyzeEpochOverlap(previous,unsafe),
     /unsafe cross-epoch quorum overlap/);
+});
+
+// A governance-signed domain change is not independent evidence of continuity:
+// even the same Ed25519 key and operator must not count as an unchanged
+// cross-epoch identity when its claimed failure domain changes.
+test("governance-signed fault-domain reassignment must not count as stable epoch overlap",()=>{
+  const f=fixture(4);
+  const previous=f.committee(f.keys,120);
+  const relocated=f.committee(f.keys,121,{changeFaultDomainAt:0});
+  assert.equal(previous.governanceKeyId,relocated.governanceKeyId);
+  assert.deepEqual(previous.validators.map(v=>v.id),relocated.validators.map(v=>v.id));
+  const before=previous.validators.find(v=>v.operatorId==="OPERATOR_0");
+  const after=relocated.validators.find(v=>v.operatorId==="OPERATOR_0");
+  assert.notEqual(before.faultDomain,after.faultDomain);
+  assert.throws(()=>analyzeEpochOverlap(previous,relocated),
+    /unsafe cross-epoch quorum overlap/);
+  const unchanged=f.committee(f.keys,121);
+  const evidence=analyzeEpochOverlap(previous,unchanged);
+  assert.equal(evidence.overlapNecessaryCondition,true);
+  assert.equal(evidence.permitsEpochTransition,false);
+  assert.equal(evidence.productionConsensus,false);
 });
