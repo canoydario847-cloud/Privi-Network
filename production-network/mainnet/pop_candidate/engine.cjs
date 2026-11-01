@@ -296,7 +296,10 @@ function verifyCertificate(committee, proposal, votes) {
     const fieldDescriptors=required.map(field=>
       Object.getOwnPropertyDescriptor(vote,field));
     check(Object.getPrototypeOf(vote)===Object.prototype &&
-          (keys.length===2 || (keys.length===3 && marker &&
+          // A Proxy can omit a configurable researchOnly key from ownKeys.
+          // The two-field form must not secretly declare that marker.
+          ((keys.length===2 && marker===undefined) ||
+           (keys.length===3 && marker &&
             Object.hasOwn(marker,"value") && marker.value===true &&
             marker.enumerable)) &&
           fieldDescriptors.every(descriptor=>
