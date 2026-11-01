@@ -441,3 +441,29 @@ test("toy account record descriptors, not Proxy property reads, determine the co
   assert.equal(result.nextState.agent_a.nonce,1);
   assert.equal(reads,0,"account Proxy get traps must never execute");
 });
+
+test("toy candidate block fields use validated descriptors, never unsigned Proxy reads",()=>{
+  const f=fixture(),sample=f.build();
+  const fields=new Set(["height","previousBlockHash","operations","operationsRoot","stateRoot","blockHash"]);
+  let reads=0;
+  const hostile=new Proxy(sample.blocks[0],{
+    get(target,key,receiver){
+      if(fields.has(key)){reads++;throw Error("unsigned candidate getter: "+String(key));}
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  const verified=f.verify({...sample,blocks:[hostile,...sample.blocks.slice(1)]});
+  assert.equal(verified.verifiedToyTransitions,2);
+  assert.equal(verified.productionConsensus,false);
+  assert.equal(verified.finalized,false);
+  assert.equal(reads,0,"candidate block Proxy getters must never execute");
+  const forged=new Proxy(sample.blocks[0],{
+    get(target,key,receiver){
+      if(key==="blockHash"){reads++;return "0x"+"f".repeat(64);}
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  assert.equal(f.verify({...sample,blocks:[forged,...sample.blocks.slice(1)]}).endingBlockHash,
+               sample.blocks[1].blockHash);
+  assert.equal(reads,0,"forged candidate block getter must not affect verification");
+});
