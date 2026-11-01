@@ -467,3 +467,31 @@ test("toy candidate block fields use validated descriptors, never unsigned Proxy
                sample.blocks[1].blockHash);
   assert.equal(reads,0,"forged candidate block getter must not affect verification");
 });
+
+
+test("toy state and signed candidate digests ignore inherited array toJSON pollution",()=>{
+  const f=fixture();
+  const operations=[{kind:"increment",account:"agent_a",amount:3,nonce:1}];
+  const expectedRoot=stateRoot(f.startingState);
+  const expected=computeResearchBlock(f.committee,f.startingState,6,
+                                      f.checkpoint.blockHash,operations);
+  const prior=Object.getOwnPropertyDescriptor(Array.prototype,"toJSON");
+  let calls=0;
+  try{
+    Object.defineProperty(Array.prototype,"toJSON",{
+      configurable:true,writable:true,
+      value(){calls++;return ["forged-research-commitment"];}
+    });
+    assert.equal(stateRoot(f.startingState),expectedRoot);
+    const actual=computeResearchBlock(f.committee,f.startingState,6,
+                                      f.checkpoint.blockHash,operations);
+    assert.equal(actual.block.operationsRoot,expected.block.operationsRoot);
+    assert.equal(actual.block.stateRoot,expected.block.stateRoot);
+    assert.equal(actual.block.blockHash,expected.block.blockHash);
+    assert.equal(calls,0,"no inherited toJSON hook may influence commitment bytes");
+  }finally{
+    if(prior)Object.defineProperty(Array.prototype,"toJSON",prior);
+    else delete Array.prototype.toJSON;
+  }
+  assert.equal(f.verify().productionConsensus,false);
+});
