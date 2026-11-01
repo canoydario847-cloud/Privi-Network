@@ -296,3 +296,32 @@ test("four-to-five research committee expansion preserves only a necessary overl
   assert.throws(()=>analyzeEpochOverlap(previous,unsafe),
     /unsafe cross-epoch quorum overlap/);
 });
+
+test("five-to-four research committee contraction preserves only a necessary overlap bound",()=>{
+  // Q5=4, Q4=3, f=max(1,1)=1. Dropping one signer retains four
+  // identities in a five-signer union, so any two quorums share at least
+  // 4+3-5=2 signers. This is only a necessary research preflight.
+  const f=fixture(5);
+  const previous=f.committee(f.keys,110);
+  const contracted=f.committee(f.keys.slice(0,4),111);
+  const evidence=analyzeEpochOverlap(previous,contracted);
+  assert.equal(previous.quorum,4);
+  assert.equal(contracted.quorum,3);
+  assert.equal(evidence.priorValidators,5);
+  assert.equal(evidence.nextValidators,4);
+  assert.equal(evidence.unchangedSigners,4);
+  assert.equal(evidence.minimalCommonQuorumSigners,2);
+  assert.equal(evidence.assumedMaxFaultySharedSigners,1);
+  assert.equal(evidence.overlapNecessaryCondition,true);
+  assert.equal(evidence.permitsEpochTransition,false);
+  assert.equal(evidence.productionConsensus,false);
+  assert.equal(evidence.researchOnly,true);
+
+  // Dropping one signer and replacing another leaves three stable
+  // identities in a six-signer union; the guaranteed intersection is
+  // 4+3-6=1, which cannot exceed the conservative f=1 bound.
+  const replaced=[...f.keys.slice(0,3),makeSigner()];
+  const unsafe=f.committee(replaced,111);
+  assert.throws(()=>analyzeEpochOverlap(previous,unsafe),
+    /unsafe cross-epoch quorum overlap/);
+});
