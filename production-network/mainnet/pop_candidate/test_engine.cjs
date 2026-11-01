@@ -922,7 +922,7 @@ test("research signatures cannot be rebound by inherited Array.toJSON",()=>{
     });
     const canonical=signedMessage("commit",["alpha",7]).toString("utf8");
     assert.equal(canonical,
-      "Privi/PoP/Research/2026/v1\\ncommit\\n[\\"alpha\\",7]");
+      ["Privi/PoP/Research/2026/v1","commit",'["alpha",7]'].join("\n"));
     const f=fixture(4),{proposal,votes}=f.bundle();
     assert.equal(verifyCertificate(f.committee,proposal,votes).valid,true);
     // The proposer signed a different block; inherited serialization hooks
@@ -930,7 +930,7 @@ test("research signatures cannot be rebound by inherited Array.toJSON",()=>{
     const altered={...proposal,blockHash:"0x"+"e".repeat(64)};
     assert.notEqual(altered.blockHash,proposal.blockHash);
     assert.throws(()=>verifyCertificate(f.committee,altered,votes),
-      /Unsigned\\/forged PoP proposal/);
+      /Unsigned\/forged PoP proposal/);
   } finally {
     if(original)Object.defineProperty(Array.prototype,"toJSON",original);
     else delete Array.prototype.toJSON;
