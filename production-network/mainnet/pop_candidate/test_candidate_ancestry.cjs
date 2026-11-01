@@ -116,6 +116,27 @@ test("rejects inherited, accessor-backed, and ambiguous caller-supplied checkpoi
     .verifiedCandidateCertificates,1);
 });
 
+test("ancestry checkpoint uses validated descriptors, never substituted Proxy reads",()=>{
+  const f=makeFixture(),items=f.sequence(1);
+  let heightReads=0,hashReads=0;
+  const checkpoint=new Proxy({...f.checkpoint},{
+    get(target,key,receiver){
+      if(key==="height"){heightReads++;return 900;}
+      if(key==="blockHash"){hashReads++;return "0x"+"f".repeat(64);}
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  const proof=verifyCandidateAncestry(f.committee,checkpoint,items);
+  assert.equal(proof.checkpointHeight,f.checkpoint.height);
+  assert.equal(proof.checkpointHash,f.checkpoint.blockHash);
+  assert.equal(proof.endingHeight,items[0].proposal.height);
+  assert.equal(proof.endingBlockHash,items[0].proposal.blockHash);
+  assert.equal(heightReads,0,"untrusted checkpoint height getter must not execute");
+  assert.equal(hashReads,0,"untrusted checkpoint hash getter must not execute");
+  assert.equal(proof.productionConsensus,false);
+  assert.equal(proof.finalized,false);
+});
+
 test("research certificate envelopes reject getters, inherited fields and hidden finality claims",()=>{
   const f=makeFixture(),valid=f.sequence(1)[0];
   let getterReads=0;
