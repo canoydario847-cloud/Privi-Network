@@ -214,3 +214,30 @@ test("30-member one-signer rotation passes only the necessary research overlap b
   assert.equal(evidence.permitsEpochTransition,false);
   assert.equal(evidence.productionConsensus,false);
 });
+
+test("30-to-31 research committee expansion preserves only a necessary overlap bound",()=>{
+  // Q30=Q31=21. With 30 stable admitted identities, the union has 31
+  // signers and the worst-case cross-epoch intersection is 21+21-31=11,
+  // just above the larger committee's f=10 bound. This is NOT a safe
+  // production handoff, independent-operator proof, or finality.
+  const f=fixture(31);
+  const previous=f.committee(f.keys.slice(0,30),80);
+  const expanded=f.committee(f.keys,81);
+  const evidence=analyzeEpochOverlap(previous,expanded);
+  assert.equal(previous.quorum,21);
+  assert.equal(expanded.quorum,21);
+  assert.equal(evidence.unchangedSigners,30);
+  assert.equal(evidence.minimalCommonQuorumSigners,11);
+  assert.equal(evidence.assumedMaxFaultySharedSigners,10);
+  assert.equal(evidence.permitsEpochTransition,false);
+  assert.equal(evidence.productionConsensus,false);
+  assert.equal(evidence.researchOnly,true);
+
+  // Replacing one of the 30 common signers during the same expansion
+  // reduces the guaranteed intersection to 10: not strictly greater
+  // than the conservative f=10 Byzantine bound, so reject.
+  const replaced=[...f.keys.slice(0,29),makeSigner(),f.keys[30]];
+  const unsafe=f.committee(replaced,81);
+  assert.throws(()=>analyzeEpochOverlap(previous,unsafe),
+    /unsafe cross-epoch quorum overlap/);
+});
