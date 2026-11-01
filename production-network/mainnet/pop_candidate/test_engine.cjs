@@ -180,6 +180,28 @@ test("research certificate rejects unsigned vote metadata and getters before fie
   assert.equal(verifyCertificate(f.committee,proposal,votes).productionConsensus,false);
 });
 
+test("research vote marker cannot be hidden from ownKeys by a Proxy",()=>{
+  const f=fixture(),{proposal,votes}=f.bundle();
+  // A configurable own marker may be omitted by a Proxy ownKeys trap even
+  // though getOwnPropertyDescriptor still exposes its declared value.
+  for(const marker of [false,true]){
+    const vote={...votes[0],researchOnly:marker};
+    let getterReads=0;
+    const hostile=new Proxy(vote,{
+      ownKeys(){return ["validatorId","signature"];},
+      get(){getterReads++;throw Error("unsigned vote getter invoked");}
+    });
+    assert.deepEqual(Reflect.ownKeys(hostile),["validatorId","signature"]);
+    assert.equal(Object.getOwnPropertyDescriptor(hostile,"researchOnly").value,marker);
+    assert.throws(()=>verifyCertificate(f.committee,proposal,
+      [hostile,...votes.slice(1)]),/plain own canonical data fields/);
+    assert.equal(getterReads,0);
+  }
+  const allowed={...votes[0],researchOnly:true};
+  assert.equal(verifyCertificate(f.committee,proposal,
+    [allowed,...votes.slice(1)]).valid,true);
+});
+
 test("research certificate signer attribution is deterministic and immutable",()=>{
   const f=fixture(7);
   const {proposal,votes}=f.bundle();
