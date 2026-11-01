@@ -302,7 +302,10 @@ function verifyCertificate(committee, proposal, votes) {
     canonicalVotes.push(descriptor.value);
   }
   const seen=new Set();
-  for(const vote of canonicalVotes) {
+  // Iterate the descriptor-snapshotted vote array by index. A poisoned
+  // Array.prototype[Symbol.iterator] must not substitute a different quorum.
+  for(let voteIndex=0;voteIndex<canonicalVotes.length;voteIndex++) {
+    const vote=canonicalVotes[voteIndex];
     check(vote && typeof vote==="object","Invalid PoP vote");
     // Signed commit fields do not authenticate arbitrary caller metadata.
     // Reject accessors, inherited values and extra finality claims before
