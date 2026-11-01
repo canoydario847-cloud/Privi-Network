@@ -912,3 +912,27 @@ test("research vote lock ignores inherited JSON hooks when preventing double-sig
   assert.throws(()=>lock.accept(epoch,height,3,validatorId,conflict,parent),
     /conflicting-height double-sign rejected/);
 });
+
+test("research signatures cannot be rebound by inherited Array.toJSON",()=>{
+  const original=Object.getOwnPropertyDescriptor(Array.prototype,"toJSON");
+  try {
+    Object.defineProperty(Array.prototype,"toJSON",{
+      configurable:true,writable:true,
+      value(){return ["attacker-replaced-every-signed-field"];}
+    });
+    const canonical=signedMessage("commit",["alpha",7]).toString("utf8");
+    assert.equal(canonical,
+      "Privi/PoP/Research/2026/v1\\ncommit\\n[\\"alpha\\",7]");
+    const f=fixture(4),{proposal,votes}=f.bundle();
+    assert.equal(verifyCertificate(f.committee,proposal,votes).valid,true);
+    // The proposer signed a different block; inherited serialization hooks
+    // must not turn that signature into authority over this forged proposal.
+    const altered={...proposal,blockHash:"0x"+"e".repeat(64)};
+    assert.notEqual(altered.blockHash,proposal.blockHash);
+    assert.throws(()=>verifyCertificate(f.committee,altered,votes),
+      /Unsigned\\/forged PoP proposal/);
+  } finally {
+    if(original)Object.defineProperty(Array.prototype,"toJSON",original);
+    else delete Array.prototype.toJSON;
+  }
+});
