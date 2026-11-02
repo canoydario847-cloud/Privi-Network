@@ -139,7 +139,7 @@ function parseRegistry(registry, governanceKey) {
     const d=Object.getOwnPropertyDescriptor(validators,String(i));
     check(d && Object.hasOwn(d,"value") && d.enumerable,
           "Noncanonical PoP validator roster: dense plain data array required");
-    admittedRecords.push(d.value);
+    admittedRecords[admittedRecords.length]=d.value;
   }
   const gov = publicKey(governanceKey);
   // Compare signed admissions directly: inherited Set.has/add methods can
@@ -339,7 +339,7 @@ function verifyCertificate(committee, proposal, votes) {
     check(descriptor && Object.hasOwn(descriptor,"value") &&
           descriptor.enumerable,
           "PoP votes require a dense plain array without unsigned metadata or accessors");
-    canonicalVotes.push(descriptor.value);
+    canonicalVotes[canonicalVotes.length]=descriptor.value;
   }
   // Keep a bounded, explicit list of authenticated signer identities. A
   // poisoned Set.prototype.has/add/size/iterator must not manufacture a
