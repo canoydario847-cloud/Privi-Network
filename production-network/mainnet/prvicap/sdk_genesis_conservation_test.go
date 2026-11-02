@@ -505,3 +505,67 @@ func TestActualSDKBankGenesisRejectsCrossDenomOffset(t *testing.T) {
 		t.Fatalf("restored genesis permitted native mint: %v", err)
 	}
 }
+
+// TestActualSDKBankGenesisRejectsDistributedHiddenOverCap exercises the
+// pre-initialization boundary when declared bank supply is exactly the
+// 1B-PRVI cap but an unchecked write adds one aprvi to a second account.
+// This is a corruption fixture, not an authorized transfer or mint path.
+func TestActualSDKBankGenesisRejectsDistributedHiddenOverCap(t *testing.T) {
+	h := newRealBankHarness(t)
+	max, ok := new(big.Int).SetString(MaxBase, 10)
+	if !ok {
+		t.Fatal("invalid embedded PRVI maximum")
+	}
+	remaining := new(big.Int).Sub(max, big.NewInt(1))
+	firstAddr := authtypes.NewModuleAddress("genesisfixtureone")
+	secondAddr := authtypes.NewModuleAddress("genesisfixturetwo")
+	first := sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))
+	second := sdk.NewCoins(sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(remaining)))
+	supply := sdk.NewCoins(sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(max)))
+	h.bank.InitGenesis(h.ctx, &banktypes.GenesisState{
+		Params: banktypes.DefaultParams(),
+		Balances: []banktypes.Balance{
+			{Address: firstAddr.String(), Coins: first},
+			{Address: secondAddr.String(), Coins: second},
+		},
+		Supply: supply,
+	})
+	// The second account now contains the entire cap in addition to
+	// the first account's one aprvi; x/bank still declares only the cap.
+	if err := h.bank.UncheckedSetBalance(h.ctx, secondAddr, sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(max))); err != nil {
+		t.Fatalf("could not arrange hidden distributed over-cap unit: %v", err)
+	}
+	if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount.String(); got != MaxBase {
+		t.Fatalf("test precondition: declared bank supply changed to %s", got)
+	}
+	if got := h.bank.GetBalance(h.ctx, secondAddr, BaseDenom).Amount.BigInt(); got.Cmp(max) != 0 {
+		t.Fatalf("test precondition: second account balance is %s", got)
+	}
+	if err := h.cap.InitGenesis(h.ctx, MaxBase, h.bank); !errors.Is(err, ErrBankSupplyMismatch) {
+		t.Fatalf("distributed hidden over-cap balance initialized issuance: %v", err)
+	}
+	if _, err := h.cap.Snapshot(h.ctx); !errors.Is(err, ErrNotInitialized) {
+		t.Fatalf("rejected distributed genesis persisted issuance: %v", err)
+	}
+	if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrNotInitialized) {
+		t.Fatalf("native mint did not fail closed after rejected genesis: %v", err)
+	}
+
+	// Correcting the single corrupted balance must allow exactly-cap
+	// initialization, with immutable issuance and mint prohibition.
+	if err := h.bank.UncheckedSetBalance(h.ctx, secondAddr, sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(remaining))); err != nil {
+		t.Fatalf("could not restore second account: %v", err)
+	}
+	if err := h.cap.InitGenesis(h.ctx, MaxBase, h.bank); err != nil {
+		t.Fatalf("restored exact-cap genesis rejected: %v", err)
+	}
+	if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
+		t.Fatalf("restored distributed cap failed reconciliation: %v", err)
+	}
+	if state, err := h.cap.Snapshot(h.ctx); err != nil || state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
+		t.Fatalf("restored distributed issuance invalid: %+v, %v", state, err)
+	}
+	if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
+		t.Fatalf("native mint allowed after restored initialization: %v", err)
+	}
+}
