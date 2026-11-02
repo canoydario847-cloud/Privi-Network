@@ -197,17 +197,20 @@ function proposer(committee,height,round) {
   // Bind this deterministic RESEARCH election to the governance-admitted
   // signer roster, not only epoch and committee size. This is NOT a
   // randomness beacon, anti-censorship proof, or production leader election.
-  const rosterIds=committee.validators.map(v=>v.id); // sorted at admission
-  // Preserve the v2 election seed byte-for-byte while serializing only
-  // primitive values. JSON.stringify on an Array invokes an inherited
-  // Array.prototype.toJSON hook and can let a poisoned runtime silently
-  // change the proposer election independently of the admitted roster.
-  const prefix=[
-    "Privi/PoP/Research/ProposerElection/v2",
-    committee.chainId,committee.genesisHash,committee.epoch,
-    committee.governanceKeyId
-  ].map(value=>JSON.stringify(value)).join(",");
-  const roster=rosterIds.map(id=>JSON.stringify(id)).join(",");
+  // Use direct indexed reads of the frozen, admitted signer roster.
+  // Inherited Array.prototype.map overrides must not substitute a different
+  // research proposer seed or cause honest nodes to elect different leaders.
+  // Preserve the existing v2 seed bytes, including JSON primitive encoding.
+  const prefix=JSON.stringify("Privi/PoP/Research/ProposerElection/v2")+","+
+    JSON.stringify(committee.chainId)+","+
+    JSON.stringify(committee.genesisHash)+","+
+    JSON.stringify(committee.epoch)+","+
+    JSON.stringify(committee.governanceKeyId);
+  let roster="";
+  for(let i=0;i<committee.validators.length;i++){
+    if(i)roster+=",";
+    roster+=JSON.stringify(committee.validators[i].id);
+  }
   const seedBytes="["+prefix+",["+roster+"],"+
                   JSON.stringify(height)+","+JSON.stringify(round)+"]";
   const seed=hash(Buffer.from(seedBytes,"utf8"));
