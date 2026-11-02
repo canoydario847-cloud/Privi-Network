@@ -569,3 +569,58 @@ func TestActualSDKBankGenesisRejectsDistributedHiddenOverCap(t *testing.T) {
 		t.Fatalf("native mint allowed after restored initialization: %v", err)
 	}
 }
+
+
+// TestActualSDKBankGenesisConservingRedistributionAtCap verifies that a
+// balance-preserving redistribution at the exact 1B-PRVI boundary is not
+// mistaken for new issuance. The unchecked setter is used only to construct
+// the disposable SDK fixture, not as an authorized production transfer.
+func TestActualSDKBankGenesisConservingRedistributionAtCap(t *testing.T) {
+	h := newRealBankHarness(t)
+	max, ok := new(big.Int).SetString(MaxBase, 10)
+	if !ok {
+		t.Fatal("invalid embedded PRVI maximum")
+	}
+	remaining := new(big.Int).Sub(max, big.NewInt(1))
+	firstAddr := authtypes.NewModuleAddress("redistributionone")
+	secondAddr := authtypes.NewModuleAddress("redistributiontwo")
+	supply := sdk.NewCoins(sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(max)))
+	h.bank.InitGenesis(h.ctx, &banktypes.GenesisState{
+		Params: banktypes.DefaultParams(),
+		Balances: []banktypes.Balance{
+			{Address: firstAddr.String(), Coins: sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))},
+			{Address: secondAddr.String(), Coins: sdk.NewCoins(sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(remaining)))},
+		},
+		Supply: supply,
+	})
+	// Move the first account's last aprvi to the second account. The
+	// declared bank supply and the sum of actual balances both stay at cap.
+	if err := h.bank.UncheckedSetBalance(h.ctx, firstAddr, sdk.NewInt64Coin(BaseDenom, 0)); err != nil {
+		t.Fatalf("could not empty first fixture account: %v", err)
+	}
+	if err := h.bank.UncheckedSetBalance(h.ctx, secondAddr, sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(max))); err != nil {
+		t.Fatalf("could not credit second fixture account: %v", err)
+	}
+	if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount.String(); got != MaxBase {
+		t.Fatalf("declared native supply changed: %s", got)
+	}
+	if got := h.bank.GetBalance(h.ctx, firstAddr, BaseDenom).Amount.String(); got != "0" {
+		t.Fatalf("first account was not emptied: %s", got)
+	}
+	if got := h.bank.GetBalance(h.ctx, secondAddr, BaseDenom).Amount.String(); got != MaxBase {
+		t.Fatalf("second account does not hold the exact cap: %s", got)
+	}
+	if err := h.cap.InitGenesis(h.ctx, MaxBase, h.bank); err != nil {
+		t.Fatalf("conserving redistribution rejected at exact cap: %v", err)
+	}
+	if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
+		t.Fatalf("conserving redistribution failed reconciliation: %v", err)
+	}
+	if state, err := h.cap.Snapshot(h.ctx); err != nil ||
+		state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
+		t.Fatalf("conserving redistribution changed issuance record: %+v, %v", state, err)
+	}
+	if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
+		t.Fatalf("conserving redistribution permitted native mint: %v", err)
+	}
+}
