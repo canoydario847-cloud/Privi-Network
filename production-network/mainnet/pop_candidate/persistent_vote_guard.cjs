@@ -88,7 +88,7 @@ function canonicalLockBody(record) {
     ',"height":'+JSON.stringify(record.height)+
     ',"validatorId":'+JSON.stringify(record.validatorId)+
     ',"blockHash":'+JSON.stringify(record.blockHash)+
-    ',"previousBlockHash":'+JSON.stringify(record.previousBlockHash)+'}\\n';
+    ',"previousBlockHash":'+JSON.stringify(record.previousBlockHash)+'}\n';
 }
 function syncLockDirectory(location) {
   const rootFd=fs.openSync(location,fs.constants.O_RDONLY|fs.constants.O_DIRECTORY);
