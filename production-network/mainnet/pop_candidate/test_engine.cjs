@@ -1329,3 +1329,46 @@ test("inherited array iterator cannot hide a substituted admitted signer key",()
   assert.equal(verifyCertificate(f.committee,proposal,votes).valid,true,
     "the original signed research certificate remains verifiable");
 });
+
+test("research quorum ignores poisoned Set and Array prototype methods",()=>{
+  const f=fixture(4),{proposal,votes}=f.bundle();
+  // Three copies of ONE valid signature are never three independent votes.
+  const duplicate=[votes[0],{...votes[0]},{...votes[0]}];
+  const reversed=votes.slice().reverse();
+  const expectedIds=votes.map(v=>v.validatorId).sort();
+  const originalHas=Set.prototype.has,originalAdd=Set.prototype.add;
+  const originalSize=Object.getOwnPropertyDescriptor(Set.prototype,"size");
+  const originalIterator=Object.getOwnPropertyDescriptor(Set.prototype,Symbol.iterator);
+  const originalSort=Array.prototype.sort;
+  let duplicateError,legitimateProof,legitimateError;
+  try {
+    // On the vulnerable path, a false has(), discarded add(), and forged
+    // size getter could make one real signer appear to meet a 3-of-4 quorum.
+    Set.prototype.has=function(){return false;};
+    Set.prototype.add=function(){return this;};
+    Object.defineProperty(Set.prototype,"size",{
+      configurable:true,get(){return 3;}
+    });
+    Set.prototype[Symbol.iterator]=function*(){
+      yield "0x"+"f".repeat(64);
+    };
+    Array.prototype.sort=function(){return this;};
+    try {verifyCertificate(f.committee,proposal,duplicate);}
+    catch(e) {duplicateError=e;}
+    try {legitimateProof=verifyCertificate(f.committee,proposal,reversed);}
+    catch(e) {legitimateError=e;}
+  } finally {
+    Set.prototype.has=originalHas;
+    Set.prototype.add=originalAdd;
+    Object.defineProperty(Set.prototype,"size",originalSize);
+    Object.defineProperty(Set.prototype,Symbol.iterator,originalIterator);
+    Array.prototype.sort=originalSort;
+  }
+  assert.match(duplicateError?.message||"",/Duplicate PoP voter/,
+    "repeated signature must never become a forged research quorum");
+  assert.equal(legitimateError,undefined);
+  assert.equal(legitimateProof.signers,3);
+  assert.deepEqual(legitimateProof.signerIds,expectedIds);
+  assert.equal(legitimateProof.finalized,false);
+  assert.equal(legitimateProof.productionConsensus,false);
+});
