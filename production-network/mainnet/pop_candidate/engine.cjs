@@ -130,14 +130,17 @@ function parseRegistry(registry, governanceKey) {
         validatorCount<=31,"PoP requires 4..31 attested research validators");
   const admittedRecords=[];
   check(Object.getPrototypeOf(validators) === Array.prototype &&
-        Reflect.ownKeys(validators).length === validatorCount + 1 &&
-        Array.from({length:validatorCount},(_,i)=>{
-          const d=Object.getOwnPropertyDescriptor(validators,String(i));
-          if(!d || !Object.hasOwn(d,"value") || !d.enumerable)return false;
-          admittedRecords.push(d.value);
-          return true;
-        }).every(Boolean),
+        Reflect.ownKeys(validators).length === validatorCount + 1,
         "Noncanonical PoP validator roster: dense plain data array required");
+  // Never use Array.from or inherited Array.prototype.every to decide which
+  // signed admissions exist. Hostile overrides could approve a sparse roster
+  // or return success without copying ANY declared validator records.
+  for(let i=0;i<validatorCount;i++){
+    const d=Object.getOwnPropertyDescriptor(validators,String(i));
+    check(d && Object.hasOwn(d,"value") && d.enumerable,
+          "Noncanonical PoP validator roster: dense plain data array required");
+    admittedRecords.push(d.value);
+  }
   const gov = publicKey(governanceKey);
   const ids = new Set(), operators = new Set(), domains=new Set(), positions=new Set();
   const validated=[];
