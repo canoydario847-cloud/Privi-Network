@@ -69,8 +69,12 @@ function lockedFileName(record) {
   // at the SAME height. Lock across membership epochs for the same chain
   // and genesis; any epoch mismatch fails closed unless a future formally
   // reviewed joint-consensus transition explicitly handles signer recovery.
-  const key = [record.chainId,record.genesisHash,record.height,record.validatorId];
-  return hash(Buffer.from(JSON.stringify(key),"utf8")).slice(2) + ".json";
+  // Preserve the v2 lock filename bytes without invoking an inherited
+  // Array.prototype.toJSON hook. A mutable hook could otherwise change the
+  // filename between same-height reservations and bypass O_EXCL locking.
+  const encoded="["+JSON.stringify(record.chainId)+","+JSON.stringify(record.genesisHash)+
+    ","+JSON.stringify(record.height)+","+JSON.stringify(record.validatorId)+"]";
+  return hash(Buffer.from(encoded,"utf8")).slice(2) + ".json";
 }
 function syncLockDirectory(location) {
   const rootFd=fs.openSync(location,fs.constants.O_RDONLY|fs.constants.O_DIRECTORY);
