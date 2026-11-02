@@ -1425,3 +1425,34 @@ test("research governance admission rejects duplicate identities despite poisone
   assert.equal(verifyCertificate(validCommittee,proposal,votes).valid,true);
   assert.equal(verifyCertificate(validCommittee,proposal,votes).productionConsensus,false);
 });
+
+
+test("research admission and certificate snapshots ignore poisoned Array.prototype.push",()=>{
+  const f=fixture(4),{proposal,votes}=f.bundle();
+  const originalPush=Array.prototype.push;
+  let intercepted=0;
+  try {
+    Array.prototype.push=function(...items){
+      // Simulate process-wide prototype pollution targeting signed roster
+      // admission records and authenticated vote descriptor snapshots.
+      if(items.length===1 && items[0] && typeof items[0]==="object" &&
+         (Object.hasOwn(items[0],"keySpkiBase64") ||
+          Object.hasOwn(items[0],"validatorId"))){
+        intercepted++;
+        throw Error("poisoned Array.push intercepted signed record");
+      }
+      return Reflect.apply(originalPush,this,items);
+    };
+    const admitted=parseRegistry(f.registry,f.gov.publicKeyB64);
+    assert.equal(admitted.validators.length,4);
+    assert.equal(admitted.quorum,3);
+    const proof=verifyCertificate(admitted,proposal,votes);
+    assert.equal(proof.valid,true);
+    assert.equal(proof.signers,3);
+    assert.equal(proof.finalized,false);
+    assert.equal(proof.productionConsensus,false);
+  } finally {
+    Array.prototype.push=originalPush;
+  }
+  assert.equal(intercepted,0,"authenticated snapshots must not call inherited push");
+});
