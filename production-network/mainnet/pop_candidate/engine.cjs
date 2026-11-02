@@ -141,7 +141,11 @@ function parseRegistry(registry, governanceKey) {
   const gov = publicKey(governanceKey);
   const ids = new Set(), operators = new Set(), domains=new Set(), positions=new Set();
   const validated=[];
-  for (const v of admittedRecords) {
+  // The snapshot must be consumed by index. An inherited array iterator can
+  // substitute a different (but validly signed) admission after descriptor
+  // validation, silently changing the committee that was actually declared.
+  for (let admissionIndex=0;admissionIndex<admittedRecords.length;admissionIndex++) {
+    const v=admittedRecords[admissionIndex];
     const {id,keySpkiBase64,operatorId,faultDomain,companyId,positionSequence,
       anchorBlockHash,positionHash,admissionSignature}=canonicalOwnData(v,
       ["id","keySpkiBase64","operatorId","faultDomain","companyId",
