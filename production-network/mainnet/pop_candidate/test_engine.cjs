@@ -1276,3 +1276,56 @@ test("research admitted committee ignores inherited sort/map/forEach hooks",()=>
   assert.equal(proof.finalized,false);
   assert.equal(proof.productionConsensus,false);
 });
+
+test("inherited array iterator cannot hide a substituted admitted signer key",()=>{
+  const f=fixture(4),{proposal,votes}=f.bundle();
+  const map=f.committee.byId;
+  const admitted=Map.prototype.get.call(map,proposal.proposerId);
+  const attacker=makeKey();
+  const fields=proposalFields(f.committee,proposal.height,proposal.round,
+                              proposal.previousBlockHash,proposal.blockHash,
+                              proposal.proposerId);
+  const forgedProposal={...proposal,signature:sign(attacker,"propose",fields)};
+  const keys=new Map(f.keys.map(k=>[k.id,k]));
+  // An attacker-controlled proposer key must not become an admitted voter.
+  // The other three signatures remain authentic and form a research quorum.
+  const independentVotes=f.committee.validators
+    .filter(v=>v.id!==proposal.proposerId)
+    .map(v=>({validatorId:v.id,
+              signature:sign(keys.get(v.id),"commit",voteFields(fields,v.id))}));
+  assert.equal(independentVotes.length,3);
+  const original=Object.getOwnPropertyDescriptor(Array.prototype,Symbol.iterator);
+  const nativeIterator=original.value;
+  let intercepted=0,proof,error;
+  try {
+    Map.prototype.set.call(map,proposal.proposerId,{
+      ...admitted,pub:crypto.createPublicKey(attacker.privateKey)
+    });
+    // Only the admitted committee's iterator lies. All other arrays retain
+    // their original iteration behavior so a forged certificate would pass
+    // on the vulnerable membership-check path.
+    Object.defineProperty(Array.prototype,Symbol.iterator,{
+      configurable:true,writable:true,
+      value:function(){
+        if(this===f.committee.validators){
+          intercepted++;
+          return nativeIterator.call([]);
+        }
+        return nativeIterator.call(this);
+      }
+    });
+    try {
+      proof=verifyCertificate(f.committee,forgedProposal,independentVotes);
+    } catch(e) { error=e; }
+  } finally {
+    Object.defineProperty(Array.prototype,Symbol.iterator,original);
+    Map.prototype.set.call(map,proposal.proposerId,admitted);
+  }
+  assert.equal(intercepted,0,
+    "authenticated membership checks must not consult inherited iterators");
+  assert.equal(proof,undefined,
+    "a forged proposer key must never authorize a research quorum certificate");
+  assert.match(error?.message||"",/membership changed/);
+  assert.equal(verifyCertificate(f.committee,proposal,votes).valid,true,
+    "the original signed research certificate remains verifiable");
+});
