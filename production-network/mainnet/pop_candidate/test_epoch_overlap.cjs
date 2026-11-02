@@ -375,3 +375,35 @@ test("research epoch overlap cannot be spoofed by inherited Array.prototype.toJS
     else delete Array.prototype.toJSON;
   }
 });
+
+test("research epoch overlap ignores poisoned inherited array iteration when counting stable signers",()=>{
+  const f=fixture(4);
+  const previous=f.committee(f.keys,140);
+  const relocated=f.committee(f.keys,141,{changeFaultDomainAt:0});
+  const stable=f.committee(f.keys,141);
+  // The previous Map(array.map(...)) and for-of paths could both consume
+  // the same stable validator repeatedly, making an unsafe 3-of-4 overlap
+  // appear to have four unchanged signers. Create fixtures before poisoning.
+  const original=Object.getOwnPropertyDescriptor(Array.prototype,Symbol.iterator);
+  let unsafeResult,unsafeError,stableResult,stableError;
+  try {
+    Object.defineProperty(Array.prototype,Symbol.iterator,{
+      configurable:true,writable:true,
+      value:function*(){for(let i=0;i<this.length;i++) yield this[1];}
+    });
+    try { unsafeResult=analyzeEpochOverlap(previous,relocated); }
+    catch(error) { unsafeError=error; }
+    try { stableResult=analyzeEpochOverlap(previous,stable); }
+    catch(error) { stableError=error; }
+  } finally {
+    if(original) Object.defineProperty(Array.prototype,Symbol.iterator,original);
+    else delete Array.prototype[Symbol.iterator];
+  }
+  assert.equal(unsafeResult,undefined,"a forged fourth overlap must never be accepted");
+  assert.match(String(unsafeError?.message),/unsafe cross-epoch quorum overlap/);
+  assert.equal(stableError,undefined);
+  assert.equal(stableResult.unchangedSigners,4);
+  assert.equal(stableResult.minimalCommonQuorumSigners,2);
+  assert.equal(stableResult.permitsEpochTransition,false);
+  assert.equal(stableResult.productionConsensus,false);
+});
