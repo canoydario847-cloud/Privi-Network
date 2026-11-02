@@ -54,6 +54,37 @@ function tempRoot(){
   return dir;
 }
 
+test("research signer membership checks ignore a tampered committee Map.has method",()=>{
+  const f=fixture(),dir=tempRoot();
+  const p=f.proposal(87),v=f.committee.validators[0];
+  const legitimateKey=f.keysById.get(v.id),outsider=makeKey();
+  const byId=f.committee.byId;
+  try {
+    // A mutable Map can acquire an own has method even though the committee
+    // wrapper is frozen. It must not authorize a non-admitted private key.
+    byId.has=()=>true;
+    assert.throws(()=>signCommitWithResearchLock({
+      lockDirectory:dir,committee:f.committee,proposal:p,
+      privateKey:outsider.privateKey
+    }),/not a registered PoP validator/);
+    assert.deepEqual(fs.readdirSync(dir),[],
+      "unadmitted key must never create a durable vote reservation");
+    // A false negative must not deny a genuine admitted signer either.
+    byId.has=()=>false;
+    const vote=signCommitWithResearchLock({
+      lockDirectory:dir,committee:f.committee,proposal:p,
+      privateKey:legitimateKey
+    });
+    assert.equal(vote.validatorId,v.id);
+    assert.equal(vote.researchOnly,true);
+    assert.equal(verifyCertificate(f.committee,p,[vote]).valid,false);
+    assert.equal(fs.readdirSync(dir).length,1);
+  } finally {
+    delete byId.has;
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
+});
+
 test("3-of-4 genuine votes are reserved on disk before signature release",()=>{
   const f=fixture(),p=f.proposal(),dirs=[],votes=[];
   try {
