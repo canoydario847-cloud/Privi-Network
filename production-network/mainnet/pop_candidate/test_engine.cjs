@@ -1096,3 +1096,39 @@ test("research proposer election ignores inherited Array.map manipulation",()=>{
     "governance-admitted roster must determine the same research proposer");
   assert.equal(intercepted,0,"proposer must not invoke inherited array map");
 });
+
+
+test("research quorum vote descriptors resist inherited Array.map substitution",()=>{
+  const f=fixture(4),{proposal,votes}=f.bundle();
+  // Each declared voter is unadmitted, although the signature belongs to
+  // an authentic admitted voter. A poisoned inherited map must not replace
+  // the descriptors checked by the quorum verifier with authentic ones.
+  const forged=votes.map(v=>({
+    validatorId:"0x"+"f".repeat(64),signature:v.signature
+  }));
+  const original=Array.prototype.map;
+  let intercepted=0,next=0;
+  try {
+    Array.prototype.map=function(callback,thisArg){
+      if(this.length===2 && this[0]==="validatorId" && this[1]==="signature"){
+        intercepted++;
+        const authentic=votes[next++];
+        return [
+          Object.getOwnPropertyDescriptor(authentic,"validatorId"),
+          Object.getOwnPropertyDescriptor(authentic,"signature")
+        ];
+      }
+      return original.call(this,callback,thisArg);
+    };
+    assert.throws(()=>verifyCertificate(f.committee,proposal,forged),
+      /Unadmitted PoP voter/);
+    assert.equal(intercepted,0,
+      "verified signer identity must not be selected by inherited map");
+    const valid=verifyCertificate(f.committee,proposal,votes);
+    assert.equal(valid.signers,3);
+    assert.equal(valid.productionConsensus,false);
+    assert.equal(valid.finalized,false);
+  } finally {
+    Array.prototype.map=original;
+  }
+});
