@@ -393,3 +393,56 @@ func TestActualSDKBankMultiDenomNativeConservation(t *testing.T) {
 		t.Fatalf("restored multi-denom native balance rejected: %v", err)
 	}
 }
+
+// TestActualSDKBankCrossDenomOffsetCannotHideNativeDeficit ensures a native shortfall cannot be
+// disguised by adding the same number of units of an unrelated denomination.
+// Total coin counts are not a substitute for per-denomination conservation.
+func TestActualSDKBankCrossDenomOffsetCannotHideNativeDeficit(t *testing.T) {
+	h := newRealBankHarness(t)
+	address := authtypes.NewModuleAddress("genesisfixture")
+	initial := sdk.NewCoins(
+		sdk.NewInt64Coin(BaseDenom, 100),
+		sdk.NewInt64Coin("uother", 50),
+	)
+	h.bank.InitGenesis(h.ctx, &banktypes.GenesisState{
+		Params:   banktypes.DefaultParams(),
+		Balances: []banktypes.Balance{{Address: address.String(), Coins: initial}},
+		Supply:   initial,
+	})
+	if err := h.cap.InitGenesis(h.ctx, "100", h.bank); err != nil {
+		t.Fatalf("valid mixed-denomination genesis rejected: %v", err)
+	}
+	// UncheckedSetBalance is a test-only corruption fixture, not a
+	// permitted production balance update.
+	if err := h.bank.UncheckedSetBalance(h.ctx, address, sdk.NewInt64Coin(BaseDenom, 99)); err != nil {
+		t.Fatalf("could not arrange native shortfall: %v", err)
+	}
+	if err := h.bank.UncheckedSetBalance(h.ctx, address, sdk.NewInt64Coin("uother", 51)); err != nil {
+		t.Fatalf("could not arrange offsetting unrelated units: %v", err)
+	}
+	if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount.String(); got != "100" {
+		t.Fatalf("native supply precondition changed: %s", got)
+	}
+	if got := h.bank.GetSupply(h.ctx, "uother").Amount.String(); got != "50" {
+		t.Fatalf("unrelated supply precondition changed: %s", got)
+	}
+	if err := h.cap.Reconcile(h.ctx, h.bank); !errors.Is(err, ErrUnexpectedSupply) {
+		t.Fatalf("offsetting unrelated units concealed native deficit: %v", err)
+	}
+	if state, err := h.cap.Snapshot(h.ctx); err != nil ||
+		state.GenesisBase != "100" || state.LifetimeIssuedBase != "100" {
+		t.Fatalf("failed reconciliation changed issuance: %+v, %v", state, err)
+	}
+	if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
+		t.Fatalf("native mint allowed after native deficit: %v", err)
+	}
+	if err := h.bank.UncheckedSetBalance(h.ctx, address, sdk.NewInt64Coin(BaseDenom, 100)); err != nil {
+		t.Fatalf("could not restore native balance: %v", err)
+	}
+	if err := h.bank.UncheckedSetBalance(h.ctx, address, sdk.NewInt64Coin("uother", 50)); err != nil {
+		t.Fatalf("could not restore unrelated balance: %v", err)
+	}
+	if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
+		t.Fatalf("restored native balances rejected: %v", err)
+	}
+}
