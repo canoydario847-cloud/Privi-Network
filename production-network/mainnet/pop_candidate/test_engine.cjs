@@ -1372,3 +1372,56 @@ test("research quorum ignores poisoned Set and Array prototype methods",()=>{
   assert.equal(legitimateProof.finalized,false);
   assert.equal(legitimateProof.productionConsensus,false);
 });
+
+test("research governance admission rejects duplicate identities despite poisoned Set methods",()=>{
+  const f=fixture(4);
+  const mutations=[
+    registry=>{registry.validators[1]={...registry.validators[0]};},
+    registry=>{registry.validators[1].operatorId=registry.validators[0].operatorId;},
+    registry=>{registry.validators[1].faultDomain=registry.validators[0].faultDomain;},
+    registry=>{
+      const v=registry.validators[1],original=registry.validators[0];
+      v.companyId=original.companyId;
+      v.positionSequence=original.positionSequence;
+      v.positionHash=hash(Buffer.from(positionStamp(v.companyId,v.positionSequence)));
+    }
+  ];
+  // All four collisions retain correctly signed governance admission records.
+  // The only invalid property is the duplicate signer/operator/domain/position.
+  const registries=mutations.map(mutate=>{
+    const registry=structuredClone(f.registry);
+    mutate(registry);
+    const v=registry.validators[1];
+    const fields=[registry.chainId,registry.genesisHash,registry.epoch,
+      v.operatorId,v.faultDomain,v.companyId,v.positionSequence,v.id,
+      v.anchorBlockHash];
+    v.admissionSignature=sign(f.gov,"admit",fields);
+    return registry;
+  });
+  const originalHas=Set.prototype.has,originalAdd=Set.prototype.add;
+  const errors=[];
+  let validCommittee;
+  try {
+    // The previous parser delegated uniqueness to these mutable methods.
+    // A forged always-false has() plus discarded add() admitted duplicates.
+    Set.prototype.has=function(){return false;};
+    Set.prototype.add=function(){return this;};
+    for(let i=0;i<registries.length;i++){
+      try {parseRegistry(registries[i],f.gov.publicKeyB64);}
+      catch(e){errors[errors.length]=e;}
+    }
+    validCommittee=parseRegistry(f.registry,f.gov.publicKeyB64);
+  } finally {
+    Set.prototype.has=originalHas;
+    Set.prototype.add=originalAdd;
+  }
+  assert.equal(errors.length,4,"every signed admission collision must fail closed");
+  for(const error of errors){
+    assert.match(error.message,/Duplicated validator, operator, failure domain, or PoP position/);
+  }
+  assert.equal(validCommittee.validators.length,4);
+  assert.equal(validCommittee.quorum,3);
+  const {proposal,votes}=f.bundle();
+  assert.equal(verifyCertificate(validCommittee,proposal,votes).valid,true);
+  assert.equal(verifyCertificate(validCommittee,proposal,votes).productionConsensus,false);
+});
