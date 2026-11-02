@@ -337,7 +337,10 @@ function verifyCertificate(committee, proposal, votes) {
           "PoP votes require a dense plain array without unsigned metadata or accessors");
     canonicalVotes.push(descriptor.value);
   }
-  const seen=new Set();
+  // Keep a bounded, explicit list of authenticated signer identities. A
+  // poisoned Set.prototype.has/add/size/iterator must not manufacture a
+  // quorum, hide duplicate votes, or rewrite the certificate signer list.
+  const verifiedSignerIds=[];
   // Iterate the descriptor-snapshotted vote array by index. A poisoned
   // Array.prototype[Symbol.iterator] must not substitute a different quorum.
   for(let voteIndex=0;voteIndex<canonicalVotes.length;voteIndex++) {
@@ -369,13 +372,26 @@ function verifyCertificate(committee, proposal, votes) {
     const validatorId=idDescriptor.value,voteSignature=sigDescriptor.value;
     const signer=nativeMapGet.call(committee.byId,validatorId);
     check(!!signer,"Unadmitted PoP voter");
-    check(!seen.has(validatorId),"Duplicate PoP voter");
+    for(let i=0;i<verifiedSignerIds.length;i++){
+      check(verifiedSignerIds[i]!==validatorId,"Duplicate PoP voter");
+    }
     check(verify(signer.pub,"commit",voteFields(fields,validatorId),voteSignature),
           "Forged or wrong-epoch/chain/round PoP vote");
-    seen.add(validatorId);
+    verifiedSignerIds[verifiedSignerIds.length]=validatorId;
   }
-  check(seen.size>=committee.quorum,
+  check(verifiedSignerIds.length>=committee.quorum,
         "Insufficient independently signed PoP quorum");
+  // Canonical ASCII-hex ordering without inherited Array.prototype.sort.
+  // With at most 31 admitted validators this insertion sort is bounded.
+  for(let i=1;i<verifiedSignerIds.length;i++){
+    const id=verifiedSignerIds[i];
+    let j=i-1;
+    while(j>=0 && verifiedSignerIds[j]>id){
+      verifiedSignerIds[j+1]=verifiedSignerIds[j];
+      j--;
+    }
+    verifiedSignerIds[j+1]=id;
+  }
   return Object.freeze({
     valid:true,
     protocol:"Point of Position candidate (not live consensus)",
@@ -385,11 +401,11 @@ function verifyCertificate(committee, proposal, votes) {
     // the proposer signature. Untrusted Proxy getters can change on reread.
     height:fields[3],round:fields[4],
     previousBlockHash:fields[5],
-    blockHash:fields[6],signers:seen.size,quorum:committee.quorum,
+    blockHash:fields[6],signers:verifiedSignerIds.length,quorum:committee.quorum,
     // Attribute the verified research votes to exact admitted signer identities.
     // Sort independently of input vote order and freeze the nested array:
     // freezing the outer certificate alone would not protect its members.
-    signerIds:Object.freeze([...seen].sort()),
+    signerIds:Object.freeze(verifiedSignerIds),
     // A quorum of valid research signatures is NOT a finalized chain block.
     // Consumers must not mistake this signed-proposal check for execution,
     // independent validator control, or production financial finality.
