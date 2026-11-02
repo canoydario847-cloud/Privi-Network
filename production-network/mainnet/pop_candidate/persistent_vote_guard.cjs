@@ -182,10 +182,14 @@ function signCommitWithResearchLock({lockDirectory,committee,proposal,privateKey
   const validatorId=hash(der);
   must(committee.byId instanceof Map && nativeMapHas.call(committee.byId,validatorId),
        "Private key is not a registered PoP validator");
-  const height=proposal.height;
+  // Lock the exact descriptor-snapshotted fields authenticated by
+  // verifyProposal. A Proxy get trap on the untrusted proposal must never
+  // redirect the durable reservation to another height, child or parent
+  // while the released signature commits to the original signed fields.
+  const height=fields[3], previousBlockHash=fields[5], blockHash=fields[6];
   // No signature may escape before local fsync is complete.
   reservePosition(lockDirectory,committee,height,validatorId,
-                  proposal.blockHash,proposal.previousBlockHash);
+                  blockHash,previousBlockHash);
   const bytes=signedMessage("commit",voteFields(fields,validatorId));
   // A signed research vote must not acquire mutable, unsigned claims such
   // as finalized=true after leaving the signer. This is not finality proof.
