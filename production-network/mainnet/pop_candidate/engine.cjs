@@ -260,7 +260,10 @@ function assertValidatedCommittee(committee) {
         committee.quorum===Math.floor(2*count/3)+1 &&
         committee.byId instanceof Map && nativeMapSize.call(committee.byId)===count,
         "PoP committee quorum or membership metadata inconsistent");
-  for(const validator of committee.validators) {
+  // A hostile inherited array iterator must not skip the membership
+  // check and let a substituted research signer key verify forged votes.
+  for(let i=0;i<count;i++) {
+    const validator=committee.validators[i];
     check(nativeMapGet.call(committee.byId,validator.id)===validator,
           "PoP committee membership changed after admission");
   }
