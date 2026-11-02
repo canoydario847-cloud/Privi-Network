@@ -179,16 +179,30 @@ function parseRegistry(registry, governanceKey) {
   // Research proposer election hashes this order. Locale collation can vary
   // across hosts/ICU versions; fixed lowercase-hex fingerprints must use
   // raw UTF-16/ASCII code-unit ordering on every research node.
-  validated.sort((a,b)=>a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  // Never delegate canonical membership ordering to inherited Array.sort.
+  // An overridden sort can silently change research proposer elections.
+  // At most 31 signed admissions: bounded insertion sort is deterministic.
+  for(let i=1;i<validated.length;i++){
+    const signer=validated[i];
+    let j=i-1;
+    while(j>=0 && validated[j].id>signer.id){
+      validated[j+1]=validated[j];
+      j--;
+    }
+    validated[j+1]=signer;
+  }
   // No PRVI staking power, token holdings or IoT event count affects
   // committee weight. This is *proposed* equal-one-vote research admission.
   const quorum=Math.floor(2*validated.length/3)+1;
-  // Freeze identity metadata used in quorum decisions. Map contents remain
-  // externally accessible for lookup, so certificate verification rechecks
-  // every map entry against these pinned validator records.
-  validated.forEach(Object.freeze);
+  // Freeze identity metadata and populate the admitted signer map without
+  // inherited Array.forEach/map hooks that could substitute membership.
+  const byId=new Map();
+  for(let i=0;i<validated.length;i++){
+    const signer=validated[i];
+    Object.freeze(signer);
+    nativeMapSet.call(byId,signer.id,signer);
+  }
   Object.freeze(validated);
-  const byId=new Map(validated.map(v=>[v.id,v]));
   // Pin the governance root that actually verified all admission signatures.
   // Adjacent epochs must not silently switch authorities with an identical validator set.
   const committee=Object.freeze({chainId,genesisHash,epoch,mode,
