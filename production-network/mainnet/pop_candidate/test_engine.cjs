@@ -1132,3 +1132,41 @@ test("research quorum vote descriptors resist inherited Array.map substitution",
     Array.prototype.map=original;
   }
 });
+
+test("admission descriptor snapshot cannot be replaced by inherited array iterator",()=>{
+  const f=fixture(5);
+  // The fifth admission is signed by the same governance key, but it is NOT
+  // declared in this four-validator roster. An inherited iterator must not
+  // replace the fourth declared operator with that valid outsider.
+  const registry={...f.registry,validators:f.registry.validators.slice(0,4)};
+  const outsider=f.registry.validators[4];
+  const declaredIds=new Set(registry.validators.map(v=>v.id));
+  const originalIterator=Array.prototype[Symbol.iterator];
+  let substitutions=0;
+  try {
+    Array.prototype[Symbol.iterator]=function*(){
+      if(this.length===4 &&
+         this[0]===registry.validators[0] &&
+         this[1]===registry.validators[1] &&
+         this[2]===registry.validators[2] &&
+         this[3]===registry.validators[3]){
+        substitutions++;
+        yield this[0];yield this[1];yield this[2];yield outsider;
+        return;
+      }
+      yield* originalIterator.call(this);
+    };
+    const committee=parseRegistry(registry,f.gov.publicKeyB64);
+    assert.equal(substitutions,0,
+      "the verified admission snapshot must never invoke inherited iteration");
+    assert.equal(committee.validators.length,4);
+    for(let i=0;i<committee.validators.length;i++){
+      assert.ok(declaredIds.has(committee.validators[i].id),
+        "only descriptor-declared validator identities may be admitted");
+    }
+    assert.equal(committee.byId.has(outsider.id),false,
+      "valid governance signature alone does not authorize undeclared admission");
+  } finally {
+    Array.prototype[Symbol.iterator]=originalIterator;
+  }
+});
