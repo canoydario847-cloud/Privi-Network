@@ -274,3 +274,56 @@ func TestActualSDKBankBelowCapRejectsUntrackedBoundaryUnit(t *testing.T) {
 		t.Fatalf("restored valid below-cap balance failed reconciliation: %v", err)
 	}
 }
+
+
+// A conservation check must not confuse an ordinary balance redistribution
+// with new native issuance. This fixture uses the SDK's unchecked setter only
+// to model two matching account writes; it does NOT validate transfer
+// authorization or permit unchecked setters in a production Privi app.
+func TestActualSDKBankConservingRedistributionAndOneUnitDrift(t *testing.T) {
+	h := newRealBankHarness(t)
+	h.genesisFund(t, 100)
+	source := authtypes.NewModuleAddress("genesisfixture")
+	recipient := authtypes.NewModuleAddress("genesisrecipient")
+
+	// Simulate a 40-aprvi transfer: both account balances change, but
+	// the bank's declared supply remains 100 and the actual sum is 100.
+	if err := h.bank.UncheckedSetBalance(h.ctx, source, sdk.NewInt64Coin(BaseDenom, 60)); err != nil {
+		t.Fatalf("could not adjust source balance: %v", err)
+	}
+	if err := h.bank.UncheckedSetBalance(h.ctx, recipient, sdk.NewInt64Coin(BaseDenom, 40)); err != nil {
+		t.Fatalf("could not adjust recipient balance: %v", err)
+	}
+	if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount.String(); got != "100" {
+		t.Fatalf("fixture unexpectedly changed declared bank supply: %s", got)
+	}
+	if err := h.cap.InitGenesis(h.ctx, "100", h.bank); err != nil {
+		t.Fatalf("conserving two-account genesis was rejected: %v", err)
+	}
+	if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
+		t.Fatalf("conserving redistribution failed reconciliation: %v", err)
+	}
+
+	// An extra aprvi in one account without a matching debit must be
+	// rejected even though the declared supply counter stays at 100.
+	if err := h.bank.UncheckedSetBalance(h.ctx, recipient, sdk.NewInt64Coin(BaseDenom, 41)); err != nil {
+		t.Fatalf("could not arrange one-unit drift: %v", err)
+	}
+	if err := h.cap.Reconcile(h.ctx, h.bank); !errors.Is(err, ErrUnexpectedSupply) {
+		t.Fatalf("one-unit drift escaped native conservation: %v", err)
+	}
+	if state, err := h.cap.Snapshot(h.ctx); err != nil ||
+		state.GenesisBase != "100" || state.LifetimeIssuedBase != "100" {
+		t.Fatalf("drift changed immutable issuance: %+v, %v", state, err)
+	}
+	if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
+		t.Fatalf("native mint was allowed after drift: %v", err)
+	}
+
+	if err := h.bank.UncheckedSetBalance(h.ctx, recipient, sdk.NewInt64Coin(BaseDenom, 40)); err != nil {
+		t.Fatalf("could not restore recipient balance: %v", err)
+	}
+	if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
+		t.Fatalf("restored conserving balances failed reconciliation: %v", err)
+	}
+}
