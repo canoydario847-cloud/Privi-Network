@@ -731,3 +731,33 @@ test("inherited array toJSON cannot fork a same-height durable research vote loc
     } finally {fs.rmSync(dir,{recursive:true,force:true});}
   }
 });
+
+test("inherited Object.prototype.toJSON cannot rewrite the durable research height lock",()=>{
+  const f=fixture(),dir=tempRoot();
+  const id=f.committee.validators[0].id,height=93;
+  const parent="0x"+"b".repeat(64),block="0x"+"c".repeat(64);
+  const record=recordFor(f.committee,height,id,block,parent);
+  const file=path.join(dir,lockedFileName(record));
+  // Compute the original v2 bytes before installing the hostile hook.
+  const expected=JSON.stringify(record)+"\n";
+  const original=Object.getOwnPropertyDescriptor(Object.prototype,"toJSON");
+  let calls=0;
+  try {
+    Object.defineProperty(Object.prototype,"toJSON",{
+      configurable:true,writable:true,
+      value(){calls++;return {format:"forged-lock-record"};}
+    });
+    assert.equal(reservePosition(dir,f.committee,height,id,block,parent).alreadyReserved,false);
+    assert.equal(fs.readFileSync(file,"utf8"),expected,
+                 "durable lock bytes must commit to the verified reservation");
+    assert.equal(reservePosition(dir,f.committee,height,id,block,parent).alreadyReserved,true);
+    assert.throws(()=>reservePosition(dir,f.committee,height,id,"0x"+"d".repeat(64),parent),
+                  /equivocation: conflicting block at locked height/);
+    assert.equal(calls,0,"the lock encoder must never call inherited toJSON");
+    assert.deepEqual(fs.readdirSync(dir),[path.basename(file)]);
+  } finally {
+    if(original)Object.defineProperty(Object.prototype,"toJSON",original);
+    else delete Object.prototype.toJSON;
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
+});
