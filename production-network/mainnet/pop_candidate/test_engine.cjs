@@ -1170,3 +1170,51 @@ test("admission descriptor snapshot cannot be replaced by inherited array iterat
     Array.prototype[Symbol.iterator]=originalIterator;
   }
 });
+
+test("governance admission ignores inherited Array.from and every roster substitutions",()=>{
+  const f=fixture(4);
+  const originalFrom=Array.from;
+  let fromInterceptions=0;
+  try {
+    Array.from=function(source,mapper,thisArg){
+      if(source && !Array.isArray(source) && source.length===4 &&
+         typeof mapper==="function"){
+        fromInterceptions++;
+        // The old admission preflight would accept these booleans without
+        // snapshotting any of the four signed validator records.
+        return [true,true,true,true];
+      }
+      return originalFrom.call(this,source,mapper,thisArg);
+    };
+    const admitted=parseRegistry(f.registry,f.gov.publicKeyB64);
+    assert.equal(admitted.validators.length,4);
+    assert.equal(admitted.quorum,3);
+    assert.equal(fromInterceptions,0,
+      "untrusted Array.from must not select the admitted committee");
+  } finally {
+    Array.from=originalFrom;
+  }
+
+  const originalEvery=Array.prototype.every;
+  let everyInterceptions=0,getterReads=0;
+  const accessorRoster=f.registry.validators.slice();
+  Object.defineProperty(accessorRoster,"2",{enumerable:true,configurable:true,
+    get(){getterReads++;throw Error("untrusted validator index getter executed");}});
+  try {
+    Array.prototype.every=function(predicate,thisArg){
+      if(predicate===Boolean && this.length===4){
+        everyInterceptions++;
+        return true; // Previously hid a failed descriptor check.
+      }
+      return originalEvery.call(this,predicate,thisArg);
+    };
+    assert.throws(()=>parseRegistry({...f.registry,validators:accessorRoster},
+      f.gov.publicKeyB64),/Noncanonical PoP validator roster/);
+    assert.equal(getterReads,0);
+    assert.equal(everyInterceptions,0,
+      "inherited every must not override roster descriptor rejection");
+  } finally {
+    Array.prototype.every=originalEvery;
+  }
+  assert.equal(parseRegistry(f.registry,f.gov.publicKeyB64).validators.length,4);
+});
