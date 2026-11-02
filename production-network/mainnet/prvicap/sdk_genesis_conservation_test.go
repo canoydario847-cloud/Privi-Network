@@ -349,6 +349,27 @@ func TestActualSDKBankMultiDenomNativeConservation(t *testing.T) {
 	if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
 		t.Fatalf("unrelated denom counted as native supply: %v", err)
 	}
+	// A change confined to an unrelated denomination must not be mistaken
+	// for native issuance. The SDK's unchecked setter is a test fixture only.
+	if err := h.bank.UncheckedSetBalance(h.ctx, address, sdk.NewInt64Coin("uother", 51)); err != nil {
+		t.Fatalf("could not arrange unrelated-denom balance change: %v", err)
+	}
+	if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount.String(); got != "100" {
+		t.Fatalf("unrelated-denom change altered declared native supply: %s", got)
+	}
+	if got := h.bank.GetSupply(h.ctx, "uother").Amount.String(); got != "50" {
+		t.Fatalf("test precondition: unrelated declared supply changed: %s", got)
+	}
+	if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
+		t.Fatalf("unrelated-denom-only drift incorrectly rejected native supply: %v", err)
+	}
+	if state, err := h.cap.Snapshot(h.ctx); err != nil ||
+		state.GenesisBase != "100" || state.LifetimeIssuedBase != "100" {
+		t.Fatalf("unrelated-denom change altered native issuance record: %+v, %v", state, err)
+	}
+	if err := h.bank.UncheckedSetBalance(h.ctx, address, sdk.NewInt64Coin("uother", 50)); err != nil {
+		t.Fatalf("could not restore unrelated-denom balance: %v", err)
+	}
 	if err := h.bank.UncheckedSetBalance(h.ctx, address, sdk.NewInt64Coin(BaseDenom, 101)); err != nil {
 		t.Fatalf("could not arrange native-only drift: %v", err)
 	}
