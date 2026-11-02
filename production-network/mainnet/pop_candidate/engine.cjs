@@ -142,7 +142,9 @@ function parseRegistry(registry, governanceKey) {
     admittedRecords.push(d.value);
   }
   const gov = publicKey(governanceKey);
-  const ids = new Set(), operators = new Set(), domains=new Set(), positions=new Set();
+  // Compare signed admissions directly: inherited Set.has/add methods can
+  // be poisoned to suppress duplicate-operator and position detection.
+  // The admitted roster is bounded to 31 entries, so this is inexpensive.
   const validated=[];
   // The snapshot must be consumed by index. An inherited array iterator can
   // substitute a different (but validly signed) admission after descriptor
@@ -165,16 +167,18 @@ function parseRegistry(registry, governanceKey) {
     check(positionHash===expectedPositionHash, "PoP validator anchor stamp mismatch");
     check(typeof anchorBlockHash==="string" && HEX.test(anchorBlockHash),
           "Verified native Privi position-block commitment missing");
-    check(!ids.has(id) && !operators.has(operatorId) &&
-          !domains.has(faultDomain) && !positions.has(stamp),
-          "Duplicated validator, operator, failure domain, or PoP position");
+    for(let priorIndex=0;priorIndex<validated.length;priorIndex++) {
+      const prior=validated[priorIndex];
+      check(prior.id!==id && prior.operatorId!==operatorId &&
+            prior.faultDomain!==faultDomain && prior.stamp!==stamp,
+            "Duplicated validator, operator, failure domain, or PoP position");
+    }
     const fields=admissionFields(chainId,genesisHash,epoch,operatorId,faultDomain,
                 companyId,positionSequence,id,anchorBlockHash);
     check(verify(gov.key,"admit",fields,admissionSignature),
           "PoP admission signature invalid or absent");
-    ids.add(id);operators.add(operatorId);domains.add(faultDomain);positions.add(stamp);
-    validated.push({id,pub:pub.key,operatorId,faultDomain,stamp,positionHash,
-                    anchorBlockHash});
+    validated[validated.length]={id,pub:pub.key,operatorId,faultDomain,stamp,
+                                  positionHash,anchorBlockHash};
   }
   // Research proposer election hashes this order. Locale collation can vary
   // across hosts/ICU versions; fixed lowercase-hex fingerprints must use
