@@ -324,7 +324,6 @@ function verifyCertificate(committee, proposal, votes) {
     // reading signer identity or signature. The local research signer adds
     // only the explicitly non-production researchOnly:true marker.
     const keys=Reflect.ownKeys(vote);
-    const required=["validatorId","signature"];
     const marker=Object.getOwnPropertyDescriptor(vote,"researchOnly");
     // Snapshot the exact own data descriptors used for validation. A Proxy
     // getter may supply a signed quorum different from its declared votes.
