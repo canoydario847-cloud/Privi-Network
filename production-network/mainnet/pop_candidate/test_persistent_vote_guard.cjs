@@ -154,6 +154,44 @@ test("same height cannot sign conflicting block even across round or process res
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });
 
+test("research signer locks verified proposal descriptors, not Proxy get-trap values",()=>{
+  const f=fixture(),dir=tempRoot();
+  const validator=f.committee.validators[0];
+  const input={lockDirectory:dir,committee:f.committee,
+               privateKey:f.keysById.get(validator.id)};
+  const parent="0x"+"b".repeat(64);
+  const first=f.proposal(94,0,"0x"+"c".repeat(64),parent);
+  const conflict=f.proposal(94,1,"0x"+"d".repeat(64),parent);
+  let substitutedReads=0;
+  // Own descriptors and the proposal signature authenticate the conflicting
+  // block D, but an untrusted Proxy get trap falsely reports block C.
+  // The signer must reserve D (and reject it), not replay C's lock and
+  // release a second, contradictory signed vote for the same height.
+  const spoofed=new Proxy(conflict,{
+    get(target,property,receiver){
+      if(property==="blockHash"){
+        substitutedReads++;
+        return first.blockHash;
+      }
+      return Reflect.get(target,property,receiver);
+    }
+  });
+  try {
+    const signed=signCommitWithResearchLock({...input,proposal:first});
+    assert.throws(()=>signCommitWithResearchLock({...input,proposal:spoofed}),
+                  /equivocation: conflicting block at locked height/);
+    assert.equal(substitutedReads,0,
+      "verified signed proposal must not be reread through Proxy getters");
+    const record=recordFor(f.committee,94,validator.id,first.blockHash,parent);
+    const filename=lockedFileName(record);
+    assert.deepEqual(fs.readdirSync(dir),[filename],
+      "rejected conflicting proposal must not create a second reservation");
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir,filename),"utf8")),record);
+    assert.equal(signCommitWithResearchLock({...input,proposal:first}).signature,
+                 signed.signature,"legitimate exact replay must remain valid");
+  } finally {fs.rmSync(dir,{recursive:true,force:true});}
+});
+
 test("research signer refuses same candidate block hash with a different signed parent",()=>{
   const f=fixture(),dir=tempRoot();
   try{
