@@ -76,6 +76,20 @@ function lockedFileName(record) {
     ","+JSON.stringify(record.height)+","+JSON.stringify(record.validatorId)+"]";
   return hash(Buffer.from(encoded,"utf8")).slice(2) + ".json";
 }
+// Serialize the validated primitive lock fields in v2's exact historical
+// order. JSON.stringify(record) invokes inherited Object.prototype.toJSON,
+// which could replace the durable reservation with attacker-chosen bytes.
+// Primitive values have no inherited object serializer to execute.
+function canonicalLockBody(record) {
+  return '{"format":'+JSON.stringify(record.format)+
+    ',"chainId":'+JSON.stringify(record.chainId)+
+    ',"genesisHash":'+JSON.stringify(record.genesisHash)+
+    ',"epoch":'+JSON.stringify(record.epoch)+
+    ',"height":'+JSON.stringify(record.height)+
+    ',"validatorId":'+JSON.stringify(record.validatorId)+
+    ',"blockHash":'+JSON.stringify(record.blockHash)+
+    ',"previousBlockHash":'+JSON.stringify(record.previousBlockHash)+'}\\n';
+}
 function syncLockDirectory(location) {
   const rootFd=fs.openSync(location,fs.constants.O_RDONLY|fs.constants.O_DIRECTORY);
   try {fs.fsyncSync(rootFd);} finally {fs.closeSync(rootFd);}
@@ -123,7 +137,7 @@ function reservePosition(dir, committee, height, validatorId, blockHash, previou
       // encodings, masking an earlier forged field behind the later one.
       // The guard may replay ONLY the precise bytes this signer writes.
       // This conservatively rejects reordered, duplicated or extra fields.
-      const canonical=Buffer.from(JSON.stringify(record)+"\n","utf8");
+      const canonical=Buffer.from(canonicalLockBody(record),"utf8");
       must(original.equals(canonical),
            "PoP height lock corrupt or noncanonical; refuse to sign");
       // A previous attempt may have failed during fsync. Never release a
@@ -137,7 +151,7 @@ function reservePosition(dir, committee, height, validatorId, blockHash, previou
   }
   let completed=false;
   try {
-    const body=Buffer.from(JSON.stringify(record)+"\n","utf8");
+    const body=Buffer.from(canonicalLockBody(record),"utf8");
     must(body.length<=2048, "PoP local height lock too large");
     let pos=0;
     while (pos<body.length) {
