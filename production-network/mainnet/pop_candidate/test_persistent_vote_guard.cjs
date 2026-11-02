@@ -77,7 +77,8 @@ test("research signer membership checks ignore a tampered committee Map.has meth
     });
     assert.equal(vote.validatorId,v.id);
     assert.equal(vote.researchOnly,true);
-    assert.equal(verifyCertificate(f.committee,p,[vote]).valid,false);
+    assert.throws(()=>verifyCertificate(f.committee,p,[vote]),
+                  /Insufficient independently signed PoP quorum/);
     assert.equal(fs.readdirSync(dir).length,1);
   } finally {
     delete byId.has;
