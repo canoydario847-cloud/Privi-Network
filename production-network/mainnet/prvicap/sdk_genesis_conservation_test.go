@@ -327,3 +327,48 @@ func TestActualSDKBankConservingRedistributionAndOneUnitDrift(t *testing.T) {
 		t.Fatalf("restored conserving balances failed reconciliation: %v", err)
 	}
 }
+
+
+// A native-only supply guard must reconcile aprvi even when x/bank contains
+// unrelated denominations. The unrelated balance is not PRVI issuance.
+func TestActualSDKBankMultiDenomNativeConservation(t *testing.T) {
+	h := newRealBankHarness(t)
+	address := authtypes.NewModuleAddress("genesisfixture")
+	initial := sdk.NewCoins(
+		sdk.NewInt64Coin(BaseDenom, 100),
+		sdk.NewInt64Coin("uother", 50),
+	)
+	h.bank.InitGenesis(h.ctx, &banktypes.GenesisState{
+		Params:   banktypes.DefaultParams(),
+		Balances: []banktypes.Balance{{Address: address.String(), Coins: initial}},
+		Supply:   initial,
+	})
+	if err := h.cap.InitGenesis(h.ctx, "100", h.bank); err != nil {
+		t.Fatalf("multi-denom native genesis rejected: %v", err)
+	}
+	if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
+		t.Fatalf("unrelated denom counted as native supply: %v", err)
+	}
+	if err := h.bank.UncheckedSetBalance(h.ctx, address, sdk.NewInt64Coin(BaseDenom, 101)); err != nil {
+		t.Fatalf("could not arrange native-only drift: %v", err)
+	}
+	if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount.String(); got != "100" {
+		t.Fatalf("test precondition: native declared supply changed to %s", got)
+	}
+	if err := h.cap.Reconcile(h.ctx, h.bank); !errors.Is(err, ErrUnexpectedSupply) {
+		t.Fatalf("native drift concealed by unrelated denomination: %v", err)
+	}
+	if state, err := h.cap.Snapshot(h.ctx); err != nil ||
+		state.GenesisBase != "100" || state.LifetimeIssuedBase != "100" {
+		t.Fatalf("failed reconciliation changed issuance record: %+v, %v", state, err)
+	}
+	if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
+		t.Fatalf("native mint allowed after multi-denom mismatch: %v", err)
+	}
+	if err := h.bank.UncheckedSetBalance(h.ctx, address, sdk.NewInt64Coin(BaseDenom, 100)); err != nil {
+		t.Fatalf("could not restore native balance: %v", err)
+	}
+	if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
+		t.Fatalf("restored multi-denom native balance rejected: %v", err)
+	}
+}
