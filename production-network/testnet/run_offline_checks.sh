@@ -14,6 +14,8 @@ node --test "$ROOT/ops/test_verify_operator_attestations.cjs"
 node --test "$ROOT/ops/test_verify_operator_release.cjs"
 node --test "$ROOT/testnet/test_send_disposable_test_transfer.cjs"
 node --test "$ROOT/testnet/test_deploy_disposable_counter.cjs"
+# POP tests are OFFLINE RESEARCH ONLY: passing cannot establish native mainnet finality.
+node --test "$ROOT"/mainnet/pop_candidate/test_*.cjs
 # Hard-cap reference is a pure-Go OFF-CHAIN accounting model, not deployed
 # Cosmos SDK consensus code. Race tests exercise simultaneous candidate mints and burns. Repeat to expose\n# schedule-dependent failures; this is still NOT a consensus-level cap proof.
 command -v go >/dev/null

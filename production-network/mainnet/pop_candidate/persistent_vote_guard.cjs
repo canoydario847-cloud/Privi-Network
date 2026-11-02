@@ -8,7 +8,7 @@
  * machine, finalized position proofs and non-stake proposer rules are needed.
  *
  * Safety boundary: an honest validator may not precommit conflicting block
- * hashes at the same {chain,genesis,epoch,height}, even in different rounds.
+ * hashes OR parent links at the same {chain,genesis,height}, even in different rounds.
  * Reserve the block on durable LOCAL filesystem before releasing a signature.
  *
  * Assumptions NOT satisfied by itself:
@@ -25,18 +25,30 @@ const {
 } = require("./engine.cjs");
 
 const HEX = /^0x[0-9a-f]{64}$/;
+// Membership checks must not trust a caller-mutated Map.has method on the
+// admitted research committee. Capture the native method before use.
+const nativeMapHas = Map.prototype.has;
 function must(x, why) { if (!x) throw Error(why); }
 function safeInt(x, label) {
   must(Number.isSafeInteger(x) && x>=1, "Invalid " + label);
 }
 function strictLocalDirectory(dir) {
   must(typeof dir==="string" && path.isAbsolute(dir), "Absolute local research lock path required");
+  // Refuse symlinked ancestors: checking only the final directory is insufficient.
+  let ancestor=path.parse(dir).root;
+  for (const component of path.relative(ancestor,dir).split(path.sep).filter(Boolean)) {
+    ancestor=path.join(ancestor,component);
+    must(!fs.lstatSync(ancestor).isSymbolicLink(),
+         "Local lock directory path must not contain symlinks");
+  }
   const stat = fs.lstatSync(dir);
   must(stat.isDirectory() && !stat.isSymbolicLink(), "Local lock directory must not be symlink");
   must((stat.mode & 0o077) === 0, "Local lock directory must be owner-only (0700)");
+  must(typeof process.getuid === "function" && stat.uid === process.getuid(),
+       "Local lock directory must be owned by current process");
   return fs.realpathSync(dir);
 }
-function recordFor(committee, height, validatorId, blockHash) {
+function recordFor(committee, height, validatorId, blockHash, previousBlockHash) {
   must(committee?.mode === TRUSTED_MODE, "PoP validator lock is RESEARCH ONLY");
   must(typeof committee.chainId==="string" && committee.chainId.startsWith("privi-pop-research-"),
        "Native Privi research identity required");
@@ -45,12 +57,14 @@ function recordFor(committee, height, validatorId, blockHash) {
   safeInt(committee.epoch,"PoP epoch");
   safeInt(height,"PoP height");
   must(typeof validatorId==="string" && HEX.test(validatorId) &&
-       committee.byId?.has(validatorId),"Voter is not an admitted PoP signer");
+       committee.byId instanceof Map && nativeMapHas.call(committee.byId,validatorId),"Voter is not an admitted PoP signer");
   must(typeof blockHash==="string" && HEX.test(blockHash), "Invalid PoP candidate block hash");
+  must(typeof previousBlockHash==="string" && HEX.test(previousBlockHash) &&
+       previousBlockHash!==blockHash, "Invalid PoP previous-block hash commitment");
   return {
-    format:"PriviPoPResearchHeightLock/v1", chainId:committee.chainId,
+    format:"PriviPoPResearchHeightLock/v2", chainId:committee.chainId,
     genesisHash:committee.genesisHash,epoch:committee.epoch,
-    height,validatorId,blockHash
+    height,validatorId,blockHash,previousBlockHash
   };
 }
 function lockedFileName(record) {
@@ -58,12 +72,34 @@ function lockedFileName(record) {
   // at the SAME height. Lock across membership epochs for the same chain
   // and genesis; any epoch mismatch fails closed unless a future formally
   // reviewed joint-consensus transition explicitly handles signer recovery.
-  const key = [record.chainId,record.genesisHash,record.height,record.validatorId];
-  return hash(Buffer.from(JSON.stringify(key),"utf8")).slice(2) + ".json";
+  // Preserve the v2 lock filename bytes without invoking an inherited
+  // Array.prototype.toJSON hook. A mutable hook could otherwise change the
+  // filename between same-height reservations and bypass O_EXCL locking.
+  const encoded="["+JSON.stringify(record.chainId)+","+JSON.stringify(record.genesisHash)+
+    ","+JSON.stringify(record.height)+","+JSON.stringify(record.validatorId)+"]";
+  return hash(Buffer.from(encoded,"utf8")).slice(2) + ".json";
 }
-function reservePosition(dir, committee, height, validatorId, blockHash) {
+// Serialize the validated primitive lock fields in v2's exact historical
+// order. JSON.stringify(record) invokes inherited Object.prototype.toJSON,
+// which could replace the durable reservation with attacker-chosen bytes.
+// Primitive values have no inherited object serializer to execute.
+function canonicalLockBody(record) {
+  return '{"format":'+JSON.stringify(record.format)+
+    ',"chainId":'+JSON.stringify(record.chainId)+
+    ',"genesisHash":'+JSON.stringify(record.genesisHash)+
+    ',"epoch":'+JSON.stringify(record.epoch)+
+    ',"height":'+JSON.stringify(record.height)+
+    ',"validatorId":'+JSON.stringify(record.validatorId)+
+    ',"blockHash":'+JSON.stringify(record.blockHash)+
+    ',"previousBlockHash":'+JSON.stringify(record.previousBlockHash)+'}\n';
+}
+function syncLockDirectory(location) {
+  const rootFd=fs.openSync(location,fs.constants.O_RDONLY|fs.constants.O_DIRECTORY);
+  try {fs.fsyncSync(rootFd);} finally {fs.closeSync(rootFd);}
+}
+function reservePosition(dir, committee, height, validatorId, blockHash, previousBlockHash) {
   const location = strictLocalDirectory(dir);
-  const record = recordFor(committee,height,validatorId,blockHash);
+  const record = recordFor(committee,height,validatorId,blockHash,previousBlockHash);
   const file=path.join(location,lockedFileName(record));
   let fd;
   try {
@@ -73,26 +109,52 @@ function reservePosition(dir, committee, height, validatorId, blockHash) {
   } catch (e) {
     if (e.code !== "EEXIST") throw e;
     // Existing lock is ALWAYS immutable: corrupt/unparseable locks block
-    // further signing. Signing service must never clean up or overwrite.
-    const stat=fs.lstatSync(file);
-    must(stat.isFile() && !stat.isSymbolicLink() &&
-         stat.size > 0 && stat.size <= 2048 && (stat.mode & 0o077)===0,
-         "PoP height lock corrupt or insecure; refuse to sign");
-    let old;
-    try { old=JSON.parse(fs.readFileSync(file,"utf8")); }
-    catch (_) {throw Error("PoP height lock corrupt; refuse to sign");}
-    for (const field of Object.keys(record)) {
-      must(old[field]===record[field],
-           field==="blockHash" ? "PoP equivocation: conflicting block at locked height" :
-           "PoP existing height lock corrupt or inconsistent");
+    // further signing. Open the inode without following symlinks, verify the
+    // inode itself, and never trust a separately reopened pathname.
+    // A hostile/corrupt lock path might be a FIFO: O_RDONLY alone can block
+    // forever before fstatSync can reject it. Never block the signer on open.
+    const oldFd=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|
+                                   fs.constants.O_NONBLOCK);
+    try {
+      const stat=fs.fstatSync(oldFd);
+      must(stat.isFile() && stat.size>0 && stat.size<=2048 &&
+           (stat.mode & 0o077)===0 && stat.nlink===1,
+           "PoP height lock corrupt, hard-linked or insecure; refuse to sign");
+      must(typeof process.getuid === "function" && stat.uid === process.getuid(),
+           "PoP height lock must be owned by current process; refuse to sign");
+      let old, original;
+      try {
+        original=fs.readFileSync(oldFd);
+        old=JSON.parse(original.toString("utf8"));
+      }
+      catch (_) {throw Error("PoP height lock corrupt; refuse to sign");}
+      for (const field of Object.keys(record)) {
+        must(old[field]===record[field],
+             field==="blockHash" ? "PoP equivocation: conflicting block at locked height" :
+           field==="previousBlockHash" ? "PoP equivocation: conflicting parent at locked height" :
+             "PoP existing height lock corrupt or inconsistent");
+      }
+      must(Object.keys(old).length===Object.keys(record).length,
+           "PoP height lock unexpected data");
+      // JSON.parse silently accepts duplicate field names and alternative
+      // encodings, masking an earlier forged field behind the later one.
+      // The guard may replay ONLY the precise bytes this signer writes.
+      // This conservatively rejects reordered, duplicated or extra fields.
+      const canonical=Buffer.from(canonicalLockBody(record),"utf8");
+      must(original.equals(canonical),
+           "PoP height lock corrupt or noncanonical; refuse to sign");
+      // A previous attempt may have failed during fsync. Never release a
+      // replayed signature until the file and directory are both durable.
+      fs.fsyncSync(oldFd);
+    } finally {
+      fs.closeSync(oldFd);
     }
-    must(Object.keys(old).length===Object.keys(record).length,
-         "PoP height lock unexpected data");
+    syncLockDirectory(location);
     return Object.freeze({alreadyReserved:true,blockHash});
   }
   let completed=false;
   try {
-    const body=Buffer.from(JSON.stringify(record)+"\n","utf8");
+    const body=Buffer.from(canonicalLockBody(record),"utf8");
     must(body.length<=2048, "PoP local height lock too large");
     let pos=0;
     while (pos<body.length) {
@@ -108,8 +170,7 @@ function reservePosition(dir, committee, height, validatorId, blockHash) {
   // On I/O errors we *retain* the broken file and fail closed. The
   // operator must recover from backed-up signing-state under a new audit.
   must(completed,"PoP lock was not durable");
-  const rootFd=fs.openSync(location,fs.constants.O_RDONLY|fs.constants.O_DIRECTORY);
-  try {fs.fsyncSync(rootFd);} finally {fs.closeSync(rootFd);}
+  syncLockDirectory(location);
   return Object.freeze({alreadyReserved:false,blockHash});
 }
 
@@ -119,15 +180,23 @@ function signCommitWithResearchLock({lockDirectory,committee,proposal,privateKey
        privateKey.asymmetricKeyType==="ed25519","PoP Ed25519 key required");
   const der=crypto.createPublicKey(privateKey).export({type:"spki",format:"der"});
   const validatorId=hash(der);
-  must(committee.byId.has(validatorId),"Private key is not a registered PoP validator");
-  const height=proposal.height;
+  must(committee.byId instanceof Map && nativeMapHas.call(committee.byId,validatorId),
+       "Private key is not a registered PoP validator");
+  // Lock the exact descriptor-snapshotted fields authenticated by
+  // verifyProposal. A Proxy get trap on the untrusted proposal must never
+  // redirect the durable reservation to another height, child or parent
+  // while the released signature commits to the original signed fields.
+  const height=fields[3], previousBlockHash=fields[5], blockHash=fields[6];
   // No signature may escape before local fsync is complete.
-  reservePosition(lockDirectory,committee,height,validatorId,proposal.blockHash);
+  reservePosition(lockDirectory,committee,height,validatorId,
+                  blockHash,previousBlockHash);
   const bytes=signedMessage("commit",voteFields(fields,validatorId));
-  return {
+  // A signed research vote must not acquire mutable, unsigned claims such
+  // as finalized=true after leaving the signer. This is not finality proof.
+  return Object.freeze({
     validatorId,
     signature:crypto.sign(null,bytes,privateKey).toString("base64"),
     researchOnly:true
-  };
+  });
 }
 module.exports={recordFor,lockedFileName,reservePosition,signCommitWithResearchLock};

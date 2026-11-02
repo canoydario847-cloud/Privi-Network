@@ -1,0 +1,564 @@
+"use strict";
+const test=require("node:test");
+const assert=require("node:assert/strict");
+const crypto=require("node:crypto");
+const {
+  hash,positionStamp,parseRegistry,signedMessage,proposer,
+  proposalFields,voteFields,TRUSTED_MODE
+}=require("./engine.cjs");
+const {SCHEMA,MODE,SIGNING_TAG,committeeDigest,checkpointFields}=require("./checkpoint_attestation.cjs");
+const {
+  stateRoot,computeResearchBlock,verifyResearchStateSequence
+}=require("./toy_state_commitment.cjs");
+
+function makeKey(){
+  const pair=crypto.generateKeyPairSync("ed25519");
+  const pub=pair.publicKey.export({format:"der",type:"spki"});
+  return {id:hash(pub),pub:pub.toString("base64"),privateKey:pair.privateKey};
+}
+function sign(key,tag,fields){
+  return crypto.sign(null,signedMessage(tag,fields),key.privateKey).toString("base64");
+}
+function fixture(n=4){
+  const gov=makeKey(),keys=Array.from({length:n},makeKey);
+  const chainId="privi-pop-research-toy-state";
+  const genesisHash="0x"+"a".repeat(64),epoch=1;
+  const validators=keys.map((key,i)=>{
+    const operatorId="OP_"+i,faultDomain="host"+i+".independent.test";
+    const companyId="ORG_"+i,positionSequence=i+1;
+    const anchorBlockHash=hash(Buffer.from("toy-state-position-"+i));
+    const positionHash=hash(Buffer.from(positionStamp(companyId,positionSequence)));
+    return {
+      id:key.id,keySpkiBase64:key.pub,operatorId,faultDomain,
+      companyId,positionSequence,anchorBlockHash,positionHash,
+      admissionSignature:sign(gov,"admit",[
+        chainId,genesisHash,epoch,operatorId,faultDomain,companyId,
+        positionSequence,key.id,anchorBlockHash
+      ])
+    };
+  });
+  const committee=parseRegistry({chainId,genesisHash,epoch,
+                                  mode:TRUSTED_MODE,validators},gov.pub);
+  const byKey=new Map(keys.map(k=>[k.id,k]));
+  const checkpointUnsigned={
+    schema:SCHEMA,mode:MODE,chainId,genesisHash,epoch,height:5,
+    blockHash:"0x"+"e".repeat(64),governanceKeyId:gov.id,
+    committeeDigest:committeeDigest(committee)
+  };
+  const checkpoint={
+    ...checkpointUnsigned,
+    signatureB64:sign(gov,SIGNING_TAG,checkpointFields(checkpointUnsigned))
+  };
+  const startingState={agent_a:{value:2,nonce:0}};
+  function signedCertificate(block,round=0,voteCount=committee.quorum){
+    const proposerId=proposer(committee,block.height,round);
+    const fields=proposalFields(committee,block.height,round,
+                                block.previousBlockHash,block.blockHash,proposerId);
+    const proposal={height:block.height,round,
+      previousBlockHash:block.previousBlockHash,blockHash:block.blockHash,
+      proposerId,signature:sign(byKey.get(proposerId),"propose",fields)};
+    const votes=committee.validators.slice(0,voteCount).map(v=>({
+      validatorId:v.id,
+      signature:sign(byKey.get(v.id),"commit",voteFields(fields,v.id))
+    }));
+    return {proposal,votes};
+  }
+  function build(opsList=[
+    [{kind:"increment",account:"agent_a",amount:3,nonce:1}],
+    [{kind:"increment",account:"agent_a",amount:4,nonce:2},
+     {kind:"increment",account:"agent_b",amount:1,nonce:1}]
+  ]){
+    let previous=checkpoint.blockHash,state=startingState;
+    const blocks=[],certificates=[];
+    opsList.forEach((ops,i)=>{
+      const result=computeResearchBlock(committee,state,checkpoint.height+1+i,
+                                        previous,ops);
+      blocks.push(result.block);
+      certificates.push(signedCertificate(result.block,i%2));
+      previous=result.block.blockHash;
+      state=result.nextState;
+    });
+    return {blocks,certificates};
+  }
+  function verify(ops=build(),initial=startingState,startingDigest=stateRoot(startingState),
+                  trustKey=gov.pub,issuedCheckpoint=checkpoint){
+    return verifyResearchStateSequence(
+      committee,issuedCheckpoint,trustKey,initial,startingDigest,
+      ops.certificates,ops.blocks
+    );
+  }
+  return {gov,keys,committee,checkpoint,startingState,build,verify,signedCertificate};
+}
+test("four-val research quorums bind nonfinancial toy execution to two signed block commitments",()=>{
+  const f=fixture(),result=f.verify();
+  assert.equal(result.researchOnly,true);
+  assert.equal(result.nonFinancialToyState,true);
+  assert.equal(result.finalized,false);
+  assert.equal(result.productionConsensus,false);
+  assert.equal(result.validatesLiveCosmosEvmState,false);
+  assert.equal(result.checkpointFinalityVerified,false);
+  assert.equal(result.startingStateExternallyAuthenticated,false);
+  assert.equal(result.verifiedToyTransitions,2);
+  assert.equal(result.endingHeight,7);
+  assert.equal(result.endingState.agent_a.value,9);
+  assert.equal(result.endingState.agent_a.nonce,2);
+  assert.equal(result.endingState.agent_b.value,1);
+  assert.equal(result.endingState.agent_b.nonce,1);
+  assert.equal(result.endingStateRoot,stateRoot(result.endingState));
+  assert.ok(Object.isFrozen(result));
+  assert.ok(Object.isFrozen(result.endingState));
+  assert.ok(Object.isFrozen(result.endingState.agent_a));
+});
+test("seven-val five-vote research quorum preserves toy deterministic execution",()=>{
+  const f=fixture(7),result=f.verify();
+  assert.equal(result.endingHeight,7);
+  assert.equal(result.endingState.agent_a.value,9);
+  assert.equal(result.nonFinancialToyState,true);
+});
+test("initial state commitment is insensitive to JSON object insertion order",()=>{
+  const original={agent_z:{value:3,nonce:2},agent_a:{value:4,nonce:3}};
+  const reordered={agent_a:{nonce:3,value:4},agent_z:{nonce:2,value:3}};
+  assert.equal(stateRoot(original),stateRoot(reordered));
+});
+test("starting state manipulation is detected against independently given digest",()=>{
+  const f=fixture(),trials=f.build();
+  assert.throws(()=>f.verify(trials,{agent_a:{value:999,nonce:0}}),
+    /does not match independently supplied expected root/);
+  assert.throws(()=>f.verify(trials,f.startingState,"0x"+"0".repeat(64)),
+    /does not match independently supplied expected root/);
+});
+test("signed block votes cannot validate modified nonfinancial operation contents",()=>{
+  const f=fixture(),trials=f.build();
+  trials.blocks[0].operations[0].amount=999;
+  assert.throws(()=>f.verify(trials),
+    /operations root mismatch|claimed state root mismatch|signed block hash/);
+});
+test("signed block votes cannot validate an invented claimed state root",()=>{
+  const f=fixture(),trials=f.build();
+  trials.blocks[1]={...trials.blocks[1],stateRoot:"0x"+"a".repeat(64)};
+  assert.throws(()=>f.verify(trials),/claimed state root mismatch/);
+});
+test("changing operation ordering invalidates nonces or recomputed commitments",()=>{
+  const f=fixture(),trials=f.build([[
+    {kind:"increment",account:"agent_a",amount:3,nonce:1},
+    {kind:"increment",account:"agent_a",amount:4,nonce:2}
+  ]]);
+  trials.blocks[0].operations.reverse();
+  assert.throws(()=>f.verify(trials),/nonce/);
+});
+test("copying or dropping a signed certificate/block cannot reproduce state history",()=>{
+  const f=fixture();
+  const missing=f.build();missing.blocks.pop();
+  assert.throws(()=>f.verify(missing),/count mismatch/);
+  const duplicate=f.build();duplicate.blocks[1]=missing.blocks[0];
+  assert.throws(()=>f.verify(duplicate),/candidate header|state root|operations root|replayed, missing or reordered operation nonce/);
+});
+test("a valid signed candidate hash for different toy state is not acceptable",()=>{
+  const f=fixture();
+  const trials=f.build();
+  const block=trials.blocks[1];
+  trials.blocks[1]={...block,blockHash:"0x"+"f".repeat(64)};
+  assert.throws(()=>f.verify(trials),/signed block hash/);
+});
+test("invalid governance checkpoint and unverified committee cannot authorize toy state verification",()=>{
+  const f=fixture(),trials=f.build();
+  assert.throws(()=>f.verify(trials,f.startingState,stateRoot(f.startingState),
+                makeKey().pub),/independently trusted|not the independently trusted/);
+  assert.throws(()=>verifyResearchStateSequence(
+    {...f.committee},f.checkpoint,f.gov.pub,f.startingState,
+    stateRoot(f.startingState),trials.certificates,trials.blocks
+  ),/Unverified PoP committee/);
+});
+test("forged voter or unsupported non-quorum certificate is rejected",()=>{
+  const f=fixture(),a=f.build();
+  a.certificates[0].votes.pop();
+  assert.throws(()=>f.verify(a),/quorum/);
+  const b=f.build();
+  b.certificates[0].votes[0].signature=b.certificates[0].votes[1].signature;
+  assert.throws(()=>f.verify(b),/Forged|wrong-epoch/);
+});
+test("operation nonces must progress exactly once across blocks",()=>{
+  const f=fixture();
+  assert.throws(()=>f.build([[
+    {kind:"increment",account:"agent_a",amount:2,nonce:2}
+  ]]),/nonce/);
+  assert.throws(()=>f.build([
+    [{kind:"increment",account:"agent_a",amount:2,nonce:1}],
+    [{kind:"increment",account:"agent_a",amount:2,nonce:1}]
+  ]),/nonce/);
+});
+test("does not accept financial, unsupported, negative, overflow, or noncanonical operations",()=>{
+  const f=fixture(),good={kind:"increment",account:"agent_a",amount:2,nonce:1};
+  for(const bad of [
+    {...good,kind:"transfer"},{...good,kind:"mint"},
+    {...good,amount:-1},{...good,amount:0},{...good,amount:1000001},
+    {...good,nonce:0},{...good,nonce:1.1},
+    {...good,account:"__proto__"},
+    {...good,account:"A"},{...good,extra:"noncanonical"}
+  ])assert.throws(()=>f.build([[bad]]));
+  const maxState={agent_a:{value:Number.MAX_SAFE_INTEGER,nonce:0}};
+  assert.throws(()=>computeResearchBlock(f.committee,maxState,6,
+    f.checkpoint.blockHash,[good]),/counter overflow/);
+});
+test("limits number of research accounts, operations, certificates and invalid state",()=>{
+  const f=fixture(),single={kind:"increment",account:"agent_a",amount:1,nonce:1};
+  assert.throws(()=>f.build([[]]),/1..64 operations/);
+  const repeated=Array.from({length:65},(_,i)=>({...single,nonce:i+1}));
+  assert.throws(()=>f.build([repeated]),/1..64 operations/);
+  const badState={agent_a:{value:-3,nonce:0}};
+  assert.throws(()=>stateRoot(badState),/invalid safe integer/);
+  assert.throws(()=>stateRoot({agent_a:{value:3,nonce:0,hidden:3}}),
+                /unexpected fields/);
+  assert.throws(()=>stateRoot([]),/plain-object accounts/);
+  assert.throws(()=>f.verify({blocks:[],certificates:[]}),/1..64 entries/);
+  const fixtureTooLong=f.build(Array.from({length:65},(_,i)=>[
+    {kind:"increment",account:"agent_a",amount:1,nonce:i+1}
+  ]));
+  assert.throws(()=>f.verify(fixtureTooLong),/1..64 entries/);
+});
+test("unexpected block fields, signed-header changes and mismatched parent are refused",()=>{
+  const f=fixture(),sample=f.build();
+  sample.blocks[0]={...sample.blocks[0],productionFinalized:true};
+  assert.throws(()=>f.verify(sample),/unexpected fields/);
+  const b=f.build();
+  b.blocks[1]={...b.blocks[1],previousBlockHash:"0x"+"a".repeat(64)};
+  assert.throws(()=>f.verify(b),/candidate header/);
+});
+
+test("toy research commitments reject unsigned record metadata and accessors before reading",()=>{
+  const f=fixture();
+  const op={kind:"increment",account:"agent_a",amount:2,nonce:1};
+  let getterReads=0;
+  const accessor={...op};
+  Object.defineProperty(accessor,"amount",{
+    enumerable:true,get(){getterReads++;return op.amount;}
+  });
+  const hidden={...op};
+  Object.defineProperty(hidden,"finalized",{value:true,enumerable:false});
+  const symbolic={...op};
+  symbolic[Symbol("productionConsensus")]=true;
+  for(const bad of [accessor,hidden,symbolic]){
+    assert.throws(()=>f.build([[bad]]),/invalid or unexpected fields/);
+  }
+  assert.equal(getterReads,0,"operation getter must never execute");
+  const stateRecord={nonce:0,value:2};
+  Object.defineProperty(stateRecord,"value",{
+    enumerable:true,get(){getterReads++;return 2;}
+  });
+  assert.throws(()=>stateRoot({agent_a:stateRecord}),/invalid or unexpected fields/);
+  assert.equal(getterReads,0,"state record getter must never execute");
+  const sample=f.build();
+  const disguised={...sample.blocks[0]};
+  Object.defineProperty(disguised,"finalized",{value:true,enumerable:false});
+  sample.blocks[0]=disguised;
+  assert.throws(()=>f.verify(sample),/invalid or unexpected fields/);
+});
+
+test("toy starting-state root rejects hidden metadata and account getters",()=>{
+  const account={value:2,nonce:0};
+  const canonical={agent_a:account};
+  const expected=stateRoot(canonical);
+  let getterReads=0;
+  const accessor={};
+  Object.defineProperty(accessor,"agent_a",{
+    enumerable:true,get(){getterReads++;return account;}
+  });
+  const hidden={agent_a:account};
+  Object.defineProperty(hidden,"agent_b",{
+    enumerable:false,value:{value:0,nonce:0}
+  });
+  const symbolic={agent_a:account};
+  symbolic[Symbol("productionFinality")]=true;
+  for(const invalid of [accessor,hidden,symbolic]){
+    assert.throws(()=>stateRoot(invalid),
+      /plain enumerable own account data fields/);
+  }
+  assert.equal(getterReads,0,"account getter must never execute");
+  assert.equal(stateRoot({agent_a:{nonce:0,value:2}}),expected);
+  const f=fixture();
+  assert.equal(f.verify().productionConsensus,false);
+});
+
+
+test("toy state commitments reject decorated and accessor operation arrays before iteration",()=>{
+  const f=fixture();
+  const op={kind:"increment",account:"agent_a",amount:2,nonce:1};
+  const valid=[op];
+  const expected=computeResearchBlock(f.committee,f.startingState,6,
+    f.checkpoint.blockHash,valid);
+  let getterReads=0;
+  const decorated=[op];
+  decorated.productionFinalized=true;
+  const hidden=[op];
+  Object.defineProperty(hidden,"finalized",{value:true});
+  const symbolic=[op];
+  symbolic[Symbol("productionConsensus")]=true;
+  const accessor=[op];
+  Object.defineProperty(accessor,"0",{
+    enumerable:true,configurable:true,
+    get(){getterReads++;throw Error("untrusted operation index getter executed");}
+  });
+  const sparse=[op];
+  delete sparse[0];
+  const inherited=[op];
+  Object.setPrototypeOf(inherited,Object.create(Array.prototype));
+  for(const operations of [decorated,hidden,symbolic,accessor,sparse,inherited]){
+    assert.throws(()=>computeResearchBlock(f.committee,f.startingState,6,
+      f.checkpoint.blockHash,operations),/dense plain operation array/);
+  }
+  assert.equal(getterReads,0,"operation index getter must never execute");
+  const replay=computeResearchBlock(f.committee,f.startingState,6,
+    f.checkpoint.blockHash,[op]);
+  assert.equal(replay.block.blockHash,expected.block.blockHash);
+  assert.equal(f.verify().productionConsensus,false);
+});
+
+test("toy operation-array proxies cannot substitute unsigned iterators or index reads",()=>{
+  const f=fixture();
+  const valid={kind:"increment",account:"agent_a",amount:2,nonce:1};
+  const invalid={...valid,kind:"mint"};
+  let iteratorReads=0,indexReads=0;
+  const substitutedIterator=new Proxy([invalid],{
+    get(target,key,receiver){
+      if(key===Symbol.iterator){
+        return function*(){iteratorReads++;yield valid;};
+      }
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  assert.throws(()=>computeResearchBlock(f.committee,f.startingState,6,
+    f.checkpoint.blockHash,substitutedIterator),/unsupported\/non-financial operation/);
+  assert.equal(iteratorReads,0,"untrusted array iterator must not execute");
+
+  const substitutedIndex=new Proxy([valid],{
+    get(target,key,receiver){
+      if(key==="0"){indexReads++;throw Error("untrusted array index getter executed");}
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  const expected=computeResearchBlock(f.committee,f.startingState,6,
+    f.checkpoint.blockHash,[valid]);
+  const actual=computeResearchBlock(f.committee,f.startingState,6,
+    f.checkpoint.blockHash,substitutedIndex);
+  assert.equal(actual.block.operationsRoot,expected.block.operationsRoot);
+  assert.equal(actual.block.blockHash,expected.block.blockHash);
+  assert.equal(indexReads,0,"untrusted array index getter must not execute");
+  assert.equal(f.verify().productionConsensus,false);
+});
+
+test("toy candidate block-list proxies cannot substitute iterator or numeric-index entries",()=>{
+  const f=fixture(),sample=f.build(),good=sample.blocks[0];
+  const unauthorized={...good,operations:[{
+    kind:"mint",account:"agent_a",amount:2,nonce:1
+  }]};
+  let iteratorReads=0,indexReads=0;
+  const disguised=new Proxy([unauthorized,sample.blocks[1]],{
+    get(target,key,receiver){
+      if(key===Symbol.iterator){
+        return function*(){iteratorReads++;yield good;yield sample.blocks[1];};
+      }
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  assert.throws(()=>f.verify({...sample,blocks:disguised}),
+    /unsupported\/non-financial operation/);
+  assert.equal(iteratorReads,0,"unsigned block iterator must never execute");
+
+  const indexed=new Proxy(sample.blocks,{
+    get(target,key,receiver){
+      if(key==="0"){
+        indexReads++;throw Error("untrusted block index getter executed");
+      }
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  assert.equal(f.verify({...sample,blocks:indexed}).endingHeight,7);
+  assert.equal(indexReads,0,"unsigned block index getter must never execute");
+
+  const accessor=[...sample.blocks];
+  Object.defineProperty(accessor,"0",{
+    enumerable:true,configurable:true,
+    get(){indexReads++;throw Error("untrusted block accessor executed");}
+  });
+  assert.throws(()=>f.verify({...sample,blocks:accessor}),
+    /dense plain array/);
+  assert.equal(indexReads,0,"block array accessor must never execute");
+  const decorated=[...sample.blocks];
+  decorated[Symbol("finalized")]=true;
+  assert.throws(()=>f.verify({...sample,blocks:decorated}),
+    /dense plain array/);
+  assert.equal(f.verify(sample).productionConsensus,false);
+});
+
+test("toy operation fields are bound to descriptor snapshots, never Proxy property reads",()=>{
+  const f=fixture();
+  const good={kind:"increment",account:"agent_a",amount:2,nonce:1};
+  const fieldNames=new Set(["kind","account","amount","nonce"]);
+  let unsignedReads=0;
+  // A forged property getter must not disguise an unauthorized descriptor
+  // as an increment that the deterministic state verifier would accept.
+  const forged=new Proxy({...good,kind:"mint"},{
+    get(target,key,receiver){
+      if(fieldNames.has(key)){unsignedReads++;return good[key];}
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  assert.throws(()=>computeResearchBlock(f.committee,f.startingState,6,
+    f.checkpoint.blockHash,[forged]),/unsupported\/non-financial operation/);
+  assert.equal(unsignedReads,0,"unsigned operation getters must not execute");
+  // Conversely, valid declared descriptor data must remain usable even if
+  // an attacker makes direct property reads throw or return other values.
+  const hostileGetter=new Proxy({...good},{
+    get(target,key,receiver){
+      if(fieldNames.has(key)){
+        unsignedReads++;
+        throw Error("unsigned operation property read executed");
+      }
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  const expected=computeResearchBlock(f.committee,f.startingState,6,
+    f.checkpoint.blockHash,[good]);
+  const actual=computeResearchBlock(f.committee,f.startingState,6,
+    f.checkpoint.blockHash,[hostileGetter]);
+  assert.equal(actual.block.operationsRoot,expected.block.operationsRoot);
+  assert.equal(actual.block.blockHash,expected.block.blockHash);
+  assert.equal(unsignedReads,0,"no operation property read may escape validation");
+  assert.equal(f.verify().productionConsensus,false);
+});
+
+test("toy account record descriptors, not Proxy property reads, determine the committed state",()=>{
+  const f=fixture();
+  const canonical={value:2,nonce:0};
+  let reads=0;
+  const hostile=new Proxy({...canonical},{
+    get(_target,key){reads++;throw Error("unsigned account read: "+String(key));}
+  });
+  assert.equal(stateRoot({agent_a:hostile}),stateRoot({agent_a:canonical}));
+  const result=computeResearchBlock(f.committee,{agent_a:hostile},6,
+    f.checkpoint.blockHash,[{kind:"increment",account:"agent_a",amount:3,nonce:1}]);
+  assert.equal(result.nextState.agent_a.value,5);
+  assert.equal(result.nextState.agent_a.nonce,1);
+  assert.equal(reads,0,"account Proxy get traps must never execute");
+});
+
+test("toy candidate block fields use validated descriptors, never unsigned Proxy reads",()=>{
+  const f=fixture(),sample=f.build();
+  const fields=new Set(["height","previousBlockHash","operations","operationsRoot","stateRoot","blockHash"]);
+  let reads=0;
+  const hostile=new Proxy(sample.blocks[0],{
+    get(target,key,receiver){
+      if(fields.has(key)){reads++;throw Error("unsigned candidate getter: "+String(key));}
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  const verified=f.verify({...sample,blocks:[hostile,...sample.blocks.slice(1)]});
+  assert.equal(verified.verifiedToyTransitions,2);
+  assert.equal(verified.productionConsensus,false);
+  assert.equal(verified.finalized,false);
+  assert.equal(reads,0,"candidate block Proxy getters must never execute");
+  const forged=new Proxy(sample.blocks[0],{
+    get(target,key,receiver){
+      if(key==="blockHash"){reads++;return "0x"+"f".repeat(64);}
+      return Reflect.get(target,key,receiver);
+    }
+  });
+  assert.equal(f.verify({...sample,blocks:[forged,...sample.blocks.slice(1)]}).endingBlockHash,
+               sample.blocks[1].blockHash);
+  assert.equal(reads,0,"forged candidate block getter must not affect verification");
+});
+
+
+test("toy state and signed candidate digests ignore inherited array toJSON pollution",()=>{
+  const f=fixture();
+  const operations=[{kind:"increment",account:"agent_a",amount:3,nonce:1}];
+  const expectedRoot=stateRoot(f.startingState);
+  const expected=computeResearchBlock(f.committee,f.startingState,6,
+                                      f.checkpoint.blockHash,operations);
+  const prior=Object.getOwnPropertyDescriptor(Array.prototype,"toJSON");
+  let calls=0;
+  try{
+    Object.defineProperty(Array.prototype,"toJSON",{
+      configurable:true,writable:true,
+      value(){calls++;return ["forged-research-commitment"];}
+    });
+    assert.equal(stateRoot(f.startingState),expectedRoot);
+    const actual=computeResearchBlock(f.committee,f.startingState,6,
+                                      f.checkpoint.blockHash,operations);
+    assert.equal(actual.block.operationsRoot,expected.block.operationsRoot);
+    assert.equal(actual.block.stateRoot,expected.block.stateRoot);
+    assert.equal(actual.block.blockHash,expected.block.blockHash);
+    assert.equal(calls,0,"no inherited toJSON hook may influence commitment bytes");
+  }finally{
+    if(prior)Object.defineProperty(Array.prototype,"toJSON",prior);
+    else delete Array.prototype.toJSON;
+  }
+  assert.equal(f.verify().productionConsensus,false);
+});
+
+test("toy starting-state root ignores a poisoned inherited Array iterator",()=>{
+  const state={
+    agent_z:{value:17,nonce:2},
+    agent_a:{value:3,nonce:1}
+  };
+  const expected=stateRoot(state);
+  const original=Object.getOwnPropertyDescriptor(Array.prototype,Symbol.iterator);
+  let calls=0,actual;
+  try {
+    Object.defineProperty(Array.prototype,Symbol.iterator,{
+      configurable:true,writable:true,
+      value:function*(){
+        calls++;
+        yield "attacker-substituted-array-entry";
+      }
+    });
+    // Capture results before asserting: the test harness itself may iterate
+    // arrays, but no inherited array iterator may affect this state digest.
+    actual=stateRoot(state);
+  } finally {
+    if(original)Object.defineProperty(Array.prototype,Symbol.iterator,original);
+    else delete Array.prototype[Symbol.iterator];
+  }
+  assert.equal(actual,expected);
+  assert.equal(calls,0,"state-root canonicalization must not invoke an inherited array iterator");
+});
+
+test("toy counter transitions ignore poisoned inherited array iterators",()=>{
+  const f=fixture();
+  const operations=[{kind:"increment",account:"agent_a",amount:3,nonce:1}];
+  const expected=computeResearchBlock(f.committee,f.startingState,6,
+                                      f.checkpoint.blockHash,operations);
+  const prior=Object.getOwnPropertyDescriptor(Array.prototype,Symbol.iterator);
+  const originalIterator=prior.value;
+  let intercepted=0,actual;
+  try {
+    Object.defineProperty(Array.prototype,Symbol.iterator,{
+      configurable:true,writable:true,
+      value:function(){
+        const first=Object.getOwnPropertyDescriptor(this,"0")?.value;
+        const second=Object.getOwnPropertyDescriptor(this,"1")?.value;
+        // Detect both an operation snapshot and a Map's [account, record]
+        // entry; neither may be read through this inherited hook.
+        if((this.length===1&&first?.kind==="increment")||
+           (this.length===2&&typeof first==="string"&&second&&
+            typeof second==="object"&&
+            Number.isSafeInteger(second.value)&&Number.isSafeInteger(second.nonce))){
+          intercepted++;
+          throw Error("poisoned inherited array iterator used in toy execution");
+        }
+        return originalIterator.call(this);
+      }
+    });
+    actual=computeResearchBlock(f.committee,f.startingState,6,
+                                f.checkpoint.blockHash,operations);
+  } finally {
+    Object.defineProperty(Array.prototype,Symbol.iterator,prior);
+  }
+  assert.equal(intercepted,0,
+    "validated operations and Map entry pairs must not invoke Array.iterator");
+  assert.equal(actual.block.operationsRoot,expected.block.operationsRoot);
+  assert.equal(actual.block.stateRoot,expected.block.stateRoot);
+  assert.equal(actual.block.blockHash,expected.block.blockHash);
+  assert.equal(actual.nextState.agent_a.value,5);
+  assert.equal(actual.nextState.agent_a.nonce,1);
+});
