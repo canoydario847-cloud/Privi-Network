@@ -25,6 +25,9 @@ const {
 } = require("./engine.cjs");
 
 const HEX = /^0x[0-9a-f]{64}$/;
+// Membership checks must not trust a caller-mutated Map.has method on the
+// admitted research committee. Capture the native method before use.
+const nativeMapHas = Map.prototype.has;
 function must(x, why) { if (!x) throw Error(why); }
 function safeInt(x, label) {
   must(Number.isSafeInteger(x) && x>=1, "Invalid " + label);
@@ -54,7 +57,7 @@ function recordFor(committee, height, validatorId, blockHash, previousBlockHash)
   safeInt(committee.epoch,"PoP epoch");
   safeInt(height,"PoP height");
   must(typeof validatorId==="string" && HEX.test(validatorId) &&
-       committee.byId?.has(validatorId),"Voter is not an admitted PoP signer");
+       committee.byId instanceof Map && nativeMapHas.call(committee.byId,validatorId),"Voter is not an admitted PoP signer");
   must(typeof blockHash==="string" && HEX.test(blockHash), "Invalid PoP candidate block hash");
   must(typeof previousBlockHash==="string" && HEX.test(previousBlockHash) &&
        previousBlockHash!==blockHash, "Invalid PoP previous-block hash commitment");
@@ -177,7 +180,8 @@ function signCommitWithResearchLock({lockDirectory,committee,proposal,privateKey
        privateKey.asymmetricKeyType==="ed25519","PoP Ed25519 key required");
   const der=crypto.createPublicKey(privateKey).export({type:"spki",format:"der"});
   const validatorId=hash(der);
-  must(committee.byId.has(validatorId),"Private key is not a registered PoP validator");
+  must(committee.byId instanceof Map && nativeMapHas.call(committee.byId,validatorId),
+       "Private key is not a registered PoP validator");
   const height=proposal.height;
   // No signature may escape before local fsync is complete.
   reservePosition(lockDirectory,committee,height,validatorId,
