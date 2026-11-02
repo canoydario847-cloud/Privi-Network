@@ -86,12 +86,25 @@ function verifyResearchCertificatePair(committee,left,right) {
   // Changing the *round alone* without changing block or parent does not
   // violate the persistent research height lock.
   const incompatible=differentBlock||differentParent;
-  const secondSigners=new Map(secondInput.votes.map(v=>[v.validatorId,v]));
-  // Signer fingerprints are fixed-width lowercase ASCII hex. Evidence order
-  // must not depend on host ICU locale or environment language settings.
-  const intersection=firstInput.votes.filter(v=>secondSigners.has(v.validatorId))
-    .sort((a,b)=>a.validatorId < b.validatorId ? -1 :
-                 a.validatorId > b.validatorId ? 1 : 0);
+  // Compare only descriptor-snapshotted, independently verified votes.
+  // Inherited Array map/filter/sort and mutable Map methods must not invent,
+  // suppress or reorder cryptographic double-sign evidence.
+  // At most 31 voters per certificate, so bounded direct comparisons suffice.
+  // Insert matches in raw ASCII signer-ID order, independent of host locale.
+  const intersection=[];
+  for(let i=0;i<firstInput.votes.length;i++){
+    const firstVote=firstInput.votes[i];
+    for(let j=0;j<secondInput.votes.length;j++){
+      const secondVote=secondInput.votes[j];
+      if(firstVote.validatorId!==secondVote.validatorId)continue;
+      let at=intersection.length;
+      while(at>0 && intersection[at-1].first.validatorId>firstVote.validatorId)at--;
+      intersection.length++;
+      for(let k=intersection.length-1;k>at;k--)intersection[k]=intersection[k-1];
+      intersection[at]={first:firstVote,second:secondVote};
+      break;
+    }
+  }
 
   // Two supermajority quorums in one admitted committee mathematically
   // intersect, but this is checked explicitly as a defensive assertion.
@@ -109,20 +122,23 @@ function verifyResearchCertificatePair(committee,left,right) {
   // Preserve all signed fields and BOTH independently verified signatures,
   // sufficient to reproduce the signed-message verification offline given
   // the governance-admitted registry + pinned research governance key.
-  const doubleSignEvidence=incompatible ? intersection.map(v=>{
-    const other=secondSigners.get(v.validatorId);
-    return Object.freeze({
-      validatorId:v.validatorId,
-      first:Object.freeze({
-        voteFields:Object.freeze(voteFields(leftFields,v.validatorId)),
-        signatureB64:v.signature
-      }),
-      second:Object.freeze({
-        voteFields:Object.freeze(voteFields(rightFields,v.validatorId)),
-        signatureB64:other.signature
-      })
-    });
-  }):[];
+  const doubleSignEvidence=[];
+  if(incompatible){
+    for(let i=0;i<intersection.length;i++){
+      const v=intersection[i].first,other=intersection[i].second;
+      doubleSignEvidence[doubleSignEvidence.length]=Object.freeze({
+        validatorId:v.validatorId,
+        first:Object.freeze({
+          voteFields:Object.freeze(voteFields(leftFields,v.validatorId)),
+          signatureB64:v.signature
+        }),
+        second:Object.freeze({
+          voteFields:Object.freeze(voteFields(rightFields,v.validatorId)),
+          signatureB64:other.signature
+        })
+      });
+    }
+  }
   Object.freeze(doubleSignEvidence);
 
   return Object.freeze({
