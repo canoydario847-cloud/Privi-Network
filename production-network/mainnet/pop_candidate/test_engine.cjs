@@ -1036,3 +1036,38 @@ test("research vote signatures cannot be rebound by inherited Array iterator",()
   }
   assert.equal(verifyCertificate(f.committee,proposal,votes).valid,true);
 });
+
+
+test("research vote lock ignores poisoned inherited Map get/set methods",()=>{
+  const f=fixture(4),id=f.keys[0].id;
+  const first="0x"+"b".repeat(64),other="0x"+"c".repeat(64);
+  const parent="0x"+"a".repeat(64);
+  const lock=new ResearchVoteLock();
+  lock.accept(1,61,0,id,first,parent);
+  const originalGet=Map.prototype.get;
+  let conflictError;
+  try {
+    // A poisoned inherited get must not erase a previously committed vote.
+    Map.prototype.get=function(){return undefined;};
+    try {lock.accept(1,61,1,id,other,parent);}
+    catch(error){conflictError=error;}
+  } finally {
+    Map.prototype.get=originalGet;
+  }
+  assert.match(conflictError?.message || "",
+    /PoP conflicting-height double-sign rejected/);
+  const second=new ResearchVoteLock();
+  const originalSet=Map.prototype.set;
+  try {
+    // A poisoned inherited set must not silently drop the first reservation.
+    Map.prototype.set=function(){return this;};
+    second.accept(1,62,0,id,first,parent);
+  } finally {
+    Map.prototype.set=originalSet;
+  }
+  assert.throws(()=>second.accept(1,62,1,id,other,parent),
+    /PoP conflicting-height double-sign rejected/);
+  // Both guards still permit idempotent same-height research replay.
+  lock.accept(1,61,2,id,first,parent);
+  second.accept(1,62,2,id,first,parent);
+});

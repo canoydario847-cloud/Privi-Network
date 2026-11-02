@@ -31,6 +31,7 @@ const validatedCommittees = new WeakSet();
 // Pin native Map accessors so per-instance get/has/size overrides cannot
 // redirect research signature verification to attacker-supplied keys.
 const nativeMapGet = Map.prototype.get;
+const nativeMapSet = Map.prototype.set;
 const nativeMapHas = Map.prototype.has;
 const nativeMapSize = Object.getOwnPropertyDescriptor(Map.prototype,"size").get;
 function check(ok, why) { if (!ok) throw Error(why); }
@@ -395,12 +396,12 @@ class ResearchVoteLock {
     // between calls and permit conflicting same-height votes. The validated
     // safe-integer height and fixed-width hex signer ID are unambiguous here.
     const key=height+":"+validatorId;
-    const old=this.#commits.get(key);
+    const old=nativeMapGet.call(this.#commits,key);
     check(!old || old.epoch===epoch,"PoP unreviewed same-height epoch transition rejected");
     check(!old || old.blockHash===blockHash,"PoP conflicting-height double-sign rejected");
     check(!old || old.previousBlockHash===previousBlockHash,
           "PoP conflicting-height parent-link double-sign rejected");
-    this.#commits.set(key,{epoch,blockHash,previousBlockHash});
+    nativeMapSet.call(this.#commits,key,{epoch,blockHash,previousBlockHash});
   }
 }
 module.exports={
