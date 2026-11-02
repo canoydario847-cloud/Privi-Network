@@ -1218,3 +1218,61 @@ test("governance admission ignores inherited Array.from and every roster substit
   }
   assert.equal(parseRegistry(f.registry,f.gov.publicKeyB64).validators.length,4);
 });
+
+test("research admitted committee ignores inherited sort/map/forEach hooks",()=>{
+  const f=fixture(7);
+  const expectedIds=f.committee.validators.map(v=>v.id);
+  const originalSort=Array.prototype.sort;
+  const originalMap=Array.prototype.map;
+  const originalForEach=Array.prototype.forEach;
+  const intercepted={sort:0,map:0,forEach:0};
+  const isAdmissionArray=a=>Array.isArray(a) && a.length===7 &&
+    a[0] && typeof a[0]==="object" &&
+    Object.hasOwn(a[0],"pub") && Object.hasOwn(a[0],"id");
+  let admitted;
+  try {
+    Array.prototype.sort=function(...args){
+      if(isAdmissionArray(this)){
+        intercepted.sort++;
+        throw Error("poisoned admitted committee sort");
+      }
+      return originalSort.apply(this,args);
+    };
+    Array.prototype.map=function(...args){
+      if(isAdmissionArray(this)){
+        intercepted.map++;
+        throw Error("poisoned admitted committee map");
+      }
+      return originalMap.apply(this,args);
+    };
+    Array.prototype.forEach=function(...args){
+      if(isAdmissionArray(this)){
+        intercepted.forEach++;
+        throw Error("poisoned admitted committee forEach");
+      }
+      return originalForEach.apply(this,args);
+    };
+    admitted=parseRegistry(f.registry,f.gov.publicKeyB64);
+  } finally {
+    Array.prototype.sort=originalSort;
+    Array.prototype.map=originalMap;
+    Array.prototype.forEach=originalForEach;
+  }
+  assert.deepEqual(intercepted,{sort:0,map:0,forEach:0},
+    "signed committee admission must not invoke inherited array hooks");
+  assert.deepEqual(admitted.validators.map(v=>v.id),expectedIds,
+    "canonical admitted roster must be stable across hosts");
+  assert.equal(admitted.quorum,5);
+  for(const signer of admitted.validators){
+    assert.equal(admitted.byId.get(signer.id),signer,
+      "admitted signer map must match the verified canonical roster");
+  }
+  for(let round=0;round<16;round++){
+    assert.equal(proposer(admitted,19,round),proposer(f.committee,19,round));
+  }
+  const {proposal,votes}=f.bundle();
+  const proof=verifyCertificate(admitted,proposal,votes);
+  assert.equal(proof.signers,admitted.quorum);
+  assert.equal(proof.finalized,false);
+  assert.equal(proof.productionConsensus,false);
+});
