@@ -328,8 +328,12 @@ function verifyCertificate(committee, proposal, votes) {
     const marker=Object.getOwnPropertyDescriptor(vote,"researchOnly");
     // Snapshot the exact own data descriptors used for validation. A Proxy
     // getter may supply a signed quorum different from its declared votes.
-    const fieldDescriptors=required.map(field=>
-      Object.getOwnPropertyDescriptor(vote,field));
+    // Never invoke inherited Array.prototype.map/ every to select the two
+    // authenticated vote fields: a polluted map could substitute descriptors
+    // from another, legitimately signed voter for an unadmitted declared vote.
+    const idDescriptor=Object.getOwnPropertyDescriptor(vote,"validatorId");
+    const sigDescriptor=Object.getOwnPropertyDescriptor(vote,"signature");
+    const ownData=d=>d && Object.hasOwn(d,"value") && d.enumerable;
     check(Object.getPrototypeOf(vote)===Object.prototype &&
           // A Proxy can omit a configurable researchOnly key from ownKeys.
           // The two-field form must not secretly declare that marker.
@@ -337,11 +341,9 @@ function verifyCertificate(committee, proposal, votes) {
            (keys.length===3 && marker &&
             Object.hasOwn(marker,"value") && marker.value===true &&
             marker.enumerable)) &&
-          fieldDescriptors.every(descriptor=>
-            descriptor && Object.hasOwn(descriptor,"value") &&
-            descriptor.enumerable),
+          ownData(idDescriptor) && ownData(sigDescriptor),
           "PoP vote requires plain own canonical data fields without extras");
-    const [validatorId,voteSignature]=fieldDescriptors.map(descriptor=>descriptor.value);
+    const validatorId=idDescriptor.value,voteSignature=sigDescriptor.value;
     const signer=nativeMapGet.call(committee.byId,validatorId);
     check(!!signer,"Unadmitted PoP voter");
     check(!seen.has(validatorId),"Duplicate PoP voter");
