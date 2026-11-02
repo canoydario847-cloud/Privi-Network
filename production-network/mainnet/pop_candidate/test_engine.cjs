@@ -1071,3 +1071,28 @@ test("research vote lock ignores poisoned inherited Map get/set methods",()=>{
   lock.accept(1,61,2,id,first,parent);
   second.accept(1,62,2,id,first,parent);
 });
+
+
+test("research proposer election ignores inherited Array.map manipulation",()=>{
+  const f=fixture(7),expected=[];
+  for(let round=0;round<16;round++){
+    expected.push(proposer(f.committee,19,round));
+  }
+  const original=Array.prototype.map;
+  let intercepted=0,actual;
+  try {
+    Array.prototype.map=function(){
+      intercepted++;
+      throw Error("poisoned inherited array map executed");
+    };
+    actual=[];
+    for(let round=0;round<16;round++){
+      actual.push(proposer(f.committee,19,round));
+    }
+  } finally {
+    Array.prototype.map=original;
+  }
+  assert.deepEqual(actual,expected,
+    "governance-admitted roster must determine the same research proposer");
+  assert.equal(intercepted,0,"proposer must not invoke inherited array map");
+});
