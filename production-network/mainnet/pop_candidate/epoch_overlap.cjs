@@ -39,11 +39,19 @@ function analyzeEpochOverlap(previous, next) {
   requireCondition(BigInt(next.epoch) === BigInt(previous.epoch)+1n,
     "PoP epoch preflight requires exactly one forward epoch");
 
-  const oldById = new Map(previous.validators.map(v=>[v.id,v]));
+  // Committees have at most 31 members. Use numeric slots rather than
+  // inherited Array iteration/map hooks or mutable Map prototype methods:
+  // runtime prototype pollution must never inflate the overlap count.
   let shared=0;
-  for(const updated of next.validators) {
-    const old=oldById.get(updated.id);
-    if(old && sameStableIdentity(old, updated)) shared++;
+  for(let i=0;i<next.validators.length;i++) {
+    const updated=next.validators[i];
+    for(let j=0;j<previous.validators.length;j++) {
+      const old=previous.validators[j];
+      if(old.id===updated.id) {
+        if(sameStableIdentity(old,updated)) shared++;
+        break;
+      }
+    }
   }
   const nOld=previous.validators.length,nNew=next.validators.length;
   const maxFaulty=Math.max(Math.floor((nOld-1)/3),Math.floor((nNew-1)/3));
