@@ -261,3 +261,36 @@ test("research conflict evidence uses authenticated snapshots, not changing Prox
                 /Noncanonical PoP research certificate/);
   assert.equal(getterCalls,0);
 });
+
+test("research conflict evidence resists inherited array map/filter substitution",()=>{
+  const f=fixture(7);
+  const left=f.certificate({indexes:[0,1,2,3,4]});
+  const right=f.certificate({round:1,block:"0x"+"d".repeat(64),
+                             indexes:[2,3,4,5,6]});
+  const expected=[2,3,4].map(i=>f.committee.validators[i].id).sort();
+  const originalMap=Array.prototype.map;
+  const originalFilter=Array.prototype.filter;
+  let report;
+  try {
+    // Previously, either hook could suppress or fabricate the intersection
+    // after both certificates had passed signature verification.
+    Array.prototype.map=function(){throw Error("untrusted inherited map executed");};
+    Array.prototype.filter=function(){throw Error("untrusted inherited filter executed");};
+    report=verifyResearchCertificatePair(f.committee,left,right);
+  } finally {
+    Array.prototype.map=originalMap;
+    Array.prototype.filter=originalFilter;
+  }
+  assert.equal(report.incompatibleCommitments,true);
+  assert.equal(report.intersectingSignerCount,3);
+  assert.equal(report.minimumGuaranteedIntersection,3);
+  assert.deepEqual(report.doubleSignEvidence.map(v=>v.validatorId),expected);
+  for(const evidence of report.doubleSignEvidence){
+    assert.equal(verifyEvidenceSignature(f.committee,evidence.validatorId,
+                                        "commit",evidence.first),true);
+    assert.equal(verifyEvidenceSignature(f.committee,evidence.validatorId,
+                                        "commit",evidence.second),true);
+  }
+  assert.equal(report.productionConsensus,false);
+  assert.equal(report.slashingAuthorized,false);
+});
