@@ -446,3 +446,62 @@ func TestActualSDKBankCrossDenomOffsetCannotHideNativeDeficit(t *testing.T) {
 		t.Fatalf("restored native balances rejected: %v", err)
 	}
 }
+// An offsetting unrelated-denomination deficit cannot disguise a native
+// aprvi surplus during genesis, even if x/bank's declared supply is unchanged.
+// A rejected candidate must leave the cap uninitialized and native mint
+// unavailable; restoring honest balances permits one initialization.
+func TestActualSDKBankGenesisRejectsCrossDenomOffset(t *testing.T) {
+	h := newRealBankHarness(t)
+	address := authtypes.NewModuleAddress("genesisfixture")
+	initial := sdk.NewCoins(
+		sdk.NewInt64Coin(BaseDenom, 100),
+		sdk.NewInt64Coin("uother", 50),
+	)
+	h.bank.InitGenesis(h.ctx, &banktypes.GenesisState{
+		Params:   banktypes.DefaultParams(),
+		Balances: []banktypes.Balance{{Address: address.String(), Coins: initial}},
+		Supply:   initial,
+	})
+	// These unchecked writes simulate a corrupted candidate genesis; they
+	// are not authorized application balance operations.
+	if err := h.bank.UncheckedSetBalance(h.ctx, address, sdk.NewInt64Coin(BaseDenom, 101)); err != nil {
+		t.Fatalf("could not arrange untracked native surplus: %v", err)
+	}
+	if err := h.bank.UncheckedSetBalance(h.ctx, address, sdk.NewInt64Coin("uother", 49)); err != nil {
+		t.Fatalf("could not arrange offsetting unrelated deficit: %v", err)
+	}
+	if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount.String(); got != "100" {
+		t.Fatalf("native declared supply unexpectedly changed: %s", got)
+	}
+	if got := h.bank.GetSupply(h.ctx, "uother").Amount.String(); got != "50" {
+		t.Fatalf("unrelated declared supply unexpectedly changed: %s", got)
+	}
+	if err := h.cap.InitGenesis(h.ctx, "100", h.bank); !errors.Is(err, ErrBankSupplyMismatch) {
+		t.Fatalf("offsetting unrelated deficit concealed native genesis surplus: %v", err)
+	}
+	if _, err := h.cap.Snapshot(h.ctx); !errors.Is(err, ErrNotInitialized) {
+		t.Fatalf("rejected mixed-denomination genesis persisted issuance: %v", err)
+	}
+	if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrNotInitialized) {
+		t.Fatalf("rejected genesis permitted native mint: %v", err)
+	}
+	if err := h.bank.UncheckedSetBalance(h.ctx, address, sdk.NewInt64Coin(BaseDenom, 100)); err != nil {
+		t.Fatalf("could not restore native balance: %v", err)
+	}
+	if err := h.bank.UncheckedSetBalance(h.ctx, address, sdk.NewInt64Coin("uother", 50)); err != nil {
+		t.Fatalf("could not restore unrelated balance: %v", err)
+	}
+	if err := h.cap.InitGenesis(h.ctx, "100", h.bank); err != nil {
+		t.Fatalf("restored mixed-denomination genesis rejected: %v", err)
+	}
+	if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
+		t.Fatalf("restored mixed-denomination genesis failed reconciliation: %v", err)
+	}
+	if state, err := h.cap.Snapshot(h.ctx); err != nil ||
+		state.GenesisBase != "100" || state.LifetimeIssuedBase != "100" {
+		t.Fatalf("restored genesis issuance record invalid: %+v, %v", state, err)
+	}
+	if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
+		t.Fatalf("restored genesis permitted native mint: %v", err)
+	}
+}
