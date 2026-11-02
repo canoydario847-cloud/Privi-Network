@@ -699,3 +699,35 @@ test("existing-lock file fsync failure refuses vote and requires durable replay"
     fs.rmSync(dir,{recursive:true,force:true});
   }
 });
+
+test("inherited array toJSON cannot fork a same-height durable research vote lock",()=>{
+  const f=fixture(),dir=tempRoot();
+  const id=f.committee.validators[0].id;
+  const height=92,parent="0x"+"b".repeat(64);
+  const firstHash="0x"+"c".repeat(64),conflictingHash="0x"+"d".repeat(64);
+  const original=Object.getOwnPropertyDescriptor(Array.prototype,"toJSON");
+  const expected=lockedFileName(recordFor(f.committee,height,id,firstHash,parent));
+  let calls=0;
+  try {
+    // Under the previous JSON.stringify(array) filename derivation, each
+    // inherited hook call produced a new pathname, evading O_EXCL and
+    // allowing two conflicting block hashes at one signer/height.
+    Object.defineProperty(Array.prototype,"toJSON",{
+      configurable:true,writable:true,
+      value(){calls++;return ["attacker-controlled-lock-namespace",calls];}
+    });
+    assert.equal(reservePosition(dir,f.committee,height,id,firstHash,parent).alreadyReserved,false);
+    assert.equal(lockedFileName(recordFor(f.committee,height,id,conflictingHash,parent)),
+                 expected,"same-height filename must remain canonical");
+    assert.throws(()=>reservePosition(dir,f.committee,height,id,conflictingHash,parent),
+                  /equivocation: conflicting block at locked height/);
+    assert.equal(calls,0,"lock naming must never invoke inherited array serializers");
+  } finally {
+    if(original)Object.defineProperty(Array.prototype,"toJSON",original);
+    else delete Array.prototype.toJSON;
+    try {
+      assert.deepEqual(fs.readdirSync(dir),[expected],
+                       "conflicting research vote must not create a second lock");
+    } finally {fs.rmSync(dir,{recursive:true,force:true});}
+  }
+});
