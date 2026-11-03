@@ -66,6 +66,13 @@ func TestActualSDKBankExactCapNativeDeficitCrossDenomFailsClosed(t *testing.T) {
     if err := h.cap.Reconcile(h.ctx, h.bank); !errors.Is(err, ErrUnexpectedSupply) {
         t.Fatalf("repeated reconciliation accepted unresolved native deficit: %v", err)
     }
+    // Failed checks must not silently repair the bank supply counters.
+    if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount.String(); got != MaxBase {
+        t.Fatalf("rejected deficit changed declared native supply: %s", got)
+    }
+    if got := h.bank.GetSupply(h.ctx, "uother").Amount.String(); got != "50" {
+        t.Fatalf("rejected deficit changed unrelated declared supply: %s", got)
+    }
     // A second rejection must not mutate the immutable cap ledger either.
     if state, err := h.cap.Snapshot(h.ctx); err != nil ||
         state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
