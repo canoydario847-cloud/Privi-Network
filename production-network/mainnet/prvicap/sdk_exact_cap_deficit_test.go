@@ -43,6 +43,17 @@ func TestActualSDKBankExactCapNativeDeficitCrossDenomFailsClosed(t *testing.T) {
     if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount.String(); got != MaxBase {
         t.Fatalf("declared native supply unexpectedly changed: %s", got)
     }
+    // Verify both fixture mutations really occurred while the declared
+    // counters stayed unchanged; otherwise this regression could pass vacuously.
+    if got := h.bank.GetBalance(h.ctx, addr, BaseDenom).Amount.String(); got != less.String() {
+        t.Fatalf("native deficit fixture missing: got %s, want %s", got, less.String())
+    }
+    if got := h.bank.GetBalance(h.ctx, addr, "uother").Amount.String(); got != "51" {
+        t.Fatalf("unrelated surplus fixture missing: got %s, want 51", got)
+    }
+    if got := h.bank.GetSupply(h.ctx, "uother").Amount.String(); got != "50" {
+        t.Fatalf("unrelated declared supply unexpectedly changed: %s", got)
+    }
     if err := h.cap.Reconcile(h.ctx, h.bank); !errors.Is(err, ErrUnexpectedSupply) {
         t.Fatalf("unrelated surplus concealed native deficit: %v", err)
     }
