@@ -766,3 +766,43 @@ func TestActualSDKBankPostGenesisPartialCreditFailsClosed(t *testing.T) {
 		t.Fatalf("completed conserving transfer rejected: %v", err)
 	}
 }
+
+
+// TestActualSDKBankPostGenesisRepeatedDriftFailsClosed ensures a successful
+// recovery does not disable subsequent native-supply reconciliation checks.
+// UncheckedSetBalance is used only to construct disposable SDK fixtures.
+func TestActualSDKBankPostGenesisRepeatedDriftFailsClosed(t *testing.T) {
+	h := newRealBankHarness(t)
+	addr := authtypes.NewModuleAddress("repeateddrift")
+	h.bank.InitGenesis(h.ctx, &banktypes.GenesisState{
+		Params: banktypes.DefaultParams(),
+		Balances: []banktypes.Balance{
+			{Address: addr.String(), Coins: sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 100))},
+		},
+		Supply: sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 100)),
+	})
+	if err := h.cap.InitGenesis(h.ctx, "100", h.bank); err != nil {
+		t.Fatalf("valid genesis rejected: %v", err)
+	}
+	for _, amount := range []int64{101, 99, 101} {
+		if err := h.bank.UncheckedSetBalance(h.ctx, addr, sdk.NewInt64Coin(BaseDenom, amount)); err != nil {
+			t.Fatalf("could not construct drift %d: %v", amount, err)
+		}
+		if err := h.cap.Reconcile(h.ctx, h.bank); !errors.Is(err, ErrUnexpectedSupply) {
+			t.Fatalf("drift %d accepted after prior recovery: %v", amount, err)
+		}
+		if state, err := h.cap.Snapshot(h.ctx); err != nil ||
+			state.GenesisBase != "100" || state.LifetimeIssuedBase != "100" {
+			t.Fatalf("drift %d changed issuance: %+v, %v", amount, state, err)
+		}
+		if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
+			t.Fatalf("drift %d permitted mint: %v", amount, err)
+		}
+		if err := h.bank.UncheckedSetBalance(h.ctx, addr, sdk.NewInt64Coin(BaseDenom, 100)); err != nil {
+			t.Fatalf("could not restore native balance: %v", err)
+		}
+		if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
+			t.Fatalf("recovery after drift %d rejected: %v", amount, err)
+		}
+	}
+}
