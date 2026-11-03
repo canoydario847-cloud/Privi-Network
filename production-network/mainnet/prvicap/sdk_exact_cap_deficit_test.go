@@ -70,6 +70,14 @@ func TestActualSDKBankExactCapNativeDeficitCrossDenomFailsClosed(t *testing.T) {
     if err := h.bank.UncheckedSetBalance(h.ctx, addr, sdk.NewInt64Coin("uother", 50)); err != nil {
         t.Fatalf("could not restore unrelated balance: %v", err)
     }
+    // Confirm the repaired fixture actually restored both denominations before
+    // accepting a successful reconciliation; counters alone are insufficient.
+    if got := h.bank.GetBalance(h.ctx, addr, BaseDenom).Amount.String(); got != MaxBase {
+        t.Fatalf("native balance not restored: got %s, want %s", got, MaxBase)
+    }
+    if got := h.bank.GetBalance(h.ctx, addr, "uother").Amount.String(); got != "50" {
+        t.Fatalf("unrelated balance not restored: got %s, want 50", got)
+    }
     // A successful recovery must not rewrite the lifetime issuance record.
     if got := h.bank.GetSupply(h.ctx, "uother").Amount.String(); got != "50" {
         t.Fatalf("unrelated declared supply changed during recovery: %s", got)
