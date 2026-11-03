@@ -66,6 +66,11 @@ func TestActualSDKBankExactCapNativeDeficitCrossDenomFailsClosed(t *testing.T) {
     if err := h.cap.Reconcile(h.ctx, h.bank); !errors.Is(err, ErrUnexpectedSupply) {
         t.Fatalf("repeated reconciliation accepted unresolved native deficit: %v", err)
     }
+    // A second rejection must not mutate the immutable cap ledger either.
+    if state, err := h.cap.Snapshot(h.ctx); err != nil ||
+        state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
+        t.Fatalf("repeated rejection changed issuance: %+v, %v", state, err)
+    }
     if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
         t.Fatalf("native mint allowed after deficit: %v", err)
     }
