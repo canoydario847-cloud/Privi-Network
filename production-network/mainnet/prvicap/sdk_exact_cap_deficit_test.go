@@ -66,6 +66,14 @@ func TestActualSDKBankExactCapNativeDeficitCrossDenomFailsClosed(t *testing.T) {
     if err := h.cap.Reconcile(h.ctx, h.bank); !errors.Is(err, ErrUnexpectedSupply) {
         t.Fatalf("repeated reconciliation accepted unresolved native deficit: %v", err)
     }
+    // Failed reconciliation must not mutate either corrupted account balance.
+    // The discrepancy must remain observable until an explicit repair occurs.
+    if got := h.bank.GetBalance(h.ctx, addr, BaseDenom).Amount.String(); got != less.String() {
+        t.Fatalf("rejected deficit modified native account balance: got %s, want %s", got, less.String())
+    }
+    if got := h.bank.GetBalance(h.ctx, addr, "uother").Amount.String(); got != "51" {
+        t.Fatalf("rejected deficit modified unrelated account balance: got %s, want 51", got)
+    }
     // Failed checks must not silently repair the bank supply counters.
     if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount.String(); got != MaxBase {
         t.Fatalf("rejected deficit changed declared native supply: %s", got)
