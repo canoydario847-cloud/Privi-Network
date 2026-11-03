@@ -234,4 +234,8 @@ func TestActualSDKBankExactCapNativeSurplusCrossDenomFailsClosed(t *testing.T) {
     if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
         t.Fatalf("repaired balances rejected: %v", err)
     }
+    // Repair of an untracked native surplus must not restore mint authority.
+    if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
+        t.Fatalf("surplus recovery re-enabled native minting: %v", err)
+    }
 }
