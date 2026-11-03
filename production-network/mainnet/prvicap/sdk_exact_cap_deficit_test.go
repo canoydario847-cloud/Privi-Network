@@ -114,6 +114,14 @@ func TestActualSDKBankExactCapNativeDeficitCrossDenomFailsClosed(t *testing.T) {
         state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
         t.Fatalf("recovery changed immutable issuance: %+v, %v", state, err)
     }
+    // Repeated reconciliation of repaired balances must be idempotent.
+    if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
+        t.Fatalf("second reconciliation of repaired balances rejected: %v", err)
+    }
+    if state, err := h.cap.Snapshot(h.ctx); err != nil ||
+        state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
+        t.Fatalf("repeated recovery changed immutable issuance: %+v, %v", state, err)
+    }
     // Recovery must not silently re-enable minting at the exact cap.
     if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
         t.Fatalf("recovery re-enabled native minting: %v", err)
