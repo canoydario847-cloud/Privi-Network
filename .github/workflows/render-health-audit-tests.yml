@@ -1,0 +1,30 @@
+name: Privi Render audit unit tests
+
+on:
+  pull_request:
+    paths:
+      - "ops/render_health_audit.py"
+      - "ops/test_render_health_audit.py"
+      - ".github/workflows/render-health-audit-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit-unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out pull request
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile audit script
+        run: python3 -m compileall -q ops/render_health_audit.py
+      - name: Run offline unit tests (no production network access)
+        run: python3 -m unittest discover -s ops -p 'test_render_health_audit.py' -v
