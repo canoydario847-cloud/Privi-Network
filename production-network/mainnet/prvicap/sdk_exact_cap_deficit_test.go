@@ -140,6 +140,18 @@ func TestActualSDKBankExactCapNativeDeficitCrossDenomFailsClosed(t *testing.T) {
     if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
         t.Fatalf("second restoration rejected: %v", err)
     }
+    // The second recovery must restore the real account balance and leave
+    // both declared supplies and the immutable issuance ledger untouched.
+    if got := h.bank.GetBalance(h.ctx, addr, BaseDenom).Amount.String(); got != MaxBase {
+        t.Fatalf("second recovery left native balance incorrect: %s", got)
+    }
+    if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount.String(); got != MaxBase {
+        t.Fatalf("second recovery changed declared native supply: %s", got)
+    }
+    if state, err := h.cap.Snapshot(h.ctx); err != nil ||
+        state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
+        t.Fatalf("second recovery changed immutable issuance: %+v, %v", state, err)
+    }
     // Recovery must not silently re-enable minting at the exact cap.
     if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
         t.Fatalf("recovery re-enabled native minting: %v", err)
