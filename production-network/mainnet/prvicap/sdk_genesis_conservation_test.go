@@ -716,3 +716,53 @@ func TestActualSDKBankPostGenesisPartialRedistributionFailsClosed(t *testing.T) 
 		t.Fatalf("completed conserving transfer rejected: %v", err)
 	}
 }
+
+
+// TestActualSDKBankPostGenesisPartialCreditFailsClosed covers the opposite
+// half-transfer ordering: crediting the recipient before debiting the sender.
+// UncheckedSetBalance is used only in this disposable SDK corruption fixture.
+func TestActualSDKBankPostGenesisPartialCreditFailsClosed(t *testing.T) {
+	h := newRealBankHarness(t)
+	max, ok := new(big.Int).SetString(MaxBase, 10)
+	if !ok {
+		t.Fatal("invalid embedded PRVI maximum")
+	}
+	remaining := new(big.Int).Sub(max, big.NewInt(1))
+	firstAddr := authtypes.NewModuleAddress("partialcreditone")
+	secondAddr := authtypes.NewModuleAddress("partialcredittwo")
+	h.bank.InitGenesis(h.ctx, &banktypes.GenesisState{
+		Params: banktypes.DefaultParams(),
+		Balances: []banktypes.Balance{
+			{Address: firstAddr.String(), Coins: sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))},
+			{Address: secondAddr.String(), Coins: sdk.NewCoins(sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(remaining)))},
+		},
+		Supply: sdk.NewCoins(sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(max))),
+	})
+	if err := h.cap.InitGenesis(h.ctx, MaxBase, h.bank); err != nil {
+		t.Fatalf("exact-cap genesis rejected: %v", err)
+	}
+	// Only the credit has happened: actual native supply exceeds the cap.
+	if err := h.bank.UncheckedSetBalance(h.ctx, secondAddr, sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(max))); err != nil {
+		t.Fatalf("could not construct partial credit: %v", err)
+	}
+	if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount.String(); got != MaxBase {
+		t.Fatalf("test precondition: declared supply changed: %s", got)
+	}
+	if err := h.cap.Reconcile(h.ctx, h.bank); !errors.Is(err, ErrUnexpectedSupply) {
+		t.Fatalf("partial credit incorrectly reconciled: %v", err)
+	}
+	if state, err := h.cap.Snapshot(h.ctx); err != nil ||
+		state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
+		t.Fatalf("failed reconciliation altered issuance: %+v, %v", state, err)
+	}
+	if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
+		t.Fatalf("native mint allowed after partial credit: %v", err)
+	}
+	// Completing the debit restores the original cap without new issuance.
+	if err := h.bank.UncheckedSetBalance(h.ctx, firstAddr, sdk.NewInt64Coin(BaseDenom, 0)); err != nil {
+		t.Fatalf("could not complete matching debit: %v", err)
+	}
+	if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
+		t.Fatalf("completed conserving transfer rejected: %v", err)
+	}
+}
