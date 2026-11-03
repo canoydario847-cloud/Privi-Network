@@ -624,3 +624,48 @@ func TestActualSDKBankGenesisConservingRedistributionAtCap(t *testing.T) {
 		t.Fatalf("conserving redistribution permitted native mint: %v", err)
 	}
 }
+
+
+// TestActualSDKBankPostGenesisConservingRedistributionAtCap checks that
+// reconciliation accepts a zero-sum account movement after cap initialization.
+// UncheckedSetBalance is only a disposable corruption/transfer fixture.
+func TestActualSDKBankPostGenesisConservingRedistributionAtCap(t *testing.T) {
+	h := newRealBankHarness(t)
+	max, ok := new(big.Int).SetString(MaxBase, 10)
+	if !ok {
+		t.Fatal("invalid embedded PRVI maximum")
+	}
+	remaining := new(big.Int).Sub(max, big.NewInt(1))
+	firstAddr := authtypes.NewModuleAddress("postgenesisone")
+	secondAddr := authtypes.NewModuleAddress("postgenesistwo")
+	h.bank.InitGenesis(h.ctx, &banktypes.GenesisState{
+		Params: banktypes.DefaultParams(),
+		Balances: []banktypes.Balance{
+			{Address: firstAddr.String(), Coins: sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))},
+			{Address: secondAddr.String(), Coins: sdk.NewCoins(sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(remaining)))},
+		},
+		Supply: sdk.NewCoins(sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(max))),
+	})
+	if err := h.cap.InitGenesis(h.ctx, MaxBase, h.bank); err != nil {
+		t.Fatalf("exact-cap genesis rejected: %v", err)
+	}
+	if err := h.bank.UncheckedSetBalance(h.ctx, firstAddr, sdk.NewInt64Coin(BaseDenom, 0)); err != nil {
+		t.Fatalf("could not debit first account: %v", err)
+	}
+	if err := h.bank.UncheckedSetBalance(h.ctx, secondAddr, sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(max))); err != nil {
+		t.Fatalf("could not credit second account: %v", err)
+	}
+	if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount.String(); got != MaxBase {
+		t.Fatalf("declared native supply changed: %s", got)
+	}
+	if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
+		t.Fatalf("post-genesis conserving movement rejected: %v", err)
+	}
+	if state, err := h.cap.Snapshot(h.ctx); err != nil ||
+		state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
+		t.Fatalf("post-genesis redistribution altered issuance: %+v, %v", state, err)
+	}
+	if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
+		t.Fatalf("native mint allowed after post-genesis redistribution: %v", err)
+	}
+}
