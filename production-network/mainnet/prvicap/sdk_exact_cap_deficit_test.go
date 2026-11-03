@@ -134,7 +134,12 @@ func TestActualSDKBankExactCapNativeDeficitCrossDenomFailsClosed(t *testing.T) {
         state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
         t.Fatalf("post-recovery deficit changed immutable issuance: %+v, %v", state, err)
     }
-    // A renewed supply discrepancy must not permit native issuance while\n    // the bank and immutable cap ledger disagree.\n    if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {\n        t.Fatalf("native mint allowed during post-recovery deficit: %v", err)\n    }\n    if err := h.bank.UncheckedSetBalance(h.ctx, addr, sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(max))); err != nil {
+    // A renewed supply discrepancy must not permit native issuance while
+    // the bank and immutable cap ledger disagree.
+    if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
+        t.Fatalf("native mint allowed during post-recovery deficit: %v", err)
+    }
+    if err := h.bank.UncheckedSetBalance(h.ctx, addr, sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(max))); err != nil {
         t.Fatalf("could not restore post-recovery deficit: %v", err)
     }
     if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
