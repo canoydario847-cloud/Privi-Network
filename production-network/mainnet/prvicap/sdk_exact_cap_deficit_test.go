@@ -152,7 +152,14 @@ func TestActualSDKBankExactCapNativeDeficitCrossDenomFailsClosed(t *testing.T) {
         state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
         t.Fatalf("second recovery changed immutable issuance: %+v, %v", state, err)
     }
-    // A second native-only repair must leave the unrelated denomination intact.\n    if got := h.bank.GetBalance(h.ctx, addr, "uother").Amount.String(); got != "50" {\n        t.Fatalf("second recovery changed unrelated account balance: %s", got)\n    }\n    if got := h.bank.GetSupply(h.ctx, "uother").Amount.String(); got != "50" {\n        t.Fatalf("second recovery changed unrelated declared supply: %s", got)\n    }\n    // Recovery must not silently re-enable minting at the exact cap.
+    // A second native-only repair must leave the unrelated denomination intact.
+    if got := h.bank.GetBalance(h.ctx, addr, "uother").Amount.String(); got != "50" {
+        t.Fatalf("second recovery changed unrelated account balance: %s", got)
+    }
+    if got := h.bank.GetSupply(h.ctx, "uother").Amount.String(); got != "50" {
+        t.Fatalf("second recovery changed unrelated declared supply: %s", got)
+    }
+    // Recovery must not silently re-enable minting at the exact cap.
     if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
         t.Fatalf("recovery re-enabled native minting: %v", err)
     }
