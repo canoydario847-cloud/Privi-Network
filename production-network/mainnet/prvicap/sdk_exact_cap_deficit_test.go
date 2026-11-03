@@ -122,6 +122,24 @@ func TestActualSDKBankExactCapNativeDeficitCrossDenomFailsClosed(t *testing.T) {
         state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
         t.Fatalf("repeated recovery changed immutable issuance: %+v, %v", state, err)
     }
+    // A previously successful recovery must not permanently disable future
+    // discrepancy detection. Reintroduce a native deficit after recovery.
+    if err := h.bank.UncheckedSetBalance(h.ctx, addr, sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(less))); err != nil {
+        t.Fatalf("could not reintroduce native deficit after recovery: %v", err)
+    }
+    if err := h.cap.Reconcile(h.ctx, h.bank); !errors.Is(err, ErrUnexpectedSupply) {
+        t.Fatalf("reconciliation accepted new deficit after successful recovery: %v", err)
+    }
+    if state, err := h.cap.Snapshot(h.ctx); err != nil ||
+        state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
+        t.Fatalf("post-recovery deficit changed immutable issuance: %+v, %v", state, err)
+    }
+    if err := h.bank.UncheckedSetBalance(h.ctx, addr, sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(max))); err != nil {
+        t.Fatalf("could not restore post-recovery deficit: %v", err)
+    }
+    if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
+        t.Fatalf("second restoration rejected: %v", err)
+    }
     // Recovery must not silently re-enable minting at the exact cap.
     if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
         t.Fatalf("recovery re-enabled native minting: %v", err)
