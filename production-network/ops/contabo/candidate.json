@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "provider": "contabo",
+  "purpose": "valueless-multi-host-testnet",
+  "operator": "Privi World Corp",
+  "financial_mainnet_enabled": false,
+  "auto_provision_enabled": false,
+  "real_prvi_issuance_enabled": false,
+  "nodes": [
+    {
+      "id": "privi-owner-val-01",
+      "instance_id": "UNASSIGNED",
+      "region": "UNASSIGNED",
+      "fault_domain": "UNASSIGNED",
+      "public_ipv4": "UNASSIGNED",
+      "private_overlay_ipv4": "UNASSIGNED",
+      "admin_ssh_public_key_fingerprint": "UNASSIGNED",
+      "rpc_bind": "127.0.0.1",
+      "metrics_bind": "127.0.0.1"
+    },
+    {
+      "id": "privi-owner-val-02",
+      "instance_id": "UNASSIGNED",
+      "region": "UNASSIGNED",
+      "fault_domain": "UNASSIGNED",
+      "public_ipv4": "UNASSIGNED",
+      "private_overlay_ipv4": "UNASSIGNED",
+      "admin_ssh_public_key_fingerprint": "UNASSIGNED",
+      "rpc_bind": "127.0.0.1",
+      "metrics_bind": "127.0.0.1"
+    },
+    {
+      "id": "privi-owner-val-03",
+      "instance_id": "UNASSIGNED",
+      "region": "UNASSIGNED",
+      "fault_domain": "UNASSIGNED",
+      "public_ipv4": "UNASSIGNED",
+      "private_overlay_ipv4": "UNASSIGNED",
+      "admin_ssh_public_key_fingerprint": "UNASSIGNED",
+      "rpc_bind": "127.0.0.1",
+      "metrics_bind": "127.0.0.1"
+    },
+    {
+      "id": "privi-owner-val-04",
+      "instance_id": "UNASSIGNED",
+      "region": "UNASSIGNED",
+      "fault_domain": "UNASSIGNED",
+      "public_ipv4": "UNASSIGNED",
+      "private_overlay_ipv4": "UNASSIGNED",
+      "admin_ssh_public_key_fingerprint": "UNASSIGNED",
+      "rpc_bind": "127.0.0.1",
+      "metrics_bind": "127.0.0.1"
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+name: Privi Contabo staging evidence (NO DEPLOYMENT)
+on:
+  pull_request:
+    paths:
+      - 'production-network/ops/contabo/**'
+      - '.github/workflows/privi-contabo-staging-preflight.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-contabo-preflight:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate no-secrets draft
+        run: python3 production-network/ops/contabo/host_plan.py production-network/ops/contabo/candidate.json --mode draft
+      - name: Negative tests
+        run: python3 -m unittest discover -s production-network/ops/contabo -p 'test_*.py' -v
+      - name: Check read-only host diagnostic shell syntax
+        run: |
+          bash -n production-network/ops/contabo/host_probe.sh
+          bash -n production-network/ops/contabo/ssh_readonly_diagnostics.sh
+      - name: Mainnet preflight MUST NOT succeed
+        shell: bash
+        run: |
+          set +e
+          python3 production-network/ops/contabo/host_plan.py production-network/ops/contabo/candidate.json --mode preflight
+          code=$?
+          set -e
+          test "$code" -eq 3
+          echo 'PASS: no cloud billing, no financial mainnet, no CI-generated validator signing keys.'
