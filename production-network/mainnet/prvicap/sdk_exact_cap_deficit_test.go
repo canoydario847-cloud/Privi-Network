@@ -59,7 +59,15 @@ func TestActualSDKBankExactCapNativeDeficitCrossDenomFailsClosed(t *testing.T) {
     if err := h.bank.UncheckedSetBalance(h.ctx, addr, sdk.NewInt64Coin("uother", 50)); err != nil {
         t.Fatalf("could not restore unrelated balance: %v", err)
     }
+    // A successful recovery must not rewrite the lifetime issuance record.
+    if got := h.bank.GetSupply(h.ctx, "uother").Amount.String(); got != "50" {
+        t.Fatalf("unrelated declared supply changed during recovery: %s", got)
+    }
     if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
         t.Fatalf("restored exact-cap balances rejected: %v", err)
+    }
+    if state, err := h.cap.Snapshot(h.ctx); err != nil ||
+        state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
+        t.Fatalf("recovery changed immutable issuance: %+v, %v", state, err)
     }
 }
