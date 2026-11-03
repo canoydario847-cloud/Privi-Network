@@ -23,6 +23,44 @@ class TestPoPMainnetGate(unittest.TestCase):
         self.assertFalse(result["financial_prvi_issued"])
         self.assertTrue(any("PoP BFT consensus" in x for x in result["blockers"]))
 
+    def test_invalid_manifest_never_omits_financial_safety_flags(self):
+        for manifest in (None, [], "", 42):
+            with self.subTest(manifest=manifest):
+                result = gate_module.gate(manifest)
+                self.assertEqual(result["status"], "NO_GO")
+                self.assertIs(result["production_mainnet_activated"], False)
+                self.assertIs(result["financial_prvi_issued"], False)
+
+    def test_invalid_manifest_has_no_financial_issuance(self):
+        result = gate_module.gate(None)
+        self.assertEqual(result["status"], "NO_GO")
+        self.assertIs(result["financial_prvi_issued"], False)
+        self.assertIs(result["production_mainnet_activated"], False)
+
+    def test_missing_and_invalid_json_cli_fail_closed(self):
+        import contextlib
+        import io
+        import sys
+        import tempfile
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as directory:
+            file_path = Path(directory) / "manifest.json"
+            for exists in (False, True):
+                with self.subTest(exists=exists):
+                    if exists:
+                        file_path.write_text("not json", encoding="utf-8")
+                    output = io.StringIO()
+                    with patch.object(sys, "argv", ["guard", "--manifest", str(file_path)]):
+                        with contextlib.redirect_stdout(output):
+                            with self.assertRaises(SystemExit) as caught:
+                                gate_module.main()
+                    self.assertEqual(caught.exception.code, 3)
+                    result = json.loads(output.getvalue())
+                    self.assertEqual(result["status"], "NO_GO")
+                    self.assertIs(result["production_mainnet_activated"], False)
+                    self.assertIs(result["financial_prvi_issued"], False)
+
     def test_foreign_chain_settlement_is_refused(self):
         for field, bad in (("chain_family", "base"), ("iot_settlement", "bnb"),
                            ("target_protocol", "proof-of-stake"),
@@ -40,6 +78,19 @@ class TestPoPMainnetGate(unittest.TestCase):
             payload["consensus_kind"] = kind
             self.assertTrue(any("PoS or PoSA" in x
                                 for x in gate_module.gate(payload)["blockers"]))
+
+    def test_unknown_or_missing_consensus_state_fails_closed(self):
+        for kind in (None, "", "pop", "custom", "proof-of-participation"):
+            with self.subTest(kind=kind):
+                payload = baseline()
+                if kind is None:
+                    del payload["consensus_kind"]
+                else:
+                    payload["consensus_kind"] = kind
+                result = gate_module.gate(payload, financial_mainnet=False)
+                self.assertEqual(result["status"], "NO_GO")
+                self.assertTrue(any("consensus implementation state" in x
+                                    for x in result["blockers"]))
 
     def test_missing_hardened_iot_controls_fail_closed(self):
         for control in gate_module.REQUIRED_IOT_CONTROLS:
