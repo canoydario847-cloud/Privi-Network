@@ -215,6 +215,16 @@ func TestActualSDKBankExactCapNativeSurplusCrossDenomFailsClosed(t *testing.T) {
     if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
         t.Fatalf("native mint allowed with untracked surplus: %v", err)
     }
+    // A rejected surplus must not silently alter the corrupted account balances.
+    if got := h.bank.GetBalance(h.ctx, addr, BaseDenom).Amount.String(); got != more.String() {
+        t.Fatalf("rejected surplus modified native account balance: got %s, want %s", got, more.String())
+    }
+    if got := h.bank.GetBalance(h.ctx, addr, "uother").Amount.String(); got != "49" {
+        t.Fatalf("rejected surplus modified unrelated account balance: got %s, want 49", got)
+    }
+    if err := h.cap.Reconcile(h.ctx, h.bank); !errors.Is(err, ErrUnexpectedSupply) {
+        t.Fatalf("repeated reconciliation accepted unresolved native surplus: %v", err)
+    }
     if err := h.bank.UncheckedSetBalance(h.ctx, addr, sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(max))); err != nil {
         t.Fatalf("could not restore native balance: %v", err)
     }
