@@ -1,0 +1,8 @@
+{
+  "cosmos_chain_id": "",
+  "evm_chain_id": 0,
+  "canonical_genesis_sha256": "",
+  "binary_sha256": "",
+  "allocations_sha256": "",
+  "status": "INCOMPLETE_NO_RELEASE_OR_GENESIS"
+}

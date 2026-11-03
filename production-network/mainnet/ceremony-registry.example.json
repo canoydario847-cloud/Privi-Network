@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "status": "AWAITING_INDEPENDENT_OPERATORS_AND_EXTERNAL_AUDITS",
+  "cosmos_chain_id": null,
+  "evm_chain_id": null,
+  "genesis_sha256": null,
+  "binary_sha256": null,
+  "operator_independence_audit_complete": false,
+  "externally_audited_release": false,
+  "operators": [],
+  "note": "All operators must sign a canonical payload with their own independent Ed25519 ATTESTATION keys. Never place validator signing keys or seed phrases in this registry."
+}

@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "status": "DRAFT_NO_OPERATORS_YET",
+  "independent_ownership_review_complete": false,
+  "independent_ownership_review_url": "",
+  "operators": [],
+  "instructions": "Supply 7+ independently controlled real operators later. Each must provide operator_id, legal_controller_id, signing_key_custodian_id, cloud_account_owner_id, 32-byte public consensus_pubkey (hex/Base64), provider, failure_region, voting_power, HTTPS evidence references, and independently reviewed true booleans. Never add signing private keys or mnemonic phrases."
+}

@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "status": "DESIGN_ONLY_NOT_A_GENESIS",
+  "source": {
+    "upstream_repo": "https://github.com/cosmos/evm",
+    "tag": "v0.7.3",
+    "commit": "c3ae9067a7eadcdea55a5192226916deb44c71c4",
+    "review_required": true
+  },
+  "network": {
+    "cosmos_chain_id": null,
+    "evm_chain_id": null,
+    "bech32_prefix": "privi",
+    "new_genesis_required": true,
+    "demo_genesis_reuse_permitted": false
+  },
+  "coin": {
+    "display_denom": "PRVI",
+    "base_denom": "aprvi",
+    "decimals": 18,
+    "fixed_max_supply": "1000000000",
+    "max_supply_base_units": "1000000000000000000000000000",
+    "inflation_enabled": false,
+    "mint_module_begin_block_enabled": false,
+    "checked_supply_cap_in_app": true,
+    "initial_fee_deposit_denom": "aprvi"
+  },
+  "allocations_policy": [
+    {
+      "name": "community_adoption",
+      "percentage": 40,
+      "amount_base_units": "400000000000000000000000000",
+      "vesting": "Approved and published grant eligibility and spend controls required; no wallets designated"
+    },
+    {
+      "name": "ecosystem_development",
+      "percentage": 20,
+      "amount_base_units": "200000000000000000000000000",
+      "vesting": "On-chain escrow, milestone schedule and accountable program oversight required"
+    },
+    {
+      "name": "staking_reward_reserve",
+      "percentage": 20,
+      "amount_base_units": "200000000000000000000000000",
+      "vesting": "On-chain controlled noninflationary rewards; no uncapped minting"
+    },
+    {
+      "name": "protocol_treasury",
+      "percentage": 10,
+      "amount_base_units": "100000000000000000000000000",
+      "vesting": "Multisig plus governance/timelock and public spending reports"
+    },
+    {
+      "name": "contributors",
+      "percentage": 10,
+      "amount_base_units": "100000000000000000000000000",
+      "vesting": "Minimum 12-month cliff and 36-month linear unlock proposal; concrete on-chain accounts and period parameters required"
+    }
+  ],
+  "staking": {
+    "bond_denom": "aprvi",
+    "minimum_operator_count": 7,
+    "target_independent_infrastructure_providers": 3,
+    "target_regions": 3,
+    "unbonding_time": "504h",
+    "max_validators": 100,
+    "min_commission_rate": "0.05",
+    "double_sign_slash_fraction": "0.05",
+    "downtime_slash_fraction": "0.0001",
+    "signed_operator_genesis_attestation_required": true,
+    "staking_revenue_source": "finite_reward_reserve_and_transaction_fees",
+    "operator_compensation_not_guaranteed": true
+  },
+  "governance": {
+    "quorum": "0.334",
+    "threshold": "0.5",
+    "veto_threshold": "0.334",
+    "voting_period": "168h",
+    "proposal_deposit_policy": "unapproved",
+    "timelocked_software_upgrade_required": true
+  },
+  "evm": {
+    "coin_info": {
+      "denom": "aprvi",
+      "extended_denom": "aprvi",
+      "display_denom": "prvi",
+      "decimals": 18
+    },
+    "disable_example_erc20_token_pairs": true,
+    "no_base_fee": false,
+    "public_rpc_requires_separate_gateway": true
+  },
+  "constraints": {
+    "test_is_always_valueless": true,
+    "bnb_priv_is_independent": true,
+    "no_public_developer_mnemonics": true,
+    "no_private_keys_in_repo": true,
+    "no_mainnet_deploy_or_mint": true,
+    "chain_id_registry_and_security_review_required": true
+  }
+}

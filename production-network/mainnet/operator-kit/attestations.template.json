@@ -1,0 +1,5 @@
+{
+  "status": "UNSIGNED_OPERATOR_ATTESTATIONS",
+  "attestations": [],
+  "notes": "One Ed25519 public attestation per independently verified operator, to be supplied later. Do not submit private signing keys."
+}

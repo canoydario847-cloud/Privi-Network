@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "status": "INCOMPLETE_REVIEW_TEMPLATE_NOT_GENESIS",
+  "notes": "Replace these placeholders with REAL, externally verified, non-duplicated privi1 addresses and beneficial owners. Every wallet row needs category, address, amount_base_units, and schedule for restricted groups. No operator addresses, keys or wallet recipients have been supplied; intentionally rejected by vesting_plan.py.",
+  "allocations": [
+    {
+      "category": "community_adoption",
+      "address": "",
+      "amount_base_units": "400000000000000000000000000"
+    },
+    {
+      "category": "ecosystem_development",
+      "address": "",
+      "amount_base_units": "200000000000000000000000000",
+      "schedule": "monthly_36_months"
+    },
+    {
+      "category": "staking_reward_reserve",
+      "address": "",
+      "amount_base_units": "200000000000000000000000000"
+    },
+    {
+      "category": "protocol_treasury",
+      "address": "",
+      "amount_base_units": "100000000000000000000000000",
+      "schedule": "monthly_36_months"
+    },
+    {
+      "category": "contributors",
+      "address": "",
+      "amount_base_units": "100000000000000000000000000",
+      "schedule": "contributor_12_plus_36_months"
+    }
+  ]
+}
