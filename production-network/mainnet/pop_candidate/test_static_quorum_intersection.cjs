@@ -103,3 +103,23 @@ test("even one-member rotation can break honest quorum overlap", () => {
   assert.ok(minimumOverlap(oldMembers, twoReplacements) <= f,
     "static quorum checks must not authorize two-member epoch rotation");
 });
+
+test("one-member rotation admits conflicting certificates with only a Byzantine common signer", () => {
+  // Four-member epochs, q=3, f=1: old/new certificates can each satisfy
+  // their local threshold while their sole shared signer equivocates.
+  // A cross-epoch lock or joint reconfiguration proof is still required.
+  const oldEpoch = new Set(["a", "b", "c", "d"]);
+  const newEpoch = new Set(["a", "b", "c", "e"]);
+  const oldCertificate = ["a", "b", "d"];
+  const newCertificate = ["a", "c", "e"];
+  const threshold = members => Math.floor((2 * members.size) / 3) + 1;
+  assert.equal(oldCertificate.length, threshold(oldEpoch));
+  assert.equal(newCertificate.length, threshold(newEpoch));
+  assert.ok(oldCertificate.every(id => oldEpoch.has(id)));
+  assert.ok(newCertificate.every(id => newEpoch.has(id)));
+  const commonSigners = oldCertificate.filter(id => newCertificate.includes(id));
+  assert.deepEqual(commonSigners, ["a"]);
+  const byzantine = new Set(["a"]);
+  assert.ok(commonSigners.every(id => byzantine.has(id)),
+    "no honest common signer prevents conflicting certificates across epochs");
+});
