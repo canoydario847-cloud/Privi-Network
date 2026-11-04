@@ -265,4 +265,15 @@ func TestActualSDKBankExactCapNativeSurplusCrossDenomFailsClosed(t *testing.T) {
     if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
         t.Fatalf("surplus recovery re-enabled native minting: %v", err)
     }
+    // A new native surplus after successful recovery must still fail closed.
+    if err := h.bank.UncheckedSetBalance(h.ctx, addr, sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(more))); err != nil {
+        t.Fatalf("could not reintroduce native surplus: %v", err)
+    }
+    if err := h.cap.Reconcile(h.ctx, h.bank); !errors.Is(err, ErrUnexpectedSupply) {
+        t.Fatalf("post-recovery native surplus was accepted: %v", err)
+    }
+    if state, err := h.cap.Snapshot(h.ctx); err != nil ||
+        state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
+        t.Fatalf("post-recovery surplus changed immutable issuance: %+v, %v", state, err)
+    }
 }
