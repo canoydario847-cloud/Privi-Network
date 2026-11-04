@@ -288,4 +288,12 @@ func TestActualSDKBankExactCapNativeSurplusCrossDenomFailsClosed(t *testing.T) {
     if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
         t.Fatalf("recurring native surplus repair rejected: %v", err)
     }
+    // Repeated recovery must preserve immutable issuance and keep minting closed.
+    if state, err := h.cap.Snapshot(h.ctx); err != nil ||
+        state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
+        t.Fatalf("recurring surplus repair changed issuance: %+v, %v", state, err)
+    }
+    if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
+        t.Fatalf("recurring surplus repair re-enabled native minting: %v", err)
+    }
 }
