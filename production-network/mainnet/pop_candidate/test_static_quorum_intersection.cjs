@@ -59,3 +59,20 @@ test("candidate PoP quorum pairs retain honest overlap under bounded faults", ()
     }
   }
 });
+
+test("static quorum safety does not extend automatically across membership changes", () => {
+  // Two individually valid 4-member epochs can have disjoint certificates.
+  // This counterexample MUST remain possible until a separate reconfiguration
+  // protocol proves cross-epoch safety (joint consensus or equivalent).
+  const oldEpoch = new Set(["a", "b", "c", "d"]);
+  const newEpoch = new Set(["e", "f", "g", "h"]);
+  const quorumSize = n => Math.floor(2 * n / 3) + 1;
+  const oldCertificate = ["a", "b", "c"];
+  const newCertificate = ["e", "f", "g"];
+  assert.equal(oldCertificate.length, quorumSize(oldEpoch.size));
+  assert.equal(newCertificate.length, quorumSize(newEpoch.size));
+  assert.ok(oldCertificate.every(id => oldEpoch.has(id)));
+  assert.ok(newCertificate.every(id => newEpoch.has(id)));
+  assert.equal(oldCertificate.filter(id => newCertificate.includes(id)).length, 0,
+    "independent valid epoch quorums need not intersect");
+});
