@@ -359,4 +359,16 @@ func TestActualSDKBankExactCapNativeSurplusCrossDenomFailsClosed(t *testing.T) {
     if err := h.cap.MintRestriction(h.ctx, mixed); !errors.Is(err, ErrMintForbidden) {
         t.Fatalf("mixed-denomination mint bypassed native cap after recovery: %v", err)
     }
+    // A rejected mixed-denomination request must not mutate issuance records
+    // or either bank supply counter, including the unrelated denomination.
+    if state, err := h.cap.Snapshot(h.ctx); err != nil ||
+        state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
+        t.Fatalf("mixed mint rejection changed immutable issuance: %+v, %v", state, err)
+    }
+    if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount.String(); got != MaxBase {
+        t.Fatalf("mixed mint rejection changed declared native supply: %s", got)
+    }
+    if got := h.bank.GetSupply(h.ctx, "uother").Amount.String(); got != "50" {
+        t.Fatalf("mixed mint rejection changed unrelated declared supply: %s", got)
+    }
 }
