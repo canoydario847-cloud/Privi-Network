@@ -242,6 +242,18 @@ func TestActualSDKBankExactCapNativeSurplusCrossDenomFailsClosed(t *testing.T) {
     if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
         t.Fatalf("repaired balances rejected: %v", err)
     }
+    // Successful repair must preserve both declared bank supplies and the
+    // immutable native issuance record, not merely return nil.
+    if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount.String(); got != MaxBase {
+        t.Fatalf("surplus recovery changed declared native supply: %s", got)
+    }
+    if got := h.bank.GetSupply(h.ctx, "uother").Amount.String(); got != "50" {
+        t.Fatalf("surplus recovery changed unrelated declared supply: %s", got)
+    }
+    if state, err := h.cap.Snapshot(h.ctx); err != nil ||
+        state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
+        t.Fatalf("surplus recovery changed immutable issuance: %+v, %v", state, err)
+    }
     // Repair of an untracked native surplus must not restore mint authority.
     if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
         t.Fatalf("surplus recovery re-enabled native minting: %v", err)
