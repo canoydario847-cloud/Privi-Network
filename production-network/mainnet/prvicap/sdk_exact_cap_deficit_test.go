@@ -288,6 +288,11 @@ func TestActualSDKBankExactCapNativeSurplusCrossDenomFailsClosed(t *testing.T) {
     if err := h.cap.Reconcile(h.ctx, h.bank); !errors.Is(err, ErrUnexpectedSupply) {
         t.Fatalf("post-recovery native surplus was accepted: %v", err)
     }
+    // Rejection must be observational: it cannot erase the recurring surplus
+    // or silently reconcile the actual account balance to the supply counter.
+    if got := h.bank.GetBalance(h.ctx, addr, BaseDenom).Amount.String(); got != more.String() {
+        t.Fatalf("post-recovery rejection modified native account balance: got %s, want %s", got, more.String())
+    }
     if state, err := h.cap.Snapshot(h.ctx); err != nil ||
         state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
         t.Fatalf("post-recovery surplus changed immutable issuance: %+v, %v", state, err)
