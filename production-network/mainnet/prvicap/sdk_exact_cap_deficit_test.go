@@ -269,6 +269,15 @@ func TestActualSDKBankExactCapNativeSurplusCrossDenomFailsClosed(t *testing.T) {
     if err := h.bank.UncheckedSetBalance(h.ctx, addr, sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(more))); err != nil {
         t.Fatalf("could not reintroduce native surplus: %v", err)
     }
+    // Confirm the recurring surplus exists while the bank supply counter remains
+    // at the exact cap, so this checks hidden balance drift rather than a
+    // straightforward declared-supply overflow.
+    if got := h.bank.GetBalance(h.ctx, addr, BaseDenom).Amount.String(); got != more.String() {
+        t.Fatalf("recurring surplus fixture missing: got %s, want %s", got, more.String())
+    }
+    if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount.String(); got != MaxBase {
+        t.Fatalf("recurring surplus unexpectedly changed declared supply: %s", got)
+    }
     if err := h.cap.Reconcile(h.ctx, h.bank); !errors.Is(err, ErrUnexpectedSupply) {
         t.Fatalf("post-recovery native surplus was accepted: %v", err)
     }
