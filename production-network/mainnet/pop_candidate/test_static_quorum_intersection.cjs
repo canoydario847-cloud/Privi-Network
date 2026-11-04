@@ -76,3 +76,30 @@ test("static quorum safety does not extend automatically across membership chang
   assert.equal(oldCertificate.filter(id => newCertificate.includes(id)).length, 0,
     "independent valid epoch quorums need not intersect");
 });
+
+test("two-member rotation can break honest quorum overlap even with shared validators", () => {
+  // For N=4, q=3 and f=1. One replacement preserves at least two
+  // certificate signers; two replacements can produce disjoint certificates.
+  // This is a counterexample, NOT a validator-rotation implementation.
+  const oldMembers = new Set(["a", "b", "c", "d"]);
+  const oneReplacement = new Set(["a", "b", "c", "e"]);
+  const twoReplacements = new Set(["a", "b", "e", "f"]);
+  const q = 3;
+  const f = 1;
+  const certificates = members => {
+    const ids = [...members];
+    return ids.flatMap((_, omit) => [ids.filter((_, index) => index !== omit)]);
+  };
+  const minimumOverlap = (left, right) => Math.min(
+    ...certificates(left).flatMap(a =>
+      certificates(right).map(b => a.filter(id => b.includes(id)).length)));
+  assert.equal(oldMembers.size, 4);
+  assert.equal(oneReplacement.size, 4);
+  assert.equal(twoReplacements.size, 4);
+  assert.ok(certificates(oldMembers).every(cert => cert.length === q));
+  assert.equal(minimumOverlap(oldMembers, oneReplacement), 2);
+  assert.ok(minimumOverlap(oldMembers, oneReplacement) > f);
+  assert.equal(minimumOverlap(oldMembers, twoReplacements), 0);
+  assert.ok(minimumOverlap(oldMembers, twoReplacements) <= f,
+    "static quorum checks must not authorize two-member epoch rotation");
+});
