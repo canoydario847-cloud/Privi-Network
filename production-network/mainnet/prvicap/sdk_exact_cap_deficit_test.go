@@ -292,6 +292,14 @@ func TestActualSDKBankExactCapNativeSurplusCrossDenomFailsClosed(t *testing.T) {
         state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
         t.Fatalf("post-recovery surplus changed immutable issuance: %+v, %v", state, err)
     }
+    // Reintroducing only native corruption must not disturb the previously
+    // repaired unrelated denomination or its declared supply.
+    if got := h.bank.GetBalance(h.ctx, addr, "uother").Amount.String(); got != "50" {
+        t.Fatalf("recurring native surplus altered unrelated account balance: %s", got)
+    }
+    if got := h.bank.GetSupply(h.ctx, "uother").Amount.String(); got != "50" {
+        t.Fatalf("recurring native surplus altered unrelated declared supply: %s", got)
+    }
     // A second corruption must not revive native mint authority after recovery.
     if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
         t.Fatalf("post-recovery surplus permitted native minting: %v", err)
