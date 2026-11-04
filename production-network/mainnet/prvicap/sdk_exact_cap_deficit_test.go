@@ -371,4 +371,12 @@ func TestActualSDKBankExactCapNativeSurplusCrossDenomFailsClosed(t *testing.T) {
     if got := h.bank.GetSupply(h.ctx, "uother").Amount.String(); got != "50" {
         t.Fatalf("mixed mint rejection changed unrelated declared supply: %s", got)
     }
+    // MintRestriction is a guard, not a bank mutation: rejecting a mixed
+    // request must also preserve both actual account balances.
+    if got := h.bank.GetBalance(h.ctx, addr, BaseDenom).Amount.String(); got != MaxBase {
+        t.Fatalf("mixed mint rejection changed native account balance: %s", got)
+    }
+    if got := h.bank.GetBalance(h.ctx, addr, "uother").Amount.String(); got != "50" {
+        t.Fatalf("mixed mint rejection changed unrelated account balance: %s", got)
+    }
 }
