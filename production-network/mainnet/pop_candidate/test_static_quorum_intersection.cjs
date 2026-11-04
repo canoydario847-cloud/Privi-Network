@@ -29,3 +29,33 @@ test("candidate PoP quorum cannot be reduced to simple majority", () => {
     }
   }
 });
+
+test("candidate PoP quorum pairs retain honest overlap under bounded faults", () => {
+  // Exhaustive small-committee model check; assumes unique validator IDs,
+  // a fixed membership set, and at most f Byzantine identities.
+  const combinations = (n, k) => {
+    const result = [];
+    const visit = (start, chosen) => {
+      if (chosen.length === k) { result.push([...chosen]); return; }
+      for (let i = start; i <= n - (k - chosen.length); i++) {
+        chosen.push(i);
+        visit(i + 1, chosen);
+        chosen.pop();
+      }
+    };
+    visit(0, []);
+    return result;
+  };
+  for (let n = 4; n <= 8; n++) {
+    const q = Math.floor(2 * n / 3) + 1;
+    const f = Math.floor((n - 1) / 3);
+    const quorums = combinations(n, q);
+    for (const a of quorums) {
+      for (const b of quorums) {
+        const overlap = a.filter(id => b.includes(id));
+        assert.ok(overlap.length > f,
+          `N=${n}: two quorum certificates must overlap beyond f=${f}`);
+      }
+    }
+  }
+});
