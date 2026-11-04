@@ -26,9 +26,12 @@ test("one-member rotation lacks guaranteed honest certificate intersection for N
     }
     assert.equal(minIntersection, Math.max(0, 2 * q - (n + 1)),
       `N=${n}: cross-epoch minimum intersection`);
-    // If overlap is not greater than f, the shared signers could all be Byzantine.
-    if (minIntersection <= f) {
-      assert.ok(minIntersection <= f, `N=${n}: rotation must not be inferred safe`);
-    }
+    // Explicit expected counterexamples prevent this test from passing vacuously.
+    // A static overlap bound is NOT sufficient to authorize any rotation.
+    const expectedUnsafe = new Set([4, 7]);
+    assert.equal(minIntersection <= f, expectedUnsafe.has(n),
+      `N=${n}: unexpected honest-overlap classification`);
+    assert.equal(minIntersection > f, !expectedUnsafe.has(n),
+      `N=${n}: honest-overlap lower bound`);
   }
 });
