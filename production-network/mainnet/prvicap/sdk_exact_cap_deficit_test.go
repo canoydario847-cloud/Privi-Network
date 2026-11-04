@@ -353,4 +353,10 @@ func TestActualSDKBankExactCapNativeSurplusCrossDenomFailsClosed(t *testing.T) {
     if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
         t.Fatalf("repeated recurring surplus recovery re-enabled native minting: %v", err)
     }
+    // Mixing native PRVI with another denomination must not bypass the
+    // native mint prohibition after repeated surplus recovery.
+    mixed := sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1), sdk.NewInt64Coin("uother", 1))
+    if err := h.cap.MintRestriction(h.ctx, mixed); !errors.Is(err, ErrMintForbidden) {
+        t.Fatalf("mixed-denomination mint bypassed native cap after recovery: %v", err)
+    }
 }
