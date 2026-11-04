@@ -349,4 +349,8 @@ func TestActualSDKBankExactCapNativeSurplusCrossDenomFailsClosed(t *testing.T) {
         state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
         t.Fatalf("repeated recurring surplus recovery changed issuance: %+v, %v", state, err)
     }
+    // Even an idempotent clean reconciliation cannot reopen native issuance.
+    if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
+        t.Fatalf("repeated recurring surplus recovery re-enabled native minting: %v", err)
+    }
 }
