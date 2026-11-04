@@ -233,6 +233,13 @@ func TestActualSDKBankExactCapNativeSurplusCrossDenomFailsClosed(t *testing.T) {
     if err := h.cap.Reconcile(h.ctx, h.bank); !errors.Is(err, ErrUnexpectedSupply) {
         t.Fatalf("repeated reconciliation accepted unresolved native surplus: %v", err)
     }
+    // Repeated rejection must not modify either declared bank supply counter.
+    if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount.String(); got != MaxBase {
+        t.Fatalf("repeated rejection modified native declared supply: %s", got)
+    }
+    if got := h.bank.GetSupply(h.ctx, "uother").Amount.String(); got != "50" {
+        t.Fatalf("repeated rejection modified unrelated declared supply: %s", got)
+    }
     if err := h.bank.UncheckedSetBalance(h.ctx, addr, sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(max))); err != nil {
         t.Fatalf("could not restore native balance: %v", err)
     }
