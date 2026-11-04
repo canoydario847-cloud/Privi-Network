@@ -325,6 +325,14 @@ func TestActualSDKBankExactCapNativeSurplusCrossDenomFailsClosed(t *testing.T) {
     if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount.String(); got != MaxBase {
         t.Fatalf("recurring surplus repair changed declared native supply: %s", got)
     }
+    // A native-only recurring surplus repair must not change the unrelated
+    // account or declared supply, even after repeated failed reconciliation.
+    if got := h.bank.GetBalance(h.ctx, addr, "uother").Amount.String(); got != "50" {
+        t.Fatalf("recurring surplus repair changed unrelated account balance: %s", got)
+    }
+    if got := h.bank.GetSupply(h.ctx, "uother").Amount.String(); got != "50" {
+        t.Fatalf("recurring surplus repair changed unrelated declared supply: %s", got)
+    }
     // Repeated recovery must preserve immutable issuance and keep minting closed.
     if state, err := h.cap.Snapshot(h.ctx); err != nil ||
         state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
