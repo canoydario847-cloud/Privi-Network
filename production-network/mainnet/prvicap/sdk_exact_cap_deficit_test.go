@@ -239,6 +239,13 @@ func TestActualSDKBankExactCapNativeSurplusCrossDenomFailsClosed(t *testing.T) {
     if err := h.bank.UncheckedSetBalance(h.ctx, addr, sdk.NewInt64Coin("uother", 50)); err != nil {
         t.Fatalf("could not restore unrelated balance: %v", err)
     }
+    // Verify both actual bank balances were repaired, not just their declared supplies.
+    if got := h.bank.GetBalance(h.ctx, addr, BaseDenom).Amount.String(); got != MaxBase {
+        t.Fatalf("surplus repair left native account balance incorrect: %s", got)
+    }
+    if got := h.bank.GetBalance(h.ctx, addr, "uother").Amount.String(); got != "50" {
+        t.Fatalf("surplus repair left unrelated account balance incorrect: %s", got)
+    }
     if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
         t.Fatalf("repaired balances rejected: %v", err)
     }
