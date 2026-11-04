@@ -199,6 +199,14 @@ func TestActualSDKBankExactCapNativeSurplusCrossDenomFailsClosed(t *testing.T) {
     if err := h.bank.UncheckedSetBalance(h.ctx, addr, sdk.NewInt64Coin("uother", 49)); err != nil {
         t.Fatalf("could not construct unrelated deficit: %v", err)
     }
+    // Ensure both unchecked bank writes took effect before testing rejection.
+    // Otherwise a passing reconciliation assertion could hide a broken fixture.
+    if got := h.bank.GetBalance(h.ctx, addr, BaseDenom).Amount.String(); got != more.String() {
+        t.Fatalf("native surplus fixture missing: got %s, want %s", got, more.String())
+    }
+    if got := h.bank.GetBalance(h.ctx, addr, "uother").Amount.String(); got != "49" {
+        t.Fatalf("unrelated deficit fixture missing: got %s, want 49", got)
+    }
     if got := h.bank.GetSupply(h.ctx, BaseDenom).Amount.String(); got != MaxBase {
         t.Fatalf("declared native supply changed: %s", got)
     }
