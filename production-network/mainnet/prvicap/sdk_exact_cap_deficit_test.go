@@ -276,4 +276,16 @@ func TestActualSDKBankExactCapNativeSurplusCrossDenomFailsClosed(t *testing.T) {
         state.GenesisBase != MaxBase || state.LifetimeIssuedBase != MaxBase {
         t.Fatalf("post-recovery surplus changed immutable issuance: %+v, %v", state, err)
     }
+    // A second corruption must not revive native mint authority after recovery.
+    if err := h.cap.MintRestriction(h.ctx, sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 1))); !errors.Is(err, ErrMintForbidden) {
+        t.Fatalf("post-recovery surplus permitted native minting: %v", err)
+    }
+    // Restore the fixture so the final reconciliation proves the keeper can
+    // reject a recurring discrepancy without permanently poisoning valid state.
+    if err := h.bank.UncheckedSetBalance(h.ctx, addr, sdk.NewCoin(BaseDenom, sdkmath.NewIntFromBigInt(max))); err != nil {
+        t.Fatalf("could not restore recurring native surplus: %v", err)
+    }
+    if err := h.cap.Reconcile(h.ctx, h.bank); err != nil {
+        t.Fatalf("recurring native surplus repair rejected: %v", err)
+    }
 }
