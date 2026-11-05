@@ -14,7 +14,7 @@ function commitment(x) {
   if (typeof toEpoch !== 'string' || !/^(0|[1-9][0-9]*)$/.test(toEpoch) || BigInt(toEpoch) > (1n << 64n) - 1n || BigInt(toEpoch) !== BigInt(fromEpoch) + 1n) throw new TypeError('epoch transition');
   if (typeof finalizedCheckpoint !== 'string' || !/^[0-9a-f]{64}$/.test(finalizedCheckpoint)) throw new TypeError('checkpoint');
   for (const members of [oldMembers, newMembers]) {
-    if (!Array.isArray(members) || members.length < 4 || members.some(v => typeof v !== 'string' || !/^[a-z0-9-]{1,64}$/.test(v)) || new Set(members).size !== members.length) throw new TypeError('committee');
+    if (!Array.isArray(members) || (members.length < 4 || members.length > 31) || members.some(v => typeof v !== 'string' || !/^[a-z0-9-]{1,64}$/.test(v)) || new Set(members).size !== members.length) throw new TypeError('committee');
   }
   const canonical = [chainId, fromEpoch, toEpoch, finalizedCheckpoint, [...oldMembers].sort(), [...newMembers].sort()];
   return createHash('sha256').update(JSON.stringify(['PRVI_POP_HANDOFF_RESEARCH_V1', ...canonical])).digest('hex');
@@ -42,6 +42,8 @@ test('research handoff commitment binds both epochs, both committees, chain and 
     {...x, fromEpoch:'09'},
     {...x, oldMembers:['a','a','c','d']},
     {...x, newMembers:['b','c','d','d']},
+    {...x, oldMembers:Array.from({length:32}, (_,i) => `validator-${i}`)},
+    {...x, newMembers:Array.from({length:32}, (_,i) => `validator-${i}`)},
     {...x, finalizedCheckpoint:'not-a-hash'},
   ]) assert.throws(() => commitment(invalid), TypeError);
 });
