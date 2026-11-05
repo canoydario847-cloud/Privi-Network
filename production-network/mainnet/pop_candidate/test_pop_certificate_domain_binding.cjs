@@ -18,7 +18,9 @@ function acceptsCertificate(expected, certificate) {
       new Set(members).size !== members.length) return false;
   const signers = certificate.signers;
   if (!signers.every(id => typeof id === 'string' && id.length > 0 && members.includes(id))) return false;
-  return new Set(signers).size >= Math.floor(2 * members.length / 3) + 1;
+  // Reject noncanonical duplicate identities even when unique quorum is met.
+  if (new Set(signers).size !== signers.length) return false;
+  return signers.length >= Math.floor(2 * members.length / 3) + 1;
 }
 
 test('candidate POP certificate context must reject cross-chain, cross-epoch, and conflicting-block replay', () => {
@@ -33,4 +35,6 @@ test('candidate POP certificate context must reject cross-chain, cross-epoch, an
   assert.equal(acceptsCertificate(expected, {...certificate, signers: ['a','a','a']}), false);
   assert.equal(acceptsCertificate(expected, {...certificate, signers: ['a','b','outsider']}), false);
   assert.equal(acceptsCertificate(expected, {...certificate, signers: ['a','b']}), false);
+  assert.equal(acceptsCertificate(expected, {...certificate, signers: ['a','b','c','a']}), false,
+    'reject duplicate identity even when unique quorum is present');
 });
