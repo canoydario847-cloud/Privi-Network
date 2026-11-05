@@ -10,7 +10,8 @@ function commitment(x) {
   const {chainId, fromEpoch, toEpoch, finalizedCheckpoint, oldMembers, newMembers} = x;
   if (typeof chainId !== 'string' || !/^privi-[a-z0-9-]+$/.test(chainId)) throw new TypeError('chain id');
   if (typeof fromEpoch !== 'string' || !/^(0|[1-9][0-9]*)$/.test(fromEpoch)) throw new TypeError('epoch');
-  if (typeof toEpoch !== 'string' || !/^(0|[1-9][0-9]*)$/.test(toEpoch) || BigInt(toEpoch) !== BigInt(fromEpoch) + 1n) throw new TypeError('epoch transition');
+  if (BigInt(fromEpoch) >= (1n << 64n) - 1n) throw new RangeError('epoch overflow');
+  if (typeof toEpoch !== 'string' || !/^(0|[1-9][0-9]*)$/.test(toEpoch) || BigInt(toEpoch) > (1n << 64n) - 1n || BigInt(toEpoch) !== BigInt(fromEpoch) + 1n) throw new TypeError('epoch transition');
   if (typeof finalizedCheckpoint !== 'string' || !/^[0-9a-f]{64}$/.test(finalizedCheckpoint)) throw new TypeError('checkpoint');
   for (const members of [oldMembers, newMembers]) {
     if (!Array.isArray(members) || members.length < 4 || members.some(v => typeof v !== 'string' || !/^[a-z0-9-]{1,64}$/.test(v)) || new Set(members).size !== members.length) throw new TypeError('committee');
@@ -31,6 +32,11 @@ test('research handoff commitment binds both epochs, both committees, chain and 
     {...x, oldMembers:['a','b','c','f']},
     {...x, newMembers:['b','c','d','f']},
   ]) assert.notEqual(commitment(altered), baseline);
+  for (const overflow of [
+    {...x, fromEpoch:'18446744073709551615', toEpoch:'18446744073709551616'},
+    {...x, fromEpoch:'18446744073709551616', toEpoch:'18446744073709551617'},
+  ]) assert.throws(() => commitment(overflow), RangeError);
+  assert.equal(commitment({...x, fromEpoch:'18446744073709551614', toEpoch:'18446744073709551615'}).length, 64);
   for (const invalid of [
     {...x, toEpoch:'11'},
     {...x, fromEpoch:'09'},
