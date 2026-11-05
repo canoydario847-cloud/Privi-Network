@@ -11,7 +11,9 @@ function hasQuorum(committee, signers) {
   const members = new Set(committee);
   if (members.size !== committee.length) return false;
   if (signers.some(id => !members.has(id))) return false;
-  return new Set(signers).size >= Math.floor(2 * members.size / 3) + 1;
+  // Noncanonical repeated identities must fail even when a unique quorum exists.
+  if (new Set(signers).size !== signers.length) return false;
+  return signers.length >= Math.floor(2 * members.size / 3) + 1;
 }
 
 test('candidate POP quorum input validation fails closed for malformed identities and committee sizes', () => {
@@ -25,7 +27,7 @@ test('candidate POP quorum input validation fails closed for malformed identitie
   }
   for (const invalid of [null, undefined, {}, 'abc', ['a', 'b', 3],
     ['a', 'b', null], ['a', 'b', ''], ['a', 'b', 'outsider'],
-    ['a', 'a', 'a']]) {
+    ['a', 'a', 'a'], ['a', 'b', 'c', 'a'], ['a', 'b', 'c', 'c']]) {
     assert.equal(hasQuorum(valid, invalid), false);
   }
 });
