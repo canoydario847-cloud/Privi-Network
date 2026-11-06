@@ -74,3 +74,11 @@ test('rejects offsetting liquid and vested allocations even at exact total cap',
     assert.equal(validateAllocation(0n, units(CAP, decimals), decimals), false);
   }
 });
+
+test('rejects malformed precision even when allocation values are nonnegative BigInts', () => {
+  const liquid = units(LIQUID, 18);
+  const locked = units(LOCKED, 18);
+  for (const bad of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 31, '18', null, undefined]) {
+    assert.throws(() => validateAllocation(liquid, locked, bad), RangeError);
+  }
+});
