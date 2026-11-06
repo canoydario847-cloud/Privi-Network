@@ -10,7 +10,9 @@ function hasQuorum(committee, signers) {
   const members = new Set(committee);
   if (members.size !== committee.length) return false;
   if (signers.some(s => typeof s !== 'string' || !s.trim() || s !== s.trim() || !members.has(s))) return false;
-  return new Set(signers).size >= Math.floor((2 * members.size) / 3) + 1;
+  // Reject ambiguous certificates rather than silently deduplicating signer entries.
+  if (new Set(signers).size !== signers.length) return false;
+  return signers.length >= Math.floor((2 * members.size) / 3) + 1;
 }
 
 test('candidate POP certificate counts distinct authorized validators only', () => {
@@ -40,5 +42,15 @@ test('candidate POP certificate rejects whitespace-only and padded identities', 
   for (const invalid of ['', ' ', '\\t', ' a', 'a ', '\\na']) {
     assert.equal(hasQuorum([invalid, 'b', 'c', 'd'], [invalid, 'b', 'c']), false);
     assert.equal(hasQuorum(committee, [invalid, 'b', 'c']), false);
+  }
+});
+
+test('candidate POP certificate rejects repeated signers even with a full unique quorum', () => {
+  for (let n = 4; n <= 31; n++) {
+    const committee = Array.from({ length: n }, (_, i) => `v${i}`);
+    const q = Math.floor((2 * n) / 3) + 1;
+    const quorum = committee.slice(0, q);
+    assert.equal(hasQuorum(committee, quorum), true, `N=${n}: canonical quorum`);
+    assert.equal(hasQuorum(committee, [...quorum, quorum[0]]), false, `N=${n}: repeated signer`);
   }
 });
