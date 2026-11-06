@@ -39,7 +39,7 @@ test('candidate POP committee size and signer identity shapes are bounded', () =
 test('candidate POP certificate rejects whitespace-only and padded identities', () => {
   const committee = ['a', 'b', 'c', 'd'];
   assert.equal(hasQuorum(committee, ['a', 'b', 'c']), true);
-  for (const invalid of ['', ' ', '\\t', ' a', 'a ', '\\na']) {
+  for (const invalid of ['', ' ', '\t', ' a', 'a ', '\na']) {
     assert.equal(hasQuorum([invalid, 'b', 'c', 'd'], [invalid, 'b', 'c']), false);
     assert.equal(hasQuorum(committee, [invalid, 'b', 'c']), false);
   }
