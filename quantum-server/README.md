@@ -46,6 +46,7 @@ Privi Quantum joins three things into one pipeline:
 | `vault_keygen` / `vault_seal` / `vault_open` / `vault_receipt` | Privi Vault: re-wrap long-lived data under hybrid X25519 + ML-KEM against "harvest now, decrypt later" |
 | `quantum_mandate_request` / `_status` / `_check` / `_revoke` | Quantum Mandates: a human signs spending terms with their passkey before an agent can run paid quantum hardware |
 | `quantum_run_circuit` | Bring your own circuit: OpenQASM 2.0/3.0 from Qiskit, run on IBM Quantum, IonQ, Braket or locally, counts sealed |
+| `quantum_ibm_kingston` | Privi Kingston: live IBM machine view (queue, calibration hash, lowest-error qubit groups, Open Plan seconds left; also `/ibm/kingston.json`) |
 | `quantum_leaderboard` | Every backend ranked only by runs Privi measured and sealed (also `/leaderboard`, `/leaderboard.json`) |
 | `bridge_connect` / `bridge_status` / `bridge_test` / `bridge_revoke` / `quantum_workflow_run` / `bridge_workflow` | Privi Bridge: agents pull data from a company's existing software, run it on quantum hardware and push the signed answer back, inside a passkey-signed scope |
 
@@ -176,6 +177,21 @@ Money guard: a backend that costs money runs only when its price is set in `HARD
 (JSON, USD per task and per shot) and the estimate fits `HARDWARE_DAILY_BUDGET_USD` (default 0 =
 paid hardware off). Open jobs are polled every `HARDWARE_POLL_SECONDS` (60) and sealed when done.
 
+**Privi Kingston (IBM Quantum Heron, e.g. `ibm_kingston`).** Every IBM job is run the careful way:
+
+1. Privi reads the machine's live calibration (readout error, T1/T2, every CZ coupler) and seals
+   its SHA-256 into the result, so anyone can see which calibration the answer ran on.
+2. The circuit is pinned on the connected group of qubits with the lowest readout + two-qubit
+   error for its size and transpiled at optimization level 3.
+3. SamplerV2 runs with dynamical decoupling (XY4) and gate + measurement twirling
+   (`IBM_ERROR_SUPPRESSION=off` to disable).
+4. Readout-error mitigation (tensored inverse from the same calibration) is reported next to the
+   raw counts in the sealed record, never instead of them.
+5. Open Plan guard: Privi meters QPU seconds over a rolling window and refuses a job before it
+   would use up the free allowance (`IBM_OPEN_PLAN_SECONDS`, default 600; `IBM_OPEN_PLAN_WINDOW_DAYS`,
+   default 28; `IBM_OPEN_PLAN_RESERVE_SECONDS`, default 30; set `IBM_OPEN_PLAN_SECONDS=0` on a paid
+   plan). It syncs with IBM's own usage figure whenever `quantum_ibm_kingston` is called.
+
 **Crypto Inventory (CBOM).** `pqc_crypto_inventory` takes domains (live TLS 1.3 / hybrid ML-KEM
 check) and up to 5 public GitHub repos (downloaded as a tarball and scanned in memory, nothing kept)
 and returns the readiness package with profile `company` (NIST IR 8547 dates) or a federal profile,
@@ -223,7 +239,7 @@ that spend is not part of v0.7.
 from qiskit import QuantumCircuit, qasm2
 qc = QuantumCircuit(2); qc.h(0); qc.cx(0, 1); qc.measure_all()
 qasm = qasm2.dumps(qc)          # or qiskit.qasm3.dumps(qc)
-# MCP: quantum_run_circuit(qasm=qasm, backend="ibm:ibm_brisbane" | "ionq:simulator" | "local", shots=1000)
+# MCP: quantum_run_circuit(qasm=qasm, backend="ibm:ibm_kingston" | "ionq:simulator" | "local", shots=1000)
 ```
 
 Standard-library gates (x, y, z, h, s, t, sx, rx, ry, rz, p, u, u1-u3, cx, cy, cz, ch, swap, crx, cry, crz, cp, ccx,

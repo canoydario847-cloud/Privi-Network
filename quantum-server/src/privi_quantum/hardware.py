@@ -39,6 +39,7 @@ from typing import Any
 
 import numpy as np
 
+from . import kingston
 from .attest import now_iso
 
 POLICIES = ("cheapest", "fastest", "hardware")
@@ -188,7 +189,15 @@ class Backend:
             return None
         return round(float(self.price.get("per_task", 0)) + float(self.price.get("per_shot", 0)) * shots, 4)
 
-    def submit(self, qasm: str, n: int, gates: list[tuple], shots: int, name: str) -> str:
+    def quota(self, shots: int) -> tuple[bool, str]:
+        """Provider-side allowance other than money (e.g. IBM Open Plan QPU seconds)."""
+        return True, ""
+
+    def attach(self, db: sqlite3.Connection, lock: threading.Lock) -> None:
+        """Called once by the router so a backend can keep its own tables in the router's database."""
+
+    def submit(self, qasm: str, n: int, gates: list[tuple], shots: int, name: str) -> str | tuple[str, dict]:
+        """Return the provider job id, or (provider job id, device metadata to keep with the job)."""
         raise NotImplementedError
 
     def fetch(self, provider_job_id: str, n: int, shots: int) -> dict:
@@ -271,38 +280,129 @@ class IonQBackend(Backend):
 
 
 class IBMBackend(Backend):
+    """IBM Quantum (Heron r2 machines such as ibm_kingston) with Privi Kingston: calibration-pinned best-qubit
+    layout, dynamical decoupling + twirling, readout-error mitigation data and the Open Plan QPU-seconds guard."""
     provider, kind, library = "IBM Quantum", "qpu", "qiskit_ibm_runtime"
+    CAL_TTL_S = 900
 
-    def __init__(self, token: str, instance: str, backend_name: str, price: dict | None):
+    def __init__(self, token: str, instance: str, backend_name: str, price: dict | None,
+                 suppression: bool = True, open_plan_seconds: float = 600.0, window_days: float = 28.0,
+                 reserve_seconds: float = 30.0, service_factory=None):
         super().__init__(price)
         self.token, self.instance, self.backend_name = token, instance, backend_name
         self.id = f"ibm:{backend_name}"
         self.name = f"IBM Quantum {backend_name} (superconducting QPU)"
+        self.suppression = suppression
+        self.open_plan_seconds, self.window_days, self.reserve_seconds = open_plan_seconds, window_days, reserve_seconds
+        self.meter: kingston.OpenPlanMeter | None = None
+        self._service_factory = service_factory
+        self._svc = None
+        self._cal: tuple[float, dict] | None = None
 
     def configured(self):
         if not self.token:
             return False, "set IBM_QUANTUM_TOKEN"
-        try:
-            __import__("qiskit_ibm_runtime")
-        except ImportError:
-            return False, "install the hardware extra (pip install privi-quantum-mcp[hardware])"
+        if self._service_factory is None:
+            try:
+                __import__("qiskit_ibm_runtime")
+            except ImportError:
+                return False, "install the hardware extra (pip install privi-quantum-mcp[hardware])"
         return True, "ready"
 
+    def attach(self, db, lock):
+        if self.open_plan_seconds > 0:
+            self.meter = kingston.OpenPlanMeter(db, lock, self.open_plan_seconds, self.window_days, self.reserve_seconds)
+
+    def quota(self, shots):
+        if not self.meter:
+            return True, ""
+        ok, why, _ = self.meter.check(shots)
+        return ok, why
+
     def _service(self):
+        if self._svc is not None:
+            return self._svc
+        if self._service_factory is not None:
+            self._svc = self._service_factory()
+            return self._svc
         from qiskit_ibm_runtime import QiskitRuntimeService
         kw = {"channel": os.getenv("IBM_QUANTUM_CHANNEL", "ibm_quantum_platform"), "token": self.token}
         if self.instance:
             kw["instance"] = self.instance
-        return QiskitRuntimeService(**kw)
+        self._svc = QiskitRuntimeService(**kw)
+        return self._svc
+
+    def calibration(self, backend=None, fresh: bool = False) -> dict:
+        if not fresh and self._cal and time.time() - self._cal[0] < self.CAL_TTL_S:
+            return self._cal[1]
+        backend = backend or self._service().backend(self.backend_name)
+        snap = kingston.snapshot_from_backend(backend)
+        self._cal = (time.time(), snap)
+        return snap
+
+    def _transpile(self, qc, backend, layout):
+        from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
+        kw = {"backend": backend, "optimization_level": 3}
+        if layout:
+            kw["initial_layout"] = layout
+        try:
+            return generate_preset_pass_manager(**kw).run(qc)
+        except Exception:  # noqa: BLE001  a pinned layout the router cannot use: let the transpiler choose
+            if not layout:
+                raise
+            kw.pop("initial_layout")
+            return generate_preset_pass_manager(**kw).run(qc)
+
+    def _sampler(self, backend):
+        from qiskit_ibm_runtime import SamplerV2
+        sampler = SamplerV2(mode=backend)
+        applied = []
+        if self.suppression:
+            try:
+                sampler.options.dynamical_decoupling.enable = True
+                sampler.options.dynamical_decoupling.sequence_type = "XY4"
+                applied.append("dynamical_decoupling:XY4")
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                sampler.options.twirling.enable_gates = True
+                sampler.options.twirling.enable_measure = True
+                applied.append("twirling:gates+measure")
+            except Exception:  # noqa: BLE001
+                pass
+        return sampler, applied
 
     def submit(self, qasm, n, gates, shots, name):
         from qiskit import QuantumCircuit
-        from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
-        from qiskit_ibm_runtime import SamplerV2
-        svc = self._service()
-        backend = svc.backend(self.backend_name)
-        isa = generate_preset_pass_manager(backend=backend, optimization_level=1).run(QuantumCircuit.from_qasm_str(qasm))
-        return SamplerV2(mode=backend).run([isa], shots=shots).job_id()
+        backend = self._service().backend(self.backend_name)
+        meta: dict[str, Any] = {"provider": "ibm", "backend": self.backend_name}
+        try:
+            snap = self.calibration(backend)
+        except Exception as e:  # noqa: BLE001  never block a run on a calibration read
+            snap, meta["calibration_error"] = None, f"{type(e).__name__}: {e}"[:200]
+        layout = kingston.best_layout(snap, n) if snap else None
+        isa = self._transpile(QuantumCircuit.from_qasm_str(qasm), backend, layout["physical_qubits"] if layout else None)
+        figs = kingston.isa_figures(isa, snap)
+        if self.meter:
+            ok, why, est_s = self.meter.check(shots, figs.get("two_qubit_gates", 0))
+            if not ok:
+                raise HardwareError(why)
+        sampler, applied = self._sampler(backend)
+        pid = sampler.run([isa], shots=shots).job_id()
+        if self.meter:
+            self.meter.reserve(pid, self.id, est_s)
+            meta["qpu_seconds_estimate"] = est_s
+        phys = kingston.measured_physical(isa, layout["physical_qubits"] if layout else None)
+        if phys is not None:
+            phys = phys[:n]
+        meta.update({"error_suppression": applied, "transpile": {"optimization_level": 3, **figs},
+                     "layout": layout, "measured_on": phys})
+        if snap:
+            meta["calibration"] = {"sha256": kingston.calibration_sha256(snap), "calibrated_at": snap.get("calibrated_at"),
+                                   "read_at": snap.get("taken_at"), "two_qubit_gate": snap.get("two_qubit_gate")}
+            if phys:
+                meta["readout"] = kingston.readout_for(snap, phys)
+        return pid, meta
 
     def fetch(self, pid, n, shots):
         job = self._service().job(pid)
@@ -311,11 +411,49 @@ class IBMBackend(Backend):
             return {"status": "queued"}
         if st == "RUNNING":
             return {"status": "running"}
+        qsec = kingston.job_quantum_seconds(job)
         if st in ("ERROR", "CANCELLED"):
-            return {"status": "failed" if st == "ERROR" else "canceled", "error": str(job.error_message() or "")[:300]}
+            status = "failed" if st == "ERROR" else "canceled"
+            if self.meter:
+                self.meter.settle(pid, qsec, status)
+            return {"status": status, "error": str(job.error_message() or "")[:300]}
         data = job.result()[0].data
         reg = next(iter(data.__dict__.values())) if not hasattr(data, "c") else data.c
-        return {"status": "done", "counts": counts_from_bitstrings(reg.get_counts(), qubit0_first=False)}
+        if self.meter:
+            self.meter.settle(pid, qsec, "done")
+        return {"status": "done", "counts": counts_from_bitstrings(reg.get_counts(), qubit0_first=False),
+                "device": {"quantum_seconds": qsec}}
+
+    def kingston_report(self, sizes=(2, 3, 4, 6, 8, 12)) -> dict:
+        """Live view of the machine for people and agents: queue, calibration, best qubits, Open Plan seconds."""
+        ok, why = self.configured()
+        out: dict[str, Any] = {"backend": self.id, "available": ok, "status": why,
+                               "error_suppression": ["dynamical_decoupling:XY4", "twirling:gates+measure"]
+                               if self.suppression else [],
+                               "readout_mitigation": "tensored inverse from the job's own calibration"}
+        if not ok:
+            return out
+        svc = self._service()
+        try:
+            backend = svc.backend(self.backend_name)
+            bs = backend.status()
+            out["queue"] = {"operational": bool(getattr(bs, "operational", True)),
+                            "pending_jobs": getattr(bs, "pending_jobs", None),
+                            "message": str(getattr(bs, "status_msg", "") or "")}
+            snap = self.calibration(backend, fresh=True)
+            out["calibration"] = kingston.summary(snap)
+            out["best_layouts"] = kingston.suggested_layouts(snap, sizes)
+        except Exception as e:  # noqa: BLE001
+            out["error"] = f"{type(e).__name__}: {e}"[:300]
+        if self.meter:
+            try:
+                u = kingston.parse_service_usage(svc.usage())
+                if u.get("remaining_s") is not None:
+                    self.meter.sync(u["remaining_s"], u.get("limit_s"), u.get("consumed_s"))
+            except Exception:  # noqa: BLE001  older SDKs have no usage(); the local meter still works
+                pass
+            out["open_plan"] = self.meter.view()
+        return out
 
 
 class BraketBackend(Backend):
@@ -395,7 +533,11 @@ def backends_from_env(env: dict | None = None) -> list[Backend]:
     for tgt in [t.strip() for t in e.get("IONQ_TARGETS", "simulator").split(",") if t.strip()]:
         out.append(IonQBackend(e.get("IONQ_API_KEY", ""), tgt, prices.get(f"ionq:{tgt}")))
     for b in [x.strip() for x in e.get("IBM_QUANTUM_BACKENDS", "").split(",") if x.strip()]:
-        out.append(IBMBackend(e.get("IBM_QUANTUM_TOKEN", ""), e.get("IBM_QUANTUM_INSTANCE", ""), b, prices.get(f"ibm:{b}")))
+        out.append(IBMBackend(e.get("IBM_QUANTUM_TOKEN", ""), e.get("IBM_QUANTUM_INSTANCE", ""), b, prices.get(f"ibm:{b}"),
+                              suppression=e.get("IBM_ERROR_SUPPRESSION", "on").lower() not in ("0", "off", "false", "no"),
+                              open_plan_seconds=float(e.get("IBM_OPEN_PLAN_SECONDS", "600") or 0),
+                              window_days=float(e.get("IBM_OPEN_PLAN_WINDOW_DAYS", "28") or 28),
+                              reserve_seconds=float(e.get("IBM_OPEN_PLAN_RESERVE_SECONDS", "30") or 0)))
     for item in [x.strip() for x in e.get("BRAKET_DEVICES", "").split(",") if x.strip()]:
         name, _, arn = item.partition("=")
         if arn:
@@ -413,8 +555,13 @@ class HardwareRouter:
         self._db.row_factory = sqlite3.Row
         with self._lock:
             self._db.executescript(SCHEMA)
+            cols = {r[1] for r in self._db.execute("PRAGMA table_info(hw_jobs)")}
+            if "device" not in cols:
+                self._db.execute("ALTER TABLE hw_jobs ADD COLUMN device TEXT")
             self._db.commit()
         self.backends = {b.id: b for b in (backends if backends is not None else backends_from_env())}
+        for b in self.backends.values():
+            b.attach(self._db, self._lock)
         self.daily_budget = float(daily_budget_usd)
 
     # -- money
@@ -439,8 +586,11 @@ class HardwareRouter:
 
     def affordable(self, b: Backend, shots: int, max_cost: float | None) -> tuple[bool, str, float | None]:
         est = b.estimate_usd(shots)
+        qok, qwhy = b.quota(shots)
+        if not qok:
+            return False, qwhy, est
         if est == 0:
-            return True, "free", 0.0
+            return True, "free" + (f" ({qwhy})" if qwhy else ""), 0.0
         if est is None:
             return False, f"price for {b.id} unknown: set it in HARDWARE_PRICES", None
         if self.daily_budget <= 0:
@@ -526,24 +676,29 @@ class HardwareRouter:
         n, gates = parse_qasm(qasm)
         b, est, considered = self.choose(backend, policy, shots, max_cost)
         jid = "hw_" + secrets.token_hex(8)
-        pid = b.submit(qasm, n, gates, shots, f"privi {problem} {jid}")
+        sub = b.submit(qasm, n, gates, shots, f"privi {problem} {jid}")
+        pid, device = (sub if isinstance(sub, tuple) else (sub, None))
         if est:
             self._add_spend(est)
         with self._lock:
             self._db.execute("INSERT INTO hw_jobs (job_id, backend_id, provider_job_id, problem, data, qasm, qubits, shots, layers, "
-                             "training, status, est_cost_usd, submitted_at, submitted_unix, owner) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                             "training, status, est_cost_usd, submitted_at, submitted_unix, owner, device) "
+                             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                              (jid, b.id, pid, problem, json.dumps(data), qasm, n, shots, layers, json.dumps(training),
-                              "queued", est, now_iso(), time.time(), owner))
+                              "queued", est, now_iso(), time.time(), owner, json.dumps(device) if device else None))
             self._db.commit()
-        return {"job_id": jid, "backend": b.info(), "provider_job_id": pid, "estimated_cost_usd": est,
-                "routing": considered}
+        out = {"job_id": jid, "backend": b.info(), "provider_job_id": pid, "estimated_cost_usd": est,
+               "routing": considered}
+        if device:
+            out["device"] = device
+        return out
 
     def get(self, jid: str) -> dict | None:
         r = self._db.execute("SELECT * FROM hw_jobs WHERE job_id=?", (jid,)).fetchone()
         if not r:
             return None
         d = dict(r)
-        for k in ("data", "training", "counts", "result"):
+        for k in ("data", "training", "counts", "result", "device"):
             if d.get(k):
                 d[k] = json.loads(d[k])
         if d.get("counts"):
@@ -567,10 +722,13 @@ class HardwareRouter:
         st = r["status"]
         if st in TERMINAL:
             ta = time.time() - j["submitted_unix"]
+            device = {**(j.get("device") or {}), **(r.get("device") or {})} or None
             with self._lock:
-                self._db.execute("UPDATE hw_jobs SET status=?, error=?, finished_at=?, turnaround_s=?, counts=? WHERE job_id=?",
+                self._db.execute("UPDATE hw_jobs SET status=?, error=?, finished_at=?, turnaround_s=?, counts=?, device=? "
+                                 "WHERE job_id=?",
                                  (st, r.get("error", ""), now_iso(), round(ta, 3),
-                                  json.dumps(r.get("counts")) if r.get("counts") else None, jid))
+                                  json.dumps(r.get("counts")) if r.get("counts") else None,
+                                  json.dumps(device) if device else None, jid))
                 self._db.commit()
             self._observe(j["backend_id"], ta, st == "done")
         elif st != j["status"]:

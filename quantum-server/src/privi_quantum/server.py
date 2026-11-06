@@ -30,7 +30,7 @@ from pydantic import Field
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 
-from . import advantage, circuits, govpqc, leaderboard as board, govreport, inventory, pqctls, qaoa, scanner, vault
+from . import advantage, circuits, govpqc, leaderboard as board, govreport, inventory, kingston, pqctls, qaoa, scanner, vault
 from .hardware import HardwareError, HardwareRouter, backends_from_env
 from .dream import BENCHMARK, MODES, DreamError, DreamScape, DreamWeaver, Privilege
 from .accelerator import LEVEL_LABEL, STEPS, Accelerator, AcceleratorError, badge_svg
@@ -44,7 +44,7 @@ from .payments import PaySettings
 from .x402 import NO_CHARGE_KEY, Facilitator, Paywall
 from . import benchmarks
 
-__version__ = "0.10.0"
+__version__ = "0.11.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/quantum-server"
 PUBLIC_URL = os.getenv("QUANTUM_PUBLIC_URL", "https://privi-quantum.onrender.com").rstrip("/")
 EXPLORER_URL = os.getenv("PRIVI_EXPLORER_URL", "").rstrip("/") or f"{PUBLIC_URL}/explorer/lookup"
@@ -657,6 +657,25 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
                 complete_workflow(wid, j)
         return j
 
+    def device_block(j: dict) -> dict | None:
+        """What Privi Kingston recorded about the machine for this job (sealed into the attestation)."""
+        d = j.get("device") or {}
+        if not d:
+            return None
+        lay = d.get("layout") or {}
+        return {"physical_qubits": d.get("measured_on") or lay.get("physical_qubits"),
+                "layout_estimated_fidelity": lay.get("estimated_fidelity"),
+                "calibration_sha256": (d.get("calibration") or {}).get("sha256"),
+                "calibrated_at": (d.get("calibration") or {}).get("calibrated_at"),
+                "error_suppression": d.get("error_suppression"), "transpile": d.get("transpile"),
+                "quantum_seconds": d.get("quantum_seconds"), "qpu_seconds_estimate": d.get("qpu_seconds_estimate")}
+
+    def mitigated(j: dict) -> dict | None:
+        ro = (j.get("device") or {}).get("readout")
+        if not ro or not j.get("counts") or len(ro) != j["qubits"]:
+            return None
+        return kingston.mitigate_readout(j["counts"], ro)
+
     def _finalize_hw(jid: str) -> dict | None:
         """Poll a hardware job; when it is done, decode the answer and seal a run attestation + advantage receipt once."""
         with finalize_lock:
@@ -674,6 +693,12 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
             exact = advantage.exhaustive(qubo)
             classical = [exact, advantage.simulated_annealing(qubo)]
             psha = _psha(j["problem"], j["data"])
+            dev, mit = device_block(j), mitigated(j)
+            mit_view = None
+            if mit:
+                mm = advantage.best_from_counts(qubo, kingston.as_counts(mit["probabilities"], j["shots"]))
+                mit_view = {"method": mit["method"], "optimum_frequency_raw": meas["optimum_frequency"],
+                            "optimum_frequency_mitigated": mm["optimum_frequency"]}
             quantum = {"method": f"CVaR-QAOA p={j['layers']} (angles trained classically)", "backend": j["backend_id"],
                        "backend_kind": kind, "provider_job_id": j["provider_job_id"], "shots": j["shots"],
                        "cost": meas["cost"], "found_optimum": meas["found_optimum"],
@@ -683,10 +708,13 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
                 "backend_kind": kind, "provider_job_id": j["provider_job_id"], "shots": j["shots"],
                 "decision": decode(meas["solution"]), "cost": meas["cost"], "found_optimum": meas["found_optimum"],
                 "exact_optimum_cost": exact["cost"], "circuit_sha256": hashlib.sha256(j["qasm"].encode()).hexdigest(),
-                "estimated_cost_usd": j["est_cost_usd"]})
+                "estimated_cost_usd": j["est_cost_usd"], **({"device": dev} if dev else {}),
+                **({"readout_mitigation": mit_view} if mit_view else {})})
             rc = attestor.issue("advantage_receipt", advantage.receipt_body(j["problem"], psha, qubo, quantum, classical))
             result = {"decision": decode(meas["solution"]), "measurement": meas, "attestation_id": run["id"],
                       "exact_optimum_cost": exact["cost"]}
+            if mit_view:
+                result["readout_mitigation"] = mit_view
             router.save_result(jid, result, run["id"], rc["id"])
             return router.get(jid)
 
@@ -697,15 +725,25 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         top = [{"bitstring": circuits.bitstring(k, n), "count": c, "probability": round(c / max(1, sum(j["counts"].values())), 6)}
                for k, c in counts[:32]]
         b = router.backends.get(j["backend_id"])
+        dev, mit = device_block(j), mitigated(j)
+        mtop = None
+        if mit:
+            mtop = [{"bitstring": circuits.bitstring(k, n), "probability": round(p, 6)}
+                    for k, p in sorted(mit["probabilities"].items(), key=lambda kv: -kv[1])[:32]]
         run = attestor.issue("quantum_circuit_run", {
             "source": j["data"].get("source", "openqasm"), "source_sha256": j["data"].get("source_sha256"),
             "circuit_sha256": hashlib.sha256(j["qasm"].encode()).hexdigest(), "label": j["data"].get("label", ""),
             "qubits": n, "basis_gates": j["data"].get("basis_gates"), "backend": j["backend_id"],
             "backend_kind": b.kind if b else "unknown", "provider_job_id": j["provider_job_id"], "shots": shots,
             "distinct_outcomes": len(counts), "top_outcomes": top, "turnaround_s": j.get("turnaround_s"),
-            "estimated_cost_usd": j["est_cost_usd"], "bit_order": "Qiskit order: qubit 0 is the rightmost bit"})
-        router.save_result(j["job_id"], {"counts": {circuits.bitstring(k, n): c for k, c in counts[:1024]},
-                                         "top_outcomes": top, "attestation_id": run["id"]}, run["id"], run["id"])
+            "estimated_cost_usd": j["est_cost_usd"], "bit_order": "Qiskit order: qubit 0 is the rightmost bit",
+            **({"device": dev} if dev else {}),
+            **({"mitigated_top_outcomes": mtop, "mitigation_method": mit["method"]} if mtop else {})})
+        res = {"counts": {circuits.bitstring(k, n): c for k, c in counts[:1024]}, "top_outcomes": top,
+               "attestation_id": run["id"]}
+        if mtop:
+            res["mitigated_top_outcomes"] = mtop
+        router.save_result(j["job_id"], res, run["id"], run["id"])
         return router.get(j["job_id"])
 
     def finalize_open() -> int:
@@ -724,16 +762,23 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
             out["mandate"] = {"mandate_id": sp["mandate_id"], "charged_usd": sp["amount"] / 1_000_000, "status": sp["status"]}
         if j.get("error"):
             out["error"] = j["error"]
+        dev = device_block(j)
+        if dev:
+            out["device"] = dev
         if j.get("poll_error"):
             out["poll_error"] = j["poll_error"]
         if j.get("result") and j["problem"] == "circuit":
             out["counts"] = j["result"]["counts"]
             out["top_outcomes"] = j["result"]["top_outcomes"][:8]
+            if j["result"].get("mitigated_top_outcomes"):
+                out["mitigated_top_outcomes"] = j["result"]["mitigated_top_outcomes"][:8]
             out["bit_order"] = "Qiskit order: qubit 0 is the rightmost bit"
             out["attestation"] = {"id": j["attestation_id"], **links(j["attestation_id"])}
         elif j.get("result"):
             out["decision"] = j["result"]["decision"]
             out["measurement"] = j["result"]["measurement"]
+            if j["result"].get("readout_mitigation"):
+                out["readout_mitigation"] = j["result"]["readout_mitigation"]
             out["attestation"] = {"id": j["attestation_id"], **links(j["attestation_id"])}
             rc = attestor.get(j["receipt_id"])
             if rc:
@@ -800,7 +845,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         problem: Annotated[str, Field(description="balance_lines | select_lots | split_conflicts | qubo (see quantum_problems)")],
         data: Annotated[dict[str, Any], Field(description="Problem data in the shape quantum_problems describes")],
         ctx: Context,
-        backend: Annotated[str, Field(description="'auto' or a backend id from quantum_backends (e.g. ionq:simulator, ionq:qpu.forte-1, ibm:ibm_brisbane)")] = "auto",
+        backend: Annotated[str, Field(description="'auto' or a backend id from quantum_backends (e.g. ionq:simulator, ionq:qpu.forte-1, ibm:ibm_kingston)")] = "auto",
         policy: Annotated[str, Field(description="With backend='auto': cheapest | fastest | hardware (real QPUs only)")] = "cheapest",
         layers: Annotated[int, Field(description="QAOA depth p (1-4)", ge=1, le=4)] = 1,
         shots: Annotated[int, Field(description="Shots on the backend (1-10000)", ge=1, le=10000)] = 1000,
@@ -857,6 +902,39 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         if not j:
             return _result({"error": "unknown job_id"}, is_error=True)
         return _result(hw_view(j))
+
+    # ---------------- Privi Kingston (IBM Quantum Heron) ----------------
+
+    def ibm_backends() -> dict[str, Any]:
+        return {bid: b for bid, b in router.backends.items() if bid.startswith("ibm:") and hasattr(b, "kingston_report")}
+
+    def kingston_view(backend: str, sizes: tuple[int, ...] = (2, 3, 4, 6, 8, 12)) -> dict[str, Any]:
+        ibm = ibm_backends()
+        if not ibm:
+            return {"error": "no IBM Quantum backend is configured (set IBM_QUANTUM_TOKEN and IBM_QUANTUM_BACKENDS)"}
+        bid = backend if backend.startswith("ibm:") else f"ibm:{backend}"
+        b = ibm.get(bid) or (next(iter(ibm.values())) if backend in ("", "auto") else None)
+        if not b:
+            return {"error": f"unknown IBM backend {backend}", "configured": sorted(ibm)}
+        return {**b.kingston_report(sizes), "how_privi_runs_it": [
+            "reads the live calibration and hashes it into every signed result",
+            "pins the circuit on the lowest-error connected qubits (optimization level 3)",
+            "dynamical decoupling (XY4) and gate + measurement twirling",
+            "readout-error mitigation reported next to the raw counts, never instead of them",
+            "stops before the IBM Open Plan QPU seconds run out"], "copyright": COPYRIGHT}
+
+    @mcp.tool(title="Privi Kingston: IBM Quantum machine status", annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
+    async def quantum_ibm_kingston(
+        backend: Annotated[str, Field(description="IBM backend name, e.g. ibm_kingston ('auto' = the first configured)")] = "auto",
+        qubits: Annotated[int | None, Field(description="Also show the best layout for a job this size", ge=1, le=156)] = None,
+    ) -> CallToolResult:
+        """Live view of the IBM Quantum machine Privi runs on (ibm_kingston, 156-qubit Heron r2): queue depth, the
+        current calibration (median readout / two-qubit error, T1, T2, calibration hash), the lowest-error qubit
+        groups Privi would pin a job to, and how many IBM Open Plan QPU seconds are left. Free."""
+        sizes = tuple(sorted({2, 3, 4, 6, 8, 12} | ({qubits} if qubits else set())))
+        out = await anyio.to_thread.run_sync(lambda: kingston_view(backend, sizes))
+        return _result(out, is_error="error" in out and "calibration" not in out)
 
     # ---------------- Privi Quantum Mandates ----------------
 
@@ -2151,6 +2229,13 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         sealed: share that found the proven optimum, jobs finished, median turnaround, median cost, and the quantum vs
         classical tally from Quantum Advantage Receipts. Free. Page: /leaderboard."""
         return _result({**board.compute(router, attestor), "page": f"{PUBLIC_URL}/leaderboard"})
+
+    @mcp.custom_route("/ibm/kingston.json", methods=["GET"], include_in_schema=False)
+    async def kingston_json(request: Request) -> JSONResponse:
+        name = request.query_params.get("backend", "auto")
+        out = await anyio.to_thread.run_sync(lambda: kingston_view(name))
+        return JSONResponse(out, status_code=404 if "error" in out and "calibration" not in out else 200,
+                            headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=60"})
 
     @mcp.custom_route("/leaderboard.json", methods=["GET"], include_in_schema=False)
     async def leaderboard_json(_: Request) -> JSONResponse:
