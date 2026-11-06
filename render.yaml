@@ -220,7 +220,7 @@ services:
         sync: false
       - key: IONQ_TARGETS
         value: simulator
-      - key: IBM_QUANTUM_TOKEN            # optional: IBM Quantum (also set IBM_QUANTUM_BACKENDS, e.g. ibm_brisbane)
+      - key: IBM_QUANTUM_TOKEN            # optional: IBM Quantum (also set IBM_QUANTUM_BACKENDS, e.g. ibm_kingston; Open Plan guard: IBM_OPEN_PLAN_SECONDS, default 600)
         sync: false
       - key: GITHUB_TOKEN                 # optional: higher GitHub limits for crypto inventory repo scans
         sync: false
