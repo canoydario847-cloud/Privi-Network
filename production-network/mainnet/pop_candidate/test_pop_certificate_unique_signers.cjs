@@ -6,10 +6,10 @@ const assert = require('node:assert/strict');
 function hasQuorum(committee, signers) {
   if (!Array.isArray(committee) || !Array.isArray(signers)) return false;
   if (committee.length < 4 || committee.length > 31 ||
-      committee.some(s => typeof s !== 'string' || !s)) return false;
+      committee.some(s => typeof s !== 'string' || !s.trim() || s !== s.trim())) return false;
   const members = new Set(committee);
   if (members.size !== committee.length) return false;
-  if (signers.some(s => typeof s !== 'string' || !members.has(s))) return false;
+  if (signers.some(s => typeof s !== 'string' || !s.trim() || s !== s.trim() || !members.has(s))) return false;
   return new Set(signers).size >= Math.floor((2 * members.size) / 3) + 1;
 }
 
@@ -32,4 +32,13 @@ test('candidate POP committee size and signer identity shapes are bounded', () =
   assert.equal(hasQuorum(['a', 'b', 'c', ''], ['a', 'b', 'c']), false);
   assert.equal(hasQuorum(['a', 'b', 'c', 4], ['a', 'b', 'c']), false);
   assert.equal(hasQuorum(['a', 'b', 'c', 'd'], ['a', 'b', 'c', 4]), false);
+});
+
+test('candidate POP certificate rejects whitespace-only and padded identities', () => {
+  const committee = ['a', 'b', 'c', 'd'];
+  assert.equal(hasQuorum(committee, ['a', 'b', 'c']), true);
+  for (const invalid of ['', ' ', '\\t', ' a', 'a ', '\\na']) {
+    assert.equal(hasQuorum([invalid, 'b', 'c', 'd'], [invalid, 'b', 'c']), false);
+    assert.equal(hasQuorum(committee, [invalid, 'b', 'c']), false);
+  }
 });
