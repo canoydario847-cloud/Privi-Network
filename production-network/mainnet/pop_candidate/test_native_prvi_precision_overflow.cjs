@@ -47,3 +47,17 @@ test('rejects malformed amounts and decimal precision', () => {
   assert.equal(validateAllocation(-1n, units(CAP, 18) + 1n, 18), false);
   assert.equal(validateAllocation(1, units(CAP, 18) - 1n, 18), false);
 });
+
+test('rejects cross-precision allocations and one-base-unit boundary errors', () => {
+  for (const decimals of [0, 6, 9, 18, 30]) {
+    const liquid = units(LIQUID, decimals);
+    const locked = units(LOCKED, decimals);
+    assert.equal(validateAllocation(liquid, locked, decimals), true);
+    assert.equal(validateAllocation(liquid + 1n, locked, decimals), false);
+    assert.equal(validateAllocation(liquid, locked + 1n, decimals), false);
+    if (decimals > 0) {
+      assert.equal(validateAllocation(units(LIQUID, decimals - 1), locked, decimals), false);
+      assert.equal(validateAllocation(liquid, units(LOCKED, decimals - 1), decimals), false);
+    }
+  }
+});
