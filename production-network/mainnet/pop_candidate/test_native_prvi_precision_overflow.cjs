@@ -82,3 +82,16 @@ test('rejects malformed precision even when allocation values are nonnegative Bi
     assert.throws(() => validateAllocation(liquid, locked, bad), RangeError);
   }
 });
+
+test('rejects floating-point and string genesis balances rather than coercing them', () => {
+  for (const decimals of [0, 6, 9, 18, 30]) {
+    const liquid = units(LIQUID, decimals);
+    const locked = units(LOCKED, decimals);
+    assert.equal(validateAllocation(Number(liquid), locked, decimals), false);
+    assert.equal(validateAllocation(liquid, Number(locked), decimals), false);
+    assert.equal(validateAllocation(liquid.toString(), locked, decimals), false);
+    assert.equal(validateAllocation(liquid, locked.toString(), decimals), false);
+    assert.equal(validateAllocation(null, locked, decimals), false);
+    assert.equal(validateAllocation(liquid, undefined, decimals), false);
+  }
+});
