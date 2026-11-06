@@ -95,3 +95,16 @@ test('rejects floating-point and string genesis balances rather than coercing th
     assert.equal(validateAllocation(liquid, undefined, decimals), false);
   }
 });
+
+test('rejects exact-cap reallocation across a deterministic range of offsets', () => {
+  for (const decimals of [0, 6, 9, 18, 30]) {
+    const liquid = units(LIQUID, decimals);
+    const locked = units(LOCKED, decimals);
+    for (let offset = 1n; offset <= 256n; offset++) {
+      // These sums still equal the cap; the prescribed genesis split must hold.
+      assert.equal(liquid - offset + locked + offset, units(CAP, decimals));
+      assert.equal(validateAllocation(liquid - offset, locked + offset, decimals), false);
+      assert.equal(validateAllocation(liquid + offset, locked - offset, decimals), false);
+    }
+  }
+});
