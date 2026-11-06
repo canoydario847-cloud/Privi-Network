@@ -15,7 +15,7 @@ function vested(elapsed) {
 function claim(state, elapsed, amount) {
   if (typeof amount !== 'bigint' || amount <= 0n) throw new RangeError('amount');
   if (typeof state.claimed !== 'bigint' || state.claimed < 0n || state.claimed > TOTAL) throw new RangeError('claimed');
-  if (typeof state.lastElapsed !== 'bigint' || elapsed < state.lastElapsed) throw new RangeError('time rollback');
+  if (typeof state.lastElapsed !== 'bigint' || state.lastElapsed < 0n || typeof elapsed !== 'bigint' || elapsed < state.lastElapsed) throw new RangeError('invalid or rolled-back time');
   const available = vested(elapsed) - state.claimed;
   if (amount > available) throw new RangeError('exceeds vested unclaimed');
   return {claimed: state.claimed + amount, lastElapsed: elapsed};
@@ -48,4 +48,13 @@ test('invalid amounts and state are rejected', () => {
   const s={claimed:0n,lastElapsed:0n};
   for(const amount of [0n,-1n,1,'1',null]) assert.throws(()=>claim(s,CLIFF+DURATION,amount),RangeError);
   for(const claimed of [-1n,TOTAL+1n,0]) assert.throws(()=>claim({claimed,lastElapsed:0n},CLIFF+DURATION,1n),RangeError);
+});
+
+test('malformed last-claim timestamps fail closed', () => {
+  for (const lastElapsed of [-1n, -100n, 0, '0', null, undefined]) {
+    assert.throws(() => claim({claimed: 0n, lastElapsed}, CLIFF + DURATION, 1n), RangeError);
+  }
+  for (const elapsed of [-1n, 0, '0', null, undefined, 1.5]) {
+    assert.throws(() => claim({claimed: 0n, lastElapsed: 0n}, elapsed, 1n), RangeError);
+  }
 });
