@@ -19,7 +19,9 @@ function units(tokens, decimals) {
 function validateAllocation(liquid, locked, decimals) {
   if (typeof liquid !== 'bigint' || typeof locked !== 'bigint' ||
       liquid < 0n || locked < 0n) return false;
-  return liquid + locked === units(CAP, decimals);
+  return liquid === units(LIQUID, decimals) &&
+    locked === units(LOCKED, decimals) &&
+    liquid + locked === units(CAP, decimals);
 }
 
 test('cap and vesting conservation are exact for plausible native precisions', () => {
@@ -59,5 +61,16 @@ test('rejects cross-precision allocations and one-base-unit boundary errors', ()
       assert.equal(validateAllocation(units(LIQUID, decimals - 1), locked, decimals), false);
       assert.equal(validateAllocation(liquid, units(LOCKED, decimals - 1), decimals), false);
     }
+  }
+});
+
+test('rejects offsetting liquid and vested allocations even at exact total cap', () => {
+  for (const decimals of [0, 6, 9, 18, 30]) {
+    const liquid = units(LIQUID, decimals);
+    const locked = units(LOCKED, decimals);
+    assert.equal(validateAllocation(liquid - 1n, locked + 1n, decimals), false);
+    assert.equal(validateAllocation(liquid + 1n, locked - 1n, decimals), false);
+    assert.equal(validateAllocation(units(CAP, decimals), 0n, decimals), false);
+    assert.equal(validateAllocation(0n, units(CAP, decimals), decimals), false);
   }
 });
