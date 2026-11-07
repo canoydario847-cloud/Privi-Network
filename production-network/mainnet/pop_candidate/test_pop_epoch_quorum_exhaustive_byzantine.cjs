@@ -38,3 +38,16 @@ test('disjoint epoch committees have zero intersection without Byzantine faults'
   assert.equal(minimumHonestOverlap(oldMembers, newMembers, new Set()), 0);
   assert.equal(minimumHonestOverlap(newMembers, oldMembers, new Set()), 0);
 });
+
+// Any one of the three retained validators could be Byzantine; a transition
+// safety argument must not depend on knowing which signer is faulty.
+test('one-replacement unsafe overlap is independent of Byzantine signer identity', () => {
+  const oldMembers = ['a', 'b', 'c', 'd'];
+  const newMembers = ['a', 'b', 'c', 'e'];
+  for (const faulty of ['a', 'b', 'c']) {
+    assert.equal(minimumHonestOverlap(oldMembers, newMembers, new Set([faulty])), 0,
+      `faulty retained signer ${faulty}`);
+    assert.equal(minimumHonestOverlap(newMembers, oldMembers, new Set([faulty])), 0,
+      `reverse transition, faulty retained signer ${faulty}`);
+  }
+});
