@@ -1,0 +1,14 @@
+'use strict';
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const {BoundedReplayGuard}=require('./bounded_replay_guard.cjs');
+let now=1000000;
+const nonce='a'.repeat(32);
+const make=(opts={})=>new BoundedReplayGuard({capacity:2,maxLifetimeMs:1000,clock:()=>now,...opts});
+const req=(tenant='tenantA',n=nonce)=>({tenant,nonce:n,expiresAt:now+500});
+test('accept once and reject replay',()=>{const g=make();assert.equal(g.consume(req()),true);assert.throws(()=>g.consume(req()),/replay/)});
+test('tenant scoped nonce',()=>{const g=make();g.consume(req());assert.equal(g.consume(req('tenantB')),true)});
+test('reject expired and excessive lifetime',()=>{const g=make();assert.throws(()=>g.consume({...req(),expiresAt:now}),/expiry/);assert.throws(()=>g.consume({...req(),expiresAt:now+1001}),/expiry/)});
+test('fail closed on capacity',()=>{const g=make({capacity:1});g.consume(req());assert.throws(()=>g.consume(req('tenantB')),/capacity/)});
+test('prune expired entries',()=>{const g=make({capacity:1});g.consume({...req(),expiresAt:now+100});now+=101;assert.equal(g.consume(req('tenantB')),true);now=1000000});
+test('reject malformed identity',()=>{const g=make();assert.throws(()=>g.consume(req('../bad')),/identity/);assert.throws(()=>g.consume(req('tenantA','x')),/identity/)});
