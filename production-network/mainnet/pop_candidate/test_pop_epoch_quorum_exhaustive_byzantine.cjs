@@ -60,6 +60,7 @@ function minimumGuaranteedHonestIntersection(oldMembers, newMembers, maxFaulty) 
       oldMembers.length < 4 || newMembers.length < 4 ||
       new Set(oldMembers).size !== oldMembers.length ||
       new Set(newMembers).size !== newMembers.length ||
+      ![...oldMembers, ...newMembers].every(v => typeof v === 'string' && v.length > 0 && v.trim() === v) ||
       !Number.isSafeInteger(maxFaulty) || maxFaulty < 0 ||
       maxFaulty > Math.floor((Math.min(oldMembers.length, newMembers.length) - 1) / 3)) return null;
   const intersection = oldMembers.filter(v => newMembers.includes(v)).length;
@@ -78,4 +79,13 @@ test('conservative cross-epoch preflight rejects unsafe overlap and malformed co
   assert.equal(minimumGuaranteedHonestIntersection(a, a, -1), null);
   assert.equal(minimumGuaranteedHonestIntersection(a, a, 2), null);
   assert.equal(minimumGuaranteedHonestIntersection(a, a, 1.5), null);
+});
+
+// Identity ambiguity must fail closed before any overlap calculation.
+test('cross-epoch preflight rejects ambiguous or non-string validator identities', () => {
+  const a = ['a', 'b', 'c', 'd'];
+  for (const invalid of [null, undefined, 1, {}, '', ' a', 'a ']) {
+    assert.equal(minimumGuaranteedHonestIntersection(a, [invalid, 'b', 'c', 'd'], 1), null);
+    assert.equal(minimumGuaranteedHonestIntersection([invalid, 'b', 'c', 'd'], a, 1), null);
+  }
 });
