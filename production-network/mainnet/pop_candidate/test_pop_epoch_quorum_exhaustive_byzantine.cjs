@@ -51,3 +51,28 @@ test('one-replacement unsafe overlap is independent of Byzantine signer identity
       `reverse transition, faulty retained signer ${faulty}`);
   }
 });
+
+// Conservative research-only transition preflight. This does not authorize
+// epoch changes: real safety also requires authenticated joint finality,
+// durable locks, operator independence, and verified fault assumptions.
+function minimumGuaranteedHonestIntersection(oldMembers, newMembers, maxFaulty) {
+  if (!Array.isArray(oldMembers) || !Array.isArray(newMembers) ||
+      oldMembers.length < 4 || newMembers.length < 4 ||
+      new Set(oldMembers).size !== oldMembers.length ||
+      new Set(newMembers).size !== newMembers.length ||
+      !Number.isSafeInteger(maxFaulty) || maxFaulty < 0) return null;
+  const intersection = oldMembers.filter(v => newMembers.includes(v)).length;
+  const lowerBound = Math.max(0, quorum(oldMembers.length) +
+    quorum(newMembers.length) -
+    (oldMembers.length + newMembers.length - intersection));
+  return Math.max(0, lowerBound - maxFaulty);
+}
+
+test('conservative cross-epoch preflight rejects unsafe overlap and malformed committees', () => {
+  const a = ['a', 'b', 'c', 'd'];
+  assert.equal(minimumGuaranteedHonestIntersection(a, a, 1), 1);
+  assert.equal(minimumGuaranteedHonestIntersection(a, ['a', 'b', 'c', 'e'], 1), 0);
+  assert.equal(minimumGuaranteedHonestIntersection(a, ['e', 'f', 'g', 'h'], 0), 0);
+  assert.equal(minimumGuaranteedHonestIntersection(a, ['a', 'a', 'c', 'd'], 1), null);
+  assert.equal(minimumGuaranteedHonestIntersection(a, a, -1), null);
+});
