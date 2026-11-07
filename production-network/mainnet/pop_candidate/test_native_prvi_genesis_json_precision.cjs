@@ -35,6 +35,10 @@ const LIQUID_BASE_UNITS = 900_000_000n * 10n ** 18n;
 const VESTED_BASE_UNITS = 100_000_000n * 10n ** 18n;
 function validateGenesisSplitFromJson(json) {
   const decoded = JSON.parse(json);
+  if (decoded === null || typeof decoded !== 'object' || Array.isArray(decoded) ||
+      Object.keys(decoded).sort().join(',') !== 'liquid,vested') {
+    throw new TypeError('genesis split must contain exactly liquid and vested fields');
+  }
   const liquid = parseNativeGenesisAmount(decoded.liquid);
   const vested = parseNativeGenesisAmount(decoded.vested);
   return liquid === LIQUID_BASE_UNITS && vested === VESTED_BASE_UNITS &&
@@ -64,5 +68,18 @@ test('fails closed on missing, malformed, or over-cap genesis split fields', () 
     JSON.stringify({ liquid: goodLiquid, vested: (CAP_BASE_UNITS + 1n).toString() }),
   ]) {
     assert.throws(() => validateGenesisSplitFromJson(json));
+  }
+});
+
+test('rejects extra genesis allocation fields and non-object containers', () => {
+  const liquid = LIQUID_BASE_UNITS.toString();
+  const vested = VESTED_BASE_UNITS.toString();
+  for (const input of [
+    { liquid, vested, hiddenMint: '1' },
+    { liquid, vested, denom: 'other' },
+    [liquid, vested],
+    { liquid, vested, extra: null },
+  ]) {
+    assert.throws(() => validateGenesisSplitFromJson(JSON.stringify(input)), TypeError);
   }
 });
