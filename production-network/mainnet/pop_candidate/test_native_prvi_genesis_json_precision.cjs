@@ -7,12 +7,15 @@ const assert = require('node:assert/strict');
 const CAP_BASE_UNITS = 1_000_000_000n * 10n ** 18n;
 
 function parseNativeGenesisAmount(value) {
-  if (typeof value !== 'string' || !/^(0|[1-9][0-9]*)$/.test(value)) {
+  if (typeof value !== 'string') {
     throw new TypeError('native amount must be a canonical unsigned decimal string');
   }
-  // Reject oversized strings before BigInt parsing to bound untrusted input work.
+  // Bound untrusted input before both regex scanning and BigInt conversion.
   if (value.length > CAP_BASE_UNITS.toString().length) {
     throw new RangeError('native amount exceeds PRVI cap digit bound');
+  }
+  if (!/^(0|[1-9][0-9]*)$/.test(value)) {
+    throw new TypeError('native amount must be a canonical unsigned decimal string');
   }
   const amount = BigInt(value);
   if (amount > CAP_BASE_UNITS) throw new RangeError('native amount exceeds PRVI cap');
@@ -88,9 +91,10 @@ test('rejects extra genesis allocation fields and non-object containers', () => 
   }
 });
 
-test('rejects oversized genesis amount strings before BigInt conversion', () => {
+test('rejects oversized genesis amount strings before regex scanning or BigInt conversion', () => {
   for (const length of [29, 1000, 100000]) {
     assert.throws(() => parseNativeGenesisAmount('9'.repeat(length)), RangeError);
   }
+  assert.throws(() => parseNativeGenesisAmount('9'.repeat(100000) + 'x'), RangeError);
   assert.equal(parseNativeGenesisAmount(CAP_BASE_UNITS.toString()), CAP_BASE_UNITS);
 });
