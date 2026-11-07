@@ -1,0 +1,18 @@
+[project]
+name = "privi-gate"
+version = "0.1.0"
+description = "Let only AI agents with a valid Privi Passport call your API or MCP server. ASGI middleware, zero dependencies."
+readme = "../README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Privi World Co", email = "dariocanoy@priviflow.us" }]
+keywords = ["mcp", "ai-agents", "agent-identity", "asgi", "middleware", "privi", "passport"]
+
+[project.urls]
+Homepage = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/gate-sdk"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["privi_gate"]
