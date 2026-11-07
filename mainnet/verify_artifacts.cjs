@@ -15,6 +15,12 @@ function verify(m,files){
    if(!stat.isFile()||stat.isSymbolicLink()){errors.push('artifact is not a regular file: '+field);continue;}
    const actual=crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
    if(actual!==m[field])errors.push('digest mismatch: '+field);
+   if(field==='genesis_sha256' && actual===m[field]){
+    try{
+     const genesis=JSON.parse(fs.readFileSync(file,'utf8'));
+     if(!genesis||typeof genesis!=='object'||Array.isArray(genesis)||genesis.chain_id!==m.chain_id)errors.push('genesis chain_id does not match manifest');
+    }catch(e){errors.push('invalid genesis JSON: '+e.message);}
+   }
   }catch(e){errors.push('unreadable artifact: '+field+' ('+e.code+')');}
  }
  return errors;
