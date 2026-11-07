@@ -10,7 +10,7 @@ Paid tools (default prices, override with env):
   quantum_run_hardware     $1     QUANTUM_PRICE_HARDWARE   (routing fee; QPU cost stays inside the operator budget)
   genius_stablecoin_check  $0.01  QUANTUM_PRICE_GENIUS_CHECK
 
-Every other tool is paid as well (see DEFAULT_PRICES_USD); only ALWAYS_FREE stays free.
+Every tool is paid (see DEFAULT_PRICES_USD). A person can still revoke a mandate on its web page with their passkey.
 """
 
 from __future__ import annotations
@@ -51,11 +51,12 @@ DEFAULT_PRICES_USD = {
         "qagent_quantum_task", "qagent_quantum_proof", "inspector_pass", "inspector_report", "inspector_patrol",
         "qagent_human_request")},
     "qagent_enroll": "1",
+    "quantum_pricing": "0.001", "quantum_status": "0.001", "accelerator_info": "0.001",
+    "quantum_mandate_revoke": "0.01",
 }
 
-# Free on purpose: the price list itself, server status and the accelerator description (an agent must be able to read
-# what things cost before it can pay), and revoking a spending mandate (stopping an agent must never be paywalled).
-ALWAYS_FREE = ("quantum_pricing", "quantum_status", "accelerator_info", "quantum_mandate_revoke")
+# No tool is free. The x402 payment-required reply states each price, so agents can learn prices by calling.
+ALWAYS_FREE: tuple[str, ...] = ()
 
 PRICE_ENV = {
     "pqc_readiness_package": "QUANTUM_PRICE_READINESS",

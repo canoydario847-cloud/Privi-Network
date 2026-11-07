@@ -65,8 +65,9 @@ def test_paid_receipt_flow_and_bazaar(tmp_path):
 
     async def go():
         async with Client(server) as c:
-            pricing = (await c.call_tool("quantum_pricing", {})).structured_content
-            assert pricing["payments"].startswith("on") and "$0.25" in pricing["paid_tools"]["quantum_advantage_receipt"]
+            # the price list is paid too; its x402 payment-required reply states the price
+            pricing = await c.call_tool("quantum_pricing", {})
+            assert pricing.is_error and "1000" in json.dumps(pricing.structured_content or {}) + str(pricing.content)
             # bad input is rejected before any payment is asked for
             bad = await c.call_tool("quantum_advantage_receipt", {"problem": "nope", "data": {}})
             assert bad.is_error and "accepts" not in (bad.structured_content or {})
@@ -86,8 +87,7 @@ def test_paid_receipt_flow_and_bazaar(tmp_path):
             need_opt = await c.call_tool("quantum_optimize", {"problem": "balance_lines", "data": JOBS})
             assert need_opt.is_error and "x402" in json.dumps(need_opt.structured_content or {}).lower() + str(need_opt.content).lower()
             assert (await c.call_tool("pqc_federal_deadlines", {})).is_error
-            assert not (await c.call_tool("quantum_status", {})).is_error
-            assert not (await c.call_tool("quantum_pricing", {})).is_error
+            assert (await c.call_tool("quantum_status", {})).is_error      # nothing is free
     anyio.run(go)
 
 

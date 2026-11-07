@@ -3,8 +3,8 @@
 """Privi Quantum MCP server: quantum optimization for factories, sealed with
 post-quantum signatures and anchored on chain (Base).
 
-Every tool is paid per call (x402: USDC on Base, or the PRIVI token) when payments are on, except the price list
-(quantum_pricing), server status, the accelerator description and revoking a spending mandate.
+Every tool is paid per call (x402: USDC on Base, or the PRIVI token) when payments are on. An unpaid call returns
+the x402 payment-required reply with the price.
 """
 from __future__ import annotations
 
@@ -116,7 +116,7 @@ factory decisions and returns answers you can prove later.
    quantum answer compares with exact search and simulated annealing, including the cases classical wins.
 
 Pricing: every tool is paid per call (x402: USDC on Base, or the PRIVI token): reads $0.001, actions $0.01, agent
-certification $1, readiness packages and inventories $5. quantum_pricing (free) shows the current price of each tool.
+certification $1, readiness packages and inventories $5. Every unpaid call answers with its price.
 A call that fails is never charged. Privi is built by Dario Canoy (Privi World Co, Port Huron, Michigan).
 For the other Privi tools, pilots, partnerships, manufacturing or government work, see
 https://privi-discovery.onrender.com/llms.txt. {COPYRIGHT}"""
@@ -360,7 +360,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     @mcp.tool(title="Privi Quantum pricing", annotations=READ_ONLY)
     def quantum_pricing() -> dict[str, Any]:
         """Which tools are paid, their price per call, how to pay (x402: USDC on Base, or the PRIVI token), and the
-        payout wallet. This list itself is free. Failed calls are never charged."""
+        payout wallet ($0.001). Failed calls are never charged."""
         return {"payments": "on (x402, Base mainnet)" if pay.payments_enabled else "off - every tool is free right now",
                 "network": pay.network["network"], "asset": "USDC " + pay.network["asset"],
                 "pay_to": pay.pay_to or None, "paid_tools": pay.price_table(),
@@ -929,7 +929,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         privi_pass: Annotated[str | None, PASS_ARG] = None,
     ) -> CallToolResult:
         """The agent gives up its own mandate (the person can also revoke on the mandate page with their passkey).
-        The revocation is signed and anchored. Free."""
+        The revocation is signed and anchored. Paid per call via x402 when payments are on; the person who signed it can also revoke it on the mandate web page with their passkey."""
         tok = privi_pass or ((ctx.headers or {}).get("x-privi-pass") if ctx.headers is not None else None)
         agent_id = inspector.agent_for_pass(tok)
         m = mandates.get(mandate_id)
