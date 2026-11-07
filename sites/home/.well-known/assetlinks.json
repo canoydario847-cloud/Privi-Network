@@ -10,5 +10,17 @@
         "82:BA:2F:F5:47:7F:4F:F8:2F:2F:64:A4:AC:56:C2:ED:EC:17:C6:B5:BC:FD:3C:92:2C:14:22:34:4E:13:41:6F"
       ]
     }
+  },
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "us.priviflow.world",
+      "sha256_cert_fingerprints": [
+        "FE:30:F4:1B:DD:FA:55:96:CD:E4:24:F6:5A:50:8B:82:B4:80:98:19:81:5C:4A:E5:69:CE:02:65:A6:B5:14:9E"
+      ]
+    }
   }
 ]
