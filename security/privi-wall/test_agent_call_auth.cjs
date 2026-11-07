@@ -20,3 +20,6 @@ test('rejects unknown or wrong tenant key',()=>assert.throws(()=>authorizeCall({
 test('bad signature does not consume nonce',()=>{const g=guard(),c=call();assert.throws(()=>authorizeCall({...opts(c,g),signature:sign(null,Buffer.from('other'),privateKey).toString('base64url')}),/signature rejected/);assert.equal(authorizeCall(opts(c,g)).authorized,true)});
 test('rejects invalid routes',()=>assert.throws(()=>bytesForCall({...call(),path:'/agent/../admin'}),/route/));
 test('rejects expired calls',()=>assert.throws(()=>authorizeCall(opts({...call(),expiresAt:now-1})),/expiry/));
+
+test('rejects unsigned privilege and routing extensions',()=>{for(const extra of [{role:'admin'},{tenantOverride:'t2'},{destination:'https://evil.invalid'}]){const c={...call(),...extra};assert.throws(()=>authorizeCall({...opts(call()),call:c}),/unsigned call field/);}});
+test('rejects missing signed envelope field',()=>{const c=call();delete c.agent;assert.throws(()=>bytesForCall(c),/unsigned call field/);});
