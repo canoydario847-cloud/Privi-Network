@@ -1,0 +1,15 @@
+{
+  "/": "index.html",
+  "/.well-known/agent-card.json": "well-known/agent-card.json",
+  "/.well-known/agent.json": "well-known/agent.json",
+  "/.well-known/ai-plugin.json": "well-known/ai-plugin.json",
+  "/.well-known/mcp.json": "well-known/mcp.json",
+  "/humans.txt": "humans.txt",
+  "/icon.svg": "icon.svg",
+  "/llms-full.txt": "llms-full.txt",
+  "/llms.txt": "llms.txt",
+  "/manifest.json": "manifest.json",
+  "/openapi.json": "openapi.json",
+  "/robots.txt": "robots.txt",
+  "/sitemap.xml": "sitemap.xml"
+}

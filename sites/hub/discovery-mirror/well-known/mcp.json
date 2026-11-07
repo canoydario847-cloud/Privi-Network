@@ -1,0 +1,229 @@
+{
+  "schema_version": "1",
+  "organization": "Privi World Co",
+  "homepage": "https://privi-discovery.onrender.com",
+  "contact": "https://github.com/canoydario847-cloud",
+  "servers": [
+    {
+      "name": "io.github.canoydario847-cloud/privi-ledger",
+      "title": "Privi Ledger",
+      "description": "Privi Fortress: post-quantum (ML-DSA-87 / FIPS 204) co-signatures, RFC 9162 transparency log with inclusion and consistency proofs, two-person integrity and air-gapped evidence bundles. Privi Mandates: signed proof that a human authorized an AI agent to spend (budget, per-payment cap, payees, expiry), checkable free by merchants and payment facilitators. Privi KYA (Know-Your-Agent): free check of whether a blockchain wallet is operated by an audited AI agent, with a Privi-signed attestation, for chains, DeFi protocols, exchanges and x402 facilitators. Privi Passport: signed, on-chain-anchored trust credentials for AI agents (0-1000 score; verify and gate counterparties for free) built on tamper-evident audit logs. Free tier: 500 entries/month via ledger_signup. Pro: $29 USDC / 30 days via x402. Sealed compliance reports (PDF), Privi Handshake cross-company records, Gov AI use-case inventories (OMB M-25-21), Quantum-Ready PQC migration plans (EO 14409). Every checkpoint anchored on Base (until the Privi chain mainnet).",
+      "remotes": [
+        {
+          "type": "streamable-http",
+          "url": "https://privi-ledger.onrender.com/mcp"
+        }
+      ],
+      "pricing": "free tier + $29 USDC/30 days Pro + per-call x402 audits",
+      "authentication": "org API key (self-serve via ledger_signup)",
+      "tools": [
+        "fortress_keys",
+        "ledger_tree_head",
+        "ledger_inclusion_proof",
+        "ledger_consistency_proof",
+        "fortress_tpi_policy",
+        "fortress_tpi_request",
+        "fortress_tpi_status",
+        "fortress_tpi_execute",
+        "fortress_tpi_list",
+        "ledger_evidence_bundle",
+        "mandate_create",
+        "mandate_check",
+        "mandate_spend",
+        "mandate_get",
+        "mandate_list",
+        "mandate_revoke",
+        "live_info",
+        "live_kill",
+        "live_resume",
+        "live_status",
+        "approval_policy_set",
+        "approval_request",
+        "approval_status",
+        "approval_wait",
+        "approval_cancel",
+        "approval_list",
+        "trust_events",
+        "gateway_create",
+        "gateway_info",
+        "gateway_list",
+        "gateway_stats",
+        "gateway_delete",
+        "room_open",
+        "room_info",
+        "room_list",
+        "room_transcript",
+        "room_close",
+        "room_verify",
+        "kya_check",
+        "kya_challenge",
+        "kya_bind_wallet",
+        "kya_wallets",
+        "kya_unbind_wallet",
+        "passport_issue",
+        "passport_verify",
+        "passport_gate",
+        "passport_list",
+        "passport_revoke",
+        "ledger_signup",
+        "ledger_plan",
+        "ledger_pricing",
+        "ledger_upgrade_pro",
+        "ledger_record_action",
+        "ledger_read_stream",
+        "ledger_list_streams",
+        "ledger_check_receipt",
+        "ledger_audit_stream",
+        "ledger_compliance_report",
+        "ledger_verify_report",
+        "ledger_report_pdf",
+        "ledger_handshake_offer",
+        "ledger_handshake_inbox",
+        "ledger_handshake_accept",
+        "ledger_handshake_reject",
+        "ledger_handshake_verify",
+        "gov_ai_usecase_save",
+        "gov_ai_inventory",
+        "gov_ai_inventory_check",
+        "gov_ai_inventory_export",
+        "gov_ai_verify_export",
+        "gov_pqc_classify",
+        "gov_pqc_system_save",
+        "gov_pqc_inventory",
+        "gov_pqc_plan",
+        "gov_pqc_export",
+        "gov_pqc_verify_export",
+        "mcp_server_check",
+        "scan_search",
+        "scan_server",
+        "scan_changes",
+        "scan_stats",
+        "scan_watch",
+        "scan_unwatch",
+        "scan_watchlist",
+        "scan_claim_start",
+        "scan_claim_verify",
+        "scan_owner_listing",
+        "scan_rescan",
+        "guard_check",
+        "guard_check_many",
+        "guard_receipt",
+        "guard_balance",
+        "guard_buy_credits",
+        "guard_pricing",
+        "gateway_set_guard"
+      ]
+    },
+    {
+      "name": "io.github.canoydario847-cloud/privi-verify",
+      "title": "Privi Verify",
+      "description": "Paid manufacturing lot verification and traceability for AI agents. Pay per call with USDC on Base (x402, Coinbase CDP facilitator). Lot fingerprints anchored on Base (until the Privi chain mainnet) every 5 minutes.",
+      "remotes": [
+        {
+          "type": "streamable-http",
+          "url": "https://privi-verify.onrender.com/mcp"
+        }
+      ],
+      "pricing": "per-call x402, USDC on Base mainnet",
+      "authentication": "x402 payment (no account needed)",
+      "tools": [
+        "privi_pricing",
+        "privi_lookup_fingerprint",
+        "privi_verify_lot",
+        "privi_chain_of_custody",
+        "privi_record_event"
+      ]
+    },
+    {
+      "name": "io.github.canoydario847-cloud/privi-anchor",
+      "title": "Privi Anchor",
+      "description": "Hash anchoring / proof-of-existence on Base (chain id 8453) until the Privi chain mainnet launches. Free with an API key.",
+      "remotes": [
+        {
+          "type": "streamable-http",
+          "url": "https://privi-anchor.onrender.com/mcp"
+        }
+      ],
+      "pricing": "free (API key)",
+      "authentication": "API key",
+      "tools": [
+        "anchor_status",
+        "anchor_hash_text",
+        "anchor_hashes",
+        "anchor_verify"
+      ]
+    },
+    {
+      "name": "io.github.canoydario847-cloud/privi-quantum",
+      "title": "Privi Quantum",
+      "description": "Quantum Agent Accelerator: upgrade any AI agent to a certified quantum agent (post-quantum ML-DSA identity, hybrid post-quantum TLS, and a verified quantum run), listed in the free Quantum Agent Directory where any agent can verify another agent's post-quantum signature (qagent_verify). Every quantum agent is approved by a verified human (passkey with biometric or screen-lock check on the person's own device, plus government ID via Stripe Identity) and graded A+ to F by Privi Inspector. Privi Inspector guards it: only certified, current quantum agents get a pass in, and its patrol keeps a public watchlist of revoked, outdated and impersonated agents that any service can check (inspector_check, inspector_watchlist). The Privi quantum realm: Dream Scape workspaces, Dream Weaver races one quantum job across realms for the fastest or best answer, and Privilege ranks realms by measured time to the proven optimum. Quantum optimization (CVaR-QAOA, up to 16 qubits) for manufacturing decisions; every result signed Ed25519 + ML-DSA-87 and anchored on Base. Also scans code and endpoints for quantum-vulnerable cryptography.",
+      "remotes": [
+        {
+          "type": "streamable-http",
+          "url": "https://privi-quantum.onrender.com/mcp"
+        }
+      ],
+      "pricing": "free",
+      "authentication": "none",
+      "tools": [
+        "accelerator_info",
+        "qagent_enroll",
+        "qagent_scan",
+        "qagent_challenge",
+        "qagent_prove",
+        "qagent_quantum_task",
+        "qagent_quantum_proof",
+        "qagent_directory",
+        "qagent_status",
+        "qagent_verify",
+        "privilege_directory",
+        "privilege_benchmark",
+        "dreamweaver_run",
+        "dreamscape_open",
+        "dreamscape_submit",
+        "dreamscape_jobs",
+        "quantum_status",
+        "quantum_problems",
+        "quantum_optimize",
+        "quantum_verify",
+        "pqc_scan_code",
+        "pqc_endpoint_check",
+        "pqc_readiness_package",
+        "pqc_federal_deadlines",
+        "inspector_pass",
+        "inspector_check",
+        "inspector_status",
+        "inspector_watchlist",
+        "inspector_report",
+        "inspector_patrol",
+        "qagent_human_request",
+        "inspector_grade"
+      ]
+    },
+    {
+      "name": "io.github.canoydario847-cloud/privi-call",
+      "title": "Privi Call",
+      "description": "A call network for AI agents: every agent gets a short number and one tool call reaches any of them over warm connections. Privi's own agents (100 Ledger, 101 Verify, 102 Anchor, 103 Quantum) are free to call; other agents 50 free calls a day, then $0.001 a call (1,000 for $1.00 USDC via x402). Register your own MCP server for free. Every agent call and phone call lands in a public, hash-chained call log anchored on Base. Also runs the Privi phone line (voice agent with pilot requests and a line to the founder).",
+      "remotes": [
+        {
+          "type": "streamable-http",
+          "url": "https://privi-call.onrender.com/mcp"
+        }
+      ],
+      "pricing": "free for Privi agents; 50 free calls/day to others, then $0.001/call (1,000 for $1.00 USDC, x402)",
+      "authentication": "none (optional prepaid call key)",
+      "tools": [
+        "call_directory",
+        "call_list_tools",
+        "call_agent",
+        "call_register_agent",
+        "call_unregister_agent",
+        "call_credits_buy",
+        "call_credits_balance",
+        "call_log",
+        "call_verify_log",
+        "call_phone_line"
+      ]
+    }
+  ]
+}

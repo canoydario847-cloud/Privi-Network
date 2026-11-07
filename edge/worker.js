@@ -29,6 +29,64 @@ const CACHEABLE = [/^\/benchmarks(\.json)?$/, /^\/keys$/, /^\/leaderboard(\.json
                    /^\/\.well-known\//, /^\/icon\.svg$/, /^\/sitemap\.xml$/, /^\/robots\.txt$/];
 const CACHE_SECONDS = 120;
 
+// Always-on fallback for the Discovery Hub. The live hub runs on Render's free plan and sleeps when idle,
+// so cold starts answer 503. sites/hub/discovery-mirror/ (exported by discovery/export_static.py) is served
+// by the always-on privi-hub static site; the edge serves it whenever the live hub is down.
+const HUB_MIRROR = "https://privi-hub.onrender.com/discovery-mirror";
+const HUB_PUBLIC = "https://privi-discovery.onrender.com";
+
+// Every AI crawler and agent is welcome. Served at the edge so a sleeping origin never blocks discovery.
+const AI_BOTS = ["GPTBot", "ChatGPT-User", "OAI-SearchBot", "ClaudeBot", "Claude-User", "Claude-SearchBot",
+  "anthropic-ai", "PerplexityBot", "Perplexity-User", "Google-Extended", "Googlebot", "Bingbot", "Applebot",
+  "Applebot-Extended", "Amazonbot", "CCBot", "cohere-ai", "DuckAssistBot", "meta-externalagent", "YouBot",
+  "MistralAI-User"];
+
+function robots(host) {
+  const lines = ["User-agent: *", "Allow: /", ""];
+  for (const b of AI_BOTS) lines.push(`User-agent: ${b}`, "Allow: /", "");
+  lines.push(`Sitemap: ${HUB_PUBLIC}/sitemap.xml`, `# LLM summary: ${HUB_PUBLIC}/llms.txt`,
+             `# Agent card: ${HUB_PUBLIC}/.well-known/agent.json`, `# MCP endpoint: https://${host}/mcp`);
+  return new Response(lines.join("\n") + "\n", {
+    headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600",
+               "access-control-allow-origin": "*" },
+  });
+}
+
+// Discovery for a single MCP server (crawlers such as histor and mcp-icon-survey look for it).
+function mcpWellKnown(name, host) {
+  return new Response(JSON.stringify({
+    name: `Privi ${name[0].toUpperCase()}${name.slice(1)}`, publisher: "Privi World Co",
+    mcp: { url: `https://${host}/mcp`, transport: "streamable-http" },
+    registry: `io.github.canoydario847-cloud/privi-${name}`,
+    hub: `${HUB_PUBLIC}/.well-known/mcp.json`, llms: `${HUB_PUBLIC}/llms.txt`,
+    agent_card: `${HUB_PUBLIC}/.well-known/agent.json`,
+  }, null, 2), { headers: { "content-type": "application/json", "access-control-allow-origin": "*",
+                            "cache-control": "public, max-age=600" } });
+}
+
+export function mirrorPath(path) {
+  const p = path.replace(/\/+$/, "") || "/";
+  if (p === "/") return "/index.html";
+  if (p === "/health" || !/^\/[A-Za-z0-9._\-\/]+$/.test(p)) return null;
+  return p.replace(/^\/\.well-known\//, "/well-known/");
+}
+
+async function hubFallback(path, why) {
+  const mp = mirrorPath(path);
+  if (!mp) return null;
+  try {
+    const r = await fetch(HUB_MIRROR + mp, { cf: { cacheEverything: true, cacheTtl: 300 } });
+    if (!r.ok) return null;
+    const type = mp.endsWith(".json") ? "application/json; charset=utf-8"
+      : mp.endsWith(".html") ? "text/html; charset=utf-8" : mp.endsWith(".svg") ? "image/svg+xml"
+      : mp.endsWith(".xml") ? "application/xml" : "text/plain; charset=utf-8";
+    return new Response(r.body, { status: 200, headers: { "content-type": type, "access-control-allow-origin": "*",
+      "cache-control": "public, max-age=60", "x-privi-edge-fallback": why } });
+  } catch (e) {
+    return null;
+  }
+}
+
 // Hop-by-hop headers that must not be forwarded.
 const HOP = ["connection", "keep-alive", "proxy-connection", "transfer-encoding", "upgrade", "te", "trailer"];
 
@@ -61,6 +119,7 @@ export default {
       return new Response("Not found. See / for the list of Privi servers.", { status: 404 });
     }
     if (url.pathname === "/edge" || target.path === "/edge") return index(req);
+    if (target.path === "/robots.txt") return robots(url.host);
 
     const dest = new URL(target.path + url.search, target.origin);
 
@@ -93,8 +152,22 @@ export default {
     try {
       res = await fetch(dest, init);
     } catch (e) {
+      if (target.name === "hub" && isGet) {
+        const fb = await hubFallback(target.path, "origin-unreachable");
+        if (fb) return fb;
+      }
       return new Response(JSON.stringify({ error: "Privi server unreachable from the edge", server: target.name,
                                            detail: String(e) }), { status: 502, headers: { "content-type": "application/json" } });
+    }
+
+    // Sleeping free-plan hub: answer from the always-on mirror instead of a 503.
+    if (target.name === "hub" && isGet && res.status >= 500) {
+      const fb = await hubFallback(target.path, `origin-${res.status}`);
+      if (fb) return fb;
+    }
+    // MCP servers have no /.well-known/mcp.json of their own; describe them at the edge.
+    if (target.name !== "hub" && isGet && res.status === 404 && target.path === "/.well-known/mcp.json") {
+      return mcpWellKnown(target.name, url.host);
     }
 
     // Stream the response back as-is (MCP streamable HTTP / SSE), adding where it was served.

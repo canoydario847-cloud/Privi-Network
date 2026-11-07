@@ -34,3 +34,16 @@ What the Worker does:
 Or with Wrangler: `cd edge && npx wrangler deploy` (uses `wrangler.toml`).
 
 Free plan: 100,000 requests per day. Workers Paid ($5/month) lifts that to 10 million per month.
+
+## Always-on discovery (free)
+
+The Discovery Hub runs on Render's free plan and sleeps when idle, so cold starts used to answer agents with
+HTTP 503 on `/llms.txt`, `/.well-known/agent.json` and `/`. Now:
+
+- `discovery/export_static.py` writes every hub document to `sites/hub/discovery-mirror/`, which the always-on
+  `privi-hub` static site serves for free. Re-run it whenever `discovery/manifest.json` changes.
+- The Worker serves that mirror (header `X-Privi-Edge-Fallback`) whenever the live hub answers 5xx or is unreachable.
+- `robots.txt` is answered at the edge on every hostname, explicitly allowing every major AI crawler.
+- `/.well-known/mcp.json` on each MCP hostname describes that server, instead of the 404 crawlers were getting.
+
+No keep-alive pings: those would burn the free plan's monthly instance hours that Privi's other free services share.

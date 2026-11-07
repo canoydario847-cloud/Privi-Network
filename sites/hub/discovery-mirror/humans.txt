@@ -1,0 +1,9 @@
+/* TEAM */
+Founder: Dario Canoy
+Role: Founder & CEO
+Location: Port Huron, Michigan, USA
+GitHub: https://github.com/canoydario847-cloud
+
+/* SITE */
+Standards: A2A agent card, MCP, llms.txt, schema.org, x402
+Last update: 2026-11-07
