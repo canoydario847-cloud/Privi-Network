@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Buy Privi · Pay in USDC on Base</title>
+<meta name="description" content="Buy Privi World Co services. Pay in USDC on Base from MetaMask, Coinbase Wallet or any wallet.">
+<style>
+:root{--ink:#0f172a;--mute:#475569;--line:#e2e8f0;--bg:#f8fafc;--card:#fff;--accent:#5b21b6}
+@media(prefers-color-scheme:dark){:root{--ink:#e5e7eb;--mute:#94a3b8;--line:#1f2937;--bg:#0b1220;--card:#111827;--accent:#a78bfa}}
+*{box-sizing:border-box}body{margin:0;font:16px/1.55 system-ui,-apple-system,Segoe UI,sans-serif;color:var(--ink);background:var(--bg)}
+main{max-width:980px;margin:0 auto;padding:32px 18px 64px}h1{font-size:30px;margin:0 0 6px}
+.sub{color:var(--mute);margin:0 0 28px}.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;display:flex;flex-direction:column}
+.card h2{font-size:18px;margin:0 0 4px}.price{font-size:28px;font-weight:700;margin:6px 0}.price small{font-size:14px;font-weight:500;color:var(--mute)}
+.card p{color:var(--mute);margin:0 0 14px;flex:1}.badge{display:inline-block;font-size:12px;color:var(--accent);border:1px solid var(--accent);border-radius:99px;padding:1px 8px;margin-bottom:8px}
+button{font:inherit;border:0;border-radius:10px;padding:11px 14px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer}
+dialog{border:1px solid var(--line);border-radius:14px;max-width:520px;width:calc(100% - 24px);background:var(--card);color:var(--ink);padding:22px}
+dialog::backdrop{background:rgba(0,0,0,.45)}.row{margin:12px 0}.row label{display:block;font-size:13px;color:var(--mute)}
+code{display:block;word-break:break-all;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px}
+a.btn{display:block;text-align:center;text-decoration:none;background:var(--accent);color:#fff;border-radius:10px;padding:11px;font-weight:600;margin:8px 0}
+a.alt{background:transparent;color:var(--accent);border:1px solid var(--accent)}.small{font-size:13px;color:var(--mute)}
+footer{margin-top:36px;color:var(--mute);font-size:14px}
+</style>
+</head>
+<body><main>
+<h1>Buy Privi</h1>
+<p class="sub">Pay in <b>USDC on Base</b> from MetaMask, Coinbase Wallet or any wallet. Payment goes straight to Privi World Co. Send us the transaction link and we start the same business day.</p>
+<div class="grid" id="offers"></div>
+<footer>Privi World Co · 1920 24th St, Port Huron, MI 48060 · 313-413-8532 · <a href="mailto:dariocanoy@priviflow.us">dariocanoy@priviflow.us</a><br>
+Payee wallet (Base): <span id="w"></span> · USDC contract on Base: 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913. Need an invoice instead? Email us.</footer>
+</main>
+<dialog id="d"><h2 id="dt" style="margin-top:0"></h2>
+<div class="row"><label>Amount</label><code id="da"></code></div>
+<div class="row"><label>Send USDC on <b>Base</b> (chain 8453) to</label><code id="dw"></code></div>
+<a class="btn" id="mm" href="#">Pay with MetaMask</a>
+<a class="btn alt" id="eip" href="#">Open in another wallet</a>
+<a class="btn alt" id="mail" href="#">I've paid: email the transaction link</a>
+<p class="small">Only send USDC on the Base network. Questions? Call 313-413-8532.</p>
+<button onclick="d.close()" style="width:100%;margin-top:6px">Close</button></dialog>
+<script>
+const WALLET="0x1990589FD200E043b8C6FD9ec5956c61b3071048", USDC="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+const OFFERS=[
+ {id:"pqc-report",name:"Post-Quantum Readiness Report",usd:249,per:"one-time",tag:"Defense & government contractors",
+  desc:"Privi scans your public endpoints and code for quantum-vulnerable encryption. You get a signed report mapped to EO 14409 / OMB M-26-15 with a migration plan, delivered within 3 business days."},
+ {id:"supplier-proof",name:"Supplier Proof",usd:99,per:"/ month",tag:"Manufacturers",
+  desc:"Share verified, tamper-evident ISO / IATF / AS9100 and material certificates with every buyer through one link, and collect your own suppliers' certificates with expiry alerts. Set up within 2 business days."},
+ {id:"ledger-pro",name:"Privi Ledger Pro",usd:29,per:"/ month",tag:"AI agent builders",
+  desc:"Tamper-evident audit logs for AI agents, sealed compliance reports, Passports and Guard checks, with every checkpoint anchored on Base."},
+ {id:"founding",name:"Founding Customer",usd:499,per:"/ year",tag:"First 10 customers only",
+  desc:"Everything Privi sells for 12 months: Ledger Pro, Supplier Proof, a quarterly Post-Quantum Readiness Report and a direct line to the founder. Price locked for life."},
+];
+document.getElementById("w").textContent=WALLET;
+const g=document.getElementById("offers"), d=document.getElementById("d");
+for(const o of OFFERS){const c=document.createElement("div");c.className="card";
+ c.innerHTML=`<span class="badge">${o.tag}</span><h2>${o.name}</h2><div class="price">$${o.usd} <small>USDC ${o.per}</small></div><p>${o.desc}</p><button>Buy</button>`;
+ c.querySelector("button").onclick=()=>buy(o);g.appendChild(c);}
+function buy(o){const units=String(o.usd*1e6);
+ document.getElementById("dt").textContent=o.name;
+ document.getElementById("da").textContent=`${o.usd} USDC ${o.per}`;
+ document.getElementById("dw").textContent=WALLET;
+ document.getElementById("mm").href=`https://metamask.app.link/send/${USDC}@8453/transfer?address=${WALLET}&uint256=${units}`;
+ document.getElementById("eip").href=`ethereum:${USDC}@8453/transfer?address=${WALLET}&uint256=${units}`;
+ const s=encodeURIComponent(`Privi order: ${o.name} ($${o.usd} USDC)`), b=encodeURIComponent(`Company:\nContact name:\nBase transaction link (basescan.org/tx/...):\n\nWhat should we set up or scan first?\n`);
+ document.getElementById("mail").href=`mailto:dariocanoy@priviflow.us?subject=${s}&body=${b}`;
+ history.replaceState(null,"","#"+o.id); d.showModal();}
+const pre=OFFERS.find(o=>"#"+o.id===location.hash); if(pre) buy(pre);
+</script>
+</body></html>
