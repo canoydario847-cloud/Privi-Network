@@ -129,7 +129,7 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
             return hashlib.sha256(token.encode()).hexdigest()[:12]
         return None
 
-    # ---------------- free ----------------
+    # ---------------- key holders (every tool needs a paid API key) ----------------
 
     @mcp.tool(title="Anchor status", annotations=READ_ONLY)
     async def anchor_status() -> dict[str, Any]:
@@ -215,7 +215,7 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
         tx_hash: Annotated[str | None, Field(description="Optional: transaction from the receipt, to verify without this server's index")] = None,
         proof: Annotated[list[str] | None, Field(description="Optional: Merkle proof from the receipt")] = None,
     ) -> CallToolResult:
-        """Check on the blockchain that a hash was anchored, by whom and when. Free.
+        """Check on the blockchain that a hash was anchored, by whom and when. Requires a paid API key.
         With tx_hash and proof from a receipt, the check uses only chain data."""
         d, err = await verify_hash(hash, tx_hash, proof)
         return _result(d, is_error=err)
@@ -352,6 +352,20 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
         return JSONResponse({"service": "Privi Anchor MCP", "mcp_endpoint": "/mcp", "network": settings.network_name,
                              "chain_id": settings.chain_id, "source": SOURCE})
 
+
+    # ---- No free tools: every tool needs a paid Anchor API key (ANCHOR_API_KEYS; keys are issued after payment).
+    _all_paid = os.getenv("ANCHOR_ALL_TOOLS_PAID", "1").strip().lower() not in ("0", "false", "no", "off")
+    _raw_call_tool = mcp.call_tool
+
+    async def _keyed_call_tool(name, arguments, context=None):
+        if _all_paid and name != "anchor_hashes" and (context is None or not client_key(context)):
+            from mcp_types import CallToolResult as _CTR, TextContent as _TC
+            msg = {"error": "Privi Anchor is a paid service: send 'Authorization: Bearer <api key>'. Buy at "
+                            "https://privi-hub.onrender.com/pay/ or email dariocanoy@priviflow.us"}
+            return _CTR(content=[_TC(type="text", text=json.dumps(msg))], structured_content=msg, is_error=True)
+        return await _raw_call_tool(name, arguments, context)
+
+    mcp.call_tool = _keyed_call_tool
     return mcp
 
 

@@ -35,7 +35,7 @@ from .handshake import HandshakeError, Handshakes
 from .plans import Plans
 from .gov_ai import HIGH_IMPACT_PRACTICES, GovAIInventory
 from .gov_pqc import KINDS, STATUSES, QuantumReady, canonical_json, classify
-from .x402 import Facilitator, Paywall
+from .x402 import NO_CHARGE_KEY, Facilitator, Paywall
 from . import privi_token
 from .kya import KYA, KYAError, checksum as eth_checksum
 from .mandate import MandateError, Mandates
@@ -265,7 +265,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
                 "ledger_record_action": "organization API key",
                 "ledger_read_stream": "organization API key",
                 "ledger_list_streams": "organization API key",
-                "ledger_signup": "free (free plan: monthly entry limit)",
+                "ledger_signup": f"${os.getenv('LEDGER_PRICE_PER_CALL', '0.01')} per call (x402); every tool is paid per call unless your organization is on Pro or enterprise",
                 "privi_payment_options": "free; USDC x402 unchanged, PRVI_TEST simulation disabled by default",
                 "privi_test_payment_quote": "valueless staging simulation only; organization API key",
                 "privi_test_payment_simulate": "valueless staging simulation only; NO paid service access",
@@ -1772,6 +1772,49 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
                              "payments": "x402 (USDC on Base)" if settings.payments_enabled else "disabled",
                              "source": SOURCE})
 
+    # ---- No free tools. Organizations on a paid plan (Pro / enterprise) use every tool as part of their plan;
+    # every other call pays per call via x402. Tools that already price themselves keep their own paywall.
+    from .guard import FREE_MONTHLY as _GUARD_INCLUDED
+    _all_paid = os.getenv("LEDGER_ALL_TOOLS_PAID", "1").strip().lower() not in ("0", "false", "no", "off")
+    if _all_paid:
+        guard.allowance_for = lambda oid: _GUARD_INCLUDED if plans.status(oid)["plan"] in ("pro", "enterprise") else 0
+    _self_gated = {"ledger_audit_stream", "ledger_upgrade_pro", "passport_issue", "guard_check",
+                   "guard_buy_credits", "guard_credits_1k", "guard_credits_10k", "guard_credits_100k"}
+    _per_call = os.getenv("LEDGER_PRICE_PER_CALL", "0.01")
+    _raw_call_tool = mcp.call_tool
+
+    async def _gated_call_tool(name, arguments, context=None):
+        if not _all_paid or not settings.payments_enabled or name in _self_gated:
+            return await _raw_call_tool(name, arguments, context)
+        org = None
+        try:
+            org = org_from(context) if context is not None else None
+        except Exception:
+            org = None
+        if org and plans.status(org["org_id"])["plan"] in ("pro", "enterprise"):
+            return await _raw_call_tool(name, arguments, context)
+        settings.prices_usd.setdefault(name, _per_call)
+
+        async def work() -> dict[str, Any]:
+            r = await _raw_call_tool(name, arguments, context)
+            data = getattr(r, "structured_content", None)
+            if not isinstance(data, dict):
+                text = "".join(getattr(c, "text", "") for c in (getattr(r, "content", None) or []))
+                try:
+                    data = json.loads(text) if text else {}
+                except ValueError:
+                    data = {"result": text}
+                if not isinstance(data, dict):
+                    data = {"result": data}
+            return {**data, NO_CHARGE_KEY: True} if getattr(r, "is_error", False) else data
+
+        try:
+            meta = dict(context.request_context.meta or {}) if context is not None else {}
+        except Exception:
+            meta = {}
+        return await paywall.run(name, f"Privi Ledger: {name}", meta, work)
+
+    mcp.call_tool = _gated_call_tool
     return mcp
 
 

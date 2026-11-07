@@ -32,7 +32,7 @@ from .anchoring import AnchorError, HttpAnchorClient
 from .config import PHONE_COST_PER_MIN, SPEECH_COST_PER_TURN, Settings
 from .router import RouteError, Router, check_public_endpoint
 from .store import Store, anchor_head, mask_phone, sha
-from .x402 import PAYMENT_META_KEY, Paywall
+from .x402 import NO_CHARGE_KEY, PAYMENT_META_KEY, Paywall
 from . import privi_token
 
 __version__ = "0.1.0"
@@ -511,6 +511,38 @@ def build_server(settings: Settings | None = None, store: Store | None = None, r
                             .replace("{{PACK}}", f"{s.pack_credits:,} calls for ${s.pack_price_usd}"))
 
     mcp._privi = {"store": store, "anchor": anchor_client, "settings": s, "router": router}
+
+    # ---- No free tools: every call pays per call via x402 unless the call uses a prepaid call key (call_credits_buy). Tools with their own price keep it.
+    _all_paid = os.getenv("CALL_ALL_TOOLS_PAID", "1").strip().lower() not in ("0", "false", "no", "off")
+    _self_gated = {"call_credits_buy"}
+    _raw_call_tool = mcp.call_tool
+
+    async def _gated_call_tool(name, arguments, context=None):
+        if not _all_paid or not s.payments_enabled or name in _self_gated or (name == "call_agent" and str((arguments or {}).get("call_key", "")).startswith("pck_") and store.balance(str(arguments.get("call_key"))) > 0):
+            return await _raw_call_tool(name, arguments, context)
+        s.per_call_prices.setdefault(name, os.getenv("CALL_PRICE_PER_CALL", "0.01"))
+
+        async def work():
+            r = await _raw_call_tool(name, arguments, context)
+            data = getattr(r, "structured_content", None)
+            if not isinstance(data, dict):
+                text = "".join(getattr(c, "text", "") for c in (getattr(r, "content", None) or []))
+                try:
+                    data = json.loads(text) if text else {}
+                except ValueError:
+                    data = {"result": text}
+                if not isinstance(data, dict):
+                    data = {"result": data}
+            return {**data, NO_CHARGE_KEY: True} if getattr(r, "is_error", False) else data
+
+        try:
+            meta = dict(context.request_context.meta or {}) if context is not None else {}
+        except Exception:
+            meta = {}
+        return await paywall.run(name, f"Privi Call: {name}", meta, work)
+
+    mcp.call_tool = _gated_call_tool
+
     return mcp
 
 
