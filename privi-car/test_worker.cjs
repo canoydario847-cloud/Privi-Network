@@ -1,0 +1,13 @@
+'use strict';
+const {test} = require('node:test');
+const assert = require('node:assert/strict');
+const {verifyJob} = require('./worker.cjs');
+const now = 1700000000000;
+const policy = {ownerOptIn:true,parked:true,externalPower:true,thermalSafe:true,tenant:'owner1'};
+const job = () => ({tenant:'owner1',nonce:'a'.repeat(32),expiresAt:now+30000,payload:'hello'});
+test('simulated job yields zero credits and stable digest',()=>{const r=verifyJob(job(),policy,new Set(),now);assert.equal(r.credits,0);assert.equal(r.status,'simulated');assert.equal(r.digest.length,64)});
+test('replay rejected',()=>{const seen=new Set();verifyJob(job(),policy,seen,now);assert.throws(()=>verifyJob(job(),policy,seen,now),/replay/)});
+test('cross tenant rejected',()=>assert.throws(()=>verifyJob({...job(),tenant:'other'},policy,new Set(),now),/tenant/));
+test('driving or opt out rejected',()=>{for(const k of ['parked','ownerOptIn','externalPower','thermalSafe'])assert.throws(()=>verifyJob(job(),{...policy,[k]:false},new Set(),now),/disabled/)});
+test('expired job rejected',()=>assert.throws(()=>verifyJob({...job(),expiresAt:now-1},policy,new Set(),now),/expiry/));
+test('oversized payload rejected',()=>assert.throws(()=>verifyJob({...job(),payload:'x'.repeat(65537)},policy,new Set(),now),/payload/));
