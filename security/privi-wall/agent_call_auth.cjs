@@ -13,6 +13,11 @@ function bytesForCall(call) {
   if (!call || typeof call !== 'object' || Array.isArray(call)) throw Error('invalid call');
   // Reject unsigned extension fields: downstream code must never act on data
   // that was not bound into the signature.
+  // Only inert plain records: reject inherited privilege fields, accessors, symbols,
+  // and non-enumerable extensions before any field is read.
+  if (Object.getPrototypeOf(call) !== Object.prototype && Object.getPrototypeOf(call) !== null) throw Error('invalid call prototype');
+  const descriptors = Object.getOwnPropertyDescriptors(call);
+  if (Reflect.ownKeys(call).some(k => typeof k !== 'string' || !descriptors[k] || !Object.hasOwn(descriptors[k], 'value') || !descriptors[k].enumerable)) throw Error('unsafe call property');
   const allowed = ['tenant','agent','method','path','nonce','expiresAt','bodyHash'];
   if (Object.keys(call).length !== allowed.length || Object.keys(call).some(k=>!allowed.includes(k))) throw Error('unsigned call field');
   const {tenant, agent, method, path, nonce, expiresAt, bodyHash} = call;
