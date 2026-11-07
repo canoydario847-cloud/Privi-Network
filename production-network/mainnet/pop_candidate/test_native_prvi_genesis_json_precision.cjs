@@ -1,0 +1,100 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+
+// Research-only boundary test. Cosmos genesis amounts are decimal strings;
+// this does not prove production keeper or genesis import enforcement.
+const CAP_BASE_UNITS = 1_000_000_000n * 10n ** 18n;
+
+function parseNativeGenesisAmount(value) {
+  if (typeof value !== 'string') {
+    throw new TypeError('native amount must be a canonical unsigned decimal string');
+  }
+  // Bound untrusted input before both regex scanning and BigInt conversion.
+  if (value.length > CAP_BASE_UNITS.toString().length) {
+    throw new RangeError('native amount exceeds PRVI cap digit bound');
+  }
+  if (!/^(0|[1-9][0-9]*)$/.test(value)) {
+    throw new TypeError('native amount must be a canonical unsigned decimal string');
+  }
+  const amount = BigInt(value);
+  if (amount > CAP_BASE_UNITS) throw new RangeError('native amount exceeds PRVI cap');
+  return amount;
+}
+
+test('round-trips exact cap and one-base-unit-under-cap through JSON', () => {
+  for (const amount of [0n, 1n, CAP_BASE_UNITS - 1n, CAP_BASE_UNITS]) {
+    const encoded = JSON.stringify({ amount: amount.toString() });
+    assert.equal(parseNativeGenesisAmount(JSON.parse(encoded).amount), amount);
+  }
+});
+
+test('rejects noncanonical or lossy JSON amounts', () => {
+  for (const value of [0, 1, Number(CAP_BASE_UNITS), null, '-1', '+1', '01', '1.0', '1e18', ' 1', '1 ', '', 'NaN']) {
+    assert.throws(() => parseNativeGenesisAmount(value));
+  }
+  assert.throws(() => parseNativeGenesisAmount((CAP_BASE_UNITS + 1n).toString()), RangeError);
+});
+
+ 
+// Exact split is a proposed genesis policy, not a production bank/vesting keeper.
+const LIQUID_BASE_UNITS = 900_000_000n * 10n ** 18n;
+const VESTED_BASE_UNITS = 100_000_000n * 10n ** 18n;
+function validateGenesisSplitFromJson(json) {
+  const decoded = JSON.parse(json);
+  if (decoded === null || typeof decoded !== 'object' || Array.isArray(decoded) ||
+      Object.keys(decoded).sort().join(',') !== 'liquid,vested') {
+    throw new TypeError('genesis split must contain exactly liquid and vested fields');
+  }
+  const liquid = parseNativeGenesisAmount(decoded.liquid);
+  const vested = parseNativeGenesisAmount(decoded.vested);
+  return liquid === LIQUID_BASE_UNITS && vested === VESTED_BASE_UNITS &&
+    liquid + vested === CAP_BASE_UNITS;
+}
+
+test('rejects split substitution even when serialized genesis supply remains at cap', () => {
+  const serialize = (liquid, vested) => JSON.stringify({ liquid: liquid.toString(), vested: vested.toString() });
+  assert.equal(validateGenesisSplitFromJson(serialize(LIQUID_BASE_UNITS, VESTED_BASE_UNITS)), true);
+  for (const delta of [1n, 10n ** 18n, VESTED_BASE_UNITS]) {
+    assert.equal(validateGenesisSplitFromJson(serialize(LIQUID_BASE_UNITS + delta, VESTED_BASE_UNITS - delta)), false);
+    assert.equal(validateGenesisSplitFromJson(serialize(LIQUID_BASE_UNITS - delta, VESTED_BASE_UNITS + delta)), false);
+  }
+  assert.throws(() => validateGenesisSplitFromJson(JSON.stringify({ liquid: Number(LIQUID_BASE_UNITS), vested: VESTED_BASE_UNITS.toString() })), TypeError);
+});
+
+test('fails closed on missing, malformed, or over-cap genesis split fields', () => {
+  const goodLiquid = LIQUID_BASE_UNITS.toString();
+  const goodVested = VESTED_BASE_UNITS.toString();
+  for (const json of [
+    '{}', 'null', '[]', '"invalid"', '{',
+    JSON.stringify({ liquid: goodLiquid }),
+    JSON.stringify({ vested: goodVested }),
+    JSON.stringify({ liquid: goodLiquid, vested: null }),
+    JSON.stringify({ liquid: goodLiquid, vested: -1 }),
+    JSON.stringify({ liquid: (CAP_BASE_UNITS + 1n).toString(), vested: '0' }),
+    JSON.stringify({ liquid: goodLiquid, vested: (CAP_BASE_UNITS + 1n).toString() }),
+  ]) {
+    assert.throws(() => validateGenesisSplitFromJson(json));
+  }
+});
+
+test('rejects extra genesis allocation fields and non-object containers', () => {
+  const liquid = LIQUID_BASE_UNITS.toString();
+  const vested = VESTED_BASE_UNITS.toString();
+  for (const input of [
+    { liquid, vested, hiddenMint: '1' },
+    { liquid, vested, denom: 'other' },
+    [liquid, vested],
+    { liquid, vested, extra: null },
+  ]) {
+    assert.throws(() => validateGenesisSplitFromJson(JSON.stringify(input)), TypeError);
+  }
+});
+
+test('rejects oversized genesis amount strings before regex scanning or BigInt conversion', () => {
+  for (const length of [29, 1000, 100000]) {
+    assert.throws(() => parseNativeGenesisAmount('9'.repeat(length)), RangeError);
+  }
+  assert.throws(() => parseNativeGenesisAmount('9'.repeat(100000) + 'x'), RangeError);
+  assert.equal(parseNativeGenesisAmount(CAP_BASE_UNITS.toString()), CAP_BASE_UNITS);
+});
