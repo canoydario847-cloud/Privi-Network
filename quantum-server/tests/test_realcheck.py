@@ -75,3 +75,17 @@ def test_realcheck_end_to_end(tmp_path):
         srv._realcheck._db.execute("UPDATE real_orgs SET paid_until='2000-01-01T00:00:00Z'")
         assert http.post("/real/v1/checks", json={"member_id": cfo["member_id"]}, headers=H).status_code == 402
         assert http.get("/real").status_code == 200
+
+
+def test_realcheck_android_links(tmp_path, monkeypatch):
+    from starlette.testclient import TestClient
+    db = str(tmp_path / "a.db")
+    srv = build_server(Settings(db_path=db, rate_per_min=1000), Attestor(db))
+    with TestClient(http_app(srv)) as http:
+        assert http.get("/.well-known/assetlinks.json").json() == []
+        monkeypatch.setenv("REALCHECK_ANDROID_SHA256", "aa:bb, CC:DD")
+        a = http.get("/.well-known/assetlinks.json").json()[0]
+        assert a["target"]["package_name"] == "us.priviflow.realcheck" and a["target"]["sha256_cert_fingerprints"] == ["AA:BB", "CC:DD"]
+        m = http.get("/real/manifest.webmanifest")
+        assert m.json()["start_url"].startswith("/real") and "manifest+json" in m.headers["content-type"]
+        assert "manifest.webmanifest" in http.get("/real").text

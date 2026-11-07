@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import html
 import json
+import os
 
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
@@ -30,7 +31,7 @@ const ub64u=s=>Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')+'='.re
 
 def _page(title: str, body: str, script: str = "") -> HTMLResponse:
     return HTMLResponse(f"<!DOCTYPE html><html lang=en><head><meta charset=utf-8><title>{html.escape(title)}</title>{_STYLE}"
-                        f"</head><body>{body}<script>{_JS_B64}{script}</script></body></html>", headers=NOSTORE)
+                        f"<link rel=manifest href=/real/manifest.webmanifest><meta name=theme-color content=#0f172a></head><body>{body}<script>{_JS_B64}{script}</script></body></html>", headers=NOSTORE)
 
 
 def _err(e: RealCheckError) -> JSONResponse:
@@ -180,6 +181,23 @@ document.getElementById('y').onclick=()=>go('confirm');document.getElementById('
                                             await _json(request)), headers=NOSTORE)
         except RealCheckError as e:
             return _err(e)
+
+    # ---- Android app (Trusted Web Activity, package us.priviflow.realcheck) ----
+    @route("/.well-known/assetlinks.json", methods=["GET"], include_in_schema=False)
+    async def assetlinks(_: Request) -> Response:
+        fps = [f.strip().upper() for f in os.getenv("REALCHECK_ANDROID_SHA256", "").split(",") if f.strip()]
+        body = [{"relation": ["delegate_permission/common.handle_all_urls"],
+                 "target": {"namespace": "android_app", "package_name": "us.priviflow.realcheck",
+                            "sha256_cert_fingerprints": fps}}] if fps else []
+        return JSONResponse(body, headers={"Cache-Control": "max-age=300"})
+
+    @route("/real/manifest.webmanifest", methods=["GET"], include_in_schema=False)
+    async def web_manifest(_: Request) -> Response:
+        return JSONResponse({"name": "Privi RealCheck", "short_name": "RealCheck", "start_url": "/real?source=pwa",
+                             "scope": "/real", "display": "standalone", "background_color": "#f8fafc",
+                             "theme_color": "#0f172a", "description": "Confirm it's really them before you act.",
+                             "icons": []},
+                            media_type="application/manifest+json")
 
     # ---- console for the finance / front desk (org key kept in this browser only) ----
     @route("/real", methods=["GET"], include_in_schema=False)
