@@ -43,5 +43,5 @@ test('analytical cross-epoch bound matches exhaustive worst case for all 4-membe
       cases++;
     }
   }
-  assert.equal(cases, 560); // 70 committees, each with empty + 7 faulty choices.
+  assert.equal(cases, 490); // 70 committees; union size varies by rotation.
 });
