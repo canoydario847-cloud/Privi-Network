@@ -13,7 +13,9 @@ function bytesForCall(call) {
   if (!call || typeof call !== 'object' || Array.isArray(call)) throw Error('invalid call');
   // Reject unsigned extension fields: downstream code must never act on data
   // that was not bound into the signature.
-  const allowed = ['tenant','agent','method','path','nonce','expiresAt','bodyHash'];\n  if (Object.keys(call).length !== allowed.length || Object.keys(call).some(k=>!allowed.includes(k))) throw Error('unsigned call field');\n  const {tenant, agent, method, path, nonce, expiresAt, bodyHash} = call;
+  const allowed = ['tenant','agent','method','path','nonce','expiresAt','bodyHash'];
+  if (Object.keys(call).length !== allowed.length || Object.keys(call).some(k=>!allowed.includes(k))) throw Error('unsigned call field');
+  const {tenant, agent, method, path, nonce, expiresAt, bodyHash} = call;
   if (![tenant,agent].every(x=>typeof x==='string'&&ID.test(x)))throw Error('invalid identity');
   if(typeof method!=='string'||!['POST','PUT'].includes(method)||typeof path!=='string'||!/^\/agent\/[A-Za-z0-9_/-]{1,128}$/.test(path)||path.includes('//')||path.includes('..'))throw Error('invalid route');
   if(typeof nonce!=='string'||!HEX.test(nonce)||!Number.isSafeInteger(expiresAt)||typeof bodyHash!=='string'||!/^[a-f0-9]{64}$/.test(bodyHash))throw Error('invalid signed fields');
