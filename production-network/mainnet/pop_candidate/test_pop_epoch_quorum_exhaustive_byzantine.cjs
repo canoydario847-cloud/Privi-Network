@@ -60,7 +60,8 @@ function minimumGuaranteedHonestIntersection(oldMembers, newMembers, maxFaulty) 
       oldMembers.length < 4 || newMembers.length < 4 ||
       new Set(oldMembers).size !== oldMembers.length ||
       new Set(newMembers).size !== newMembers.length ||
-      !Number.isSafeInteger(maxFaulty) || maxFaulty < 0) return null;
+      !Number.isSafeInteger(maxFaulty) || maxFaulty < 0 ||
+      maxFaulty > Math.floor((Math.min(oldMembers.length, newMembers.length) - 1) / 3)) return null;
   const intersection = oldMembers.filter(v => newMembers.includes(v)).length;
   const lowerBound = Math.max(0, quorum(oldMembers.length) +
     quorum(newMembers.length) -
@@ -75,4 +76,6 @@ test('conservative cross-epoch preflight rejects unsafe overlap and malformed co
   assert.equal(minimumGuaranteedHonestIntersection(a, ['e', 'f', 'g', 'h'], 0), 0);
   assert.equal(minimumGuaranteedHonestIntersection(a, ['a', 'a', 'c', 'd'], 1), null);
   assert.equal(minimumGuaranteedHonestIntersection(a, a, -1), null);
+  assert.equal(minimumGuaranteedHonestIntersection(a, a, 2), null);
+  assert.equal(minimumGuaranteedHonestIntersection(a, a, 1.5), null);
 });
