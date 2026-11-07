@@ -308,6 +308,32 @@ class HumanRegistry:
         return {"approved": True, "agent_id": agent_id, "human_id": human_id, "new_passkey": created,
                 "human_session": token, "id_verified": self.human(human_id)["id_status"] == "verified"}
 
+    def register_passkey(self, cred: dict, challenge: bytes) -> tuple[str, str]:
+        """Verify a passkey registration (navigator.credentials.create) over `challenge`, with the person verified,
+        and store it as a new human. Returns (human_id, credential_id). Used by Privi RealCheck enrollment."""
+        resp = cred.get("response") or {}
+        if not resp.get("attestationObject"):
+            raise HumanError("expected a new passkey (credentials.create)")
+        self._check_client(resp.get("clientDataJSON", ""), "webauthn.create", challenge)
+        att = cbor_decode(unb64u(resp["attestationObject"]))
+        ad = parse_auth_data(att.get("authData", b""))
+        if ad["rp_id_hash"] != hashlib.sha256(self.rp_id.encode()).digest():
+            raise HumanError("passkey is for a different site")
+        if not (ad["up"] and ad["uv"]):
+            raise HumanError("the device did not verify the person (biometric or screen lock); try again")
+        if "cose" not in ad or not isinstance(ad["cose"], dict) or ad["cose"].get(3) not in (-7, -8, -257):
+            raise HumanError("unsupported passkey type")
+        cid = b64u(ad["credential_id"])
+        human_id = "human_" + secrets.token_hex(8)
+        with self._lock:
+            if self._db.execute("SELECT 1 FROM human_passkeys WHERE credential_id=?", (cid,)).fetchone():
+                raise HumanError("this passkey is already registered")
+            self._db.execute("INSERT INTO humans (human_id, created_at) VALUES (?,?)", (human_id, _iso()))
+            self._db.execute("INSERT INTO human_passkeys VALUES (?,?,?,?,?)",
+                             (cid, human_id, base64.b64encode(_cose_bytes(ad)).decode(), ad["sign_count"], _iso()))
+            self._db.commit()
+        return human_id, cid
+
     def verify_assertion(self, cred: dict, challenge: bytes) -> tuple[str, str]:
         """Verify a passkey sign-in (navigator.credentials.get) over `challenge` with the person verified.
         Returns (human_id, credential_id). Used for agent approval and for signing quantum mandates."""
