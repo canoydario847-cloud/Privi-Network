@@ -13,6 +13,8 @@ on:
 jobs:
   bundle:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -44,3 +46,13 @@ jobs:
           name: privi-realcheck-${{ github.run_number }}
           path: android-realcheck/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
+      - name: Save the bundle to branch aab/realcheck-latest (so it can be signed off GitHub)
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/pub" && cp android-realcheck/app/build/outputs/bundle/release/app-release.aab "$RUNNER_TEMP/pub/privi-realcheck-unsigned.aab"
+          cd "$RUNNER_TEMP/pub" && git init -q && git config user.name "privi-build" && git config user.email "dariocanoy@priviflow.us"
+          echo "run ${{ github.run_number }} commit ${{ github.sha }}" > BUILD.txt
+          git add . && git commit -qm "Privi realcheck unsigned bundle, run ${{ github.run_number }}"
+          git push -qf "https://x-access-token:$GH_TOKEN@github.com/${{ github.repository }}.git" HEAD:refs/heads/aab/realcheck-latest
