@@ -23,3 +23,7 @@ test('rejects expired calls',()=>assert.throws(()=>authorizeCall(opts({...call()
 
 test('rejects unsigned privilege and routing extensions',()=>{for(const extra of [{role:'admin'},{tenantOverride:'t2'},{destination:'https://evil.invalid'}]){const c={...call(),...extra};assert.throws(()=>authorizeCall({...opts(call()),call:c}),/unsigned call field/);}});
 test('rejects missing signed envelope field',()=>{const c=call();delete c.agent;assert.throws(()=>bytesForCall(c),/unsigned call field/);});
+
+test('rejects inherited privilege fields',()=>{const c=Object.assign(Object.create({role:'admin'}),call());assert.throws(()=>bytesForCall(c),/invalid call prototype/);});
+test('rejects accessor side effects',()=>{const c=call();Object.defineProperty(c,'tenant',{enumerable:true,get(){throw Error('getter executed')}});assert.throws(()=>bytesForCall(c),/unsafe call property/);});
+test('rejects non-enumerable and symbol extensions',()=>{const c=call();Object.defineProperty(c,'role',{value:'admin',enumerable:false});assert.throws(()=>bytesForCall(c),/unsafe call property/);const d=call();d[Symbol('role')]='admin';assert.throws(()=>bytesForCall(d),/unsafe call property/);});
