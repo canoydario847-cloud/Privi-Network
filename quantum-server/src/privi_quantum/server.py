@@ -1762,6 +1762,11 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
 
     mcp._dream_ws = scapes.ws
     mcp._inspector = inspector
+    from .realcheck import RealCheck
+    from .realcheck_web import register as _register_realcheck
+    realcheck = RealCheck(settings.db_path, humans, attestor, PUBLIC_URL)
+    _register_realcheck(mcp, realcheck, _admin)
+    mcp._realcheck = realcheck
     mcp._humans = humans
     mcp._patrol_minutes = settings.inspector_patrol_minutes
     mcp._dream = (privilege, weaver, scapes)
