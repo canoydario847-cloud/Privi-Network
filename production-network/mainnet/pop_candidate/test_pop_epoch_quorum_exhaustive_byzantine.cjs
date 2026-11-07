@@ -29,3 +29,12 @@ test('unchanged four-member committee retains honest quorum intersection with on
     assert.equal(minimumHonestOverlap(members, members, new Set([faulty])), 1);
   }
 });
+
+// A transition with no shared validators has no quorum intersection even
+// when every signer is honest. This must fail any naive continuity gate.
+test('disjoint epoch committees have zero intersection without Byzantine faults', () => {
+  const oldMembers = ['a', 'b', 'c', 'd'];
+  const newMembers = ['e', 'f', 'g', 'h'];
+  assert.equal(minimumHonestOverlap(oldMembers, newMembers, new Set()), 0);
+  assert.equal(minimumHonestOverlap(newMembers, oldMembers, new Set()), 0);
+});
