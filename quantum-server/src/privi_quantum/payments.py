@@ -8,6 +8,7 @@ Paid tools (default prices, override with env):
   pqc_crypto_inventory     $5     QUANTUM_PRICE_INVENTORY
   quantum_advantage_receipt $0.25 QUANTUM_PRICE_RECEIPT
   quantum_run_hardware     $1     QUANTUM_PRICE_HARDWARE   (routing fee; QPU cost stays inside the operator budget)
+  genius_stablecoin_check  $0.01  QUANTUM_PRICE_GENIUS_CHECK
 
 Free on purpose (the funnel): pqc_scan_code, pqc_endpoint_check, pqc_federal_deadlines, quantum_optimize,
 quantum_verify, quantum_backends, quantum_hardware_job, vault tools, the accelerator and inspector.
@@ -37,6 +38,7 @@ DEFAULT_PRICES_USD = {
     "pqc_crypto_inventory": "5",
     "quantum_advantage_receipt": "0.25",
     "quantum_run_hardware": "1",
+    "genius_stablecoin_check": "0.01",
 }
 
 PRICE_ENV = {
@@ -44,6 +46,7 @@ PRICE_ENV = {
     "pqc_crypto_inventory": "QUANTUM_PRICE_INVENTORY",
     "quantum_advantage_receipt": "QUANTUM_PRICE_RECEIPT",
     "quantum_run_hardware": "QUANTUM_PRICE_HARDWARE",
+    "genius_stablecoin_check": "QUANTUM_PRICE_GENIUS_CHECK",
 }
 
 CDP_FACILITATOR = "https://api.cdp.coinbase.com/platform/v2/x402"

@@ -138,6 +138,12 @@ _PROBLEM_SCHEMA = {"type": "object", "properties": {
 # x402 Bazaar discovery for the paid tools (indexed by the Coinbase facilitator after a settled payment).
 # Each example is valid input, so an unpaid call with it returns the x402 payment-required response.
 BAZAAR_DISCOVERY = {
+    "genius_stablecoin_check": {
+        "inputSchema": {"type": "object", "properties": {"chain": {"type": "string"}, "address": {"type": "string"}},
+                        "required": ["chain", "address"]},
+        "example": {"chain": "base", "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"},
+        "output": {"verdict": "pass | pass_reserves_license_pending | caution | reject | unknown",
+                   "issuer": {"license_status": "permitted"}, "latest_reserve_report": {"current": True}}},
     "pqc_readiness_package": {
         "inputSchema": {"type": "object", "properties": {
             "organization": {"type": "string"},
@@ -1767,6 +1773,33 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     realcheck = RealCheck(settings.db_path, humans, attestor, PUBLIC_URL)
     _register_realcheck(mcp, realcheck, _admin)
     mcp._realcheck = realcheck
+    from .genius import Genius, GeniusError
+    from .genius_web import register as _register_genius
+    genius = Genius(settings.db_path, humans, attestor, PUBLIC_URL)
+    _register_genius(mcp, genius, _admin)
+    mcp._genius = genius
+
+    @mcp.tool(title="GENIUS Act stablecoin check", annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False))
+    async def genius_stablecoin_check(
+        chain: Annotated[str, Field(description="base | ethereum | arbitrum | optimism | polygon")],
+        address: Annotated[str, Field(description="The stablecoin's token contract address (0x...)")],
+        ctx: Context,
+    ) -> CallToolResult:
+        """Before accepting, paying with or listing a stablecoin: who issues it, what GENIUS Act license status has been
+        recorded (with the regulator's source), and whether its latest monthly reserve report is sealed, current, examined,
+        CEO/CFO-certified, 1:1 and matched to on-chain supply. Returns pass / pass_reserves_license_pending / caution /
+        reject / unknown. The DASP rule (no non-permitted stablecoins for U.S. persons) starts 2028-07-18. Paid per call via
+        x402 when payments are on (see quantum_pricing). Evidence, not a legal determination."""
+        if not limiter.allow(_who(ctx)):
+            return _result({"error": f"rate limit: {settings.rate_per_min} calls per minute"}, is_error=True)
+
+        async def work() -> dict[str, Any]:
+            if not (address or "").startswith("0x") or len(address or "") != 42:
+                return no_charge({"error": "address must be a 0x token contract address"})
+            return genius.check(chain, address)
+
+        return await paywall.run("genius_stablecoin_check", "GENIUS Act stablecoin issuer and reserve check", meta_of(ctx), work)
     mcp._humans = humans
     mcp._patrol_minutes = settings.inspector_patrol_minutes
     mcp._dream = (privilege, weaver, scapes)
