@@ -1,0 +1,165 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Privi World Co Discovery Hub",
+    "version": "1.0.0",
+    "description": "Trust credentials and verifiable infrastructure for AI agents \u2014 pay, prove, and audit on-chain."
+  },
+  "servers": [
+    {
+      "url": "https://privi-discovery.onrender.com"
+    }
+  ],
+  "paths": {
+    "/.well-known/agent-card.json": {
+      "get": {
+        "summary": "agent_card",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/.well-known/agent.json": {
+      "get": {
+        "summary": "agent_card",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/.well-known/mcp.json": {
+      "get": {
+        "summary": "mcp_manifest",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/.well-known/ai-plugin.json": {
+      "get": {
+        "summary": "ai_plugin",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/llms.txt": {
+      "get": {
+        "summary": "llms",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/llms-full.txt": {
+      "get": {
+        "summary": "llms_full",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/robots.txt": {
+      "get": {
+        "summary": "robots",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/sitemap.xml": {
+      "get": {
+        "summary": "sitemap",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/humans.txt": {
+      "get": {
+        "summary": "humans",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/manifest.json": {
+      "get": {
+        "summary": "manifest",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/icon.svg": {
+      "get": {
+        "summary": "icon",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/ada26ed8847e32f1a16fb752cb24b14f.txt": {
+      "get": {
+        "summary": "IndexNow ownership key (Bing, Yandex, Naver, Seznam).",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "health",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "summary": "index",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "summary": "openapi",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  }
+}
