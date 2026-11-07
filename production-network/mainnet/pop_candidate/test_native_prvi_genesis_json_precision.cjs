@@ -50,3 +50,19 @@ test('rejects split substitution even when serialized genesis supply remains at 
   }
   assert.throws(() => validateGenesisSplitFromJson(JSON.stringify({ liquid: Number(LIQUID_BASE_UNITS), vested: VESTED_BASE_UNITS.toString() })), TypeError);
 });
+
+test('fails closed on missing, malformed, or over-cap genesis split fields', () => {
+  const goodLiquid = LIQUID_BASE_UNITS.toString();
+  const goodVested = VESTED_BASE_UNITS.toString();
+  for (const json of [
+    '{}', 'null', '[]', '"invalid"', '{',
+    JSON.stringify({ liquid: goodLiquid }),
+    JSON.stringify({ vested: goodVested }),
+    JSON.stringify({ liquid: goodLiquid, vested: null }),
+    JSON.stringify({ liquid: goodLiquid, vested: -1 }),
+    JSON.stringify({ liquid: (CAP_BASE_UNITS + 1n).toString(), vested: '0' }),
+    JSON.stringify({ liquid: goodLiquid, vested: (CAP_BASE_UNITS + 1n).toString() }),
+  ]) {
+    assert.throws(() => validateGenesisSplitFromJson(json));
+  }
+});
