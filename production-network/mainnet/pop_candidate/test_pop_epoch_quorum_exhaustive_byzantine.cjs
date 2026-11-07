@@ -89,3 +89,16 @@ test('cross-epoch preflight rejects ambiguous or non-string validator identities
     assert.equal(minimumGuaranteedHonestIntersection([invalid, 'b', 'c', 'd'], a, 1), null);
   }
 });
+
+// Different-sized committees must use each epoch's own quorum threshold.
+// A 4->5 transition retaining all four old members has a guaranteed honest
+// intersection of one under f=1; expanding to seven does not.
+test('asymmetric committee sizes use distinct quorum thresholds in both directions', () => {
+  const oldMembers = ['a', 'b', 'c', 'd'];
+  const five = ['a', 'b', 'c', 'd', 'e'];
+  const seven = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+  assert.equal(minimumGuaranteedHonestIntersection(oldMembers, five, 1), 1);
+  assert.equal(minimumGuaranteedHonestIntersection(five, oldMembers, 1), 1);
+  assert.equal(minimumGuaranteedHonestIntersection(oldMembers, seven, 1), 0);
+  assert.equal(minimumGuaranteedHonestIntersection(seven, oldMembers, 1), 0);
+});
