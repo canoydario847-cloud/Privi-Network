@@ -22,3 +22,14 @@ test('tampered binary fails closed',()=>fixture(x=>{fs.appendFileSync(x.binary,'
 test('missing artifact fails closed',()=>fixture(x=>{fs.unlinkSync(x.binary);assert.ok(verify(x.m,x).some(e=>e.includes('unreadable artifact')))}));
 test('symlink artifacts rejected',()=>fixture(x=>{const link=path.join(x.dir,'link');fs.symlinkSync(x.binary,link);assert.ok(verify(x.m,{genesis:x.genesis,binary:link}).some(e=>e.includes('regular file')))}));
 test('invalid manifest fails before artifact comparison',()=>fixture(x=>{x.m.audit_approval='';assert.ok(verify(x.m,x).some(e=>e.includes('audit')))}));
+
+test('matching hash but wrong genesis chain ID fails closed',()=>fixture(x=>{
+ fs.writeFileSync(x.genesis,JSON.stringify({chain_id:'privi-other-1'}));
+ x.m.genesis_sha256=digest(fs.readFileSync(x.genesis));
+ assert.ok(verify(x.m,x).some(e=>e.includes('genesis chain_id')));
+}));
+test('matching hash but malformed genesis JSON fails closed',()=>fixture(x=>{
+ fs.writeFileSync(x.genesis,'not-json');
+ x.m.genesis_sha256=digest(fs.readFileSync(x.genesis));
+ assert.ok(verify(x.m,x).some(e=>e.includes('invalid genesis JSON')));
+}));
