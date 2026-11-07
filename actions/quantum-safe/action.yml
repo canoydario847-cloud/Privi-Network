@@ -1,0 +1,43 @@
+name: "Privi Quantum-Safe Check"
+description: "Find cryptography a quantum computer breaks (RSA, ECC, DH, DSA) in your code, with a readiness score and fixes. Free, runs in your CI."
+author: "Privi World Co"
+branding:
+  icon: "shield"
+  color: "purple"
+inputs:
+  path:
+    description: "File or folder to scan (relative to the workspace)."
+    default: "."
+  fail-on:
+    description: "Fail the job at this severity or worse: critical, high, medium, or none."
+    default: "critical"
+  sarif-file:
+    description: "Where to write SARIF for GitHub code scanning (empty to skip)."
+    default: "privi-quantum.sarif"
+  show-info:
+    description: "Include INFO findings (post-quantum crypto already in use) in the summary."
+    default: "false"
+outputs:
+  score:
+    description: "Quantum readiness score, 0-100."
+    value: ${{ steps.scan.outputs.score }}
+  critical:
+    description: "Number of CRITICAL findings."
+    value: ${{ steps.scan.outputs.critical }}
+  high:
+    description: "Number of HIGH findings."
+    value: ${{ steps.scan.outputs.high }}
+  sarif-file:
+    description: "Path of the SARIF file written."
+    value: ${{ steps.scan.outputs.sarif_file }}
+runs:
+  using: "composite"
+  steps:
+    - id: scan
+      shell: bash
+      env:
+        PRIVI_PATH: ${{ inputs.path }}
+        PRIVI_FAIL_ON: ${{ inputs.fail-on }}
+        PRIVI_SARIF: ${{ inputs.sarif-file }}
+        PRIVI_SHOW_INFO: ${{ inputs.show-info }}
+      run: python3 "$GITHUB_ACTION_PATH/run.py"
