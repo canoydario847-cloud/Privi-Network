@@ -28,3 +28,25 @@ test('rejects noncanonical or lossy JSON amounts', () => {
   }
   assert.throws(() => parseNativeGenesisAmount((CAP_BASE_UNITS + 1n).toString()), RangeError);
 });
+
+ 
+// Exact split is a proposed genesis policy, not a production bank/vesting keeper.
+const LIQUID_BASE_UNITS = 900_000_000n * 10n ** 18n;
+const VESTED_BASE_UNITS = 100_000_000n * 10n ** 18n;
+function validateGenesisSplitFromJson(json) {
+  const decoded = JSON.parse(json);
+  const liquid = parseNativeGenesisAmount(decoded.liquid);
+  const vested = parseNativeGenesisAmount(decoded.vested);
+  return liquid === LIQUID_BASE_UNITS && vested === VESTED_BASE_UNITS &&
+    liquid + vested === CAP_BASE_UNITS;
+}
+
+test('rejects split substitution even when serialized genesis supply remains at cap', () => {
+  const serialize = (liquid, vested) => JSON.stringify({ liquid: liquid.toString(), vested: vested.toString() });
+  assert.equal(validateGenesisSplitFromJson(serialize(LIQUID_BASE_UNITS, VESTED_BASE_UNITS)), true);
+  for (const delta of [1n, 10n ** 18n, VESTED_BASE_UNITS]) {
+    assert.equal(validateGenesisSplitFromJson(serialize(LIQUID_BASE_UNITS + delta, VESTED_BASE_UNITS - delta)), false);
+    assert.equal(validateGenesisSplitFromJson(serialize(LIQUID_BASE_UNITS - delta, VESTED_BASE_UNITS + delta)), false);
+  }
+  assert.throws(() => validateGenesisSplitFromJson(JSON.stringify({ liquid: Number(LIQUID_BASE_UNITS), vested: VESTED_BASE_UNITS.toString() })), TypeError);
+});
