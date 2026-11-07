@@ -10,6 +10,10 @@ function parseNativeGenesisAmount(value) {
   if (typeof value !== 'string' || !/^(0|[1-9][0-9]*)$/.test(value)) {
     throw new TypeError('native amount must be a canonical unsigned decimal string');
   }
+  // Reject oversized strings before BigInt parsing to bound untrusted input work.
+  if (value.length > CAP_BASE_UNITS.toString().length) {
+    throw new RangeError('native amount exceeds PRVI cap digit bound');
+  }
   const amount = BigInt(value);
   if (amount > CAP_BASE_UNITS) throw new RangeError('native amount exceeds PRVI cap');
   return amount;
@@ -82,4 +86,11 @@ test('rejects extra genesis allocation fields and non-object containers', () => 
   ]) {
     assert.throws(() => validateGenesisSplitFromJson(JSON.stringify(input)), TypeError);
   }
+});
+
+test('rejects oversized genesis amount strings before BigInt conversion', () => {
+  for (const length of [29, 1000, 100000]) {
+    assert.throws(() => parseNativeGenesisAmount('9'.repeat(length)), RangeError);
+  }
+  assert.equal(parseNativeGenesisAmount(CAP_BASE_UNITS.toString()), CAP_BASE_UNITS);
 });
