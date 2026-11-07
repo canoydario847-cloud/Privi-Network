@@ -1,0 +1,14 @@
+{
+  "name": "privi-gate",
+  "version": "0.1.0",
+  "description": "Let only AI agents with a valid Privi Passport call your API or MCP server. Express/Connect middleware, zero dependencies.",
+  "type": "module",
+  "main": "index.mjs",
+  "exports": "./index.mjs",
+  "scripts": { "test": "node test.mjs" },
+  "keywords": ["mcp", "ai-agents", "agent-identity", "middleware", "express", "privi", "passport", "trust"],
+  "author": "Privi World Co",
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "engines": { "node": ">=18" },
+  "repository": { "type": "git", "url": "https://github.com/canoydario847-cloud/Privi-Network", "directory": "gate-sdk/js" }
+}
