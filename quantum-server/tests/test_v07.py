@@ -1,6 +1,7 @@
 # Copyright (c) 2026 Privi World Co. All rights reserved.
 # Privi Quantum - https://priviflow.us - dariocanoy@priviflow.us
 """v0.7: x402 paid tools (with Bazaar discovery and no charge on failure) and signed public benchmarks."""
+import json
 import anyio
 import pytest
 from mcp import Client
@@ -81,9 +82,12 @@ def test_paid_receipt_flow_and_bazaar(tmp_path):
             assert not ok.is_error, ok
             assert ok.structured_content["verdict"] in ("quantum_won", "classical_won", "tie")
             assert ok.meta["x402/payment-response"]["success"] and fac.calls == ["verify", "settle"]
-            # free tools stay free
-            assert not (await c.call_tool("quantum_optimize", {"problem": "balance_lines", "data": JOBS})).is_error
-            assert not (await c.call_tool("pqc_federal_deadlines", {})).is_error
+            # no free tools: former funnel tools now ask for payment; the price list and status stay free
+            need_opt = await c.call_tool("quantum_optimize", {"problem": "balance_lines", "data": JOBS})
+            assert need_opt.is_error and "x402" in json.dumps(need_opt.structured_content or {}).lower() + str(need_opt.content).lower()
+            assert (await c.call_tool("pqc_federal_deadlines", {})).is_error
+            assert not (await c.call_tool("quantum_status", {})).is_error
+            assert not (await c.call_tool("quantum_pricing", {})).is_error
     anyio.run(go)
 
 

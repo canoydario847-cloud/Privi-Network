@@ -10,8 +10,7 @@ Paid tools (default prices, override with env):
   quantum_run_hardware     $1     QUANTUM_PRICE_HARDWARE   (routing fee; QPU cost stays inside the operator budget)
   genius_stablecoin_check  $0.01  QUANTUM_PRICE_GENIUS_CHECK
 
-Free on purpose (the funnel): pqc_scan_code, pqc_endpoint_check, pqc_federal_deadlines, quantum_optimize,
-quantum_verify, quantum_backends, quantum_hardware_job, vault tools, the accelerator and inspector.
+Every other tool is paid as well (see DEFAULT_PRICES_USD); only ALWAYS_FREE stays free.
 """
 
 from __future__ import annotations
@@ -39,7 +38,24 @@ DEFAULT_PRICES_USD = {
     "quantum_advantage_receipt": "0.25",
     "quantum_run_hardware": "1",
     "genius_stablecoin_check": "0.01",
+    # Every other tool is paid too (gated centrally in server.py). Reads $0.001, actions $0.01, certification $1.
+    **{t: "0.001" for t in (
+        "quantum_problems", "quantum_backends", "pqc_federal_deadlines", "quantum_mandate_status", "quantum_mandate_check",
+        "qagent_directory", "qagent_status", "qagent_verify", "inspector_check", "inspector_status", "inspector_watchlist",
+        "privilege_directory", "dreamscape_jobs", "quantum_benchmarks", "quantum_leaderboard", "inspector_grade",
+        "quantum_verify")},
+    **{t: "0.01" for t in (
+        "pqc_scan_code", "pqc_endpoint_check", "quantum_optimize", "quantum_hardware_job", "quantum_mandate_request",
+        "quantum_run_circuit", "vault_keygen", "vault_seal", "vault_open", "vault_receipt", "privilege_benchmark",
+        "dreamweaver_run", "dreamscape_open", "dreamscape_submit", "qagent_scan", "qagent_challenge", "qagent_prove",
+        "qagent_quantum_task", "qagent_quantum_proof", "inspector_pass", "inspector_report", "inspector_patrol",
+        "qagent_human_request")},
+    "qagent_enroll": "1",
 }
+
+# Free on purpose: the price list itself, server status and the accelerator description (an agent must be able to read
+# what things cost before it can pay), and revoking a spending mandate (stopping an agent must never be paywalled).
+ALWAYS_FREE = ("quantum_pricing", "quantum_status", "accelerator_info", "quantum_mandate_revoke")
 
 PRICE_ENV = {
     "pqc_readiness_package": "QUANTUM_PRICE_READINESS",

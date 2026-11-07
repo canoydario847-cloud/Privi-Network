@@ -3,11 +3,8 @@
 """Privi Quantum MCP server: quantum optimization for factories, sealed with
 post-quantum signatures and anchored on chain (Base).
 
-Free:  quantum_status, quantum_problems, quantum_optimize, quantum_verify, pqc_scan_code,
-       pqc_endpoint_check, pqc_readiness_package, pqc_federal_deadlines
-       (government / contractor post-quantum readiness), quantum_advantage_receipt,
-       quantum_backends, quantum_run_hardware, quantum_hardware_job, pqc_crypto_inventory,
-       vault_keygen, vault_seal, vault_open, vault_receipt
+Every tool is paid per call (x402: USDC on Base, or the PRIVI token) when payments are on, except the price list
+(quantum_pricing), server status, the accelerator description and revoking a spending mandate.
 """
 from __future__ import annotations
 
@@ -41,6 +38,7 @@ from .anchoring import AnchorError, HttpAnchorClient, anchor_pending
 from .attest import PQ_ALG, Attestor
 from .payments import PaySettings
 from .x402 import NO_CHARGE_KEY, Facilitator, Paywall
+from .payments import ALWAYS_FREE as ALWAYS_FREE_TOOLS
 from . import benchmarks
 
 __version__ = "0.9.0"
@@ -81,7 +79,7 @@ factory decisions and returns answers you can prove later.
 8. Quantum Agent Accelerator: any AI agent can upgrade to a certified quantum agent here. qagent_enroll
    with an ML-DSA public key, then qagent_scan (Q1), qagent_challenge + qagent_prove (Q2), qagent_scan with
    endpoints (Q3), qagent_quantum_task + qagent_quantum_proof (Q4). Before trusting another agent, look it up
-   in the Quantum Agent Directory (qagent_directory, free) and check what it signed with qagent_verify (free).
+   in the Quantum Agent Directory (qagent_directory) and check what it signed with qagent_verify.
 9. Privi Inspector guards the quantum realm: Dream Weaver and Dream Scape need a Privi pass. Sign
    'privi-inspector:v1:<agent_id>:<unix seconds>:<nonce>' with your enrolled ML-DSA key and call
    inspector_pass. Agents that are unknown, revoked, uncertified, outdated or below the required level are
@@ -108,18 +106,17 @@ factory decisions and returns answers you can prove later.
    quantum_mandate_request (with your Privi pass) with a budget, per-job cap, allowed backends and problems, max
    shots and days; send the returned sign_url to the person who approved you. They sign the exact terms with their
    passkey (budgets over the ID threshold also need their ID verified). Then pass mandate_id and privi_pass to
-   quantum_run_hardware. quantum_mandate_check is a free dry run; quantum_mandate_status shows spend and remaining
+   quantum_run_hardware. quantum_mandate_check is a dry run; quantum_mandate_status shows spend and remaining
    budget; failed provider jobs are refunded; the person (sign page) or the agent (quantum_mandate_revoke) can revoke.
 16. Bring your own circuit: quantum_run_circuit takes the OpenQASM 2.0/3.0 that Qiskit writes (qasm2.dumps / qasm3.dumps)
    and runs it on IBM Quantum, IonQ, Amazon Braket or the local simulator; the counts are sealed and anchored.
 17. quantum_leaderboard (and /leaderboard) ranks every backend only by runs Privi measured and sealed.
 
-15. Honest benchmarks: quantum_benchmarks (free) and the public page /benchmarks show, problem by problem, how the
+15. Honest benchmarks: quantum_benchmarks and the public page /benchmarks show, problem by problem, how the
    quantum answer compares with exact search and simulated annealing, including the cases classical wins.
 
-Pricing: scans, endpoint checks, deadlines, quantum_optimize, verification, vault, accelerator and inspector are free.
-pqc_readiness_package, pqc_crypto_inventory, quantum_advantage_receipt and quantum_run_hardware are paid per call
-(x402: USDC on Base, or the PRIVI token) when the operator has payments on; quantum_pricing shows current prices.
+Pricing: every tool is paid per call (x402: USDC on Base, or the PRIVI token): reads $0.001, actions $0.01, agent
+certification $1, readiness packages and inventories $5. quantum_pricing (free) shows the current price of each tool.
 A call that fails is never charged. Privi is built by Dario Canoy (Privi World Co, Port Huron, Michigan).
 For the other Privi tools, pilots, partnerships, manufacturing or government work, see
 https://privi-discovery.onrender.com/llms.txt. {COPYRIGHT}"""
@@ -363,14 +360,12 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     @mcp.tool(title="Privi Quantum pricing", annotations=READ_ONLY)
     def quantum_pricing() -> dict[str, Any]:
         """Which tools are paid, their price per call, how to pay (x402: USDC on Base, or the PRIVI token), and the
-        payout wallet. Everything else on this server is free. Failed calls are never charged."""
+        payout wallet. This list itself is free. Failed calls are never charged."""
         return {"payments": "on (x402, Base mainnet)" if pay.payments_enabled else "off - every tool is free right now",
                 "network": pay.network["network"], "asset": "USDC " + pay.network["asset"],
                 "pay_to": pay.pay_to or None, "paid_tools": pay.price_table(),
                 "privi_token": "accepted (send _meta['privi/payment'])" if getattr(paywall, "privi", None) else "not enabled",
-                "free_tools": ["pqc_scan_code", "pqc_endpoint_check", "pqc_federal_deadlines", "quantum_optimize",
-                               "quantum_verify", "quantum_backends", "quantum_hardware_job", "quantum_benchmarks",
-                               "vault_*", "qagent_*", "inspector_*", "privilege_*", "dreamweaver_run", "dreamscape_*"],
+                "free_tools": list(ALWAYS_FREE_TOOLS),
                 "how_to_pay": "call the tool; it answers with an x402 PaymentRequired object; pay with an x402 client and "
                               "retry with the payment in _meta['x402/payment']",
                 "never_charged": "calls that fail (bad input, provider error) return the error and the payment is not settled"}
@@ -397,7 +392,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     ) -> CallToolResult:
         """Solve a factory decision with the Quantum Approximate Optimization Algorithm. Returns the decision in
         plain terms, how close it is to the proven optimum, and a post-quantum signed attestation (Ed25519 +
-        ML-DSA-87) that is anchored on chain (Base). Free."""
+        ML-DSA-87) that is anchored on chain (Base). Paid per call via x402 when payments are on (see quantum_pricing)."""
         if not limiter.allow(_who(ctx)):
             return _result({"error": f"rate limit: {settings.rate_per_min} optimizations per minute"}, is_error=True)
         try:
@@ -442,7 +437,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         attestation_id: Annotated[str | None, Field(description="An attestation id (qa_...) issued by this server")] = None,
         attestation: Annotated[dict[str, Any] | None, Field(description="Or a full attestation object (from GET /attestations/<id>) to check offline")] = None,
     ) -> CallToolResult:
-        """Check both post-quantum signatures, the body hash, and the on-chain anchor of a result. Free."""
+        """Check both post-quantum signatures, the body hash, and the on-chain anchor of a result. Paid per call via x402 when payments are on (see quantum_pricing)."""
         att = attestation or (attestor.get(attestation_id) if attestation_id else None)
         if not att:
             return _result({"error": "give an attestation_id issued here or a full attestation"}, is_error=True)
@@ -584,7 +579,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     ) -> CallToolResult:
         """Test live public sites and services for TLS 1.3 and hybrid post-quantum key exchange (X25519MLKEM768,
         FIPS 203), the protection against 'harvest now, decrypt later'. Sends two TLS hellos per endpoint and no data.
-        Returns a status and fix per endpoint plus CBOM-ready assets for pqc_readiness_package. Free."""
+        Returns a status and fix per endpoint plus CBOM-ready assets for pqc_readiness_package. Paid per call via x402 when payments are on (see quantum_pricing)."""
         if not limiter.allow(_who(ctx)):
             return _result({"error": f"rate limit: {settings.rate_per_min} calls per minute"}, is_error=True)
         if not endpoints:
@@ -596,7 +591,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     @mcp.tool(title="Federal post-quantum deadlines", annotations=READ_ONLY)
     def pqc_federal_deadlines() -> dict[str, Any]:
         """The U.S. federal post-quantum timeline (EO 14409, OMB M-26-15, NIST IR 8547 draft, NSA CNSA 2.0), the
-        approved replacement algorithms, and links to the sources. Free."""
+        approved replacement algorithms, and links to the sources. Paid per call via x402 when payments are on (see quantum_pricing)."""
         return govpqc.deadlines_reference()
 
     # ---------------- Quantum Advantage Receipts, hardware routing, crypto inventory, vault ----------------
@@ -769,7 +764,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     @mcp.tool(title="Quantum hardware backends", annotations=READ_ONLY)
     def quantum_backends() -> dict[str, Any]:
         """Every quantum backend this server can route to (local simulator, IonQ, IBM Quantum, Amazon Braket),
-        whether it is usable now, its estimated price, measured turnaround, and the hardware budget. Free."""
+        whether it is usable now, its estimated price, measured turnaround, and the hardware budget. Paid per call via x402 when payments are on (see quantum_pricing)."""
         return {"backends": router.directory(), "policies": {
                     "cheapest": "lowest estimated price, real providers before this server's simulator, then fastest",
                     "fastest": "lowest measured submission-to-result turnaround",
@@ -837,7 +832,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         job_id: Annotated[str, Field(description="hw_... id from quantum_run_hardware")],
     ) -> CallToolResult:
         """Status of a quantum hardware job; once done, the decision, measurement statistics, the signed attestation and
-        the Quantum Advantage Receipt. Free."""
+        the Quantum Advantage Receipt. Paid per call via x402 when payments are on (see quantum_pricing)."""
         j = await anyio.to_thread.run_sync(finalize_hw, job_id)
         if not j:
             return _result({"error": "unknown job_id"}, is_error=True)
@@ -875,7 +870,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         privi_pass: Annotated[str | None, PASS_ARG] = None,
     ) -> CallToolResult:
         """Draft a Quantum Mandate: the spending terms under which this agent may run paid quantum hardware jobs.
-        Returns a sign_url for the person who approved the agent; they sign the exact terms with their passkey. Free."""
+        Returns a sign_url for the person who approved the agent; they sign the exact terms with their passkey. Paid per call via x402 when payments are on (see quantum_pricing)."""
         tok = privi_pass or ((ctx.headers or {}).get("x-privi-pass") if ctx.headers is not None else None)
         if blocked := realm_gate(ctx, tok, "quantum_mandate_request"):
             return blocked
@@ -900,7 +895,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     @mcp.tool(title="Quantum Mandate: status", annotations=READ_ONLY)
     def quantum_mandate_status(mandate_id: Annotated[str, Field(description="qm_... id")]) -> CallToolResult:
         """A Quantum Mandate's terms, status (draft, active, expired, revoked), spend, remaining budget and every
-        charge and refund. Free."""
+        charge and refund. Paid per call via x402 when payments are on (see quantum_pricing)."""
         try:
             return _result({**mandates.public(mandate_id, with_spends=True), "page": _sign_url(mandate_id)})
         except MandateError as e:
@@ -915,7 +910,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         shots: Annotated[int, Field(ge=1, le=10000)] = 1000,
     ) -> CallToolResult:
         """Would this paid run be allowed under the mandate? Picks the backend the router would use, estimates the
-        price and checks it against every term without spending anything. Free."""
+        price and checks it against every term without spending anything. Paid per call via x402 when payments are on (see quantum_pricing)."""
         if not mandates.get(mandate_id):
             return _result({"error": "unknown mandate"}, is_error=True)
         try:
@@ -1049,7 +1044,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         suite: Annotated[str, Field(description="X25519+ML-KEM-768 (default) | X25519+ML-KEM-1024 (CNSA 2.0 KEM level)")] = vault.DEFAULT_SUITE,
     ) -> CallToolResult:
         """Create a hybrid X25519 + ML-KEM (FIPS 203) key pair for Privi Vault. The private key is returned once and not
-        stored here; for the strongest setup generate it locally with `python -m privi_quantum.vault keygen`. Free."""
+        stored here; for the strongest setup generate it locally with `python -m privi_quantum.vault keygen`. Paid per call via x402 when payments are on (see quantum_pricing)."""
         try:
             kp = vault.keygen(suite)
         except vault.VaultError as e:
@@ -1068,7 +1063,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     ) -> CallToolResult:
         """Re-wrap long-lived sensitive data under hybrid post-quantum encryption (X25519 + ML-KEM, AES-256-GCM) so data
         recorded today can't be decrypted by a future quantum computer. Returns the envelope and a signed protection
-        receipt anchored on chain. Plaintext is not stored. Free."""
+        receipt anchored on chain. Plaintext is not stored. Paid per call via x402 when payments are on (see quantum_pricing)."""
         if not limiter.allow(_who(ctx)):
             return _result({"error": f"rate limit: {settings.rate_per_min} calls per minute"}, is_error=True)
         if (text is None) == (data_base64 is None):
@@ -1090,7 +1085,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         private_key: Annotated[dict[str, Any], Field(description="The recipient private key from vault_keygen")],
     ) -> CallToolResult:
         """Decrypt a Privi Vault envelope. Nothing is stored; for sensitive data prefer opening locally with
-        `python -m privi_quantum.vault open`. Free."""
+        `python -m privi_quantum.vault open`. Paid per call via x402 when payments are on (see quantum_pricing)."""
         try:
             pt = vault.open_(envelope, private_key)
         except vault.VaultError as e:
@@ -1109,7 +1104,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         label: Annotated[str, Field(description="What this protects")] = "",
     ) -> CallToolResult:
         """Get a signed, chain-anchored protection receipt proving data was under hybrid post-quantum encryption by a
-        given time, for envelopes sealed with the local Privi Vault tool. Free."""
+        given time, for envelopes sealed with the local Privi Vault tool. Paid per call via x402 when payments are on (see quantum_pricing)."""
         if not limiter.allow(_who(ctx)):
             return _result({"error": f"rate limit: {settings.rate_per_min} calls per minute"}, is_error=True)
         try:
@@ -1153,7 +1148,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     @mcp.tool(title="Privilege: quantum realm directory", annotations=READ_ONLY)
     def privilege_directory() -> CallToolResult:
         """Every quantum realm Privi can run a job on (engines on this server and other Privi Quantum nodes),
-        ranked by expected time to the proven optimum, with latency, optimum rate, wins and status. Free."""
+        ranked by expected time to the proven optimum, with latency, optimum rate, wins and status. Paid per call via x402 when payments are on (see quantum_pricing)."""
         return _result(privilege.directory())
 
     @mcp.tool(title="Privilege: benchmark the realms", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
@@ -1163,7 +1158,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         privi_pass: Annotated[str | None, PASS_ARG] = None,
     ) -> CallToolResult:
         """Run the standard 8-qubit benchmark on every active realm at once and update Privilege's speed
-        rankings. At most once every 2 minutes for everyone. Requires a Privi pass. Free."""
+        rankings. At most once every 2 minutes for everyone. Requires a Privi pass. Paid per call via x402 when payments are on (see quantum_pricing)."""
         if blocked := realm_gate(ctx, privi_pass, "privilege_benchmark"):
             return blocked
         now = time.monotonic()
@@ -1196,7 +1191,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         privi_pass: Annotated[str | None, PASS_ARG] = None,
     ) -> CallToolResult:
         """Run one quantum optimization on several realms at once and return the winning answer, every realm's
-        timing, and a post-quantum signed attestation (Ed25519 + ML-DSA-87) anchored on chain. Free."""
+        timing, and a post-quantum signed attestation (Ed25519 + ML-DSA-87) anchored on chain. Paid per call via x402 when payments are on (see quantum_pricing)."""
         if blocked := realm_gate(ctx, privi_pass, "dreamweaver_run"):
             return blocked
         if not limiter.allow(_who(ctx)):
@@ -1220,7 +1215,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         privi_pass: Annotated[str | None, PASS_ARG] = None,
     ) -> CallToolResult:
         """Open a private Dream Scape: your own quantum environment that keeps every job and result. Returns
-        scape_id and scape_key (shown once; keep it). Free."""
+        scape_id and scape_key (shown once; keep it). Paid per call via x402 when payments are on (see quantum_pricing)."""
         if blocked := realm_gate(ctx, privi_pass, "dreamscape_open"):
             return blocked
         if not limiter.allow(_who(ctx)):
@@ -1250,7 +1245,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         deadline_s: Annotated[float, Field(ge=1, le=120)] = 30,
         privi_pass: Annotated[str | None, PASS_ARG] = None,
     ) -> CallToolResult:
-        """Run a quantum job in your Dream Scape through Dream Weaver and keep the result there. Free."""
+        """Run a quantum job in your Dream Scape through Dream Weaver and keep the result there. Paid per call via x402 when payments are on (see quantum_pricing)."""
         if blocked := realm_gate(ctx, privi_pass, "dreamscape_submit"):
             return blocked
         if not scapes.auth(scape_id, scape_key):
@@ -1272,7 +1267,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         limit: Annotated[int, Field(ge=1, le=100)] = 20,
         privi_pass: Annotated[str | None, PASS_ARG] = None,
     ) -> CallToolResult:
-        """Your Dream Scape's recent jobs, or one job with its full result. Free."""
+        """Your Dream Scape's recent jobs, or one job with its full result. Paid per call via x402 when payments are on (see quantum_pricing)."""
         if blocked := realm_gate(ctx, privi_pass, "dreamscape_jobs"):
             return blocked
         if not scapes.auth(scape_id, scape_key):
@@ -1293,7 +1288,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     @mcp.tool(title="Quantum Agent Accelerator: how it works", annotations=READ_ONLY)
     def accelerator_info() -> CallToolResult:
         """The program that upgrades an AI agent into a certified quantum agent: the four steps (Q1-Q4), the
-        levels, how to make an ML-DSA key in five lines, and the free directory checks. Free."""
+        levels, how to make an ML-DSA key in five lines, and the free directory checks. Paid per call via x402 when payments are on (see quantum_pricing)."""
         return _result({"program": "Privi Quantum Agent Accelerator", "page": f"{PUBLIC_URL}/accelerator",
                         "steps": STEPS, "levels": LEVEL_LABEL,
                         "certified": "Quantum Agent = Q1 + Q2 + Q4; Quantum Agent+ = all four",
@@ -1314,7 +1309,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         listed: Annotated[bool, Field(description="Show this agent in the public Quantum Agent Directory")] = True,
     ) -> CallToolResult:
         """Join the Quantum Agent Accelerator. Returns agent_id and agent_token (shown once; keep it) and your
-        upgrade plan. Your public key goes in the directory so other agents can verify what you sign. Free."""
+        upgrade plan. Your public key goes in the directory so other agents can verify what you sign. Paid per call via x402 when payments are on (see quantum_pricing)."""
         if not limiter.allow(_who(ctx)):
             return _result({"error": "rate limit; try again in a minute"}, is_error=True)
         return _qa(accel.enroll, name, operator, public_key, homepage, listed)
@@ -1401,14 +1396,14 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         limit: Annotated[int, Field(ge=1, le=500)] = 100,
     ) -> CallToolResult:
         """Look up agents that upgraded to quantum agents: level, operator, post-quantum key fingerprint and
-        certificate. Use it before trusting or paying another agent. Free."""
+        certificate. Use it before trusting or paying another agent. Paid per call via x402 when payments are on (see quantum_pricing)."""
         if level and level not in LEVEL_LABEL:
             return _result({"error": f"level must be one of {', '.join(LEVEL_LABEL)}"}, is_error=True)
         return _result(accel.directory(level, query, limit))
 
     @mcp.tool(title="Quantum Agent: profile", annotations=READ_ONLY)
     def qagent_status(agent_id: Annotated[str, Field(description="An agent_id (qagent_...)")]) -> CallToolResult:
-        """One agent's public profile: level, steps passed, post-quantum public key, certificate. Free."""
+        """One agent's public profile: level, steps passed, post-quantum public key, certificate. Paid per call via x402 when payments are on (see quantum_pricing)."""
         return _qa(accel.public, agent_id)
 
     @mcp.tool(title="Quantum Agent: verify a signed message", annotations=READ_ONLY)
@@ -1510,7 +1505,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     ) -> CallToolResult:
         """For any service: put the Privi Inspector in front of your own tools. Send the credential an agent
         gave you; get allowed or intercepted with reasons (unknown, revoked, uncertified, outdated, level,
-        signature, replay). The nonce is consumed so the credential cannot be reused. Free."""
+        signature, replay). The nonce is consumed so the credential cannot be reused. Paid per call via x402 when payments are on (see quantum_pricing)."""
         if not limiter.allow(_who(ctx)):
             return _result({"error": "rate limit; try again in a minute"}, is_error=True)
         if min_level and min_level not in INSPECTOR_LEVELS:
@@ -1522,27 +1517,27 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     @mcp.tool(title="Privi Inspector: would this agent pass?", annotations=READ_ONLY)
     def inspector_status(agent_id: Annotated[str, Field(description="A Quantum Agent id")]) -> CallToolResult:
         """Whether an agent would pass the checkpoint right now and why not: revoked, certificate missing or
-        outdated, level, key, and forged-signature attempts against it in the last hour. Free."""
+        outdated, level, key, and forged-signature attempts against it in the last hour. Paid per call via x402 when payments are on (see quantum_pricing)."""
         return _result({**inspector.evaluate(agent_id), "policy": inspector.policy()})
 
     @mcp.tool(title="Privi Inspector: watchlist", annotations=READ_ONLY)
     def inspector_watchlist() -> CallToolResult:
         """Agents the Inspector's patrol found revoked, outdated, expiring, never certified, using a weak key,
         or being impersonated (repeated forged signatures against them). Block them or demand a fresh
-        inspector_check. Free."""
+        inspector_check. Paid per call via x402 when payments are on (see quantum_pricing)."""
         return _result(inspector.watchlist())
 
     @mcp.tool(title="Privi Inspector: report", annotations=READ_ONLY)
     def inspector_report(hours: Annotated[int, Field(ge=1, le=720, description="Look-back window")] = 24) -> CallToolResult:
         """What the checkpoint did: inspections, interceptions by reason, the latest interceptions, and the
-        policy in force. Free."""
+        policy in force. Paid per call via x402 when payments are on (see quantum_pricing)."""
         return _result(inspector.report(hours))
 
     @mcp.tool(title="Privi Inspector: run a patrol now", annotations=ToolAnnotations(
         readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False))
     def inspector_patrol() -> CallToolResult:
         """Re-check every enrolled agent now and rebuild the watchlist (also runs automatically every hour).
-        At most once every 5 minutes. Free."""
+        At most once every 5 minutes. Paid per call via x402 when payments are on (see quantum_pricing)."""
         now = time.monotonic()
         if sweep_state["last"] is not None and now - sweep_state["last"] < 300:
             return _result({"error": "a patrol ran less than 5 minutes ago", "watchlist": inspector.watchlist()},
@@ -1636,7 +1631,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     def inspector_grade(agent_id: Annotated[str, Field(description="A Quantum Agent id")]) -> CallToolResult:
         """An agent's Privi trust grade (A+ to F, 0-100): quantum level, passkey approval by a verified human, ID
         verification, current certificate, key strength and clean record, minus penalties for revocation and
-        impersonation. Shows what is missing and what the quantum realm requires. Free."""
+        impersonation. Shows what is missing and what the quantum realm requires. Paid per call via x402 when payments are on (see quantum_pricing)."""
         g = inspector.grade(agent_id)
         return _result(g, is_error="error" in g)
 
@@ -1779,6 +1774,34 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     _register_genius(mcp, genius, _admin)
     mcp._genius = genius
 
+    # Central paywall: every priced tool that doesn't gate itself goes through x402 here (payments off -> unchanged).
+    from .payments import ALWAYS_FREE
+    _self_gated = {"pqc_readiness_package", "quantum_advantage_receipt", "quantum_run_hardware", "pqc_crypto_inventory",
+                   "genius_stablecoin_check"}
+    _raw_call_tool = mcp.call_tool
+
+    async def _gated_call_tool(name, arguments, context=None):
+        if name in _self_gated or name in ALWAYS_FREE or name not in pay.prices_usd or not pay.payments_enabled:
+            return await _raw_call_tool(name, arguments, context)
+
+        async def work() -> dict[str, Any]:
+            r = await _raw_call_tool(name, arguments, context)
+            data = getattr(r, "structured_content", None)
+            if not isinstance(data, dict):
+                text = "".join(getattr(c, "text", "") for c in (getattr(r, "content", None) or []))
+                try:
+                    data = json.loads(text) if text else {}
+                except ValueError:
+                    data = {"result": text}
+                if not isinstance(data, dict):
+                    data = {"result": data}
+            return no_charge(data) if getattr(r, "is_error", False) else data
+
+        meta = meta_of(context) if context is not None else {}
+        return await paywall.run(name, f"Privi Quantum: {name}", meta, work)
+
+    mcp.call_tool = _gated_call_tool
+
     @mcp.tool(title="GENIUS Act stablecoin check", annotations=ToolAnnotations(
         readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False))
     async def genius_stablecoin_check(
@@ -1812,7 +1835,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         """The latest signed benchmark suite: Privi's quantum solver against exhaustive search and simulated annealing on
         a fixed set of factory problems (6-16 qubits), with each verdict, how often the circuit finds the optimum, and
         its lift over random guessing, plus finished real-hardware runs with their receipts. Published whichever side
-        wins. Public page: /benchmarks. Free."""
+        wins. Public page: /benchmarks. Paid per call via x402 when payments are on (see quantum_pricing)."""
         rep = bench.report()
         rep["page"] = f"{PUBLIC_URL}/benchmarks"
         if not rep["suite"]:
