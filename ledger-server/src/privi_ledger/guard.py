@@ -138,17 +138,18 @@ class Guard:
     def bill(self, org_id: str | None, units: int) -> str:
         """Charge `units` to the organization's free allowance, then its credits. Raises NeedPayment otherwise."""
         if not org_id:
-            raise NeedPayment(units, "no organization key: pay per check with x402, or get a free key with ledger_signup")
+            raise NeedPayment(units, "no organization key: pay per check with x402, or buy credits / Pro for your organization")
         m = self._month()
         with self.lock:
             r = self.db.execute("SELECT units FROM guard_usage WHERE org_id=? AND month=?", (org_id, m)).fetchone()
             used = r["units"] if r else 0
-            if used + units <= FREE_MONTHLY:
+            allowance = self.allowance_for(org_id) if getattr(self, "allowance_for", None) else FREE_MONTHLY
+            if used + units <= allowance:
                 paid_by = "free"
             else:
                 c = self.db.execute("SELECT balance FROM guard_credits WHERE org_id=?", (org_id,)).fetchone()
                 if not c or c["balance"] < units:
-                    raise NeedPayment(units, f"free allowance of {FREE_MONTHLY} checks this month is used and credits are "
+                    raise NeedPayment(units, f"included checks this month ({allowance}) are used and credits are "
                                              f"{c['balance'] if c else 0}; buy credits with guard_buy_credits or pay per check via x402")
                 self.db.execute("UPDATE guard_credits SET balance = balance - ?, updated_at=? WHERE org_id=?",
                                 (units, _iso(), org_id))

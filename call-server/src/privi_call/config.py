@@ -59,6 +59,7 @@ class Settings:
     admin_key: str = ""
     # payments (x402, USDC on Base) for call credit packs
     payments_enabled: bool = True
+    per_call_prices: dict = field(default_factory=dict)   # every other tool, set by the all-paid gate
     network_key: str = "base"
     pay_to: str = "0x1990589FD200E043b8C6FD9ec5956c61b3071048"
     facilitator_url: str = "https://api.cdp.coinbase.com/platform/v2/x402"
@@ -126,7 +127,7 @@ class Settings:
 
     @property
     def prices_usd(self) -> dict[str, str]:
-        return {"call_credits_buy": self.pack_price_usd}
+        return {"call_credits_buy": self.pack_price_usd, **self.per_call_prices}
 
     @property
     def payments_ready(self) -> bool:

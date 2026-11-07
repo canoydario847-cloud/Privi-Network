@@ -24,7 +24,7 @@ from .config import Settings
 from .store import EVENT_TYPES, LotStore, seed_demo
 from . import chainflow
 from .anchoring import Checkpoints, HttpAnchorClient, describe, start_loop
-from .x402 import Facilitator, Paywall
+from .x402 import NO_CHARGE_KEY, Facilitator, Paywall
 from . import privi_token
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor.onrender.com/mcp"
@@ -280,6 +280,46 @@ def build_server(
             "payments": "x402 (USDC on Base)" if settings.payments_enabled else "disabled",
             "source": "https://github.com/canoydario847-cloud/Privi-Network/tree/main/mcp-server",
         })
+
+
+    def _has_write_key(context) -> bool:
+        try:
+            auth = (context.headers or {}).get("authorization", "")
+        except Exception:
+            return False
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        return bool(token) and any(hmac.compare_digest(token, k) for k in settings.write_keys)
+
+    # ---- No free tools: every call pays per call via x402 unless the caller holds a manufacturer write key (PRIVI_WRITE_KEYS). Tools with their own price keep it.
+    _all_paid = os.getenv("PRIVI_ALL_TOOLS_PAID", "1").strip().lower() not in ("0", "false", "no", "off")
+    _self_gated = {"privi_verify_lot", "privi_chain_of_custody"}
+    _raw_call_tool = mcp.call_tool
+
+    async def _gated_call_tool(name, arguments, context=None):
+        if not _all_paid or not settings.payments_enabled or name in _self_gated or (_has_write_key(context)):
+            return await _raw_call_tool(name, arguments, context)
+        settings.prices_usd.setdefault(name, os.getenv("PRIVI_PRICE_PER_CALL", "0.01"))
+
+        async def work():
+            r = await _raw_call_tool(name, arguments, context)
+            data = getattr(r, "structured_content", None)
+            if not isinstance(data, dict):
+                text = "".join(getattr(c, "text", "") for c in (getattr(r, "content", None) or []))
+                try:
+                    data = json.loads(text) if text else {}
+                except ValueError:
+                    data = {"result": text}
+                if not isinstance(data, dict):
+                    data = {"result": data}
+            return {**data, NO_CHARGE_KEY: True} if getattr(r, "is_error", False) else data
+
+        try:
+            meta = dict(context.request_context.meta or {}) if context is not None else {}
+        except Exception:
+            meta = {}
+        return await paywall.run(name, f"Privi Verify: {name}", meta, work)
+
+    mcp.call_tool = _gated_call_tool
 
     return mcp
 

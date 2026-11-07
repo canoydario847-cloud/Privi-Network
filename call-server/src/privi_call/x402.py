@@ -155,6 +155,9 @@ class HttpFacilitator:
         return await self._call("settle", payload, requirements)
 
 
+NO_CHARGE_KEY = "_privi_no_charge"   # a result marked with this is returned as an error and never settled
+
+
 class Paywall:
     def __init__(self, settings: Settings, facilitator: Facilitator | None = None,
                  service: dict | None = None, discovery: dict[str, dict] | None = None, privi=None):
@@ -251,7 +254,9 @@ class Paywall:
         """Gate `work` behind payment. `work` returns the structured result."""
         if not self.settings.payments_enabled:
             data = await work()
-            return CallToolResult(content=[TextContent(type="text", text=json.dumps(data))], structured_content=data)
+            failed = isinstance(data, dict) and bool(data.pop(NO_CHARGE_KEY, False))
+            return CallToolResult(content=[TextContent(type="text", text=json.dumps(data))], structured_content=data,
+                                  is_error=failed)
 
         privi_payment = (meta or {}).get("privi/payment")
         if privi_payment is not None and self.privi:
@@ -288,6 +293,9 @@ class Paywall:
             return self.payment_required(tool, description, f"Invalid payment: {reason}")
 
         data = await work()
+        if isinstance(data, dict) and data.pop(NO_CHARGE_KEY, False):
+            return CallToolResult(content=[TextContent(type="text", text=json.dumps(data))], structured_content=data,
+                                  is_error=True)
 
         settled = await self.facilitator.settle(payload, req)
         if not settled.get("success"):
