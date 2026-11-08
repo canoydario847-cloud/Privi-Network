@@ -2,9 +2,9 @@
 /**
  * Fail-closed guard for already-open WebSocket agent sessions.
  * Call before every privileged message; close expired/revoked sessions.
- * Does not replace upgrade authentication, per-message authorization or TLS.
+ * Requires an explicit revocation authority; missing authority denies access.\n * Does not replace upgrade authentication, per-message authorization or TLS.
  */
-function enforceActiveSession({socket, context, now = Date.now(), isRevoked = () => false}) {
+function enforceActiveSession({socket, context, now = Date.now(), isRevoked}) {
   if (!socket || typeof socket.close !== 'function') throw Error('socket required');
   if (typeof isRevoked !== 'function') throw Error('revocation callback required');
   const valid = context && typeof context === 'object' &&
