@@ -9,9 +9,9 @@ const {privateKey,publicKey}=generateKeyPairSync('ed25519');
 const {publicKey:other}=generateKeyPairSync('ed25519');
 const guard=()=>new BoundedReplayGuard({clock:()=>now});
 const body='{"job":"demo"}';
-const call=()=>({tenant:'t1',agent:'a1',method:'POST',path:'/agent/run',nonce:'a'.repeat(32),expiresAt:now+30000,bodyHash:createHash('sha256').update(body).digest('hex')});
+const call=()=>({tenant:'t1',agent:'a1',audience:'privi-wall-east',method:'POST',path:'/agent/run',nonce:'a'.repeat(32),expiresAt:now+30000,bodyHash:createHash('sha256').update(body).digest('hex')});
 const sig=c=>sign(null,bytesForCall(c),privateKey).toString('base64url');
-const opts=(c,g=guard())=>({call:c,body,signature:sig(c),lookupKey:()=>publicKey,replayGuard:g});
+const opts=(c,g=guard())=>({call:c,body,signature:sig(c),lookupKey:()=>publicKey,replayGuard:g,expectedAudience:'privi-wall-east'});
 test('accepts valid signed call',()=>assert.equal(authorizeCall(opts(call())).authorized,true));
 test('rejects replay',()=>{const g=guard(),c=call();authorizeCall(opts(c,g));assert.throws(()=>authorizeCall(opts(c,g)),/replay/)});
 test('rejects body tampering',()=>assert.throws(()=>authorizeCall({...opts(call()),body:'tampered'}),/body mismatch/));
@@ -30,3 +30,7 @@ test('rejects non-enumerable and symbol extensions',()=>{const c=call();Object.d
 
 test('accepts trusted PEM-encoded public key',()=>assert.equal(authorizeCall({...opts(call()),lookupKey:()=>publicKey.export({type:'spki',format:'pem'})}).authorized,true));
 test('rejects private KeyObject as verifier key',()=>assert.throws(()=>authorizeCall({...opts(call()),lookupKey:()=>privateKey}),/unsupported key algorithm/));
+
+test('rejects cross-service replay despite valid signature',()=>{const c=call();assert.throws(()=>authorizeCall({...opts(c),expectedAudience:'privi-wall-west'}),/audience rejected/);});
+test('rejects missing trusted audience configuration',()=>{const o=opts(call());delete o.expectedAudience;assert.throws(()=>authorizeCall(o),/audience rejected/);});
+test('audience tampering invalidates signature',()=>{const c=call(),o=opts(c);assert.throws(()=>authorizeCall({...o,call:{...c,audience:'privi-wall-west'},expectedAudience:'privi-wall-west'}),/signature rejected/);});
