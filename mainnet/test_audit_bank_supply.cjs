@@ -11,3 +11,8 @@ test('duplicate balance denom fails',()=>{const g=fixture();g.app_state.bank.bal
 test('duplicate supply denom fails',()=>{const g=fixture();g.app_state.bank.supply.push({denom:'aprvi',amount:'1'});assert.ok(auditBankSupply(g).length);});
 test('unbacked supply fails',()=>{const g=fixture();g.app_state.bank.supply.push({denom:'other',amount:'1'});assert.ok(auditBankSupply(g).length);});
 test('malformed amount fails',()=>{const g=fixture();g.app_state.bank.balances[0].coins[0].amount='01';assert.ok(auditBankSupply(g).length);});
+
+test('whitespace-only bank address fails',()=>{const g=fixture();g.app_state.bank.balances[0].address='  ';assert.ok(auditBankSupply(g).length);});
+test('control character in bank address fails',()=>{const g=fixture();g.app_state.bank.balances[0].address='a\n';assert.ok(auditBankSupply(g).length);});
+test('whitespace in balance denomination fails',()=>{const g=fixture();g.app_state.bank.balances[0].coins[0].denom='a prvi';assert.ok(auditBankSupply(g).length);});
+test('whitespace in declared supply denomination fails',()=>{const g=fixture();g.app_state.bank.supply[0].denom=' aprvi';assert.ok(auditBankSupply(g).length);});
