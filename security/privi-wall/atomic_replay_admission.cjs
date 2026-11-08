@@ -17,7 +17,12 @@ async function admitSignedAgentNonce({tenant, nonce, expiresAt, reserve, clock =
     const key = 'privi-wall:replay:v1:' + createHash('sha256')
       .update(JSON.stringify([tenant, nonce])).digest('hex');
     // Store TTL must not be shorter than remaining validity; never round down.
-    return (await reserve(key, expiresAt - now)) === true;
+    // An asynchronous store can acknowledge after the nonce has expired.
+    // Deny even when the atomic insertion succeeded; never execute the call late.
+    const admitted = (await reserve(key, expiresAt - now)) === true;
+    const afterReserve = clock();
+    return admitted && Number.isSafeInteger(afterReserve) &&
+      afterReserve >= now && afterReserve < expiresAt;
   } catch (_) { return false; }
 }
 module.exports = {admitSignedAgentNonce};
