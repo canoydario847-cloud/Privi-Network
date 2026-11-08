@@ -20,13 +20,19 @@ async function enforceAsyncActiveSession({socket, context, isRevoked, now = Date
       !Number.isSafeInteger(context.expiresAt) ||
       !Number.isSafeInteger(now) || now >= context.expiresAt) return deny();
 
+  // Monotonic elapsed time prevents an in-flight revocation check from
+  // authorizing an agent after the credential's remaining lifetime.
+  const started = process.hrtime.bigint();
+  const remainingMs = context.expiresAt - now;
+  const budgetMs = Math.min(timeoutMs, remainingMs);
   let timer;
   try {
     const revoked = await Promise.race([
       Promise.resolve().then(() => isRevoked(context)),
-      new Promise((_, reject) => { timer = setTimeout(() => reject(Error('revocation timeout')), timeoutMs); })
+      new Promise((_, reject) => { timer = setTimeout(() => reject(Error('revocation timeout')), budgetMs); })
     ]);
-    return revoked === false ? true : deny();
+    const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+    return revoked === false && elapsedMs < remainingMs ? true : deny();
   } catch (_) {
     return deny();
   } finally {
