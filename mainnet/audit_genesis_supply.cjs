@@ -21,6 +21,7 @@ function audit(genesis, expectedDenom, expectedSupply) {
  }
  for(const coin of bank.supply)add(supplied,coin,'supply');
  for(const denom of new Set([...totals.keys(),...supplied.keys()]))if((totals.get(denom)||0n)!==(supplied.get(denom)||0n))errors.push('bank supply mismatch for '+denom);
+ if(!supplied.has(expectedDenom))errors.push('expected PRVI denomination missing from bank supply');
  if((supplied.get(expectedDenom)||0n)!==BigInt(expectedSupply))errors.push('expected PRVI supply mismatch');
  return errors;
 }
