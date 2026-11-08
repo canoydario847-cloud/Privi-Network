@@ -2,19 +2,21 @@
 // Offline bank supply reconciliation only. Does not establish staking/vesting correctness.
 const fs=require('node:fs');
 const integer=/^(0|[1-9][0-9]*)$/;
+// Reject whitespace/control characters in identifiers before accounting.
+const validIdentifier=value=>typeof value==='string' && value.length>0 && !/[\s\x00-\x1f\x7f]/u.test(value);
 function auditBankSupply(genesis){
  const errors=[];
  const bank=genesis?.app_state?.bank;
  if(!Array.isArray(bank?.balances)||!Array.isArray(bank?.supply))return ['missing bank balances or supply'];
  const totals=new Map(),supplies=new Map(),addresses=new Set();
  for(const entry of bank.balances){
-  if(!entry||typeof entry.address!=='string'||!entry.address||addresses.has(entry.address)||!Array.isArray(entry.coins)){
+  if(!entry||!validIdentifier(entry.address)||addresses.has(entry.address)||!Array.isArray(entry.coins)){
    errors.push('invalid or duplicate bank balance address');continue;
   }
   addresses.add(entry.address);
   const seen=new Set();
   for(const coin of entry.coins){
-   if(!coin||typeof coin.denom!=='string'||!coin.denom||typeof coin.amount!=='string'||!integer.test(coin.amount)){
+   if(!coin||!validIdentifier(coin.denom)||typeof coin.amount!=='string'||!integer.test(coin.amount)){
     errors.push('invalid bank balance coin');continue;
    }
    if(seen.has(coin.denom)){errors.push('duplicate balance denom '+coin.denom);continue;}
@@ -23,7 +25,7 @@ function auditBankSupply(genesis){
   }
  }
  for(const coin of bank.supply){
-  if(!coin||typeof coin.denom!=='string'||!coin.denom||typeof coin.amount!=='string'||!integer.test(coin.amount)){
+  if(!coin||!validIdentifier(coin.denom)||typeof coin.amount!=='string'||!integer.test(coin.amount)){
    errors.push('invalid supply coin');continue;
   }
   if(supplies.has(coin.denom)){errors.push('duplicate supply denom '+coin.denom);continue;}
