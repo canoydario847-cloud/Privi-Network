@@ -2,7 +2,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {createHash}=require('node:crypto');
 const {executeAdmittedAgentCall:run}=require('./authorized_execution_gate.cjs');
-const base={tenant:'tenant-A',agent:'agent-1',action:'read',nonce:'n'.repeat(32),expiresAt:2000};
+const base={tenant:'tenant-A',agent:'agent-1',action:'read',nonce:'b'.repeat(32),expiresAt:2000};
 function setup(overrides={}){
  const calls=[],seen=new Set();
  const args={sessionTenant:'tenant-A',envelope:{...base},payload:Buffer.from('original'),
