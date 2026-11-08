@@ -45,3 +45,21 @@ test('invalid clock and configuration deny',async()=>{
  assert.equal(await admit({...base,reserve,maxLifetimeMs:0}),false);
  assert.equal(await admit({...base,reserve,clock:null}),false);
 });
+
+test('late atomic acknowledgement denies even if insertion succeeded', async()=>{
+ let time=1000;
+ const reserve=async()=>{time=2000;return true;};
+ assert.equal(await admit({...base,clock:()=>time,reserve}),false);
+});
+test('prompt atomic acknowledgement remains admissible before expiry', async()=>{
+ let time=1000;
+ const reserve=async()=>{time=1999;return true;};
+ assert.equal(await admit({...base,clock:()=>time,reserve}),true);
+});
+test('clock rollback or invalid post-store clock denies', async()=>{
+ for(const value of [999,NaN,Infinity,1.5]){
+  let reads=0;
+  const clock=()=>++reads===1?1000:value;
+  assert.equal(await admit({...base,clock,reserve:async()=>true}),false);
+ }
+});
