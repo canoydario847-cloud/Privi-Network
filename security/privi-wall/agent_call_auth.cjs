@@ -39,6 +39,7 @@ function authorizeCall({call,body,signature,lookupKey,replayGuard}) {
   if(!key)throw Error('unknown agent');
   // Trusted registries may return a public KeyObject or encoded public key.
   // createPublicKey(public KeyObject) throws in Node.js; never accept private keys.
+  if(key && typeof key === 'object' && key.type === 'private') throw Error('unsupported key algorithm');
   const publicKey = key && key.type === 'public' && key.asymmetricKeyType ? key : createPublicKey(key);
   if(publicKey.type !== 'public' || publicKey.asymmetricKeyType!=='ed25519')throw Error('unsupported key algorithm');
   if(!verify(null,signed,publicKey,sig))throw Error('signature rejected');
