@@ -2,6 +2,9 @@
 // Offline bank supply reconciliation only. Does not establish staking/vesting correctness.
 const fs=require('node:fs');
 const integer=/^(0|[1-9][0-9]*)$/;
+const UINT256_MAX=(1n<<256n)-1n;
+// Validate length before BigInt parsing; Cosmos SDK coin amounts must fit uint256.
+const validAmount=value=>typeof value==='string' && value.length<=78 && integer.test(value) && BigInt(value)<=UINT256_MAX;
 // Reject whitespace/control characters in identifiers before accounting.
 const validIdentifier=value=>typeof value==='string' && value.length>0 && !/[\s\x00-\x1f\x7f]/u.test(value);
 function auditBankSupply(genesis){
@@ -16,7 +19,7 @@ function auditBankSupply(genesis){
   addresses.add(entry.address);
   const seen=new Set();
   for(const coin of entry.coins){
-   if(!coin||!validIdentifier(coin.denom)||typeof coin.amount!=='string'||!integer.test(coin.amount)){
+   if(!coin||!validIdentifier(coin.denom)||!validAmount(coin.amount)){
     errors.push('invalid bank balance coin');continue;
    }
    if(seen.has(coin.denom)){errors.push('duplicate balance denom '+coin.denom);continue;}
@@ -25,7 +28,7 @@ function auditBankSupply(genesis){
   }
  }
  for(const coin of bank.supply){
-  if(!coin||!validIdentifier(coin.denom)||typeof coin.amount!=='string'||!integer.test(coin.amount)){
+  if(!coin||!validIdentifier(coin.denom)||!validAmount(coin.amount)){
    errors.push('invalid supply coin');continue;
   }
   if(supplies.has(coin.denom)){errors.push('duplicate supply denom '+coin.denom);continue;}
