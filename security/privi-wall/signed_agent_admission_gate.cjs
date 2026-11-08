@@ -5,9 +5,10 @@
 const {admitSignedAgentNonce} = require('./atomic_replay_admission.cjs');
 const ID=/^[A-Za-z0-9_-]{1,64}$/;
 async function admitAgentCall({sessionTenant, envelope, verifySignature, authorizeAction, reserve, clock, maxLifetimeMs}={}) {
-  if (!ID.test(sessionTenant || '') || !envelope || typeof envelope !== 'object' ||
+  if (typeof sessionTenant !== 'string' || !ID.test(sessionTenant) || !envelope || typeof envelope !== 'object' ||
       Array.isArray(envelope) || envelope.tenant !== sessionTenant ||
-      !ID.test(envelope.agent || '') || !ID.test(envelope.action || '') ||
+      typeof envelope.agent !== 'string' || !ID.test(envelope.agent) ||
+      typeof envelope.action !== 'string' || !ID.test(envelope.action) ||
       typeof verifySignature !== 'function' || typeof authorizeAction !== 'function') return false;
   try {
     // No replay-store mutation before signature and tenant-bound policy approval.
