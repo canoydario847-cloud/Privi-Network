@@ -5,6 +5,7 @@ const integer=/^(0|[1-9][0-9]*)$/;
 function auditAllocations(genesis,manifest) {
  const errors=[];
  if(!manifest||!Array.isArray(manifest.allocations)||manifest.allocations.length===0)return ['missing allocation manifest'];
+ if(manifest.requireExactAccounts!==true)return ['requireExactAccounts must be true for production allocation audit'];
  if(typeof manifest.denom!=='string'||!/^a[a-z][a-z0-9]{2,63}$/.test(manifest.denom))return ['invalid manifest denom'];
  const balances=genesis?.app_state?.bank?.balances;
  if(!Array.isArray(balances))return ['missing bank balances'];
@@ -25,7 +26,7 @@ function auditAllocations(genesis,manifest) {
   expected.set(item.address,BigInt(item.amount));
  }
  for(const [address,amount] of expected)if(!actual.has(address)||actual.get(address)!==amount)errors.push('allocation mismatch '+address);
- if(manifest.requireExactAccounts===true)for(const address of actual.keys())if(!expected.has(address))errors.push('unexpected allocation '+address);
+ for(const address of actual.keys())if(!expected.has(address))errors.push('unexpected allocation '+address);
  return errors;
 }
 if(require.main===module){
