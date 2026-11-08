@@ -5,6 +5,8 @@ on:
       - 'mainnet/audit_genesis_supply.cjs'
       - 'mainnet/test_audit_genesis_supply.cjs'
       - 'mainnet/test_audit_genesis_supply_edge_cases.cjs'
+      - 'mainnet/audit_genesis_allocations.cjs'
+      - 'mainnet/test_audit_genesis_allocations.cjs'
       - '.github/workflows/privi-mainnet-genesis-supply.yml'
   workflow_dispatch:
 permissions:
@@ -25,5 +27,7 @@ jobs:
           node --check mainnet/audit_genesis_supply.cjs
           node --check mainnet/test_audit_genesis_supply.cjs
           node --check mainnet/test_audit_genesis_supply_edge_cases.cjs
-      - name: Run genesis bank-supply regression tests
-        run: node --test mainnet/test_audit_genesis_supply.cjs mainnet/test_audit_genesis_supply_edge_cases.cjs
+          node --check mainnet/audit_genesis_allocations.cjs
+          node --check mainnet/test_audit_genesis_allocations.cjs
+      - name: Run genesis supply and allocation regression tests
+        run: node --test mainnet/test_audit_genesis_supply.cjs mainnet/test_audit_genesis_supply_edge_cases.cjs mainnet/test_audit_genesis_allocations.cjs
