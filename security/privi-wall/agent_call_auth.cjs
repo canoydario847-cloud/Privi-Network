@@ -18,16 +18,19 @@ function bytesForCall(call) {
   if (Object.getPrototypeOf(call) !== Object.prototype && Object.getPrototypeOf(call) !== null) throw Error('invalid call prototype');
   const descriptors = Object.getOwnPropertyDescriptors(call);
   if (Reflect.ownKeys(call).some(k => typeof k !== 'string' || !descriptors[k] || !Object.hasOwn(descriptors[k], 'value') || !descriptors[k].enumerable)) throw Error('unsafe call property');
-  const allowed = ['tenant','agent','method','path','nonce','expiresAt','bodyHash'];
+  const allowed = ['tenant','agent','audience','method','path','nonce','expiresAt','bodyHash'];
   if (Object.keys(call).length !== allowed.length || Object.keys(call).some(k=>!allowed.includes(k))) throw Error('unsigned call field');
-  const {tenant, agent, method, path, nonce, expiresAt, bodyHash} = call;
+  const {tenant, agent, audience, method, path, nonce, expiresAt, bodyHash} = call;
+  if(typeof audience!=='string'||!ID.test(audience))throw Error('invalid audience');
   if (![tenant,agent].every(x=>typeof x==='string'&&ID.test(x)))throw Error('invalid identity');
   if(typeof method!=='string'||!['POST','PUT'].includes(method)||typeof path!=='string'||!/^\/agent\/[A-Za-z0-9_/-]{1,128}$/.test(path)||path.includes('//')||path.includes('..'))throw Error('invalid route');
   if(typeof nonce!=='string'||!HEX.test(nonce)||!Number.isSafeInteger(expiresAt)||typeof bodyHash!=='string'||!/^[a-f0-9]{64}$/.test(bodyHash))throw Error('invalid signed fields');
-  return Buffer.from(JSON.stringify(['privi-wall-agent-call-v1',tenant,agent,method,path,nonce,expiresAt,bodyHash]),'utf8');
+  return Buffer.from(JSON.stringify(['privi-wall-agent-call-v1',tenant,agent,audience,method,path,nonce,expiresAt,bodyHash]),'utf8');
 }
-function authorizeCall({call,body,signature,lookupKey,replayGuard}) {
+function authorizeCall({call,body,signature,lookupKey,replayGuard,expectedAudience}) {
   const signed=bytesForCall(call);
+  // Expected audience is trusted local service configuration, never request metadata.
+  if(typeof expectedAudience!=='string'||!ID.test(expectedAudience)||call.audience!==expectedAudience)throw Error('audience rejected');
   if(typeof body!=='string'||Buffer.byteLength(body,'utf8')>MAX_BODY_BYTES)throw Error('invalid body');
   if(createHash('sha256').update(body).digest('hex')!==call.bodyHash)throw Error('body mismatch');
   if(typeof lookupKey!=='function'||!(replayGuard instanceof BoundedReplayGuard))throw Error('invalid verifier');
