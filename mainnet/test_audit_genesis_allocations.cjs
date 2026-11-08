@@ -11,3 +11,16 @@ test('unexpected account fails in exact mode',()=>{const m=manifest();m.allocati
 test('duplicate manifest account fails',()=>{const m=manifest();m.allocations.push(m.allocations[0]);assert.ok(auditAllocations(genesis(),m).some(x=>x.includes('duplicate manifest')));});
 test('malformed amount fails',()=>{const m=manifest();m.allocations[0].amount='01';assert.ok(auditAllocations(genesis(),m).some(x=>x.includes('invalid manifest')));});
 test('missing manifest fails closed',()=>assert.ok(auditAllocations(genesis(),{}).length));
+
+test('omitted exact-account setting fails closed',()=>{
+ const m=manifest();delete m.requireExactAccounts;
+ assert.ok(auditAllocations(genesis(),m).some(x=>x.includes('requireExactAccounts')));
+});
+test('explicitly disabled exact-account setting fails closed',()=>{
+ const m=manifest();m.requireExactAccounts=false;
+ assert.ok(auditAllocations(genesis(),m).some(x=>x.includes('requireExactAccounts')));
+});
+test('unexpected allocation cannot pass with omitted exact-account setting',()=>{
+ const m=manifest();m.allocations.pop();delete m.requireExactAccounts;
+ assert.notDeepEqual(auditAllocations(genesis(),m),[]);
+});
