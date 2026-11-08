@@ -1,0 +1,27 @@
+name: Privi native mainnet bank supply offline audit
+on:
+  pull_request:
+    paths:
+      - 'mainnet/audit_bank_supply.cjs'
+      - 'mainnet/test_audit_bank_supply.cjs'
+      - '.github/workflows/privi-mainnet-bank-supply.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-bank-supply-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate JavaScript syntax
+        run: |
+          node --check mainnet/audit_bank_supply.cjs
+          node --check mainnet/test_audit_bank_supply.cjs
+      - name: Run offline bank supply regression tests
+        run: node --test mainnet/test_audit_bank_supply.cjs
