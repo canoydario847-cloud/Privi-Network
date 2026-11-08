@@ -11,3 +11,6 @@ test('malformed integer fails',()=>{const g=fixture();g.app_state.bank.balances[
 test('wrong expected amount fails',()=>assert.ok(audit(fixture(),'aprvi','999').some(x=>x.includes('expected PRVI supply'))));
 test('missing bank module fails',()=>assert.ok(audit({},'aprvi','1000').length));
 test('large integers stay exact',()=>{const g=fixture();const n='900719925474099300000';g.app_state.bank.balances=[{address:'a',coins:[{denom:'aprvi',amount:n}]}];g.app_state.bank.supply=[{denom:'aprvi',amount:n}];assert.deepEqual(audit(g,'aprvi',n),[]);});
+
+test('missing expected denomination fails even for zero expected supply',()=>{const g=fixture();g.app_state.bank.balances=[];g.app_state.bank.supply=[];assert.ok(audit(g,'aprvi','0').some(x=>x.includes('denomination missing')));});
+test('explicit zero supply denomination remains valid',()=>{const g=fixture();g.app_state.bank.balances=[];g.app_state.bank.supply=[{denom:'aprvi',amount:'0'}];assert.deepEqual(audit(g,'aprvi','0'),[]);});
