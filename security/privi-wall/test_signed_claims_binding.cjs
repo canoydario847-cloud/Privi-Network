@@ -3,7 +3,7 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {createHash}=require('node:crypto');
 const {admitBoundAgentCall:admit}=require('./signed_claims_binding.cjs');
 const payload=Buffer.from('{"operation":"read"}');
-const envelope={tenant:'t1',agent:'a1',action:'run',nonce:'x'.repeat(32),expiresAt:2000};
+const envelope={tenant:'t1',agent:'a1',action:'run',nonce:'a'.repeat(32),expiresAt:2000};
 const hash=p=>createHash('sha256').update(p).digest('hex');
 function fixture(patch={}){
  const events=[],seen=new Set();
