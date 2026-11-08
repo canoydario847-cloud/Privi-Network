@@ -1,0 +1,13 @@
+'use strict';
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const {auditAllocations}=require('./audit_genesis_allocations.cjs');
+const genesis=()=>({app_state:{bank:{balances:[{address:'wallet1',coins:[{denom:'aprvi',amount:'900719925474099300000'}]},{address:'wallet2',coins:[{denom:'aprvi',amount:'100'}]}]}}});
+const manifest=()=>({denom:'aprvi',allocations:[{address:'wallet1',amount:'900719925474099300000'},{address:'wallet2',amount:'100'}],requireExactAccounts:true});
+test('exact allocations match with BigInt precision',()=>assert.deepEqual(auditAllocations(genesis(),manifest()),[]));
+test('wrong amount fails',()=>{const m=manifest();m.allocations[0].amount='900719925474099300001';assert.ok(auditAllocations(genesis(),m).some(x=>x.includes('allocation mismatch')));});
+test('missing account fails',()=>{const g=genesis();g.app_state.bank.balances.pop();assert.ok(auditAllocations(g,manifest()).some(x=>x.includes('allocation mismatch')));});
+test('unexpected account fails in exact mode',()=>{const m=manifest();m.allocations.pop();assert.ok(auditAllocations(genesis(),m).some(x=>x.includes('unexpected allocation')));});
+test('duplicate manifest account fails',()=>{const m=manifest();m.allocations.push(m.allocations[0]);assert.ok(auditAllocations(genesis(),m).some(x=>x.includes('duplicate manifest')));});
+test('malformed amount fails',()=>{const m=manifest();m.allocations[0].amount='01';assert.ok(auditAllocations(genesis(),m).some(x=>x.includes('invalid manifest')));});
+test('missing manifest fails closed',()=>assert.ok(auditAllocations(genesis(),{}).length));
