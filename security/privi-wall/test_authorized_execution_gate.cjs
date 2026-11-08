@@ -55,3 +55,19 @@ test('missing executor and oversized payload fail before admission',async()=>{
  assert.deepEqual(await run({...f.args,payload:Buffer.alloc(65537)}),{admitted:false});
  assert.deepEqual(f.calls,[]);
 });
+
+test('expiry reached after replay admission prevents execution',async()=>{
+ let now=1000;const f=setup({clock:()=>now,reserve:async()=>{now=2000;return true;}});
+ assert.deepEqual(await run(f.args),{admitted:false});
+ assert.ok(!f.calls.includes('execute'));
+});
+test('invalid post-admission clock prevents execution',async()=>{
+ let reads=0;const f=setup({clock:()=>++reads>=3?NaN:1000});
+ assert.deepEqual(await run(f.args),{admitted:false});
+ assert.ok(!f.calls.includes('execute'));
+});
+test('clock errors after admission prevent execution',async()=>{
+ let reads=0;const f=setup({clock:()=>{if(++reads>=3)throw Error('clock unavailable');return 1000;}});
+ assert.deepEqual(await run(f.args),{admitted:false});
+ assert.ok(!f.calls.includes('execute'));
+});
