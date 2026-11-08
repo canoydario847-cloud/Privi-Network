@@ -37,8 +37,10 @@ function authorizeCall({call,body,signature,lookupKey,replayGuard}) {
   // Key registry must be provisioned out-of-band and scoped to tenant+agent.
   const key=lookupKey(call.tenant,call.agent);
   if(!key)throw Error('unknown agent');
-  const publicKey=createPublicKey(key);
-  if(publicKey.asymmetricKeyType!=='ed25519')throw Error('unsupported key algorithm');
+  // Trusted registries may return a public KeyObject or encoded public key.
+  // createPublicKey(public KeyObject) throws in Node.js; never accept private keys.
+  const publicKey = key && key.type === 'public' && key.asymmetricKeyType ? key : createPublicKey(key);
+  if(publicKey.type !== 'public' || publicKey.asymmetricKeyType!=='ed25519')throw Error('unsupported key algorithm');
   if(!verify(null,signed,publicKey,sig))throw Error('signature rejected');
   replayGuard.consume({tenant:call.tenant,nonce:call.nonce,expiresAt:call.expiresAt});
   return Object.freeze({authorized:true,tenant:call.tenant,agent:call.agent});
