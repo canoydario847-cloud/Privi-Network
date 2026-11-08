@@ -27,3 +27,6 @@ test('rejects missing signed envelope field',()=>{const c=call();delete c.agent;
 test('rejects inherited privilege fields',()=>{const c=Object.assign(Object.create({role:'admin'}),call());assert.throws(()=>bytesForCall(c),/invalid call prototype/);});
 test('rejects accessor side effects',()=>{const c=call();Object.defineProperty(c,'tenant',{enumerable:true,get(){throw Error('getter executed')}});assert.throws(()=>bytesForCall(c),/unsafe call property/);});
 test('rejects non-enumerable and symbol extensions',()=>{const c=call();Object.defineProperty(c,'role',{value:'admin',enumerable:false});assert.throws(()=>bytesForCall(c),/unsafe call property/);const d=call();d[Symbol('role')]='admin';assert.throws(()=>bytesForCall(d),/unsafe call property/);});
+
+test('accepts trusted PEM-encoded public key',()=>assert.equal(authorizeCall({...opts(call()),lookupKey:()=>publicKey.export({type:'spki',format:'pem'})}).authorized,true));
+test('rejects private KeyObject as verifier key',()=>assert.throws(()=>authorizeCall({...opts(call()),lookupKey:()=>privateKey}),/unsupported key algorithm/));
