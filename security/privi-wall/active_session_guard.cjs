@@ -6,7 +6,10 @@
  */
 function enforceActiveSession({socket, context, now = Date.now(), isRevoked}) {
   if (!socket || typeof socket.close !== 'function') throw Error('socket required');
-  if (typeof isRevoked !== 'function') throw Error('revocation callback required');
+  if (typeof isRevoked !== 'function') {
+    try { socket.close(1008, 'Session unauthorized'); } catch (_) { /* still deny */ }
+    return false;
+  }
   const valid = context && typeof context === 'object' &&
     typeof context.agentId === 'string' && context.agentId.length > 0 &&
     typeof context.tenant === 'string' && context.tenant.length > 0 &&
