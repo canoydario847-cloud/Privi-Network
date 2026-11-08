@@ -16,3 +16,9 @@ test('whitespace-only bank address fails',()=>{const g=fixture();g.app_state.ban
 test('control character in bank address fails',()=>{const g=fixture();g.app_state.bank.balances[0].address='a\n';assert.ok(auditBankSupply(g).length);});
 test('whitespace in balance denomination fails',()=>{const g=fixture();g.app_state.bank.balances[0].coins[0].denom='a prvi';assert.ok(auditBankSupply(g).length);});
 test('whitespace in declared supply denomination fails',()=>{const g=fixture();g.app_state.bank.supply[0].denom=' aprvi';assert.ok(auditBankSupply(g).length);});
+
+test('rejects bank balance coin exceeding uint256',()=>{const g=fixture();g.app_state.bank.balances[0].coins[0].amount=(1n<<256n).toString();assert.ok(auditBankSupply(g).some(x=>x.includes('invalid bank balance coin')));});
+test('rejects bank supply coin exceeding uint256',()=>{const g=fixture();g.app_state.bank.supply[0].amount=(1n<<256n).toString();assert.ok(auditBankSupply(g).some(x=>x.includes('invalid supply coin')));});
+test('rejects excessive decimal digits without BigInt conversion',()=>{const g=fixture();g.app_state.bank.balances[0].coins[0].amount='9'.repeat(100000);assert.ok(auditBankSupply(g).some(x=>x.includes('invalid bank balance coin')));});
+test('accepts uint256 maximum for balanced bank amounts',()=>{const g={app_state:{bank:{balances:[{address:'a',coins:[{denom:'aprvi',amount:((1n<<256n)-1n).toString()}]}],supply:[{denom:'aprvi',amount:((1n<<256n)-1n).toString()}]}}};assert.deepEqual(auditBankSupply(g),[]);});
+test('rejects sum of valid balances exceeding uint256',()=>{const g={app_state:{bank:{balances:[{address:'a',coins:[{denom:'aprvi',amount:((1n<<256n)-1n).toString()}]},{address:'b',coins:[{denom:'aprvi',amount:'1'}]}],supply:[{denom:'aprvi',amount:'0'}]}}};assert.ok(auditBankSupply(g).length);});
