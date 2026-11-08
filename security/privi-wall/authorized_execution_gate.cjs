@@ -15,6 +15,13 @@ async function executeAdmittedAgentCall(options={}){
  const safePayload=Buffer.from(payload);
  const admitted=await admitBoundAgentCall({...options,envelope:safeEnvelope,payload:safePayload});
  if(!admitted)return {admitted:false};
+ // Admission can succeed just before expiry; do not execute after expiry.
+ // Treat invalid clocks and rollback as authorization failures.
+ try {
+   const now = (typeof options.clock === 'function' ? options.clock : Date.now)();
+   if(!Number.isSafeInteger(now)||!Number.isSafeInteger(safeEnvelope.expiresAt)||
+      now>=safeEnvelope.expiresAt)return {admitted:false};
+ }catch(_){return {admitted:false};}
  // Never execute from mutable caller-owned objects. Errors do not become approvals.
  try{
    const result=await execute(Object.freeze({...safeEnvelope}),Buffer.from(safePayload));
