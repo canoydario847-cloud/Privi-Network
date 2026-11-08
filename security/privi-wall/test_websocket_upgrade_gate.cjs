@@ -5,7 +5,10 @@ const {authorizeWebSocketUpgrade} = require('./websocket_upgrade_gate.cjs');
 const opts = {request:{headers:{origin:'https://app.privi.example'}}, allowedOrigins:['https://app.privi.example'], expectedTenant:'tenant-1', expectedAudience:'privi-agent', authenticate:async()=>({authenticated:true,tenant:'tenant-1',audience:'privi-agent',agentId:'agent-1',expiresAt:Date.now()+60000})};
 test('accepts authenticated, tenant-and-audience-bound upgrade',async()=>{
   const p=await authorizeWebSocketUpgrade(opts);
-  assert.deepEqual(p,{agentId:'agent-1',tenant:'tenant-1',audience:'privi-agent'});
+  assert.equal(p.agentId,'agent-1');
+  assert.equal(p.tenant,'tenant-1');
+  assert.equal(p.audience,'privi-agent');
+  assert.ok(p.expiresAt>Date.now());
   assert.equal(Object.isFrozen(p),true);
 });
 test('rejects untrusted origin before calling authentication',async()=>{
