@@ -1,0 +1,14 @@
+'use strict';
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const {auditSupplyManifest}=require('./audit_supply_manifest.cjs');
+const genesis=()=>({app_state:{bank:{balances:[{address:'a',coins:[{denom:'aprvi',amount:'100'}]}],supply:[{denom:'aprvi',amount:'100'}]}}});
+const manifest=()=>({denom:'aprvi',expectedSupply:'100',maxSupply:'1000'});
+test('matching supply and cap',()=>assert.deepEqual(auditSupplyManifest(genesis(),manifest()),[]));
+test('missing manifest fails',()=>assert.ok(auditSupplyManifest(genesis(),null).length));
+test('supply mismatch fails',()=>{const m=manifest();m.expectedSupply='99';assert.ok(auditSupplyManifest(genesis(),m).some(x=>x.includes('differs')));});
+test('cap breach fails',()=>{const m=manifest();m.maxSupply='99';assert.ok(auditSupplyManifest(genesis(),m).some(x=>x.includes('exceeds')));});
+test('missing denomination fails',()=>{const m=manifest();m.denom='other';assert.ok(auditSupplyManifest(genesis(),m).length);});
+test('malformed numeric cap fails',()=>{const m=manifest();m.maxSupply='1e3';assert.ok(auditSupplyManifest(genesis(),m).length);});
+test('malformed identifier fails',()=>{const m=manifest();m.denom='a prvi';assert.ok(auditSupplyManifest(genesis(),m).length);});
+test('bank mismatch fails even if manifest matches supply',()=>{const g=genesis();g.app_state.bank.balances[0].coins[0].amount='99';assert.ok(auditSupplyManifest(g,manifest()).length);});
