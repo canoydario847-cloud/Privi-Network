@@ -3,7 +3,7 @@
 const {auditBankSupply}=require('./audit_bank_supply.cjs');
 const decimal=/^(0|[1-9][0-9]*)$/;
 const UINT256_MAX=(1n<<256n)-1n;
-const validUint256=value=>typeof value==='string' && decimal.test(value) && value.length<=78 && BigInt(value)<=UINT256_MAX;
+const validUint256=value=>typeof value==='string' && value.length<=78 && decimal.test(value) && BigInt(value)<=UINT256_MAX;
 function auditSupplyManifest(genesis,manifest){
  const errors=auditBankSupply(genesis);
  if(!manifest||typeof manifest!=='object'||Array.isArray(manifest))return [...errors,'missing approved supply manifest'];
