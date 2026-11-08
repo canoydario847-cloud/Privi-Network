@@ -14,7 +14,8 @@ async function authorizeWebSocketUpgrade({request, allowedOrigins, authenticate,
   if (!principal || typeof principal !== 'object' ||
       principal.authenticated !== true ||
       principal.tenant !== expectedTenant || principal.audience !== expectedAudience ||
-      typeof principal.agentId !== 'string' || !principal.agentId) throw Error('upgrade unauthorized');
+      typeof principal.agentId !== 'string' || !principal.agentId ||
+      !Number.isSafeInteger(principal.expiresAt) || principal.expiresAt <= Date.now()) throw Error('upgrade unauthorized');
   return Object.freeze({agentId:principal.agentId, tenant:expectedTenant, audience:expectedAudience});
 }
 module.exports = {authorizeWebSocketUpgrade};
