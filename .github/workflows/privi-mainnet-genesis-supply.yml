@@ -1,0 +1,27 @@
+name: Privi mainnet offline genesis supply audit
+on:
+  pull_request:
+    paths:
+      - 'mainnet/audit_genesis_supply.cjs'
+      - 'mainnet/test_audit_genesis_supply.cjs'
+      - '.github/workflows/privi-mainnet-genesis-supply.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-audit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout untrusted branch for offline tests
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check Node runtime
+        run: node --version
+      - name: Validate auditor and test syntax
+        run: |
+          node --check mainnet/audit_genesis_supply.cjs
+          node --check mainnet/test_audit_genesis_supply.cjs
+      - name: Run genesis bank-supply regression tests
+        run: node --test mainnet/test_audit_genesis_supply.cjs
