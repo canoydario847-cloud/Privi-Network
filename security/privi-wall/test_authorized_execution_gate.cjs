@@ -71,3 +71,20 @@ test('clock errors after admission prevent execution',async()=>{
  assert.deepEqual(await run(f.args),{admitted:false});
  assert.ok(!f.calls.includes('execute'));
 });
+
+test('wall clock rollback during asynchronous admission prevents privileged execution',async()=>{
+ let now=1000;
+ const f=setup({clock:()=>now,reserve:async()=>{now=999;return true;}});
+ assert.deepEqual(await run(f.args),{admitted:false});
+ assert.ok(!f.calls.includes('execute'));
+});
+test('invalid initial clock prevents any signature verification or execution',async()=>{
+ const f=setup({clock:()=>Infinity});
+ assert.deepEqual(await run(f.args),{admitted:false});
+ assert.deepEqual(f.calls,[]);
+});
+test('initial clock exception prevents all admission callbacks',async()=>{
+ const f=setup({clock:()=>{throw Error('clock unavailable');}});
+ assert.deepEqual(await run(f.args),{admitted:false});
+ assert.deepEqual(f.calls,[]);
+});
