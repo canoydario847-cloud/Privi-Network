@@ -34,7 +34,10 @@ function auditBankSupply(genesis){
   if(supplies.has(coin.denom)){errors.push('duplicate supply denom '+coin.denom);continue;}
   supplies.set(coin.denom,BigInt(coin.amount));
  }
- for(const [denom,total] of totals)if(!supplies.has(denom)||supplies.get(denom)!==total)errors.push('supply mismatch '+denom);
+ for(const [denom,total] of totals){
+  if(total>UINT256_MAX)errors.push('bank balance sum exceeds uint256 '+denom);
+  if(!supplies.has(denom)||supplies.get(denom)!==total)errors.push('supply mismatch '+denom);
+ }
  for(const [denom,amount] of supplies)if(!totals.has(denom)&&amount!==0n)errors.push('unbacked supply '+denom);
  return errors;
 }
