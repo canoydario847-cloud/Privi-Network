@@ -11,7 +11,7 @@ const guard=()=>new BoundedReplayGuard({clock:()=>now});
 const body='{"job":"demo"}';
 const call=()=>({tenant:'t1',agent:'a1',audience:'privi-wall-east',method:'POST',path:'/agent/run',nonce:'a'.repeat(32),expiresAt:now+30000,bodyHash:createHash('sha256').update(body).digest('hex')});
 const sig=c=>sign(null,bytesForCall(c),privateKey).toString('base64url');
-const opts=(c,g=guard())=>({call:c,body,signature:sig(c),lookupKey:()=>publicKey,replayGuard:g,expectedAudience:'privi-wall-east'});
+const opts=(c,g=guard())=>({call:c,body,signature:sig(c),lookupKey:()=>publicKey,replayGuard:g,expectedAudience:'privi-wall-east',expectedTenant:'t1'});
 test('accepts valid signed call',()=>assert.equal(authorizeCall(opts(call())).authorized,true));
 test('rejects replay',()=>{const g=guard(),c=call();authorizeCall(opts(c,g));assert.throws(()=>authorizeCall(opts(c,g)),/replay/)});
 test('rejects body tampering',()=>assert.throws(()=>authorizeCall({...opts(call()),body:'tampered'}),/body mismatch/));
@@ -34,3 +34,8 @@ test('rejects private KeyObject as verifier key',()=>assert.throws(()=>authorize
 test('rejects cross-service replay despite valid signature',()=>{const c=call();assert.throws(()=>authorizeCall({...opts(c),expectedAudience:'privi-wall-west'}),/audience rejected/);});
 test('rejects missing trusted audience configuration',()=>{const o=opts(call());delete o.expectedAudience;assert.throws(()=>authorizeCall(o),/audience rejected/);});
 test('audience tampering invalidates signature',()=>{const c=call(),o=opts(c);assert.throws(()=>authorizeCall({...o,call:{...c,audience:'privi-wall-west'},expectedAudience:'privi-wall-west'}),/signature rejected/);});
+
+test('rejects valid cross-tenant signed call under trusted tenant context',()=>{const c=call();assert.throws(()=>authorizeCall({...opts(c),expectedTenant:'t2'}),/tenant rejected/);});
+test('rejects missing trusted tenant context',()=>{const o=opts(call());delete o.expectedTenant;assert.throws(()=>authorizeCall(o),/tenant rejected/);});
+test('rejects malformed trusted tenant context',()=>assert.throws(()=>authorizeCall({...opts(call()),expectedTenant:'t1/../t2'}),/tenant rejected/));
+test('tenant rejection does not consume nonce',()=>{const g=guard(),c=call();assert.throws(()=>authorizeCall({...opts(c,g),expectedTenant:'t2'}),/tenant rejected/);assert.equal(authorizeCall(opts(c,g)).authorized,true);});
