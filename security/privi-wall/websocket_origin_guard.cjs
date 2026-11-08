@@ -10,7 +10,7 @@ function normalizeOrigin(value) {
   try { url = new URL(value); } catch { throw Error('invalid origin'); }
   if (!['https:', 'http:'].includes(url.protocol) || url.username ||
       url.password || url.pathname !== '/' || url.search || url.hash ||
-      url.origin !== value) throw Error('invalid origin');
+      url.origin !== value || url.hostname.includes('*')) throw Error('invalid origin');
   return url.origin;
 }
 function assertWebSocketOrigin({origin, allowedOrigins}) {
