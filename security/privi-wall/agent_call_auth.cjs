@@ -27,10 +27,13 @@ function bytesForCall(call) {
   if(typeof nonce!=='string'||!HEX.test(nonce)||!Number.isSafeInteger(expiresAt)||typeof bodyHash!=='string'||!/^[a-f0-9]{64}$/.test(bodyHash))throw Error('invalid signed fields');
   return Buffer.from(JSON.stringify(['privi-wall-agent-call-v1',tenant,agent,audience,method,path,nonce,expiresAt,bodyHash]),'utf8');
 }
-function authorizeCall({call,body,signature,lookupKey,replayGuard,expectedAudience}) {
+function authorizeCall({call,body,signature,lookupKey,replayGuard,expectedAudience,expectedTenant}) {
   const signed=bytesForCall(call);
   // Expected audience is trusted local service configuration, never request metadata.
   if(typeof expectedAudience!=='string'||!ID.test(expectedAudience)||call.audience!==expectedAudience)throw Error('audience rejected');
+  // Trusted tenant context comes from the authenticated connection or route,
+  // never from the signed request itself or a client-supplied header.
+  if(typeof expectedTenant!=='string'||!ID.test(expectedTenant)||call.tenant!==expectedTenant)throw Error('tenant rejected');
   if(typeof body!=='string'||Buffer.byteLength(body,'utf8')>MAX_BODY_BYTES)throw Error('invalid body');
   if(createHash('sha256').update(body).digest('hex')!==call.bodyHash)throw Error('body mismatch');
   if(typeof lookupKey!=='function'||!(replayGuard instanceof BoundedReplayGuard))throw Error('invalid verifier');
