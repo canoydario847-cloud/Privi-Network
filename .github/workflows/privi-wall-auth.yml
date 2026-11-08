@@ -1,0 +1,26 @@
+name: Privi Wall authorization security tests
+on:
+  pull_request:
+    paths:
+      - 'security/privi-wall/**'
+      - '.github/workflows/privi-wall-auth.yml'
+  push:
+    branches:
+      - 'security/privi-wall-*'
+    paths:
+      - 'security/privi-wall/**'
+      - '.github/workflows/privi-wall-auth.yml'
+permissions:
+  contents: read
+jobs:
+  auth-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Node version
+        run: node --version
+      - name: Check authorization syntax
+        run: node --check security/privi-wall/agent_call_auth.cjs
+      - name: Run isolated Privi Wall security regression tests
+        run: node --test security/privi-wall/test_bounded_replay_guard.cjs security/privi-wall/test_agent_call_auth.cjs security/privi-wall/test_source_integrity.cjs
