@@ -3,7 +3,7 @@
 const {createHash}=require('node:crypto');
 const {verifyFreshTenantReceipt}=require('./verify_fresh_tenant_receipt.cjs');
 const ID=/^[A-Za-z0-9_-]{1,128}$/;
-const NONCE=/^[A-Za-z0-9_-]{22,128}$/;
+const NONCE=/^[a-f0-9]{32,128}$/;
 async function verifyOnceTenantReceipt(options={}) {
   try {
     if (!options || typeof options!=='object' || Array.isArray(options)) return false;
