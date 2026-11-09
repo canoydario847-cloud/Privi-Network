@@ -1,0 +1,14 @@
+'use strict';
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const {auditGenesisAllocations}=require('./audit_genesis_allocations.cjs');
+const genesis={app_state:{bank:{balances:[{address:'vesting1',coins:[{denom:'aprvi',amount:'100'}]},{address:'liquid1',coins:[{denom:'aprvi',amount:'900'}]}],supply:[{denom:'aprvi',amount:'1000'}]}}};
+const allocations=[{address:'vesting1',denom:'aprvi',amount:'100'},{address:'liquid1',denom:'aprvi',amount:'900'}];
+test('accepts matching explicit allocations',()=>assert.deepEqual(auditGenesisAllocations(genesis,{allocations}),[]));
+test('rejects missing manifest',()=>assert.match(auditGenesisAllocations(genesis,null)[0],/missing/));
+test('rejects wrong vesting allocation amount',()=>assert.ok(auditGenesisAllocations(genesis,{allocations:[{...allocations[0],amount:'101'},allocations[1]]}).length));
+test('rejects unknown address',()=>assert.ok(auditGenesisAllocations(genesis,{allocations:[{address:'unknown',denom:'aprvi',amount:'100'}]}).length));
+test('rejects duplicate allocations',()=>assert.ok(auditGenesisAllocations(genesis,{allocations:[allocations[0],allocations[0]]}).length));
+test('rejects invalid numeric amount',()=>assert.ok(auditGenesisAllocations(genesis,{allocations:[{...allocations[0],amount:'-1'}]}).length));
+test('rejects bank supply mismatch',()=>{const bad=structuredClone(genesis);bad.app_state.bank.supply[0].amount='999';assert.ok(auditGenesisAllocations(bad,{allocations}).length);});
+test('rejects empty manifest',()=>assert.ok(auditGenesisAllocations(genesis,{allocations:[]}).length));
