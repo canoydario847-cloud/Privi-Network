@@ -1,0 +1,27 @@
+name: Native PRVI isolated genesis approval gate
+on:
+  push:
+    branches:
+      - 'mainnet/review-isolated-genesis-gate-*'
+  pull_request:
+    paths:
+      - 'mainnet/audit_bank_supply.cjs'
+      - 'mainnet/audit_supply_manifest.cjs'
+      - 'mainnet/audit_pinned_supply_manifest.cjs'
+      - 'mainnet/audit_signed_genesis_approval.cjs'
+      - 'mainnet/audit_pinned_release_identity.cjs'
+      - 'mainnet/test_pinned_release_identity.cjs'
+      - '.github/workflows/mainnet-isolated-genesis-gate.yml'
+permissions:
+  contents: read
+jobs:
+  isolated-genesis-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Pinned release identity regression suite
+        run: node --test mainnet/test_pinned_release_identity.cjs
