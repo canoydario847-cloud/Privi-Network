@@ -22,3 +22,7 @@ test('malformed signature fails',()=>assert.equal(check({receipt,signature:Buffe
 
 test('trusted PEM public key verifies',()=>assert.equal(check({receipt,signature,algorithm:'Ed25519',keyResolver:()=>publicKey.export({type:'spki',format:'pem'})}),true));
 test('private key rejected as trusted verifier key',()=>assert.equal(check({receipt,signature,algorithm:'Ed25519',keyResolver:()=>privateKey}),false));
+
+test('private PEM rejected as verifier key',()=>assert.equal(check({receipt,signature,algorithm:'Ed25519',keyResolver:()=>privateKey.export({type:'pkcs8',format:'pem'})}),false));
+test('ambiguous resolver object rejected',()=>assert.equal(check({receipt,signature,algorithm:'Ed25519',keyResolver:()=>({key:privateKey.export({type:'pkcs8',format:'pem'})})}),false));
+test('raw buffer resolver key rejected',()=>assert.equal(check({receipt,signature,algorithm:'Ed25519',keyResolver:()=>Buffer.from(publicKey.export({type:'spki',format:'pem'}))}),false));
