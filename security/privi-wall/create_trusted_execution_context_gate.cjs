@@ -5,7 +5,8 @@
 const {createAuthorizedExecutionBoundary}=require('./create_authorized_execution_boundary.cjs');
 // Canonical ASCII identifiers avoid whitespace/control-character and Unicode-normalization
 // ambiguity across tenant policy stores. Integrators must map external IDs first.
-const CANONICAL_ID=/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;\nfunction createTrustedExecutionContextGate({resolveTrustedContext,authorize,executeAuthorized}={}) {
+const CANONICAL_ID=/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+function createTrustedExecutionContextGate({resolveTrustedContext,authorize,executeAuthorized}={}) {
   if (typeof resolveTrustedContext!=='function') throw new TypeError('trusted context resolver required');
   const boundary=createAuthorizedExecutionBoundary({authorize,executeAuthorized});
   return Object.freeze({
