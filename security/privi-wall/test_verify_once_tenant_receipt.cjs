@@ -1,0 +1,18 @@
+'use strict';
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const path=require('node:path');
+const dep=path.join(__dirname,'verify_fresh_tenant_receipt.cjs');
+let valid=true;
+require.cache[dep]={id:dep,filename:dep,loaded:true,exports:{verifyFreshTenantReceipt:()=>valid}};
+const {verifyOnceTenantReceipt}=require('./verify_once_tenant_receipt.cjs');
+const nowMs=100000;
+const base={receipt:{nonce:'a'.repeat(32),executedAt:99000},expectedTenant:'tenant_A',nowMs,maxAgeMs:3000,maxFutureSkewMs:1000};
+test('first use accepted; repeated nonce denied',async()=>{const seen=new Set();const consumeOnce=async({key})=>!seen.has(key)&&(seen.add(key),true);assert.equal(await verifyOnceTenantReceipt({...base,consumeOnce}),true);assert.equal(await verifyOnceTenantReceipt({...base,consumeOnce}),false)});
+test('tenant scope differs',async()=>{const keys=[];const consumeOnce=async({key})=>(keys.push(key),true);await verifyOnceTenantReceipt({...base,consumeOnce});await verifyOnceTenantReceipt({...base,expectedTenant:'tenant_B',consumeOnce});assert.notEqual(keys[0],keys[1])});
+test('invalid signature never consumes',async()=>{valid=false;let calls=0;assert.equal(await verifyOnceTenantReceipt({...base,consumeOnce:async()=>{calls++;return true}}),false);assert.equal(calls,0);valid=true});
+test('backend errors fail closed',async()=>assert.equal(await verifyOnceTenantReceipt({...base,consumeOnce:async()=>{throw Error('down')}}),false));
+test('only literal true admits',async()=>assert.equal(await verifyOnceTenantReceipt({...base,consumeOnce:async()=>1}),false));
+test('rejects missing or weak nonce',async()=>assert.equal(await verifyOnceTenantReceipt({...base,receipt:{...base.receipt,nonce:'short'},consumeOnce:async()=>true}),false));
+test('rejects no atomic backend',async()=>assert.equal(await verifyOnceTenantReceipt(base),false));
+test('expiry derived from receipt time',async()=>{let expiry;await verifyOnceTenantReceipt({...base,consumeOnce:async({expiresAtMs})=>(expiry=expiresAtMs,true)});assert.equal(expiry,103001)});
