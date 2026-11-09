@@ -14,7 +14,11 @@ function verifyExecutionReceipt({receipt,signature,algorithm,keyResolver}={}){
   const trusted=keyResolver(receipt.keyId,algorithm);
   // No caller-supplied public key, fallback key, or algorithm negotiation.
   if(!trusted||typeof trusted.then==='function'||(trusted instanceof KeyObject && trusted.type!=='public'))return false;
-  const key=trusted instanceof KeyObject && trusted.type==='public' ? trusted : createPublicKey(trusted);
+  // Only explicit public KeyObjects or SPKI PUBLIC KEY PEM are trusted.
+  // createPublicKey(privateKeyPem) silently derives a public key; never accept that input.
+  if(!(trusted instanceof KeyObject) &&
+     (typeof trusted!=='string'||!/^-----BEGIN PUBLIC KEY-----\r?\n(?:[A-Za-z0-9+/=]+\r?\n)+-----END PUBLIC KEY-----\r?\n?$/.test(trusted)))return false;
+  const key=trusted instanceof KeyObject ? trusted : createPublicKey(trusted);
   if(key.asymmetricKeyType!=='ed25519')return false;
   return verify(null,transcript,key,signature);
  }catch(_){return false;}
