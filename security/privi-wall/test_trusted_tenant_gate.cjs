@@ -34,3 +34,21 @@ test('only strict true permits admission',async()=>{
  const gate=createTrustedTenantGate({gate:{verify:async()=>({ok:true})},resolveIdentity:async()=>trusted()});
  assert.equal(await gate.verify({request}),false);
 });
+
+test('inherited tenant identity fields are rejected',async()=>{
+ let invoked=false;
+ const inherited=Object.create(trusted());
+ const gate=createTrustedTenantGate({gate:{verify:async()=>{invoked=true;return true;}},resolveIdentity:async()=>inherited});
+ assert.equal(await gate.verify({request}),false);
+ assert.equal(invoked,false);
+});
+test('coercible identity objects cannot masquerade as identifiers',async()=>{
+ const identity={...trusted(),tenantId:{toString:()=> 'tenantA'}};
+ const gate=createTrustedTenantGate({gate:{verify:async()=>true},resolveIdentity:async()=>identity});
+ assert.equal(await gate.verify({request}),false);
+});
+test('inherited signing-key resolver is rejected',async()=>{
+ const identity=Object.assign(Object.create({resolveTenantKey:()=>({})}),{tenantId:'tenantA',agentId:'agentA',actionId:'run'});
+ const gate=createTrustedTenantGate({gate:{verify:async()=>true},resolveIdentity:async()=>identity});
+ assert.equal(await gate.verify({request}),false);
+});
