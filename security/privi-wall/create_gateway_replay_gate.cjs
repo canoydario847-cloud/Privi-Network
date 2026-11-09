@@ -12,7 +12,7 @@ function createGatewayReplayGate({client,maxAgeMs,maxFutureSkewMs,maxReplayTtlMs
       if (!options || typeof options!=='object' || Array.isArray(options)) return false;
       // Caller cannot override the startup-validated policy or replay backend.
       return verifyOnceTenantReceipt({...options,maxAgeMs:policy.maxAgeMs,
-        maxFutureSkewMs:policy.maxFutureSkewMs,consumeOnce});
+        maxFutureSkewMs:policy.maxFutureSkewMs,nowMs:Date.now(),consumeOnce});
     }
   });
 }
