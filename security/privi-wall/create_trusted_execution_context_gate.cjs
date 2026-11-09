@@ -3,7 +3,9 @@
 // The caller must not supply tenant/agent/action identity through the request.
 // Backend still MUST enforce revocation and authorization atomically with effects.
 const {createAuthorizedExecutionBoundary}=require('./create_authorized_execution_boundary.cjs');
-// Canonical ASCII identifiers avoid whitespace/control-character and Unicode-normalization\n// ambiguity across tenant policy stores. Integrators must map external IDs first.\nconst CANONICAL_ID=/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;\nfunction createTrustedExecutionContextGate({resolveTrustedContext,authorize,executeAuthorized}={}) {
+// Canonical ASCII identifiers avoid whitespace/control-character and Unicode-normalization
+// ambiguity across tenant policy stores. Integrators must map external IDs first.
+const CANONICAL_ID=/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;\nfunction createTrustedExecutionContextGate({resolveTrustedContext,authorize,executeAuthorized}={}) {
   if (typeof resolveTrustedContext!=='function') throw new TypeError('trusted context resolver required');
   const boundary=createAuthorizedExecutionBoundary({authorize,executeAuthorized});
   return Object.freeze({
