@@ -11,8 +11,12 @@ function createGatewayReplayGate({client,maxAgeMs,maxFutureSkewMs,maxReplayTtlMs
     async verify(options={}) {
       if (!options || typeof options!=='object' || Array.isArray(options)) return false;
       // Caller cannot override the startup-validated policy or replay backend.
-      return verifyOnceTenantReceipt({...options,maxAgeMs:policy.maxAgeMs,
-        maxFutureSkewMs:policy.maxFutureSkewMs,nowMs:Date.now(),consumeOnce});
+      try {
+        // Reject malformed or hostile request objects and verifier failures without throwing.
+        // In particular, spreading a request can invoke attacker-controlled getters.
+        return (await verifyOnceTenantReceipt({...options,maxAgeMs:policy.maxAgeMs,
+          maxFutureSkewMs:policy.maxFutureSkewMs,nowMs:Date.now(),consumeOnce}))===true;
+      } catch (_) { return false; }
     }
   });
 }
