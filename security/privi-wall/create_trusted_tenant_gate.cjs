@@ -13,10 +13,10 @@ function createTrustedTenantGate({gate,resolveIdentity}={}) {
             !ID.test(identity.tenantId||'') || !ID.test(identity.agentId||'') ||
             !ID.test(identity.actionId||'')) return false;
         if (!request || typeof request!=='object' || Array.isArray(request)) return false;
-        const {receipt,publicKey}=request;
-        if (!receipt || !publicKey) return false;
+        const {receipt,signature,algorithm}=request;
+        if (!receipt || !signature || !algorithm || typeof identity.resolveTenantKey!=='function') return false;
         return (await gate.verify({
-          receipt,publicKey,
+          receipt,signature,algorithm,resolveTenantKey:identity.resolveTenantKey,
           expectedTenant:identity.tenantId,
           expectedAgent:identity.agentId,
           expectedAction:identity.actionId
