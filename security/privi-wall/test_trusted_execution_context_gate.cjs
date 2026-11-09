@@ -42,3 +42,26 @@ test('accepts bounded canonical identifiers including namespace separators',asyn
   const gate=createTrustedExecutionContextGate({resolveTrustedContext:()=>({tenantId:'t:org_1',agentId:'a.service-2',actionId:'read:files',sessionId:'s'.repeat(128)}),authorize:async()=>true,executeAuthorized:async()=>({ok:true})});
   assert.deepEqual(await gate.execute({}),{ok:true});
 });
+
+test('canonical identity enforcement covers every trusted identity field',async()=>{
+  for (const field of ['tenantId','agentId','actionId','sessionId']) {
+    let authorized=0;
+    const gate=createTrustedExecutionContextGate({
+      resolveTrustedContext:()=>({...trusted(),[field]:'invalid/segment'}),
+      authorize:async()=>{authorized++;return true;},
+      executeAuthorized:async()=>({ok:true})
+    });
+    assert.deepEqual(await gate.execute({}),{ok:false,reason:'untrusted_context'});
+    assert.equal(authorized,0);
+  }
+});
+test('throwing trusted context proxy fails closed before authorization',async()=>{
+  let authorized=0;
+  const gate=createTrustedExecutionContextGate({
+    resolveTrustedContext:()=>new Proxy(trusted(),{getOwnPropertyDescriptor(){throw Error('trap');}}),
+    authorize:async()=>{authorized++;return true;},
+    executeAuthorized:async()=>({ok:true})
+  });
+  assert.deepEqual(await gate.execute({}),{ok:false,reason:'untrusted_context'});
+  assert.equal(authorized,0);
+});
