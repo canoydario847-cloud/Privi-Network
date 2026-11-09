@@ -23,7 +23,10 @@ function createTrustedTenantGate({gate,resolveIdentity}={}) {
         const identity=await resolveIdentity(session);
         if (!validIdentity(identity)) return false;
         if (!request || typeof request!=='object' || Array.isArray(request)) return false;
-        const {receipt,signature,algorithm}=request;
+        // Never invoke accessors or trust inherited request fields during admission.
+        const receipt=ownData(request,'receipt');
+        const signature=ownData(request,'signature');
+        const algorithm=ownData(request,'algorithm');
         if (!receipt || !signature || !algorithm) return false;
         return (await gate.verify({
           receipt,signature,algorithm,resolveTenantKey:ownData(identity,'resolveTenantKey'),
