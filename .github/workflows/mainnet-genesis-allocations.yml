@@ -1,0 +1,26 @@
+name: Native PRVI offline genesis allocation tests
+on:
+  push:
+    paths:
+      - 'mainnet/audit_genesis_allocations.cjs'
+      - 'mainnet/test_genesis_allocations.cjs'
+      - 'mainnet/audit_bank_supply.cjs'
+      - '.github/workflows/mainnet-genesis-allocations.yml'
+  pull_request:
+    paths:
+      - 'mainnet/audit_genesis_allocations.cjs'
+      - 'mainnet/test_genesis_allocations.cjs'
+      - 'mainnet/audit_bank_supply.cjs'
+      - '.github/workflows/mainnet-genesis-allocations.yml'
+permissions:
+  contents: read
+jobs:
+  offline-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test mainnet/test_genesis_allocations.cjs
