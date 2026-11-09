@@ -29,3 +29,16 @@ test('execution-time backend denial remains final',async()=>{
  const gate=createTrustedExecutionContextGate({resolveTrustedContext:trusted,authorize:async()=>true,executeAuthorized:async()=>({ok:false})});
  assert.deepEqual(await gate.execute({}),{ok:false,reason:'executor_denied'});
 });
+
+test('rejects ambiguous or oversized trusted identifiers before authorization',async()=>{
+  for (const invalid of [' tenant-a','tenant-a ','tenant\\nadmin','tenant/other','té nant','a'.repeat(129),'']) {
+    let calls=0;
+    const gate=createTrustedExecutionContextGate({resolveTrustedContext:()=>({...trusted(),tenantId:invalid}),authorize:async()=>{calls++;return true;},executeAuthorized:async()=>{calls++;return {ok:true};}});
+    assert.deepEqual(await gate.execute({}),{ok:false,reason:'untrusted_context'});
+    assert.equal(calls,0);
+  }
+});
+test('accepts bounded canonical identifiers including namespace separators',async()=>{
+  const gate=createTrustedExecutionContextGate({resolveTrustedContext:()=>({tenantId:'t:org_1',agentId:'a.service-2',actionId:'read:files',sessionId:'s'.repeat(128)}),authorize:async()=>true,executeAuthorized:async()=>({ok:true})});
+  assert.deepEqual(await gate.execute({}),{ok:true});
+});
