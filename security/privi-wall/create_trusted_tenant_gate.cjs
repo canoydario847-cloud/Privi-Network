@@ -1,6 +1,14 @@
 'use strict';
 // Bind receipt verification expectations to server-authenticated context, never request claims.
 const ID=/^[A-Za-z0-9_-]{1,128}$/;
+const own=(obj,key)=>Object.prototype.hasOwnProperty.call(obj,key);
+function validIdentity(identity) {
+  if (!identity || typeof identity!=='object' || Array.isArray(identity)) return false;
+  for (const key of ['tenantId','agentId','actionId']) {
+    if (!own(identity,key) || typeof identity[key]!=='string' || !ID.test(identity[key])) return false;
+  }
+  return own(identity,'resolveTenantKey') && typeof identity.resolveTenantKey==='function';
+}
 function createTrustedTenantGate({gate,resolveIdentity}={}) {
   if (!gate || typeof gate.verify!=='function' || typeof resolveIdentity!=='function')
     throw new TypeError('trusted gateway and identity resolver required');
@@ -9,9 +17,7 @@ function createTrustedTenantGate({gate,resolveIdentity}={}) {
       try {
         // resolveIdentity must validate the session against server-side auth state.
         const identity=await resolveIdentity(session);
-        if (!identity || typeof identity!=='object' ||
-            !ID.test(identity.tenantId||'') || !ID.test(identity.agentId||'') ||
-            !ID.test(identity.actionId||'')) return false;
+        if (!validIdentity(identity)) return false;
         if (!request || typeof request!=='object' || Array.isArray(request)) return false;
         const {receipt,signature,algorithm}=request;
         if (!receipt || !signature || !algorithm || typeof identity.resolveTenantKey!=='function') return false;
