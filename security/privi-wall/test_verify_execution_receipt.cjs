@@ -19,3 +19,6 @@ test('wrong trusted key fails',()=>assert.equal(check({receipt,signature,algorit
 test('resolver failure fails closed',()=>assert.equal(check({receipt,signature,algorithm:'Ed25519',keyResolver:()=>{throw Error('offline')}}),false));
 test('async resolver fails closed',()=>assert.equal(check({receipt,signature,algorithm:'Ed25519',keyResolver:async()=>publicKey}),false));
 test('malformed signature fails',()=>assert.equal(check({receipt,signature:Buffer.alloc(1),algorithm:'Ed25519',keyResolver:resolver}),false));
+
+test('trusted PEM public key verifies',()=>assert.equal(check({receipt,signature,algorithm:'Ed25519',keyResolver:()=>publicKey.export({type:'spki',format:'pem'})}),true));
+test('private key rejected as trusted verifier key',()=>assert.equal(check({receipt,signature,algorithm:'Ed25519',keyResolver:()=>privateKey}),false));
