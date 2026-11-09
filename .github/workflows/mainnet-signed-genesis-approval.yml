@@ -1,0 +1,26 @@
+name: Native PRVI signed genesis approval tests
+on:
+  pull_request:
+    paths:
+      - 'mainnet/audit_signed_genesis_approval.cjs'
+      - 'mainnet/test_signed_genesis_approval.cjs'
+      - 'mainnet/audit_pinned_supply_manifest.cjs'
+      - 'mainnet/audit_supply_manifest.cjs'
+      - 'mainnet/audit_bank_supply.cjs'
+      - '.github/workflows/mainnet-signed-genesis-approval.yml'
+  push:
+    branches:
+      - 'mainnet/signed-genesis-approval-20261109-08'
+permissions:
+  contents: read
+jobs:
+  signed-genesis-approval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Signed genesis approval regression suite
+        run: node --test mainnet/test_signed_genesis_approval.cjs
