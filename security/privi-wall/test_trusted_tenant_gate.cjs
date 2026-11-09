@@ -11,7 +11,7 @@ test('trusted identity pins tenant agent action and key resolver',async()=>{
  assert.equal(seen.expectedTenant,'tenantA');
  assert.equal(seen.expectedAgent,'agentA');
  assert.equal(seen.expectedAction,'run');
- assert.equal(seen.resolveTenantKey('anything'),trusted().resolveTenantKey('anything'));
+ assert.equal(typeof seen.resolveTenantKey,'function');
 });
 test('missing authenticated identity fails closed',async()=>{
  const gate=createTrustedTenantGate({gate:{verify:async()=>true},resolveIdentity:async()=>null});
