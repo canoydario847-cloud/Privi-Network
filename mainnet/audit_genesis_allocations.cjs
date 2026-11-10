@@ -23,6 +23,15 @@ function auditGenesisAllocations(genesis,allocationManifest){
   const coin=coins.find(c=>c?.denom===entry.denom);
   if(!coin||coin.amount!==entry.amount)errors.push('allocation differs from bank balance');
  }
+ // Fail closed if a bank balance coin is omitted from the approved allocation list.
+ // This is an exact address+denom comparison, not an aggregate-supply comparison.
+ for(const [address,coins] of balances){
+  if(!Array.isArray(coins))continue; // auditBankSupply already reports invalid shapes.
+  for(const coin of coins){
+   if(coin&&typeof coin.denom==='string'&&!seen.has(JSON.stringify([address,coin.denom])))
+    errors.push('bank balance missing from allocation manifest');
+  }
+ }
  if(allocationManifest.allocations.length===0)errors.push('empty allocation manifest');
  return errors;
 }
