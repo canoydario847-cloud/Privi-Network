@@ -1,0 +1,23 @@
+name: PRVI bank supply offline regression
+on:
+  pull_request:
+    paths:
+      - 'mainnet/audit_bank_supply.cjs'
+      - 'mainnet/test_bank_supply.cjs'
+      - '.github/workflows/prvi-bank-supply-regression.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bank-supply-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run offline bank supply regression suite
+        run: node --test mainnet/test_bank_supply.cjs
