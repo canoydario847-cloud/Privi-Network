@@ -17,4 +17,4 @@ test('rejects missing native supply',()=>{const g=genesis();g.app_state.bank.sup
 test('rejects malformed allowedDenoms policy type',()=>assert.match(auditMonetaryPolicy(genesis(),{...policy(),allowedDenoms:'other'}).join(';'),/invalid allowed denominations/));
 test('rejects whitespace in allowed denomination',()=>assert.match(auditMonetaryPolicy(genesis(),{...policy(),allowedDenoms:['other denom']}).join(';'),/invalid allowed denominations/));
 test('rejects non-string native supply cap',()=>assert.match(auditMonetaryPolicy(genesis(),{...policy(),maxSupply:1000}).join(';'),/missing or unapproved monetary policy/));
-test('rejects invalid native denomination',()=>assert.match(auditMonetaryPolicy(genesis(),{...policy(),denom:'aprvi\\n'}).join(';'),/missing or unapproved monetary policy/));
+test('rejects invalid native denomination',()=>assert.match(auditMonetaryPolicy(genesis(),{...policy(),denom:'aprvi\\n'}).join(';'),/unauthorized supply denomination/));
