@@ -353,6 +353,8 @@ def main() -> None:
                           store._db, store._lock, "privi-verify")
     from .front import QuickGet
     app = QuickGet(app, "Privi Verify", "privi-verify", "https://privi-verify.onrender.com")
+    from .ledger_report import link
+    app = link(app, "privi-verify", __version__, settings.db_path)   # every tool call is reported to the Quantum Ledger
     uvicorn.run(app, host=args.host, port=args.port)
 
 

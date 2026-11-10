@@ -30,6 +30,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .fortress import Fortress, FortressError, canonical, leaf_hash, sha256_hex
+from .network import source_of
 
 GENESIS_PREV = "0" * 128
 BLOCK_HASH_ALG = "SHA3-512 (FIPS 202) over canonical JSON (sorted keys, no spaces)"
@@ -327,9 +328,12 @@ class QuantumLedger:
         start = max(lo, top - limit)
         if top <= lo:
             return {"entries": [], "total": hi - lo, "range": [lo, hi]}
-        rows = self._db.execute("SELECT entry_hash FROM entries ORDER BY id LIMIT ? OFFSET ?", (top - start, start)).fetchall()
+        rows = self._db.execute("SELECT entry_hash, org_id, stream_id FROM entries ORDER BY id LIMIT ? OFFSET ?",
+                                (top - start, start)).fetchall()
+        # "service" is which Privi service the entry came from; a customer's organization or stream is never shown.
         out = [{"index": start + i, "entry_hash": r["entry_hash"], "leaf_hash": leaf_hash(r["entry_hash"]).hex(),
-                "block": self._height_for_index(sizes, start + i)} for i, r in enumerate(rows)]
+                "block": self._height_for_index(sizes, start + i), "service": source_of(r["org_id"], r["stream_id"])}
+               for i, r in enumerate(rows)]
         out.reverse()
         return {"entries": out, "total": hi - lo, "range": [lo, hi], "unsealed_from": sizes[-1][1] if sizes else 0}
 
