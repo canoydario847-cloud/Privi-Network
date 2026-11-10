@@ -439,9 +439,11 @@ def main() -> None:
         return
     import uvicorn
     from .front import QuickGet
-    uvicorn.run(QuickGet(mcp.streamable_http_app(host=args.host, stateless_http=True, json_response=True),
-                         "Privi Anchor", "privi-anchor", "https://privi-anchor.onrender.com"),
-                host=args.host, port=args.port)
+    from .ledger_report import link
+    app = QuickGet(mcp.streamable_http_app(host=args.host, stateless_http=True, json_response=True),
+                   "Privi Anchor", "privi-anchor", "https://privi-anchor.onrender.com")
+    # Every anchor request is reported to the Quantum Ledger, except the Ledger settling its own blocks.
+    uvicorn.run(link(app, "privi-anchor", __version__, settings.db_path), host=args.host, port=args.port)
 
 
 if __name__ == "__main__":

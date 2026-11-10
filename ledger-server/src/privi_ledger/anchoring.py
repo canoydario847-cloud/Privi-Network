@@ -50,8 +50,9 @@ class AnchorClient(Protocol):
 class HttpAnchorClient:
     """Calls the Privi Anchor MCP server's anchor_hashes tool over Streamable HTTP (JSON mode)."""
 
-    def __init__(self, url: str, api_key: str, timeout: float = 90.0):
+    def __init__(self, url: str, api_key: str, timeout: float = 90.0, headers: dict[str, str] | None = None):
         self.url, self.api_key, self.timeout = url, api_key, timeout
+        self.headers = dict(headers or {})      # extra request headers (the Ledger marks its own settlement calls)
 
     def anchor(self, hashes: list[str], label: str) -> dict:
         return self._call("anchor_hashes", {"hashes": hashes, "label": label})
@@ -65,7 +66,7 @@ class HttpAnchorClient:
                 "params": {"name": tool, "arguments": arguments}}
         req = urllib.request.Request(self.url, data=json.dumps(body).encode(), method="POST", headers={
             "Content-Type": "application/json", "Accept": "application/json, text/event-stream",
-            "MCP-Protocol-Version": "2025-06-18", "Authorization": f"Bearer {self.api_key}"})
+            "MCP-Protocol-Version": "2025-06-18", "Authorization": f"Bearer {self.api_key}", **self.headers})
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as r:
                 text = r.read().decode()

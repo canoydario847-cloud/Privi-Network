@@ -70,7 +70,7 @@ dd .why{display:block;color:var(--mute);font-size:12.5px;font-family:var(--sans)
     <input type="search" id="q" placeholder="Block height or any hash (block, entry, tree head, log root, transaction)" aria-label="Search a block height or hash" autocomplete="off" spellcheck="false">
     <button type="submit">Search</button>
   </form>
-  <p class="hint" id="shint">Every hash here is public and contains no company names or log contents.</p>
+  <p class="hint" id="shint">One ledger for every Privi service. Every hash here is public and contains no company names or log contents.</p>
 
   <div class="stats" id="stats"></div>
 
@@ -78,6 +78,7 @@ dd .why{display:block;color:var(--mute);font-size:12.5px;font-family:var(--sans)
     <div class="tabs" role="tablist">
       <button role="tab" id="t-blocks" aria-selected="true" aria-controls="panel">Blocks</button>
       <button role="tab" id="t-entries" aria-selected="false" aria-controls="panel">Entry hashes</button>
+      <button role="tab" id="t-services" aria-selected="false" aria-controls="panel">Services</button>
     </div>
     <div id="panel" class="card" role="tabpanel"></div>
   </div>
@@ -177,13 +178,14 @@ dd .why{display:block;color:var(--mute);font-size:12.5px;font-family:var(--sans)
       if (!data.entries.length) { panel.appendChild(el("div", { class: "empty", text: "No entry hashes yet." })); return; }
       tb = el("tbody");
       wrap = el("div", { class: "tbl" }, [el("table", null, [
-        el("thead", null, [el("tr", null, ["Log index", "Entry hash (SHA-256)", "Merkle leaf hash", "Block"].map(function (h) { return el("th", { text: h }); }))]), tb])]);
+        el("thead", null, [el("tr", null, ["Log index", "Entry hash (SHA-256)", "Service", "Merkle leaf hash", "Block"].map(function (h) { return el("th", { text: h }); }))]), tb])]);
       panel.appendChild(wrap);
     } else tb = wrap.querySelector("tbody");
     data.entries.forEach(function (e) {
       tb.appendChild(el("tr", null, [
         el("td", { class: "num", text: String(e.index) }),
         el("td", { class: "hash" }, [el("a", { href: "#hash-" + e.entry_hash, text: short(e.entry_hash, 14) })]),
+        el("td", null, [pill(e.service || "privi-ledger", "p-info")]),
         el("td", { class: "hash", text: short(e.leaf_hash, 10) }),
         el("td", null, [e.block != null ? el("a", { href: "#block-" + e.block, text: "#" + e.block }) : pill("Next block", "p-wait")])]));
     });
@@ -195,6 +197,25 @@ dd .why{display:block;color:var(--mute);font-size:12.5px;font-family:var(--sans)
     if (!append) state.offset = 0;
     api("/quantum-ledger/entries?limit=50&offset=" + state.offset + (block != null ? "&block=" + block : "")).then(function (d) { entriesTable(d, append, block); }).catch(showErr);
   }
+
+  function servicesTable(d) {
+    var panel = $("panel"); panel.textContent = "";
+    var tb = el("tbody");
+    panel.appendChild(el("div", { class: "empty", text: d.linked + " of " + d.total + " Privi services are linked to this ledger. " + d.note }));
+    panel.appendChild(el("div", { class: "tbl" }, [el("table", null, [
+      el("thead", null, [el("tr", null, ["Service", "Ledger link", "Health", "Entries", "Last report", "Last entry hash"].map(function (h) { return el("th", { text: h }); }))]), tb])]));
+    d.services.forEach(function (x) {
+      var good = x.status === "on the ledger" || x.status === "reporting";
+      tb.appendChild(el("tr", null, [
+        el("td", null, [el("b", { text: x.title || x.service }), el("div", { class: "mono", text: x.service + (x.version ? " · v" + x.version : "") })]),
+        el("td", null, [pill(x.status === "watched" ? "Watched" : x.status === "silent" || x.status === "not reporting" ? "Not reporting" : x.status === "reporting" ? "Reporting" : x.status === "on the ledger" ? "On the ledger" : "Unknown", good ? "p-ok" : x.status === "watched" ? "p-info" : "p-bad")]),
+        el("td", null, [pill(x.health === "up" ? "Up" : x.health === "down" ? "Down" : "Checking", x.health === "up" ? "p-ok" : x.health === "down" ? "p-bad" : "p-wait")]),
+        el("td", { class: "num", text: String(x.entries || 0) }),
+        el("td", { text: x.last_report_at ? when(x.last_report_at) : (x.link === "native" ? "Direct" : "None yet") }),
+        el("td", { class: "hash" }, [x.last_entry_hash ? el("a", { href: "#hash-" + x.last_entry_hash, text: short(x.last_entry_hash, 10) }) : ""])]));
+    });
+  }
+  function loadServices() { api("/quantum-ledger/services").then(servicesTable).catch(showErr); }
 
   function showErr(e) { var p = $("panel"); p.textContent = ""; p.appendChild(el("div", { class: "err", text: "Could not load: " + e.message })); }
 
@@ -267,15 +288,16 @@ dd .why{display:block;color:var(--mute);font-size:12.5px;font-family:var(--sans)
     if ((m = /^block-(\d+)$/.exec(h))) return showBlock(+m[1]);
     if ((m = /^hash-([0-9a-fA-F]{64,128})$/.exec(h))) return showHash(m[1].toLowerCase());
     $("view").hidden = true; $("main").hidden = false;
-    state.before = null; (state.tab === "blocks" ? loadBlocks(false) : loadEntries(false));
+    state.before = null; (state.tab === "blocks" ? loadBlocks(false) : state.tab === "services" ? loadServices() : loadEntries(false));
   }
   function tab(t) {
     state.tab = t;
-    $("t-blocks").setAttribute("aria-selected", t === "blocks"); $("t-entries").setAttribute("aria-selected", t === "entries");
+    $("t-blocks").setAttribute("aria-selected", t === "blocks"); $("t-entries").setAttribute("aria-selected", t === "entries"); $("t-services").setAttribute("aria-selected", t === "services");
     if (location.hash) { location.hash = ""; } else route();
   }
   $("t-blocks").addEventListener("click", function () { tab("blocks"); });
   $("t-entries").addEventListener("click", function () { tab("entries"); });
+  $("t-services").addEventListener("click", function () { tab("services"); });
   $("sf").addEventListener("submit", function (e) {
     e.preventDefault();
     var q = $("q").value.trim().toLowerCase().replace(/^0x/, "");

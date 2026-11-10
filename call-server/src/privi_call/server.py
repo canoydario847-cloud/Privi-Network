@@ -573,9 +573,12 @@ def main() -> None:
         return
     import uvicorn
     from .front import QuickGet
-    uvicorn.run(QuickGet(mcp.streamable_http_app(host=args.host, stateless_http=True, json_response=True),
-                         "Privi Call", "privi-call", st["settings"].public_url),
-                host=args.host, port=args.port, proxy_headers=True, forwarded_allow_ips="*")
+    from .ledger_report import link
+    app = QuickGet(mcp.streamable_http_app(host=args.host, stateless_http=True, json_response=True),
+                   "Privi Call", "privi-call", st["settings"].public_url)
+    # Every routed call and phone call is reported to the Quantum Ledger (one entry per phone call, not per turn).
+    app = link(app, "privi-call", __version__, st["settings"].db_path, skip_paths=("/voice/turn",))
+    uvicorn.run(app, host=args.host, port=args.port, proxy_headers=True, forwarded_allow_ips="*")
 
 
 if __name__ == "__main__":

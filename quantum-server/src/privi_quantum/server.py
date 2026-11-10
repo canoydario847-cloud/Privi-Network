@@ -2408,8 +2408,10 @@ def main() -> None:
         return
     import uvicorn
     from .front import QuickGet
-    uvicorn.run(QuickGet(http_app(mcp, host=args.host), "Privi Quantum", "privi-quantum", PUBLIC_URL),
-                host=args.host, port=args.port)
+    from .ledger_report import link
+    app = QuickGet(http_app(mcp, host=args.host), "Privi Quantum", "privi-quantum", PUBLIC_URL)
+    # Every tool call and state-changing request is reported to the Quantum Ledger.
+    uvicorn.run(link(app, "privi-quantum", __version__, settings.db_path), host=args.host, port=args.port)
 
 
 if __name__ == "__main__":

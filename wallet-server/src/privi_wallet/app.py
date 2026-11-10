@@ -343,5 +343,8 @@ def main() -> None:
     s = Settings()
     if s.custody and not s.custody_ready():
         raise SystemExit("WALLET_CUSTODY=1 needs WALLET_MASTER_KEY (32+ characters).")
-    uvicorn.run(create_app(s), host="0.0.0.0", port=int(os.getenv("PORT", "8000")), proxy_headers=True,
+    from .ledger_report import link
+    # Sign-ups, wallet creation and sends are reported to the Quantum Ledger (route and outcome only).
+    app = link(create_app(s), "privi-wallet", __version__, s.db_path, mcp_path="/__no_mcp__")
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "8000")), proxy_headers=True,
                 forwarded_allow_ips="*")
