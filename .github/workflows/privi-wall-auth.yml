@@ -23,5 +23,13 @@ jobs:
       - name: Check syntax of every Privi Wall JavaScript module
         run: |
           find security/privi-wall -type f \( -name '*.js' -o -name '*.cjs' -o -name '*.mjs' \) -print0 | xargs -0 -r -n 1 node --check
-      - name: Run isolated Privi Wall security regression tests
-        run: node --test security/privi-wall/test_bounded_replay_guard.cjs security/privi-wall/test_agent_call_auth.cjs security/privi-wall/test_source_integrity.cjs security/privi-wall/test_websocket_origin_guard.cjs security/privi-wall/test_websocket_upgrade_gate.cjs security/privi-wall/test_active_session_guard.cjs security/privi-wall/test_async_active_session_guard.cjs security/privi-wall/test_tenant_action_guard.cjs security/privi-wall/test_tenant_policy_deadline.cjs security/privi-wall/test_atomic_replay_admission.cjs security/privi-wall/test_signed_agent_admission_gate.cjs security/privi-wall/test_signed_claims_binding.cjs security/privi-wall/test_authorized_execution_gate.cjs security/privi-wall/test_receipt_transcript.cjs security/privi-wall/test_verify_execution_receipt.cjs security/privi-wall/test_verify_tenant_bound_receipt.cjs security/privi-wall/test_verify_fresh_tenant_receipt.cjs security/privi-wall/test_verify_once_tenant_receipt.cjs security/privi-wall/test_redis_replay_admission.cjs security/privi-wall/test_redis_replay_ttl_cap.cjs security/privi-wall/test_validate_replay_policy.cjs security/privi-wall/test_gateway_replay_gate.cjs security/privi-wall/test_gateway_clock_pinning.cjs security/privi-wall/test_gateway_fail_closed_errors.cjs security/privi-wall/test_trusted_tenant_gate.cjs security/privi-wall/test_request_data_only_gate.cjs security/privi-wall/test_session_bound_agent_gate.cjs security/privi-wall/test_authorized_execution_boundary.cjs security/privi-wall/test_trusted_execution_context_gate.cjs
+      - name: Run all Privi Wall security regression tests (fail if none found)
+        shell: bash
+        run: |
+          mapfile -d '' tests < <(find security/privi-wall -type f -name 'test_*.cjs' -print0 | sort -z)
+          if (( ${#tests[@]} == 0 )); then
+            echo 'ERROR: no Privi Wall regression tests discovered' >&2
+            exit 1
+          fi
+          printf 'Discovered %d security test files\\n' "${#tests[@]}"
+          node --test "${tests[@]}"
