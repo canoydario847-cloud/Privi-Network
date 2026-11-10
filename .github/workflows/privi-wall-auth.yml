@@ -16,20 +16,37 @@ jobs:
   auth-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - name: Check Node version
         run: node --version
-      - name: Check syntax of every Privi Wall JavaScript module
+      - name: Check syntax of every Privi Wall JavaScript module (fail closed)
         run: |
-          find security/privi-wall -type f \( -name '*.js' -o -name '*.cjs' -o -name '*.mjs' \) -print0 | xargs -0 -r -n 1 node --check
-      - name: Run all Privi Wall security regression tests (fail if none found)
-        shell: bash
+          set -euo pipefail
+          files="$(mktemp)"
+          trap 'rm -f "$files"' EXIT
+          find security/privi-wall -type f \( -name '*.js' -o -name '*.cjs' -o -name '*.mjs' \) -print0 > "$files"
+          mapfile -d '' -t modules < "$files"
+          if (( ${#modules[@]} == 0 )); then
+            echo 'ERROR: no Privi Wall JavaScript modules discovered' >&2
+            exit 1
+          fi
+          for module in "${modules[@]}"; do
+            node --check "$module"
+          done
+      - name: Run all Privi Wall security regression tests (fail closed)
         run: |
-          mapfile -d '' tests < <(find security/privi-wall -type f -name 'test_*.cjs' -print0 | sort -z)
+          set -euo pipefail
+          files="$(mktemp)"
+          trap 'rm -f "$files"' EXIT
+          find security/privi-wall -type f -name 'test_*.cjs' -print0 > "$files"
+          mapfile -d '' -t tests < <(sort -z "$files")
           if (( ${#tests[@]} == 0 )); then
             echo 'ERROR: no Privi Wall regression tests discovered' >&2
             exit 1
           fi
-          printf 'Discovered %d security test files\\n' "${#tests[@]}"
+          printf 'Discovered %d security test files\n' "${#tests[@]}"
           node --test "${tests[@]}"
