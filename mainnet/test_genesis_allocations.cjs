@@ -12,3 +12,21 @@ test('rejects duplicate allocations',()=>assert.ok(auditGenesisAllocations(genes
 test('rejects invalid numeric amount',()=>assert.ok(auditGenesisAllocations(genesis,{allocations:[{...allocations[0],amount:'-1'}]}).length));
 test('rejects bank supply mismatch',()=>{const bad=structuredClone(genesis);bad.app_state.bank.supply[0].amount='999';assert.ok(auditGenesisAllocations(bad,{allocations}).length);});
 test('rejects empty manifest',()=>assert.ok(auditGenesisAllocations(genesis,{allocations:[]}).length));
+
+test('rejects omitted liquid bank allocation despite balanced supply',()=>{
+ const errors=auditGenesisAllocations(genesis,{allocations:[allocations[0]]});
+ assert.ok(errors.some(e=>/missing from allocation manifest/.test(e)));
+});
+test('rejects omitted denom on a multi-denom bank address',()=>{
+ const extra=structuredClone(genesis);
+ extra.app_state.bank.balances[0].coins.push({denom:'other',amount:'7'});
+ extra.app_state.bank.supply.push({denom:'other',amount:'7'});
+ const errors=auditGenesisAllocations(extra,{allocations});
+ assert.ok(errors.some(e=>/missing from allocation manifest/.test(e)));
+});
+test('accepts complete multi-denom allocations',()=>{
+ const extra=structuredClone(genesis);
+ extra.app_state.bank.balances[0].coins.push({denom:'other',amount:'7'});
+ extra.app_state.bank.supply.push({denom:'other',amount:'7'});
+ assert.deepEqual(auditGenesisAllocations(extra,{allocations:[...allocations,{address:'vesting1',denom:'other',amount:'7'}]}),[]);
+});
