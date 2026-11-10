@@ -1,9 +1,11 @@
-name: PRVI bank supply offline regression
+name: PRVI offline financial accounting regressions
 on:
   pull_request:
     paths:
       - 'mainnet/audit_bank_supply.cjs'
       - 'mainnet/test_bank_supply.cjs'
+      - 'mainnet/audit_monetary_policy.cjs'
+      - 'mainnet/test_monetary_policy.cjs'
       - '.github/workflows/prvi-bank-supply-regression.yml'
   workflow_dispatch:
 permissions:
@@ -19,5 +21,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Run offline bank supply regression suite
-        run: node --test mainnet/test_bank_supply.cjs
+      - name: Run offline bank supply and monetary policy regression suites
+        run: node --test mainnet/test_bank_supply.cjs mainnet/test_monetary_policy.cjs
