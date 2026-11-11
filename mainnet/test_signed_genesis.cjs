@@ -16,3 +16,7 @@ test('rejects genesis chain mismatch',()=>{const g=genesis();g.chain_id='other';
 test('rejects missing trust configuration',()=>assert.match(auditSignedGenesis(genesis(),envelope(),null)[0],/trusted/));
 test('rejects supply above signed cap',()=>{const g=genesis();g.app_state.bank.supply[0].amount='1001';assert.match(auditSignedGenesis(g,envelope(),trust)[0],/exceeds/);});
 test('rejects obsolete policy version',()=>assert.match(auditSignedGenesis(genesis(),envelope(),{...trust,minVersion:3})[0],/unauthorized/));
+
+test('rejects signed genesis with native supply larger than account balances',()=>{const g=genesis();g.app_state.bank.supply[0].amount='101';assert.ok(auditSignedGenesis(g,envelope(),trust).some(e=>e.includes('supply mismatch')));});
+test('rejects signed genesis with duplicate bank balance addresses',()=>{const g=genesis();g.app_state.bank.balances.push({...g.app_state.bank.balances[0]});assert.ok(auditSignedGenesis(g,envelope(),trust).some(e=>e.includes('duplicate bank balance address')));});
+test('rejects signed genesis with unbacked native supply',()=>{const g=genesis();g.app_state.bank.balances=[];assert.ok(auditSignedGenesis(g,envelope(),trust).some(e=>e.includes('unbacked supply')));});
