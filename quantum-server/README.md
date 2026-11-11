@@ -271,6 +271,41 @@ runs appear in their own table with their receipts. First run (Oct 28, 2026): qu
 optimum in 8 of 9 problems and hit it about 6x more often than random guessing; classical won all 9 on
 time, as expected at this size. Operators can re-run it with `POST /benchmarks/run` and the admin key.
 
+## v0.12: Privi Car
+
+A trust and planning platform for vehicles, inside Privi Quantum (`car.py`, `car_web.py`, page `/car`). It continues
+the research prototype in `privi-car/` and keeps its boundary: **Privi Car never connects to or controls a vehicle**
+(no CAN bus, OBD writes, immobilizer, steering, braking, battery control or firmware).
+
+| Tool | What it does | Price |
+|---|---|---|
+| `car_info` | Tools, limits, prices, boundaries | $0.001 |
+| `car_vin_check` | VIN format and check digit; returns the fingerprint stored in place of the VIN | $0.001 |
+| `car_register` | Vehicle Passport: Ed25519 + ML-DSA-87 signed identity, public page `/car/<id>`, owner key | $1 |
+| `car_record_add` | Odometer, service, repair, inspection, trip, fuel, charge, accident, title, note: hash-chained; odometer rollbacks flagged | $0.01 |
+| `car_verify` | Recompute the chain: intact or not, record count, rollback flags | $0.001 |
+| `car_history` | Signed history report (records, odometer timeline, service due, cost of ownership) for the owner or a `history` key holder | $2 |
+| `car_key_issue` / `car_key_check` / `car_key_revoke` | Time-limited, scope-limited digital keys (`history`, `unlock`, `drive`, `trunk`, `valet`, `service`) | $0.05 / $0.001 / $0.01 |
+| `car_route` | Best order for 2-12 stops (Held-Karp exact); 5 stops or fewer also run as a QUBO on the QAOA simulator | $0.25 |
+| `car_fleet_assign` | Jobs to vehicles at lowest total cost (Hungarian exact, up to 60 jobs); 16 qubits or fewer also run on the simulator | $0.25 |
+| `car_charge_plan` | Cheapest EV charging slots before departure (2-16 slots), QAOA simulator vs exhaustive search | $0.10 |
+| `car_edge_job` | Simulated admission gate for compute on a parked car (Python port of `privi-car/worker.cjs`); zero credits | $0.01 |
+
+Prices are proposals; override any with `QUANTUM_PRICE_CAR_<TOOL>` (for example `QUANTUM_PRICE_CAR_HISTORY=5`).
+
+How the "quantum" part works, honestly: each plan is written as a QUBO, the form a quantum computer takes. When it fits
+in 16 qubits it runs on the CVaR-QAOA simulator, and it is always solved exactly on classical hardware too. The plan
+returned is the proven best; the sealed receipt (`car_route`, `car_fleet_assign`, `car_charge_plan` attestations) records
+both sides and a verdict of `tie`, `classical_won` or `classical_only`. At these sizes classical is as fast or faster.
+
+Privacy: the VIN is stored only as a SHA-256 fingerprint; records refuse location fields; route stops, jobs and prices
+are not stored (only a hash of the problem is sealed); a key's grantee is stored only as a hash; the history is private
+unless the owner hands out a `history` key. A digital key is a credential: a car or lock honors it only if its maker or
+installer builds in the check (`car_key_check` or offline verification against `/keys`).
+
+Not built: any connection to a real vehicle, charger, gas station or payment for fuel; road distances (pass your own
+`distances_km`); lookups in outside title, insurance or theft databases; rewards for edge compute.
+
 ## Honest limits
 
 - At 16 qubits a classical computer solves these exactly, which is how the service grades
@@ -285,7 +320,7 @@ time, as expected at this size. Operators can re-run it with `POST /benchmarks/r
 ```
 pip install .
 QUANTUM_DB_PATH=./quantum.db privi-quantum-mcp      # http://localhost:8000/mcp
-pytest                                              # 52 tests
+pytest                                              # 127 tests
 ```
 
 Environment: `QUANTUM_DB_PATH`, `QUANTUM_PUBLIC_URL`, `QUANTUM_SIGNING_SEED` (optional, 128 hex),

@@ -1,5 +1,11 @@
 # Privi Car — owner-controlled edge agent (research prototype)
 
+## Status (Nov 2026)
+The working platform now lives in Privi Quantum: `quantum-server/src/privi_quantum/car.py` and `car_web.py`
+(vehicle passports, sealed records, digital keys, history reports, route / fleet / charging plans, and a Python port of
+this folder's edge-job gate as the `car_edge_job` tool). See "v0.12: Privi Car" in `quantum-server/README.md`.
+This folder stays as the research prototype and the statement of safety boundaries, which the platform keeps.
+
 ## Purpose
 Opt-in vehicle-adjacent AI agent and edge-compute worker on a companion device or manufacturer-authorized compute environment. **Not** a car ECU modification, autonomous driving controller, or production financial service.
 

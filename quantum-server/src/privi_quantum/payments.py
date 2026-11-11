@@ -53,6 +53,10 @@ DEFAULT_PRICES_USD = {
     "qagent_enroll": "1",
     "quantum_pricing": "0.001", "quantum_status": "0.001", "accelerator_info": "0.001",
     "quantum_mandate_revoke": "0.01",
+    # Privi Car (car_web.PRICES): reads $0.001, records $0.01, keys $0.05, plans $0.10-$0.25, passport $1, history $2.
+    "car_info": "0.001", "car_vin_check": "0.001", "car_verify": "0.001", "car_key_check": "0.001",
+    "car_record_add": "0.01", "car_key_revoke": "0.01", "car_edge_job": "0.01", "car_key_issue": "0.05",
+    "car_charge_plan": "0.10", "car_route": "0.25", "car_fleet_assign": "0.25", "car_register": "1", "car_history": "2",
 }
 
 # No tool is free. The x402 payment-required reply states each price, so agents can learn prices by calling.
@@ -107,6 +111,10 @@ class PaySettings:
             db_path=db_path,
         )
         for tool, env in PRICE_ENV.items():
+            if os.getenv(env):
+                s.prices_usd[tool] = os.environ[env].strip()
+        for tool in [t for t in s.prices_usd if t.startswith("car_")]:      # QUANTUM_PRICE_CAR_ROUTE=0.5, ...
+            env = "QUANTUM_PRICE_" + tool.upper()
             if os.getenv(env):
                 s.prices_usd[tool] = os.environ[env].strip()
         s.validate()
