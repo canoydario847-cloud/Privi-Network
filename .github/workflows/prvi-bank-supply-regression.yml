@@ -8,6 +8,8 @@ on:
       - 'mainnet/test_monetary_policy.cjs'
       - 'mainnet/verify_signed_policy.cjs'
       - 'mainnet/test_signed_policy.cjs'
+      - 'mainnet/audit_signed_genesis.cjs'
+      - 'mainnet/test_signed_genesis.cjs'
       - '.github/workflows/prvi-bank-supply-regression.yml'
   workflow_dispatch:
 permissions:
@@ -24,4 +26,4 @@ jobs:
         with:
           node-version: '22'
       - name: Run offline bank supply and monetary policy regression suites
-        run: node --test mainnet/test_bank_supply.cjs mainnet/test_monetary_policy.cjs mainnet/test_signed_policy.cjs
+        run: node --test mainnet/test_bank_supply.cjs mainnet/test_monetary_policy.cjs mainnet/test_signed_policy.cjs mainnet/test_signed_genesis.cjs
