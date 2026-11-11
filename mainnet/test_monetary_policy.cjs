@@ -18,3 +18,9 @@ test('rejects malformed allowedDenoms policy type',()=>assert.match(auditMonetar
 test('rejects whitespace in allowed denomination',()=>assert.match(auditMonetaryPolicy(genesis(),{...policy(),allowedDenoms:['other denom']}).join(';'),/invalid allowed denominations/));
 test('rejects non-string native supply cap',()=>assert.match(auditMonetaryPolicy(genesis(),{...policy(),maxSupply:1000}).join(';'),/missing or unapproved monetary policy/));
 test('rejects invalid native denomination',()=>assert.match(auditMonetaryPolicy(genesis(),{...policy(),denom:'aprvi\\n'}).join(';'),/unauthorized supply denomination/));
+
+// Boundary and policy-isolation regressions: offline only; not production authorization.
+test('accepts native supply exactly at configured cap',()=>{const g=genesis();g.app_state.bank.supply[0].amount='1000';assert.deepEqual(auditMonetaryPolicy(g,policy()),[]);});
+test('rejects unauthorized zero-amount balance denomination',()=>{const g=genesis();g.app_state.bank.balances[0].coins.push({denom:'unapproved',amount:'0'});assert.match(auditMonetaryPolicy(g,policy()).join(';'),/unauthorized balance denomination/);});
+test('accepts explicitly allowlisted auxiliary denomination',()=>{const g=genesis();g.app_state.bank.supply.push({denom:'aux',amount:'0'});assert.deepEqual(auditMonetaryPolicy(g,{...policy(),allowedDenoms:['aux']}),[]);});
+test('rejects auxiliary denomination when allowlist removed',()=>{const g=genesis();g.app_state.bank.supply.push({denom:'aux',amount:'0'});assert.match(auditMonetaryPolicy(g,policy()).join(';'),/unauthorized supply denomination/);});
