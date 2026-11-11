@@ -1,0 +1,18 @@
+'use strict';
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const {generateKeyPairSync,sign}=require('node:crypto');
+const {canonicalPolicy}=require('./verify_signed_policy.cjs');
+const {auditSignedGenesis}=require('./audit_signed_genesis.cjs');
+const {publicKey,privateKey}=generateKeyPairSync('ed25519');
+const trust={chainId:'privi-1',minVersion:2,trustedKeys:{root:publicKey.export({type:'spki',format:'pem'})}};
+const policy={chainId:'privi-1',denom:'aprvi',maxSupply:'1000',version:2};
+const envelope=()=>({keyId:'root',policy:{...policy},signature:sign(null,canonicalPolicy(policy),privateKey).toString('base64')});
+const genesis=()=>({chain_id:'privi-1',app_state:{bank:{balances:[{address:'alice',coins:[{denom:'aprvi',amount:'100'}]}],supply:[{denom:'aprvi',amount:'100'}]}}});
+test('accepts signed monetary policy and valid genesis bank',()=>assert.deepEqual(auditSignedGenesis(genesis(),envelope(),trust),[]));
+test('rejects unsigned policy despite approved flag',()=>assert.match(auditSignedGenesis(genesis(),{policy:{...policy,approved:true}},trust)[0],/unauthorized/));
+test('rejects modified supply cap after signing',()=>{const e=envelope();e.policy.maxSupply='2000';assert.match(auditSignedGenesis(genesis(),e,trust)[0],/unauthorized/);});
+test('rejects genesis chain mismatch',()=>{const g=genesis();g.chain_id='other';assert.match(auditSignedGenesis(g,envelope(),trust)[0],/chain identifier/);});
+test('rejects missing trust configuration',()=>assert.match(auditSignedGenesis(genesis(),envelope(),null)[0],/trusted/));
+test('rejects supply above signed cap',()=>{const g=genesis();g.app_state.bank.supply[0].amount='1001';assert.match(auditSignedGenesis(g,envelope(),trust)[0],/exceeds/);});
+test('rejects obsolete policy version',()=>assert.match(auditSignedGenesis(genesis(),envelope(),{...trust,minVersion:3})[0],/unauthorized/));
