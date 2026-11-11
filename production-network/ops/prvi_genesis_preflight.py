@@ -64,7 +64,7 @@ def check(genesis):
             seen_addresses.add(address)
         seen_denoms = set()
         for coin in account.get("coins", []):
-            if not isinstance(coin, dict) or not isinstance(coin.get("denom"), str):
+            if not isinstance(coin, dict) or not isinstance(coin.get("denom"), str) or not coin.get("denom"):
                 errors.append("malformed coin")
                 continue
             denom = coin.get("denom")
@@ -93,7 +93,7 @@ def check(genesis):
     supply = bank.get("supply")
     if not isinstance(supply, list):
         return errors + ["missing or malformed bank supply"], total
-    if any(not isinstance(coin, dict) or not isinstance(coin.get("denom"), str) for coin in supply):
+    if any(not isinstance(coin, dict) or not isinstance(coin.get("denom"), str) or not coin.get("denom") for coin in supply):
         return errors + ["malformed bank supply coin"], total
     # Reject ambiguous duplicate supply entries, including non-native denoms.
     supply_denoms = set()
