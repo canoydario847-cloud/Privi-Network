@@ -42,3 +42,17 @@ test('rejects missing independently authorized denomination',()=>{
  const {denom,...missing}=trust;
  assert.match(auditSignedGenesis(genesis(),envelope(),missing).join(';'),/missing trusted/);
 });
+
+test('rejects signed genesis with unauthorized balance denomination',()=>{
+ const g=genesis();g.app_state.bank.balances[0].coins.push({denom:'other',amount:'1'});
+ g.app_state.bank.supply.push({denom:'other',amount:'1'});
+ assert.ok(auditSignedGenesis(g,envelope(),trust).some(e=>e.includes('unauthorized balance denomination')));
+});
+test('rejects signed genesis with missing native supply',()=>{
+ const g=genesis();g.app_state.bank.supply=[];
+ assert.ok(auditSignedGenesis(g,envelope(),trust).some(e=>e.includes('missing native supply')));
+});
+test('rejects signed genesis with duplicate native supply entries',()=>{
+ const g=genesis();g.app_state.bank.supply.push({denom:'aprvi',amount:'100'});
+ assert.ok(auditSignedGenesis(g,envelope(),trust).some(e=>e.includes('duplicate supply')));
+});
