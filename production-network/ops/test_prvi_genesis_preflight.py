@@ -83,6 +83,21 @@ class PreflightTests(unittest.TestCase):
         g["app_state"]["bank"]["supply"].append({"denom": "uatom", "amount": "5"})
         self.assertEqual(check(g)[0], [])
 
+    def test_duplicate_non_native_supply_denom_rejected(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["balances"][0]["coins"].append({"denom": "uatom", "amount": "5"})
+        g["app_state"]["bank"]["supply"].extend([
+            {"denom": "uatom", "amount": "5"},
+            {"denom": "uatom", "amount": "5"},
+        ])
+        self.assertIn("duplicate supply denom", check(g)[0])
+
+    def test_zero_non_native_balance_and_supply_rejected(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["balances"][0]["coins"].append({"denom": "uatom", "amount": "0"})
+        g["app_state"]["bank"]["supply"].append({"denom": "uatom", "amount": "0"})
+        self.assertIn("nonpositive coin amount", check(g)[0])
+
     def test_empty_balance_denom_rejected(self):
         g = genesis(100)
         g["app_state"]["bank"]["balances"][0]["coins"].append({"denom": "", "amount": "1"})
