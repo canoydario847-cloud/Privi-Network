@@ -36,6 +36,10 @@ DECIMALS = 18
 CAP = MAX_PRVI * 10**DECIMALS
 DENOM = "aprvi"
 
+def valid_denom(value):
+    return (isinstance(value, str) and bool(value) and value == value.strip()
+            and all(ch.isprintable() and not ch.isspace() for ch in value))
+
 def check(genesis):
     errors = []
     if not isinstance(genesis, dict) or not isinstance(genesis.get("app_state"), dict):
@@ -64,7 +68,7 @@ def check(genesis):
             seen_addresses.add(address)
         seen_denoms = set()
         for coin in account.get("coins", []):
-            if not isinstance(coin, dict) or not isinstance(coin.get("denom"), str) or not coin.get("denom").strip() or coin.get("denom") != coin.get("denom").strip():
+            if not isinstance(coin, dict) or not valid_denom(coin.get("denom")):
                 errors.append("malformed coin")
                 continue
             denom = coin.get("denom")
@@ -88,7 +92,7 @@ def check(genesis):
     supply = bank.get("supply")
     if not isinstance(supply, list):
         return errors + ["missing or malformed bank supply"], total
-    if any(not isinstance(coin, dict) or not isinstance(coin.get("denom"), str) or not coin.get("denom").strip() or coin.get("denom") != coin.get("denom").strip() for coin in supply):
+    if any(not isinstance(coin, dict) or not valid_denom(coin.get("denom")) for coin in supply):
         return errors + ["malformed bank supply coin"], total
     # Reject ambiguous duplicate supply entries, including non-native denoms.
     supply_denoms = set()
