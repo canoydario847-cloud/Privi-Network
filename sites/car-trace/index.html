@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="description" content="Privi Car and Privi Trace: explainer video and live demos.">
+<meta name="description" content="Privi Car, Privi Trace and Privi Pro: explainer video and live demos.">
 <style>[hidden]{display:none!important}img{max-width:100%}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}</style>
 </head>
 <body>
@@ -31,6 +31,7 @@
   --accent:#5b93f2; --accent-ink:#06132b; --amber:#f0b33a; --ok:#4cc27d; --bad:#ef6a5a;
   --film-bg:#070d0b; --film-ink:#eef3f1; --film-muted:#8d9c97; --film-panel:#15221e; color-scheme:dark}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.55}
 .wrap{max-width:1160px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 h1,h2,h3{font-family:var(--display);font-stretch:112%;letter-spacing:-.01em;text-wrap:balance;margin:0}
@@ -136,6 +137,46 @@ table.price td.p{font-family:var(--mono);white-space:nowrap;font-variant-numeric
 .copy-chip{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:8px 10px}
 .copy-chip span{font-family:var(--mono);font-size:.9rem;user-select:all}
 .copy-chip button{font:600 .78rem var(--body);border:0;background:var(--panel-2);color:var(--ink);border-radius:6px;padding:5px 8px;cursor:pointer}
+.probadge{display:inline-flex;align-items:center;gap:6px;font:600 .74rem var(--mono);letter-spacing:.04em;padding:4px 9px;border-radius:99px;background:var(--ink);color:var(--bg)}
+.dash{background:var(--film-bg);color:var(--film-ink);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.dash .scr-top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font:500 .78rem var(--mono);color:var(--film-muted)}
+.dash .scr-top b{color:var(--film-ink)}
+.dtabs{display:flex;gap:6px;flex-wrap:wrap}
+.dtabs button{font:600 .84rem var(--body);padding:8px 12px;border-radius:10px;border:1px solid #2b3c37;background:var(--film-panel);color:var(--film-muted);cursor:pointer}
+.dtabs button[aria-selected="true"]{color:var(--film-ink);border-color:var(--accent)}
+.dpanel{display:flex;flex-direction:column;gap:12px;min-width:0}
+.dash .field label{color:var(--film-muted)}
+.dash .field input,.dash .field select{background:var(--film-panel);color:var(--film-ink);border-color:#2f413b}
+.dash .gate{background:var(--film-panel);border-color:#2f413b;color:var(--film-ink)}
+.dash .btn{background:var(--film-panel);color:var(--film-ink);border-color:#2f413b}
+.dash .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.dash .out{background:var(--film-panel);color:var(--film-ink)}
+.dash .out .k,.dash dl.kv dt{color:var(--film-muted)}
+.stations{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px}
+.st{border:1px solid #2f413b;background:var(--film-panel);border-radius:10px;padding:10px;cursor:pointer;text-align:left;color:var(--film-ink);font:inherit}
+.st[aria-pressed="true"]{border-color:var(--accent)}
+.st small{display:block;color:var(--film-muted);font-family:var(--mono);font-size:.74rem}
+.stat3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.stat{background:var(--film-panel);border-radius:10px;padding:10px;min-width:0}
+.stat span{display:block;font:500 .72rem var(--mono);color:var(--film-muted);text-transform:uppercase;letter-spacing:.06em}
+.stat b{font:700 1.15rem var(--mono);font-variant-numeric:tabular-nums}
+.ledgerlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto}
+.ledgerlist li{display:flex;justify-content:space-between;gap:10px;background:var(--film-panel);border-radius:8px;padding:8px 10px;font-size:.88rem}
+.ledgerlist li span:last-child{font-family:var(--mono);font-size:.8rem;color:var(--film-muted);white-space:nowrap}
+.region{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--film-panel);border-radius:8px;padding:8px 10px}
+.region label{display:flex;gap:8px;align-items:center;cursor:pointer}
+.region span{font-family:var(--mono);font-size:.8rem;color:var(--film-muted)}
+.toggle{display:flex;align-items:center;gap:10px;cursor:pointer}
+.toggle input{width:18px;height:18px;accent-color:var(--amber)}
+.signup{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.signup .full{grid-column:1/-1}
+.feebox{border:1px dashed var(--line);border-radius:8px;padding:12px;font-size:.92rem;color:var(--muted)}
+.feebox b{color:var(--ink);font-family:var(--mono)}
+.err{color:var(--bad);font-size:.85rem}
+.ownerlist{border-top:1px solid var(--line);padding-top:14px}
+.ownerlist table{width:100%;border-collapse:collapse;font-size:.86rem}
+.ownerlist td,.ownerlist th{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+@media (max-width:600px){.signup{grid-template-columns:minmax(0,1fr)}.stat3{grid-template-columns:minmax(0,1fr)}}
 footer{border-top:1px solid var(--line)}
 footer .wrap{padding-block:28px;color:var(--muted);font-size:.85rem;display:flex;flex-direction:column;gap:6px}
 
@@ -152,7 +193,7 @@ footer .wrap{padding-block:28px;color:var(--muted);font-size:.85rem;display:flex
 <header class="bar"><div class="wrap">
   <a class="brand" href="#top">Privi</a>
   <nav aria-label="Sections">
-    <a href="#film">Video</a><a href="#car">Privi Car</a><a href="#trace">Privi Trace</a><a href="#how">How sealing works</a><a href="#buy">Pricing</a>
+    <a href="#film">Video</a><a href="#car">Privi Car</a><a href="#trace">Privi Trace</a><a href="#pro">Privi Pro</a><a href="#stations">Gas stations</a><a href="#how">How sealing works</a><a href="#buy">Pricing</a>
   </nav>
 </div></header>
 
@@ -162,7 +203,7 @@ footer .wrap{padding-block:28px;color:var(--muted);font-size:.85rem;display:flex
     <span class="label">Privi World Co · Port Huron, Michigan</span>
     <h1>Privi Car and Privi Trace</h1>
     <p class="lead">Privi Car lets a parked car do useful computing work while the owner stays in control, with no access to driving systems. Privi Trace keeps a sealed, step-by-step record of where something came from: a part, a stablecoin payment, an AI agent's actions, or a car's history.</p>
-    <p class="lead">Watch the 90-second explainer, then try both demos on this page. Everything here runs in your browser on example data.</p>
+    <p class="lead">Watch the short explainer, then try both demos on this page. Everything here runs in your browser on example data.</p>
     <div class="pillrow">
       <span class="pill warn">Privi Car: research prototype</span>
       <span class="pill warn">Privi Trace: concept demo</span>
@@ -257,6 +298,105 @@ footer .wrap{padding-block:28px;color:var(--muted);font-size:.85rem;display:flex
   </div>
 </div></section>
 
+<section class="bay" id="pro"><div class="wrap">
+  <div class="bayhead">
+    <div><span class="label">Privi Pro · $99 / month</span><h2>Privi Pro for your car</h2></div>
+    <p>Pro turns the car into its own small computer with its own records: pay at the pump from the dashboard, keep a car wallet, earn rewards for verified compute jobs, and carry your own offline maps and ledger. These features are only for Privi Pro accounts.</p>
+  </div>
+  <div class="grid2">
+    <div class="facts">
+      <div class="fact"><h3>Pay at the pump from the dashboard</h3><p>Pick a Privi gas station and a pump, choose an amount, and confirm with Face ID or a fingerprint on your phone. Payment only works when the car is parked with the engine off. The receipt is sealed into the car's ledger.</p></div>
+      <div class="fact"><h3>Car wallet</h3><p>A USDC wallet tied to the car, with every fuel payment and reward listed. The owner approves each payment; the car never spends on its own.</p></div>
+      <div class="fact"><h3>Compute rewards</h3><p>When the car runs a verified compute or storage job while parked, it earns reward credits. In this preview they are test credits that can't be transferred or cashed out. Paid rewards come later, from a funded pool, after legal review. No coins are created or mined.</p></div>
+      <div class="fact"><h3>The car is its own database</h3><p>The car keeps its ledger, passport and receipts on board and anchors them on Base when it has a connection. Offline maps live on the car too, so navigation and records keep working with no signal.</p></div>
+      <p><span class="probadge">PRIVI PRO · $99 / MONTH</span></p>
+      <p style="color:var(--muted);font-size:.92rem">To start Pro, call or email Dario for an invoice (details under Pricing), or pay in USDC on Base on the <a href="https://privi-hub.onrender.com/pay/" target="_blank" rel="noopener">Privi buy page</a>.</p>
+    </div>
+
+    <div class="dash" aria-labelledby="dashTitle">
+      <div class="scr-top"><b id="dashTitle">Car dashboard · Privi Pro preview</b><span id="netState">Online · ledger anchored 2 min ago</span></div>
+      <div class="dtabs" role="tablist" id="dtabs">
+        <button type="button" role="tab" data-p="pay" aria-selected="true">Pay at pump</button>
+        <button type="button" role="tab" data-p="wallet" aria-selected="false">Wallet</button>
+        <button type="button" role="tab" data-p="db" aria-selected="false">Maps &amp; ledger</button>
+      </div>
+
+      <div class="dpanel" id="p-pay">
+        <div class="stations" id="stationList"></div>
+        <div class="row">
+          <div class="field"><label for="pump">Pump</label><select id="pump"><option>Pump 1</option><option>Pump 2</option><option selected>Pump 3</option><option>Pump 4</option></select></div>
+          <div class="field"><label for="fuelAmt">Amount (USDC)</label><input id="fuelAmt" type="number" min="5" max="200" step="1" value="45"></div>
+          <div class="field"><label for="grade">Grade</label><select id="grade"><option value="0">Regular</option><option value="0.5">Mid-grade</option><option value="0.9">Premium</option></select></div>
+        </div>
+        <label class="gate" id="parkGate"><input type="checkbox" id="parked"> Parked at the pump, engine off</label>
+        <div class="btnrow"><button class="btn primary" id="payBtn" type="button">Pay from dashboard</button></div>
+        <div class="out" id="payOut"><span class="k">Payment</span><p>Choose a station, then pay. The station's 1% processing fee is shown before you confirm.</p></div>
+      </div>
+
+      <div class="dpanel" id="p-wallet" hidden>
+        <div class="stat3">
+          <div class="stat"><span>USDC (test)</span><b id="wBal">250.00</b></div>
+          <div class="stat"><span>Reward credits</span><b id="wCred">0</b></div>
+          <div class="stat"><span>Payments</span><b id="wCount">0</b></div>
+        </div>
+        <p style="color:var(--film-muted);font-size:.86rem">Reward credits come from verified edge jobs. Run one in the Privi Car console above and it appears here. Credits are test credits only.</p>
+        <ul class="ledgerlist" id="wList"></ul>
+      </div>
+
+      <div class="dpanel" id="p-db" hidden>
+        <div class="stat3">
+          <div class="stat"><span>Ledger entries</span><b id="dbEntries">2</b></div>
+          <div class="stat"><span>Stored on car</span><b id="dbSize">1.9 GB</b></div>
+          <div class="stat"><span>Last anchored</span><b id="dbAnchor">2 min</b></div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="offline"> Simulate no signal</label>
+        <div><div class="label" style="color:var(--film-muted);margin-bottom:6px">Offline maps on this car</div>
+          <div style="display:flex;flex-direction:column;gap:6px" id="regions"></div></div>
+        <div><div class="label" style="color:var(--film-muted);margin-bottom:6px">Car ledger (newest first)</div>
+          <ul class="ledgerlist" id="dbList"></ul></div>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<section class="bay" id="stations"><div class="wrap">
+  <div class="bayhead">
+    <div><span class="label">For gas station owners</span><h2>Register your station</h2></div>
+    <p>Let Privi Pro drivers pay at your pumps in USDC. There is no sign-up cost. Privi takes a 1% processing fee on each sale, paid in USDC, and the rest goes to your wallet on Base.</p>
+  </div>
+  <div class="grid2">
+    <div class="facts">
+      <div class="fact"><h3>How the fee works</h3><p>On a $45.00 fill-up, Privi keeps $0.45 in USDC and your wallet gets $44.55. No monthly charge, and no card fees on these sales.</p></div>
+      <div class="fact"><h3>What happens after you sign up</h3><p>Dario contacts you to confirm your pumps, payout wallet and pilot start date. No payments run until both sides confirm the setup in writing.</p></div>
+      <div class="fact"><h3>Status of the program</h3><p>Pump payments are in pilot sign-up. Payment terms, and any licensing the program needs, will be confirmed with each station before launch.</p></div>
+    </div>
+    <form class="console" id="stForm" novalidate aria-labelledby="stTitle">
+      <div class="top"><h3 id="stTitle">Station sign-up</h3><span class="label" id="stMode">Checking sign-in…</span></div>
+      <div class="signup">
+        <div class="field full"><label for="stName">Station name</label><input id="stName" required maxlength="120" autocomplete="organization"></div>
+        <div class="field full"><label for="stAddr">Street address</label><input id="stAddr" required maxlength="160" autocomplete="street-address"></div>
+        <div class="field"><label for="stCity">City</label><input id="stCity" required maxlength="80"></div>
+        <div class="field"><label for="stState">State</label><input id="stState" required maxlength="40" value="MI"></div>
+        <div class="field"><label for="stPumps">Number of pumps</label><input id="stPumps" type="number" min="1" max="99" value="8" required></div>
+        <div class="field"><label for="stBrand">Fuel brand (if any)</label><input id="stBrand" maxlength="60"></div>
+        <div class="field"><label for="stContact">Contact name</label><input id="stContact" required maxlength="100" autocomplete="name"></div>
+        <div class="field"><label for="stPhone">Phone</label><input id="stPhone" required maxlength="30" autocomplete="tel"></div>
+        <div class="field full"><label for="stEmail">Business email</label><input id="stEmail" type="email" required maxlength="120" autocomplete="email"></div>
+        <div class="field full"><label for="stWallet">USDC payout wallet on Base</label><input id="stWallet" required maxlength="42" placeholder="0x…" spellcheck="false"></div>
+      </div>
+      <div class="feebox">Fee: <b>1%</b> of each sale, in USDC. On <b id="feeEx">$45.00</b>, Privi keeps <b id="feeCut">$0.45</b> and you receive <b id="feeNet">$44.55</b>.</div>
+      <label class="toggle" style="color:var(--ink)"><input type="checkbox" id="stAgree" style="accent-color:var(--accent)"> I'm authorized to sign this station up for the Privi pump-pay pilot, and I understand the 1% USDC fee.</label>
+      <p class="err" id="stErr" role="alert"></p>
+      <div class="btnrow"><button class="btn primary" type="submit" id="stSubmit">Register station</button></div>
+      <div class="out" id="stOut" hidden></div>
+      <div class="ownerlist" id="ownerBox" hidden>
+        <div class="top"><h3>Station sign-ups</h3><span class="label">Only you can see this</span></div>
+        <div style="overflow-x:auto"><table><thead><tr><th>Station</th><th>Contact</th><th>Pumps</th><th>Wallet</th><th>Date</th></tr></thead><tbody id="ownerRows"><tr><td colspan="5">No sign-ups yet.</td></tr></tbody></table></div>
+      </div>
+    </form>
+  </div>
+</div></section>
+
 <section class="bay how" id="how"><div class="wrap">
   <span class="label">Under both products</span>
   <h2>How sealing works</h2>
@@ -270,7 +410,7 @@ footer .wrap{padding-block:28px;color:var(--muted);font-size:.85rem;display:flex
 <section class="bay" id="buy"><div class="wrap">
   <span class="label">What you can buy today</span>
   <h2>Pricing</h2>
-  <p style="color:var(--muted);max-width:64ch;margin-top:10px">Privi Car and Privi Trace are not on sale yet. Each Trace mode runs on a paid Privi product you can buy now. Pay in USDC on Base on the buy page, or ask for an invoice.</p>
+  <p style="color:var(--muted);max-width:64ch;margin-top:10px">Privi Pro brings the Privi Car features to your car for $99 a month, as an early-access preview. Privi Trace is not on sale yet, but each Trace mode runs on a paid Privi product you can buy now. Pay in USDC on Base on the buy page, or ask for an invoice.</p>
   <div class="tablebox">
     <table class="price">
       <thead><tr><th>Use</th><th>Product</th><th>Price</th><th>Buy</th></tr></thead>
@@ -280,7 +420,9 @@ footer .wrap{padding-block:28px;color:var(--muted);font-size:.85rem;display:flex
         <tr><td>Check a stablecoin's issuer and reserves</td><td>genius_stablecoin_check (MCP)</td><td class="p">$0.01 / call</td><td><a href="https://privi-hub.onrender.com/pay/#genius" target="_blank" rel="noopener">pay/#genius</a></td></tr>
         <tr><td>Seal monthly reserve reports (issuers)</td><td>Privi GENIUS Reserve Seal</td><td class="p">$499 / month</td><td><a href="https://privi-hub.onrender.com/pay/#genius" target="_blank" rel="noopener">pay/#genius</a></td></tr>
         <tr><td>Stop fake payment requests</td><td>Privi RealCheck</td><td class="p">$49 / month</td><td><a href="https://privi-hub.onrender.com/pay/#realcheck" target="_blank" rel="noopener">pay/#realcheck</a></td></tr>
-        <tr><td>Everything above for a year (first 10 customers)</td><td>Founding Customer</td><td class="p">$499 / year</td><td><a href="https://privi-hub.onrender.com/pay/#founding" target="_blank" rel="noopener">pay/#founding</a></td></tr>
+        <tr><td>Pay at the pump, car wallet, rewards, offline maps and car ledger</td><td>Privi Pro</td><td class="p">$99 / month</td><td>Invoice from Dario, or <a href="https://privi-hub.onrender.com/pay/" target="_blank" rel="noopener">pay in USDC</a></td></tr>
+        <tr><td>Accept Privi Pro payments at your gas station</td><td>Station pump-pay (pilot)</td><td class="p">1% per sale, in USDC</td><td><a href="#stations">Register</a></td></tr>
+        <tr><td>Ledger Pro, Supplier Proof and a quarterly Post-Quantum report for a year (first 10 customers)</td><td>Founding Customer</td><td class="p">$499 / year</td><td><a href="https://privi-hub.onrender.com/pay/#founding" target="_blank" rel="noopener">pay/#founding</a></td></tr>
       </tbody>
     </table>
   </div>
@@ -339,6 +481,7 @@ $('#runJob').onclick=async()=>{
   passport.unshift({entry,seal,when:new Date()});
   out('ok','<span class="k">Accepted · receipt sealed</span><p><b>'+j.name+'</b> ran in the sandbox on '+esc(make)+' '+esc(model)+'.</p><dl class="kv"><dt>device</dt><dd>node-'+device.slice(0,8)+' (pseudonym)</dd><dt>job digest</dt><dd>'+short(jobDigest)+'</dd><dt>resources</dt><dd>'+j.min+' min · '+j.cpu+' Wh · '+j.mb+' MB</dd><dt>result hash</dt><dd>'+short(result)+'</dd><dt>seal</dt><dd>'+short(seal)+'</dd><dt>credit</dt><dd>'+(j.cpu*2)+' test credits (not transferable)</dd></dl>');
   renderPassport();
+  document.dispatchEvent(new CustomEvent('privi:job',{detail:{credits:j.cpu*2,job:j.name,seal}}));
 };
 function renderPassport(){
   $('#passCount').textContent=passport.length+' receipt'+(passport.length===1?'':'s');
@@ -400,6 +543,110 @@ $('#verify').onclick=async()=>{
 };
 load();
 
+/* ---------- Privi Pro dashboard ---------- */
+const money=n=>n.toFixed(2);
+const stationsDemo=[
+  {id:'s1',name:'Blue Water Fuel (example)',where:'Port Huron, MI',price:3.19},
+  {id:'s2',name:'Thumb Coast Gas (example)',where:'Marysville, MI',price:3.15},
+  {id:'s3',name:'Lakeshore Stop (example)',where:'Lexington, MI',price:3.24}
+];
+let selStation=stationsDemo[0];
+const W_={bal:250,cred:0,pays:0,items:[]};
+const ledger=[{t:'Passport created',d:'Oct 30'},{t:'Service: brake pads',d:'Nov 4'}];
+const regions=[{n:'Port Huron & St. Clair County',mb:310,on:true},{n:'Detroit metro',mb:1420,on:true},{n:'Thumb region',mb:240,on:false},{n:'Lansing & Grand Rapids',mb:980,on:false}];
+let offline=false,anchorMin=2;
+const sl=$('#stationList');
+stationsDemo.forEach(s=>{const b=document.createElement('button');b.type='button';b.className='st';b.setAttribute('aria-pressed',s===selStation);b.innerHTML='<b>'+esc(s.name)+'</b><small>'+esc(s.where)+' · $'+s.price.toFixed(2)+'/gal</small>';b.onclick=()=>{selStation=s;[...sl.children].forEach((x,i)=>x.setAttribute('aria-pressed',stationsDemo[i]===s))};sl.appendChild(b)});
+$('#parked').addEventListener('change',e=>$('#parkGate').classList.toggle('on',e.target.checked));
+document.querySelectorAll('#dtabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#dtabs button').forEach(x=>x.setAttribute('aria-selected',x===b));['pay','wallet','db'].forEach(p=>$('#p-'+p).hidden=p!==b.dataset.p)});
+function payOut(cls,html){const o=$('#payOut');o.className='out '+cls;o.innerHTML=html}
+let pending=null;
+$('#payBtn').onclick=async()=>{
+  if(pending){return}
+  const amt=Number($('#fuelAmt').value);
+  if(offline){payOut('bad','<span class="k">Not sent</span><p>No signal. Payments need a connection. Your offline maps and car ledger keep working, and you can pay once the signal is back.</p>');return}
+  if(!$('#parked').checked){payOut('bad','<span class="k">Refused</span><p>Payment only works when the car is parked at the pump with the engine off.</p>');return}
+  if(!(amt>=5&&amt<=200)){payOut('bad','<span class="k">Check the amount</span><p>Enter between 5 and 200 USDC.</p>');return}
+  if(amt>W_.bal){payOut('bad','<span class="k">Not enough</span><p>The car wallet has '+money(W_.bal)+' test USDC.</p>');return}
+  const price=selStation.price+Number($('#grade').value);const gal=amt/price;const fee=amt*0.01;
+  pending={amt,price,gal,fee};
+  payOut('','<span class="k">Confirm on your phone</span><p>Approve <b>'+money(amt)+' USDC</b> at '+esc(selStation.name)+', '+esc($('#pump').value)+'. About '+gal.toFixed(2)+' gal at $'+price.toFixed(2)+'. The station pays a '+money(fee)+' USDC processing fee to Privi.</p><div class="btnrow" style="margin-top:10px"><button class="btn primary" type="button" id="faceOk">Approve with Face ID (simulated)</button><button class="btn" type="button" id="faceNo">Cancel</button></div>');
+  $('#faceNo').onclick=()=>{pending=null;payOut('','<span class="k">Payment</span><p>Cancelled. Nothing was paid.</p>')};
+  $('#faceOk').onclick=async()=>{
+    const p=pending;pending=null;
+    const tx=await sha256('tx|'+selStation.id+'|'+p.amt+'|'+Date.now());
+    const seal=await sha256(prevSeal+JSON.stringify({type:'fuel',station:selStation.name,amt:p.amt,tx}));prevSeal=seal;
+    W_.bal-=p.amt;W_.pays++;W_.items.unshift({t:'Fuel · '+selStation.name,v:'−'+money(p.amt)+' USDC'});
+    ledger.unshift({t:'Fuel payment · '+money(p.amt)+' USDC',d:'now'});anchorMin=0;
+    payOut('ok','<span class="k">Paid · pump '+esc($('#pump').value.replace('Pump ',''))+' unlocked (simulated)</span><dl class="kv"><dt>amount</dt><dd>'+money(p.amt)+' USDC</dd><dt>station receives</dt><dd>'+money(p.amt-p.fee)+' USDC</dd><dt>Privi fee (1%)</dt><dd>'+money(p.fee)+' USDC</dd><dt>network</dt><dd>Base (simulated)</dd><dt>tx</dt><dd>0x'+short(tx)+'</dd><dt>sealed to car ledger</dt><dd>'+short(seal)+'</dd></dl>');
+    renderWallet();renderDb();
+  };
+};
+document.addEventListener('privi:job',e=>{W_.cred+=e.detail.credits;W_.items.unshift({t:'Reward · '+e.detail.job,v:'+'+e.detail.credits+' credits'});ledger.unshift({t:'Job receipt · '+e.detail.job,d:'now'});anchorMin=0;renderWallet();renderDb()});
+function renderWallet(){
+  $('#wBal').textContent=money(W_.bal);$('#wCred').textContent=W_.cred;$('#wCount').textContent=W_.pays;
+  $('#wList').innerHTML=W_.items.length?W_.items.map(i=>'<li><span>'+esc(i.t)+'</span><span>'+esc(i.v)+'</span></li>').join(''):'<li><span>Starting balance (test funds)</span><span>250.00 USDC</span></li>';
+}
+function renderDb(){
+  const mb=regions.filter(r=>r.on).reduce((a,r)=>a+r.mb,0)+ledger.length*0.2;
+  $('#dbEntries').textContent=ledger.length;$('#dbSize').textContent=(mb/1024).toFixed(1)+' GB';
+  $('#dbAnchor').textContent=offline?'queued':(anchorMin===0?'just now':anchorMin+' min');
+  $('#netState').textContent=offline?'No signal · maps and ledger on the car':'Online · ledger anchored '+(anchorMin===0?'just now':anchorMin+' min ago');
+  $('#dbList').innerHTML=ledger.map(l=>'<li><span>'+esc(l.t)+'</span><span>'+esc(l.d)+(offline&&l.d==='now'?' · queued':'')+'</span></li>').join('');
+  $('#regions').innerHTML=regions.map((r,i)=>'<div class="region"><label><input type="checkbox" data-r="'+i+'"'+(r.on?' checked':'')+(offline&&!r.on?' disabled':'')+'> '+esc(r.n)+'</label><span>'+(r.mb>=1000?(r.mb/1024).toFixed(1)+' GB':r.mb+' MB')+(r.on?' · on car':'')+'</span></div>').join('');
+  document.querySelectorAll('#regions input').forEach(c=>c.onchange=()=>{regions[c.dataset.r].on=c.checked;renderDb()});
+}
+$('#offline').onchange=e=>{offline=e.target.checked;if(!offline)anchorMin=0;renderDb()};
+renderWallet();renderDb();
+
+/* ---------- Gas station sign-up ---------- */
+const fmtUSD=n=>'$'+n.toFixed(2);
+let stDb=null,stUser=null,stUid=null;
+function stModeText(t){$('#stMode').textContent=t}
+stModeText('Sign-ups go to Dario');
+(async()=>{
+  try{
+    if(!window.claude||!window.claude.use){stModeText('Email sign-up');return}
+    const timer=setTimeout(()=>{if(!stDb)stModeText('Email sign-up')},10000);
+    stDb=await window.claude.use('db');stUser=await window.claude.use('user');clearTimeout(timer);
+    if(!stDb||!stUser){stDb=null;stModeText('Email sign-up');return}
+    stUid=await stUser.id();if(!stUid){stDb=null;stModeText('Email sign-up');return}
+    stModeText('Sign-ups go straight to Dario');
+    try{const mine=await stDb.collection('stations').doc(stUid).get();if(mine.exists){const d=mine.data();showSaved(d.station_name,true)}}catch(e){}
+    if(stUser.isOwner()){$('#ownerBox').hidden=false;
+      stDb.collection('stations').orderBy('created_at','desc').onSnapshot(snap=>{
+        const rows=snap.docs.map(d=>d.data());
+        $('#ownerRows').innerHTML=rows.length?rows.map(r=>'<tr><td><b>'+esc(String(r.station_name||''))+'</b><br>'+esc(String(r.address||''))+', '+esc(String(r.city||''))+' '+esc(String(r.state||''))+'</td><td>'+esc(String(r.contact_name||''))+'<br>'+esc(String(r.email||''))+'<br>'+esc(String(r.phone||''))+'</td><td>'+esc(String(r.pumps||''))+'</td><td class="mono">'+esc(String(r.wallet||''))+'</td><td>'+esc(String(r.created_at||'').slice(0,10))+'</td></tr>').join(''):'<tr><td colspan="5">No sign-ups yet.</td></tr>';
+      },()=>{$('#ownerRows').innerHTML='<tr><td colspan="5">Could not load sign-ups.</td></tr>'});
+    }
+  }catch(e){stDb=null;stModeText('Email sign-up')}
+})();
+function showSaved(name,already){const o=$('#stOut');o.hidden=false;o.className='out ok';o.innerHTML='<span class="k">'+(already?'Already registered':'Registered')+'</span><p><b>'+esc(name)+'</b> is on the pilot list. Dario will contact you to confirm your pumps and payout wallet. You can update the form and register again to change details.</p>'}
+const val=id=>$('#'+id).value.trim();
+$('#stForm').addEventListener('submit',async e=>{
+  e.preventDefault();const err=$('#stErr');err.textContent='';
+  const need=[['stName','station name'],['stAddr','street address'],['stCity','city'],['stState','state'],['stContact','contact name'],['stPhone','phone'],['stEmail','business email'],['stWallet','payout wallet']];
+  const miss=need.filter(([id])=>!val(id)).map(([,n])=>n);
+  if(miss.length){err.textContent='Please fill in: '+miss.join(', ')+'.';return}
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val('stEmail'))){err.textContent='That email address doesn’t look complete.';return}
+  if(!/^0x[0-9a-fA-F]{40}$/.test(val('stWallet'))){err.textContent='The payout wallet should be a Base address: 0x followed by 40 letters and numbers.';return}
+  const pumps=Number($('#stPumps').value);if(!(pumps>=1&&pumps<=99)){err.textContent='Enter between 1 and 99 pumps.';return}
+  if(!$('#stAgree').checked){err.textContent='Tick the box to confirm you can sign this station up.';return}
+  const rec={station_name:val('stName'),address:val('stAddr'),city:val('stCity'),state:val('stState'),pumps,brand:val('stBrand'),contact_name:val('stContact'),phone:val('stPhone'),email:val('stEmail'),wallet:val('stWallet'),fee_percent:1,status:'new',created_at:new Date().toISOString()};
+  if(stDb&&stUid){
+    const btn=$('#stSubmit');btn.disabled=true;btn.textContent='Saving…';
+    try{await stDb.collection('stations').doc(stUid).set(rec);showSaved(rec.station_name,false)}
+    catch(x){err.textContent='Couldn’t save right now. Please email the details to dariocanoy@priviflow.us.'}
+    finally{btn.disabled=false;btn.textContent='Register station'}
+  }else{
+    const summary='Privi station sign-up\n'+Object.entries(rec).map(([k,v])=>k+': '+v).join('\n');
+    const o=$('#stOut');o.hidden=false;o.className='out';
+    o.innerHTML='<span class="k">Send this to Dario</span><p>This page can’t save sign-ups here. Email the details below to <b class="mono" style="user-select:all">dariocanoy@priviflow.us</b> or call <b class="mono">313-413-8532</b>.</p><pre class="mono" id="stSum" style="white-space:pre-wrap;margin:8px 0 0;user-select:all">'+esc(summary)+'</pre><div class="btnrow" style="margin-top:8px"><button class="btn" type="button" id="stCopy">Copy details</button></div>';
+    $('#stCopy').onclick=()=>{const b=$('#stCopy');try{navigator.clipboard.writeText(summary).then(()=>b.textContent='Copied',()=>sel($('#stSum')))}catch(_){sel($('#stSum'))}};
+  }
+});
+const updFee=()=>{const a=45;$('#feeEx').textContent=fmtUSD(a);$('#feeCut').textContent=fmtUSD(a*.01);$('#feeNet').textContent=fmtUSD(a*.99)};updFee();
+
 /* ---------- Explainer film ---------- */
 const cv=$('#cv'),ctx=cv.getContext('2d');const W=1280,H=720;
 const scenes=[
@@ -411,6 +658,7 @@ const scenes=[
  {name:'Privi Trace',dur:9,cap:'Privi Trace turns any process into a chain of checkpoints. Each one records who did what and when, sealed together with the step before it.'},
  {name:'Four traces',dur:11,cap:'Trace a part from the steel mill to the OEM, a stablecoin payment back to its issuer’s reserves, an AI agent’s actions and approvals, or a car’s full history.'},
  {name:'Tamper test',dur:10,cap:'If someone quietly edits step three, its seal no longer matches, and every seal after it fails too. Anyone can see exactly where the record changed.'},
+ {name:'Pump pay',dur:11,cap:'With Privi Pro, the driver pays at the pump from the dashboard, parked with the engine off, and confirms with Face ID. The station gets 99% in USDC; Privi keeps a 1% fee. Gas stations can register on this page.'},
  {name:'Try it',dur:9,cap:'Try both demos below. Each Trace mode runs on a Privi product you can buy today, from $29 a month. Pilots: call Dario at 313-413-8532.'}
 ];
 const total=scenes.reduce((a,s)=>a+s.dur,0);const starts=[];{let a=0;scenes.forEach(s=>{starts.push(a);a+=s.dur})}
@@ -479,10 +727,21 @@ const draw=[
    if(ver&&i>=2)cross(x+90,440,14,i===2?C.amber:C.bad);else check(x+90,440,14,C.ok)}
   if(broke&&!ver){txt('odometer quietly changed',W/2,540,26,C.amber,600,'center','mono')}
   if(ver){ctx.globalAlpha=ap(lt,5);rr(340,520,600,90,14,C.bad,null);txt('Verification failed at step 3',640,565,30,'#fff',700,'center');ctx.globalAlpha=1}},
+ lt=>{ // pump pay
+  txt('Pay at the pump from the dashboard',W/2,80,38,C.ink,800,'center','display');
+  rr(90,140,620,400,22,C.panel,C.line,2);txt('PRIVI PRO',130,180,16,C.accent,600,'left','mono');
+  txt('Blue Water Fuel (example)',130,225,26,C.ink,600,'left');txt('Pump 3 · Regular · $3.19/gal',130,262,18,C.muted,400,'left','mono');
+  const a=ap(lt,1);ctx.globalAlpha=a;rr(130,300,540,60,10,C.bg,null);txt('Amount',150,330,18,C.muted,400,'left');txt('45.00 USDC',650,330,26,C.ink,700,'right','mono');ctx.globalAlpha=1;
+  const g=clamp((lt-2)/.8);rr(130,380,540,52,10,null,g>=1?C.ok:C.line,2);check(160,406,14,g>=1?C.ok:C.muted,g<1?g:1);txt('Parked, engine off',190,406,20,C.ink,500,'left');
+  const b=ap(lt,3.2);ctx.globalAlpha=b;rr(130,452,540,60,12,C.accent,null);txt('Pay from dashboard',400,482,22,'#fff',700,'center');ctx.globalAlpha=1;
+  const ph=ap(lt,4.4);ctx.globalAlpha=ph;rr(800,150,200,360,28,C.panel,C.accent,3);rr(818,190,164,280,10,C.bg);txt('Face ID',900,260,22,C.ink,600,'center');check(900,330,34,C.ok,clamp((lt-5)/1));txt('Approved',900,410,20,C.ok,600,'center');ctx.globalAlpha=1;
+  const sp=ap(lt,6.5);ctx.globalAlpha=sp;rr(1040,180,180,140,14,C.panel,C.ok,3);txt('Station',1130,215,18,C.muted,400,'center');txt('44.55',1130,260,30,C.ink,700,'center','mono');txt('99% · USDC',1130,298,16,C.ok,500,'center','mono');
+  rr(1040,350,180,140,14,C.panel,C.accent,3);txt('Privi fee',1130,385,18,C.muted,400,'center');txt('0.45',1130,430,30,C.ink,700,'center','mono');txt('1% · USDC',1130,468,16,C.accent,500,'center','mono');ctx.globalAlpha=1;
+  ctx.globalAlpha=ap(lt,8);txt('Receipt sealed to the car ledger · gas stations register below',W/2,620,24,C.muted,500,'center');ctx.globalAlpha=1},
  lt=>{ // cta
   txt('Try both demos below',W/2,170,60,C.ink,800,'center','display');
   ctx.globalAlpha=ap(lt,1);txt('Privi Car · research prototype   |   Privi Trace · concept demo',W/2,250,24,C.muted,500,'center');ctx.globalAlpha=1;
-  const rows=[['Supplier Proof','$99 / month'],['Ledger Pro','$29 / month'],['RealCheck','$49 / month'],['Founding Customer','$499 / year']];
+  const rows=[['Privi Pro (car)','$99 / month'],['Ledger Pro','$29 / month'],['RealCheck','$49 / month'],['Gas stations','1% per sale']];
   rows.forEach((r,i)=>{const a=ap(lt,2+i*.5);ctx.globalAlpha=a;rr(330,310+i*66,620,54,10,C.panel,C.line,2);txt(r[0],360,337+i*66,22,C.ink,600,'left');txt(r[1],920,337+i*66,22,C.accent,600,'right','mono');ctx.globalAlpha=1});
   ctx.globalAlpha=ap(lt,4.5);txt('Pilots: 313-413-8532 · dariocanoy@priviflow.us',W/2,620,24,C.ink,500,'center','mono');ctx.globalAlpha=1}
 ];
