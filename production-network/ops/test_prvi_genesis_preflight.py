@@ -145,7 +145,7 @@ class PreflightTests(unittest.TestCase):
 
     def test_control_character_supply_denom_rejected(self):
         g = genesis(100)
-        g["app_state"]["bank"]["supply"].append({"denom": "uatom\\x00", "amount": "1"})
+        g["app_state"]["bank"]["supply"].append({"denom": "uatom\x00", "amount": "1"})
         self.assertIn("malformed bank supply coin", check(g)[0])
 
     def test_missing_balances(self):
