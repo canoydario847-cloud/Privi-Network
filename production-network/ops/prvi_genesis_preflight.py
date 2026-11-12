@@ -82,14 +82,9 @@ def check(genesis):
             if denom != DENOM:
                 continue
             seen_native = True
-            amount = coin.get("amount")
-            if not isinstance(amount, str) or not amount.isascii() or not amount.isdecimal() or len(amount) > MAX_COIN_AMOUNT_DIGITS or (len(amount) > 1 and amount.startswith("0")):
-                errors.append("noncanonical native amount")
-                continue
-            n = int(amount)
-            if n <= 0:
-                errors.append("zero/negative native amount")
-            total += n
+            # The amount was already validated and parsed above. Reuse that
+            # value so native accounting cannot diverge from bank accounting.
+            total += value
     supply = bank.get("supply")
     if not isinstance(supply, list):
         return errors + ["missing or malformed bank supply"], total
