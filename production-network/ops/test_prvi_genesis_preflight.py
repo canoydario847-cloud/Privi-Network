@@ -37,6 +37,16 @@ class PreflightTests(unittest.TestCase):
         g["app_state"]["bank"]["balances"].append(dict(g["app_state"]["bank"]["balances"][0]))
         self.assertIn("duplicate account address", check(g)[0])
 
+    def test_whitespace_only_account_address_rejected(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["balances"][0]["address"] = "   "
+        self.assertIn("missing account address", check(g)[0])
+
+    def test_padded_account_address_rejected(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["balances"][0]["address"] = " test "
+        self.assertIn("missing account address", check(g)[0])
+
     def test_duplicate_native_denom(self):
         g = genesis(100)
         g["app_state"]["bank"]["balances"][0]["coins"].append({"denom": "aprvi", "amount": "1"})
