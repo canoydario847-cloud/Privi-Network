@@ -104,7 +104,7 @@ services:
     disk:
       name: privi-ledger-data
       mountPath: /data
-      sizeGB: 1
+      sizeGB: 3
     envVars:
       - key: PRIVI_PAYMENTS          # paid tools also accept the PRIVI token (price from the Privi swap desk)
         value: "1"
