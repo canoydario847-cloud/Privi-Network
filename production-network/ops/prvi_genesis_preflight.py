@@ -56,7 +56,7 @@ def check(genesis):
             errors.append("malformed account or coin list")
             continue
         address = account.get("address")
-        if not isinstance(address, str) or not address:
+        if not isinstance(address, str) or not address or address != address.strip():
             errors.append("missing account address")
         elif address in seen_addresses:
             errors.append("duplicate account address")
