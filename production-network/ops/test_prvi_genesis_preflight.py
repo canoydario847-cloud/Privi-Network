@@ -155,12 +155,12 @@ class PreflightTests(unittest.TestCase):
 
     def test_control_character_account_address_rejected(self):
         g = genesis(100)
-        g["app_state"]["bank"]["balances"][0]["address"] = "privi\\x00bad"
+        g["app_state"]["bank"]["balances"][0]["address"] = "privi\x00bad"
         self.assertIn("missing account address", check(g)[0])
 
     def test_nonprintable_unicode_account_address_rejected(self):
         g = genesis(100)
-        g["app_state"]["bank"]["balances"][0]["address"] = "privi\\u200bbad"
+        g["app_state"]["bank"]["balances"][0]["address"] = "privi\u200bbad"
         self.assertIn("missing account address", check(g)[0])
 
     def test_missing_balances(self):
