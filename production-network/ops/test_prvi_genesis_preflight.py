@@ -138,6 +138,16 @@ class PreflightTests(unittest.TestCase):
         g["app_state"]["bank"]["supply"].append({"denom": "uatom ", "amount": "1"})
         self.assertIn("malformed bank supply coin", check(g)[0])
 
+    def test_embedded_whitespace_balance_denom_rejected(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["balances"][0]["coins"].append({"denom": "ua tom", "amount": "1"})
+        self.assertIn("malformed coin", check(g)[0])
+
+    def test_control_character_supply_denom_rejected(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["supply"].append({"denom": "uatom\\x00", "amount": "1"})
+        self.assertIn("malformed bank supply coin", check(g)[0])
+
     def test_missing_balances(self):
         self.assertTrue(check({"app_state": {"bank": {"balances": [], "supply": [{"denom": "aprvi", "amount": "0"}]}}})[0])
 
