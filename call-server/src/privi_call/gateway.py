@@ -364,6 +364,15 @@ def register_gateway(mcp, s, store, router, paywall, limiter, version: str) -> N
             bad = paywall._matches(payment, req)
             if bad:
                 return signup_required("Invalid payment: " + bad)
+            # Include x402 v2 resource metadata exactly as the existing gateway does.
+            payment.setdefault("resource", paywall.resource(
+                "agent_access_signup", "One Privi AI agent registration"))
+            extensions = paywall.extensions("agent_access_signup", "One Privi AI agent registration")
+            if extensions:
+                payment.setdefault("extensions", {})
+                if isinstance(payment["extensions"], dict):
+                    for ext_name, ext_value in extensions.items():
+                        payment["extensions"].setdefault(ext_name, ext_value)
             fingerprint = hashlib.sha256(
                 json.dumps(payment, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
             if store.paid_payment_used(fingerprint, ""):
