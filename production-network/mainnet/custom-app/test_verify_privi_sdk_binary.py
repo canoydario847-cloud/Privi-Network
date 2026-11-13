@@ -75,6 +75,19 @@ class ProvenanceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "missing unique guard"):
             self.check()
 
+    @unittest.expectedFailure
+    def test_unused_string_literals_must_not_qualify_as_enforcement(self):
+        """Known gap: required text in unused Go raw strings is not executable guards."""
+        for rel, markers in mod.MARKERS.items():
+            path = self.root / rel
+            path.write_text(
+                "package keeper\nvar unrelated = `" +
+                "\n".join(markers) + "`\n",
+                encoding="utf-8",
+            )
+        with self.assertRaisesRegex(ValueError, "missing unique guard|executable|enforcement"):
+            self.check()
+
     def test_reject_module_graph_without_local_replace(self):
         self.module.pop("Replace")
         with self.assertRaisesRegex(ValueError, "module graph"):
