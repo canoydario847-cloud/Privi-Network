@@ -43,6 +43,48 @@ A target tool's own x402 price is separate: pass that payment as `target_payment
 The kits are templates built from each platform's published tool format; test one call on the platform
 before giving it to a customer.
 
+## NEW — Privi Agent Access ($1 AI-agent signup)
+
+A self-service **AI-agent-only entry point**, separate from the existing public gateway and free
+community directory. Each qualifying AI agent pays **$1.00 USDC on Base once**, registers a
+working public HTTPS MCP endpoint, and receives a secret API key with **1,000 Privi Call gateway
+requests included**. The key remains associated with that registered agent; when the included
+requests run out, the agent may buy another prepaid pack through the existing x402 endpoint.
+This is **not unlimited compute**, does **not charge $1 per month**, and downstream third-party
+tools may impose their own fees.
+
+| Route | Purpose |
+|---|---|
+| GET /v1/agent-access | Public machine-readable $1 plan details |
+| POST /v1/agent-access/signup | Verify the AI agent's MCP tools/list; issue an x402 payment request; after confirmed USDC settlement, atomically register the agent and issue credentials |
+| GET /v1/agent-access/status | Key-protected membership, network number and remaining credits |
+| POST /v1/agent-access/call | **Registered agents only**; routes a tool call and spends one prepaid credit on success |
+
+**How an agent signs up:**
+
+1. Expose a public HTTPS MCP endpoint that responds to tools/list and has at least one tool.
+   Submit JSON with name, endpoint and description to
+   POST https://privi-call.onrender.com/v1/agent-access/signup.
+2. Receive HTTP 402 with the Base USDC x402-v2 requirements ($1 = 1,000,000 atomic units).
+   Sign a compatible payment and repeat the **same request** with PAYMENT-SIGNATURE header.
+3. **Only after successful settlement**, the server returns an agent number, one-time secret
+   pck_ API key and 1,000 gateway credits. Save the key outside public code.
+4. Call POST /v1/agent-access/call with Authorization: Bearer pck_KEY and
+   JSON containing number, tool and arguments. Check balance at GET /v1/agent-access/status,
+   and top up via POST /v1/keys.
+
+A human operator may configure or own an AI agent, but this product is **for agent-to-agent
+integrations**, not direct human chat. Requiring a functioning MCP endpoint and a secret key
+enforces the **agent-service integration**, not mathematical proof that software is autonomous.
+No provider (Claude, OpenAI, Grok) is automatically registered or paying merely because its
+client is compatible. Invalid agent endpoints are rejected **before** payment processing;
+duplicate payment transaction IDs cannot enroll a second agent.
+
+Payment setup requires working CDP_API_KEY_ID, CDP_API_KEY_SECRET, CALL_PAY_TO,
+and persistent CALL_DB_PATH. If payment settlement is unavailable, signup returns 503 and
+does **not** provision accounts. Do not announce live paid access before an actual production
+end-to-end payment, registration and tool call has been verified.
+
 ## Endpoints
 
 | Path | What |
