@@ -50,6 +50,7 @@ from .scanner import Scanner
 from .guard import Guard
 from . import guard_tools
 from . import musthave_tools
+from .agent_proof import verify_agent_proof
 from .ai_act import AIActRegister
 from .supplier_proof import SupplierProof
 from .content_seal import ContentSeals
@@ -265,6 +266,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
                 "ledger_pricing": "free",
                 "ledger_check_receipt": "free",
                 "ledger_audit_stream": f"${settings.prices_usd['ledger_audit_stream']} per call (x402)",
+                "agent_proof_verify": f"${settings.prices_usd['agent_proof_verify']} per verified proof (x402)",
                 "ledger_record_action": "organization API key",
                 "ledger_read_stream": "organization API key",
                 "ledger_list_streams": "organization API key",
@@ -341,6 +343,34 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
 
         return await paywall.run("ledger_audit_stream", "Integrity audit of an AI agent's action log",
                                  dict(ctx.request_context.meta or {}), work)
+
+    # ---------------- paid agent-proof skill ----------------
+
+    @mcp.tool(title="Verify signed AI-agent authorization and execution evidence", annotations=READ_ONLY)
+    async def agent_proof_verify(
+        authorization: Annotated[dict[str, Any], Field(description="Ed25519-signed policy decision envelope; hashes and identifiers only")],
+        acknowledgment: Annotated[dict[str, Any], Field(description="Separately signed executor acknowledgment binding the authorization digest")],
+        trusted_keys: Annotated[dict[str, Any], Field(description="Out-of-band pinned policy and executor Ed25519 public keys; never private keys")],
+        ctx: Context,
+    ) -> CallToolResult:
+        """Verify that two independently signed records agree on one authorized,
+        completed action. $0.01 USDC via x402 per successful verification.
+        Does not independently prove real-world execution or key ownership.
+        """
+        if not settings.payments_enabled:
+            return _result({"error": "Paid Agent Proof unavailable: production payments disabled",
+                            "charge": False}, is_error=True)
+
+        async def work() -> dict[str, Any]:
+            proof = verify_agent_proof(authorization, acknowledgment, trusted_keys)
+            if not proof["verified"]:
+                proof[NO_CHARGE_KEY] = True
+            return proof
+
+        return await paywall.run(
+            "agent_proof_verify", "Verify independent agent authorization and execution evidence",
+            dict(ctx.request_context.meta or {}), work
+        )
 
     # ---------------- organization ----------------
 

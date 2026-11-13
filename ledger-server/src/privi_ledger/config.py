@@ -21,6 +21,7 @@ NETWORKS = {
 
 DEFAULT_PRICES_USD = {
     "ledger_audit_stream": "0.02",
+    "agent_proof_verify": "0.01",  # independent signed authorization and execution attestation
     "ledger_upgrade_pro": "29",
     "passport_issue": "1",       # free-plan organizations; Pro and enterprise issue for free
     "guard_check": "0.01",       # Privi Guard, per check without an organization allowance or credits
