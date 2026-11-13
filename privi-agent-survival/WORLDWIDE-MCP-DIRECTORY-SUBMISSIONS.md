@@ -124,3 +124,9 @@ Additional third-party indexed page: https://mcprepository.com/canoydario847-clo
 - A third-party crawler identified itself as Neuronto and requested `GET /mcp`; Render logged HTTP 405. The server is an HTTP JSON-RPC POST implementation, and a GET 405 is an expected allowed transport response here, **not evidence of outage or a new marketplace listing**.
 - Added regression test to `agent-gateway/server.test.js` for `HEAD /health` HTTP 200, empty response body, and unchanged `GET /health` status. Commit [af0a963](https://github.com/canoydario847-cloud/Privi/commit/af0a96319265d6f187b1b580e74ad6819490b6cb). Render auto-deploy `dep-dbrq3te417fc73epmji0` started; test execution on CI and HEAD response in production are not yet independently attested.
 - Requests for direct HTTP checks from this environment could not resolve the remote hostname. Do not interpret these environment errors as service outages.
+
+## Deployment follow-up — 2026-11-13
+
+- The latest Privi agent gateway deploy `dep-dbrq3te417fc73epmji0` (commit `af0a96319265d6f187b1b580e74ad6819490b6cb`) is reported **live** by Render after successful startup, at 23:49:41 UTC. The previous HEAD-health compatibility build was already live before this deployment.
+- On the gateway, Render logged HTTP 200 responses for `GET /health`, `GET /agent-hub`, `GET /agent-skills`, `GET /tools.json`, `GET /skills/index.json`, and multiple `POST /mcp` requests during a pre-deploy smoke test. These do not demonstrate paid purchase fulfillment or paid tool usage.
+- Public URL fetches from the web retrieval environment for `/health`, Ledger recovery `/health`, and the server-card URL remained inaccessible in that environment, so **direct external HEAD /health, Ledger health and server-card checks remain unconfirmed**. Render's build command performs syntax checks but does not execute `npm test`; new regression test passing is not proven merely by a live deployment.
