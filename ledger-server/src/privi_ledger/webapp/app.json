@@ -1,0 +1,73 @@
+{
+ "slug": "ledger",
+ "host": "privi-ledger.onrender.com",
+ "name": "Privi Ledger",
+ "short_name": "Ledger",
+ "tagline": "The records your company has to keep, sealed so nobody can rewrite them.",
+ "intro": "Publish a trust page for buyers, run an incident against its legal deadlines, collect policy sign-offs, keep controls current and seal software releases. Documents stay on your device; only their fingerprints are recorded.",
+ "site": "https://privi-hub.onrender.com",
+ "key": {
+  "mode": "bearer",
+  "label": "Organization API key",
+  "short": "Key",
+  "placeholder": "plk_...",
+  "help": "Your Privi Ledger organization key. It is kept in this browser only and sent to Privi Ledger with each request.",
+  "skip_pay": "Organizations on the Pro plan use every feature without paying per use."
+ },
+ "plan_note": "Organizations on the Pro plan are not charged per use",
+ "file_lists": {
+  "release_seal.files": "name"
+ },
+ "android": {
+  "package": "us.priviflow.ledger",
+  "dir": "android-ledger",
+  "project": "PriviLedger",
+  "fingerprint_env": "LEDGER_ANDROID_SHA256"
+ },
+ "features": [
+  {
+   "title": "Trust Page",
+   "blurb": "A public page of your claims and evidence to share with buyers.",
+   "tools": [
+    "trust_page_publish",
+    "trust_page_view"
+   ]
+  },
+  {
+   "title": "Incident Clock",
+   "blurb": "Open an incident and track the notification deadlines.",
+   "tools": [
+    "incident_open",
+    "incident_update",
+    "incident_status",
+    "incident_close"
+   ]
+  },
+  {
+   "title": "Policy Sign-off",
+   "blurb": "Who accepted which version of a policy, and who is missing.",
+   "tools": [
+    "policy_publish",
+    "policy_acknowledge",
+    "policy_status"
+   ]
+  },
+  {
+   "title": "Control Calendar",
+   "blurb": "Recurring controls, their evidence, and what is overdue.",
+   "tools": [
+    "control_save",
+    "control_evidence",
+    "controls_due"
+   ]
+  },
+  {
+   "title": "Release Seal",
+   "blurb": "Seal a software release; anyone can check a download.",
+   "tools": [
+    "release_seal",
+    "release_check"
+   ]
+  }
+ ]
+}

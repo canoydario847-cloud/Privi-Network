@@ -85,6 +85,19 @@ and persistent CALL_DB_PATH. If payment settlement is unavailable, signup return
 does **not** provision accounts. Do not announce live paid access before an actual production
 end-to-end payment, registration and tool call has been verified.
 
+## Outreach checks (v0.3.0)
+
+Three records anyone placing calls has to keep, and one go / no-go answer before dialing. Each list belongs to a prepaid call key (`pck_...`). Phone numbers are stored only as salted SHA-256 hashes plus the last four digits.
+
+| Feature | Tools | What it does |
+|---|---|---|
+| Do-Not-Call list | `call_do_not_call` (check / add / remove) | Your own list of people who asked not to be called |
+| Calling hours | `call_hours_check` | Whether it is between 8 a.m. and 9 p.m. where the called person is (47 CFR 64.1200(c)(1)), and when the window opens next. The window can be narrowed for stricter state rules |
+| Consent records | `call_consent_record`, `call_consent_revoke`, `call_consent_check` | Who agreed to marketing calls, an AI voice, call recording or texts; hash-chained so records cannot be back-filled unnoticed. Revoking everything also adds the number to the do-not-call list |
+| Pre-call check | `call_precheck` | All three in one answer: go / no-go with blockers and warnings |
+
+> These check your own records only. They do not check the National Do Not Call Registry or state rules, and they are not legal advice.
+
 ## Endpoints
 
 | Path | What |

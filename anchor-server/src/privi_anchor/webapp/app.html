@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Privi</title>
+<link rel="manifest" href="/app/manifest.webmanifest">
+<link rel="icon" href="/app/icon-192.png">
+<link rel="apple-touch-icon" href="/app/icon-192.png">
+<meta name="theme-color" content="#0E1B33">
+<!-- Generated from apps/app.html by apps/build.py. Edit the master, then run the build. -->
+<style>
+:root{--paper:#F5F6F9;--card:#fff;--ink:#0E1B33;--mut:#5A6B85;--line:#DCE1EA;--acc:#2F5BEA;--on:#fff;--ok:#0F8A5F;--bad:#B4252F;--warn:#8A5A00;--soft:#EEF2FC;--navy:#0E1B33}
+@media (prefers-color-scheme:dark){:root{--paper:#0A1220;--card:#111C30;--ink:#E7ECF4;--mut:#93A3BB;--line:#22314A;--acc:#7FA2FF;--on:#0A1220;--ok:#3CCB94;--bad:#FF8088;--warn:#F0B35A;--soft:#17243C;color-scheme:dark}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{background:var(--navy);color:#fff;padding:calc(12px + env(safe-area-inset-top)) 16px 12px;position:sticky;top:0;z-index:5}
+header .row{max-width:720px;margin:0 auto;display:flex;align-items:center;gap:10px}
+header img{width:30px;height:30px;border-radius:8px}
+header h1{font-size:17px;margin:0;font-weight:650;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header button{background:transparent;border:1px solid #3A4A6B;color:#fff;border-radius:8px;padding:7px 11px;font:500 14px system-ui;cursor:pointer}
+main{max-width:720px;margin:0 auto;padding:16px 16px calc(40px + env(safe-area-inset-bottom))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin:0 0 14px}
+h2{font-size:21px;margin:2px 0 6px;line-height:1.2}
+h3{font-size:16px;margin:0 0 2px}
+p{margin:.3em 0 .8em}.mut{color:var(--mut)}.small{font-size:14px}
+a{color:var(--acc)}
+.grid{display:grid;gap:10px}
+.tile{display:block;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:15px 16px;color:inherit;font:inherit;cursor:pointer}
+.tile:hover{border-color:var(--acc)}
+.tile b{display:block;font-size:16px}.tile span{color:var(--mut);font-size:14px}
+.tile .tag{float:right;margin-left:8px;font:600 12px ui-monospace,Menlo,monospace;color:var(--mut)}
+.back{background:none;border:0;color:var(--acc);font:500 15px system-ui;padding:4px 0 10px;cursor:pointer}
+label{display:block;font-size:14px;font-weight:600;margin:14px 0 4px}
+label .opt{font-weight:400;color:var(--mut)}
+.help{font-size:13px;color:var(--mut);margin:3px 0 0}
+input[type=text],input[type=password],input[type=number],select,textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:9px;background:var(--paper);color:var(--ink);font:inherit}
+textarea{min-height:92px;resize:vertical;font:14px/1.45 ui-monospace,Menlo,monospace}
+.check{display:flex;gap:9px;align-items:center;margin-top:14px;font-weight:600;font-size:14px}
+.check input{width:20px;height:20px}
+.btn{display:block;width:100%;margin-top:18px;padding:13px;border:0;border-radius:10px;background:var(--acc);color:var(--on);font:650 16px system-ui;cursor:pointer}
+.btn:disabled{opacity:.55;cursor:default}
+.btn.alt{background:transparent;color:var(--acc);border:1.5px solid var(--acc)}
+.mini{margin-top:6px;background:var(--soft);border:0;border-radius:8px;color:var(--acc);padding:7px 10px;font:500 13px system-ui;cursor:pointer}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.note{border-radius:10px;padding:11px 13px;font-size:14px;margin:12px 0 0}
+.note.ok{background:color-mix(in srgb,var(--ok) 13%,transparent);color:var(--ok)}
+.note.bad{background:color-mix(in srgb,var(--bad) 13%,transparent);color:var(--bad)}
+.note.warn{background:color-mix(in srgb,var(--warn) 15%,transparent);color:var(--warn)}
+.kv{margin:0;font-size:15px}
+.kv>div{display:grid;grid-template-columns:minmax(96px,34%) 1fr;gap:10px;padding:7px 0;border-top:1px solid var(--line)}
+.kv>div:first-child{border-top:0}
+.kv dt{color:var(--mut);word-break:break-word}.kv dd{margin:0;word-break:break-word;min-width:0}
+.kv .kv{border-left:2px solid var(--line);padding-left:10px}
+.kv>div.stack{display:block}.kv>div.stack>dt{font-size:13px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.kv .kv>div{grid-template-columns:minmax(84px,38%) 1fr}
+.kv .item{border-top:1px dashed var(--line);padding-top:4px;margin-top:4px}.kv .item:first-child{border-top:0;margin-top:0;padding-top:0}
+.yes{color:var(--ok);font-weight:600}.no{color:var(--bad);font-weight:600}
+code{font:13px ui-monospace,Menlo,monospace}
+pre{font:12.5px/1.45 ui-monospace,Menlo,monospace;white-space:pre-wrap;word-break:break-all;background:var(--paper);border:1px solid var(--line);border-radius:9px;padding:11px;max-height:340px;overflow:auto}
+details summary{cursor:pointer;color:var(--mut);font-size:14px;margin-top:12px}
+dialog{border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--ink);padding:20px;width:min(440px,92vw)}
+dialog::backdrop{background:rgba(5,10,20,.55)}
+footer{color:var(--mut);font-size:13px;text-align:center;margin-top:22px}
+</style></head>
+<body>
+<header><div class="row"><img src="/app/icon-192.png" alt=""><h1 id="appname">Privi</h1><button id="keybtn" hidden>Key</button></div></header>
+<main id="view" aria-live="polite"></main>
+
+<dialog id="keydlg">
+  <h3 id="keytitle">Key</h3>
+  <p class="mut small" id="keyhelp"></p>
+  <label for="keyinput" id="keylabel">Key</label>
+  <input id="keyinput" type="password" autocomplete="off" spellcheck="false">
+  <div class="check"><input id="keyremember" type="checkbox"><label for="keyremember" style="margin:0">Remember on this device</label></div>
+  <button class="btn" id="keysave">Save</button>
+  <button class="btn alt" id="keyclear">Remove key</button>
+</dialog>
+
+<script>
+const CFG = /*PRIVI_APP_CONFIG*/null;
+const CHAINS = {"eip155:8453": {id: 8453, name: "Base", scan: "https://basescan.org/tx/",
+                 add: {chainId: "0x2105", chainName: "Base", nativeCurrency: {name: "Ether", symbol: "ETH", decimals: 18},
+                       rpcUrls: ["https://mainnet.base.org"], blockExplorerUrls: ["https://basescan.org"]}},
+                "eip155:84532": {id: 84532, name: "Base Sepolia (testnet)", scan: "https://sepolia.basescan.org/tx/",
+                 add: {chainId: "0x14a34", chainName: "Base Sepolia", nativeCurrency: {name: "Ether", symbol: "ETH", decimals: 18},
+                       rpcUrls: ["https://sepolia.base.org"], blockExplorerUrls: ["https://sepolia.basescan.org"]}}};
+const $ = id => document.getElementById(id);
+const el = (tag, props, ...kids) => { const n = document.createElement(tag); Object.assign(n, props || {}); for (const k of kids) n.append(k); return n; };
+const view = $('view');
+const KEY = CFG.key || null;
+const STORE = 'privi.' + CFG.slug + '.key';
+let TOOLS = {}, loaded = false;
+
+document.title = CFG.name;
+$('appname').textContent = CFG.name;
+
+// ---------------- key (kept in this browser only) ----------------
+function store(kind) { try { return window[kind]; } catch (e) { return null; } }
+function getKey() {
+  for (const kind of ['sessionStorage', 'localStorage']) { try { const v = store(kind) && store(kind).getItem(STORE); if (v) return v; } catch (e) {} }
+  return getKey.mem || '';
+}
+function setKey(v, remember) {
+  getKey.mem = v;
+  for (const kind of ['sessionStorage', 'localStorage']) { try { store(kind) && store(kind).removeItem(STORE); } catch (e) {} }
+  if (v) { try { store(remember ? 'localStorage' : 'sessionStorage').setItem(STORE, v); } catch (e) {} }
+  paintKey();
+}
+function paintKey() { if (KEY) { $('keybtn').hidden = false; $('keybtn').textContent = getKey() ? KEY.short + ' ✓' : 'Add ' + KEY.short.toLowerCase(); } }
+if (KEY) {
+  $('keytitle').textContent = KEY.label; $('keylabel').textContent = KEY.label; $('keyhelp').textContent = KEY.help;
+  $('keyinput').placeholder = KEY.placeholder || '';
+  $('keybtn').onclick = () => { $('keyinput').value = getKey(); $('keydlg').showModal(); };
+  $('keysave').onclick = () => { setKey($('keyinput').value.trim(), $('keyremember').checked); $('keydlg').close(); };
+  $('keyclear').onclick = () => { setKey('', false); $('keydlg').close(); };
+  paintKey();
+}
+
+// ---------------- MCP over HTTPS ----------------
+let rid = 0;
+async function rpc(method, params) {
+  const headers = {'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream', 'MCP-Protocol-Version': '2025-06-18'};
+  if (KEY && KEY.mode === 'bearer' && getKey()) headers['Authorization'] = 'Bearer ' + getKey();
+  const r = await fetch(CFG.mcp_path, {method: 'POST', headers, body: JSON.stringify({jsonrpc: '2.0', id: ++rid, method, params})});
+  let body = await r.text();
+  if (/^\s*(event|data):/.test(body)) body = (body.split('\n').find(l => l.startsWith('data:')) || 'data:{}').slice(5);
+  let msg; try { msg = JSON.parse(body); } catch (e) { throw new Error('The server did not answer (' + r.status + '). Try again in a moment.'); }
+  if (msg.error) throw new Error(msg.error.message || JSON.stringify(msg.error));
+  return msg.result;
+}
+async function loadTools() {
+  if (loaded) return;
+  let cursor;
+  do { const res = await rpc('tools/list', cursor ? {cursor} : {}); for (const t of res.tools || []) TOOLS[t.name] = t; cursor = res.nextCursor; } while (cursor);
+  loaded = true;
+}
+function content(res) {
+  if (res.structuredContent && typeof res.structuredContent === 'object') return res.structuredContent;
+  try { return JSON.parse(res.content[0].text); } catch (e) { return {result: (res.content && res.content[0] && res.content[0].text) || ''}; }
+}
+const paymentRequired = res => { const sc = content(res); return res.isError && sc && Array.isArray(sc.accepts) ? sc : null; };
+
+// ---------------- pay per call with a browser wallet (x402, USDC on Base) ----------------
+const hex32 = () => '0x' + Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join('');
+async function ensureChain(ch) {
+  const want = '0x' + ch.id.toString(16);
+  if ((await ethereum.request({method: 'eth_chainId'})).toLowerCase() === want) return;
+  try { await ethereum.request({method: 'wallet_switchEthereumChain', params: [{chainId: want}]}); }
+  catch (e) {
+    if (e && (e.code === 4902 || (e.data && e.data.originalError && e.data.originalError.code === 4902)))
+      await ethereum.request({method: 'wallet_addEthereumChain', params: [ch.add]});
+    else throw e;
+  }
+}
+async function payAndRun(call, required, say) {
+  const req = required.accepts[0], ch = CHAINS[req.network];
+  if (req.scheme !== 'exact' || !ch) throw new Error('Unsupported payment option: ' + req.scheme + ' on ' + req.network);
+  const [address] = await ethereum.request({method: 'eth_requestAccounts'});
+  await ensureChain(ch);
+  const now = Math.floor(Date.now() / 1000);
+  const auth = {from: address, to: req.payTo, value: String(req.amount), validAfter: String(now - 600),
+                validBefore: String(now + Number(req.maxTimeoutSeconds || 60)), nonce: hex32()};
+  const typed = {types: {
+      EIP712Domain: [{name: 'name', type: 'string'}, {name: 'version', type: 'string'}, {name: 'chainId', type: 'uint256'}, {name: 'verifyingContract', type: 'address'}],
+      TransferWithAuthorization: [{name: 'from', type: 'address'}, {name: 'to', type: 'address'}, {name: 'value', type: 'uint256'},
+        {name: 'validAfter', type: 'uint256'}, {name: 'validBefore', type: 'uint256'}, {name: 'nonce', type: 'bytes32'}]},
+    primaryType: 'TransferWithAuthorization',
+    domain: {name: req.extra.name, version: req.extra.version, chainId: ch.id, verifyingContract: req.asset}, message: auth};
+  say('Approve the signature request in your wallet…');
+  const signature = await ethereum.request({method: 'eth_signTypedData_v4', params: [address, JSON.stringify(typed)]});
+  const payment = {x402Version: required.x402Version, resource: required.resource, accepted: req, payload: {signature, authorization: auth}};
+  if (required.extensions) payment.extensions = required.extensions;
+  say('Signed. Running…');
+  return rpc('tools/call', {...call, _meta: {'x402/payment': payment}});
+}
+const usd = req => '$' + (Number(req.amount) / 1e6).toFixed(Number(req.amount) % 10000 ? 3 : 2);
+
+// ---------------- forms built from each tool's own description ----------------
+function fieldType(s) {
+  if (!s) return {type: 'string'};
+  if (s.anyOf) { const real = s.anyOf.filter(x => x.type !== 'null'); return {...(real[0] || {type: 'string'}), nullable: true}; }
+  return s;
+}
+const isHash = (name, s) => /sha256|(^|_)hash$/.test(name) || /SHA-256/.test(s.description || '');
+async function sha256File(file) {
+  const d = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+  return Array.from(new Uint8Array(d), b => b.toString(16).padStart(2, '0')).join('');
+}
+function pick(multiple, done) {
+  const i = el('input', {type: 'file', multiple}); i.onchange = () => done(Array.from(i.files)); i.click();
+}
+function buildField(tool, name, schema, required) {
+  const s = fieldType(schema), id = 'f-' + name, wrap = el('div');
+  const label = name.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+  let input, read, placed = false;
+  if (s.type === 'boolean') {
+    input = el('input', {type: 'checkbox', id, checked: schema.default === true});
+    wrap.append(el('div', {className: 'check'}, input, el('label', {htmlFor: id, textContent: label, style: 'margin:0'})));
+    read = () => input.checked;
+  } else {
+    const l = el('label', {htmlFor: id, textContent: label + ' '});
+    if (!required) l.append(el('span', {className: 'opt', textContent: '(optional)'}));
+    wrap.append(l);
+    if (s.type === 'array' || s.type === 'object') {
+      input = el('textarea', {id, spellcheck: false});
+      const lines = s.type === 'array' && s.items && s.items.type === 'string';
+      input.placeholder = lines ? 'One per line' : (s.type === 'array' ? '[ { … }, { … } ]' : '{ "key": "value" }');
+      read = () => {
+        const v = input.value.trim(); if (!v) return undefined;
+        if (lines && !v.startsWith('[')) return v.split('\n').map(x => x.trim()).filter(Boolean);
+        try { return JSON.parse(v); } catch (e) { throw new Error(label + ' must be valid JSON: ' + e.message); }
+      };
+      const fl = (CFG.file_lists || {})[tool.name + '.' + name];
+      if (fl) {
+        const b = el('button', {type: 'button', className: 'mini', textContent: 'Add files (fingerprinted on this device)'});
+        b.onclick = () => pick(true, async files => {
+          let cur = []; try { cur = JSON.parse(input.value || '[]'); } catch (e) {}
+          for (const f of files) cur.push({[fl]: f.webkitRelativePath || f.name, sha256: await sha256File(f)});
+          input.value = JSON.stringify(cur, null, 1);
+        });
+        wrap.append(input, b); placed = true;
+      }
+    } else if (s.enum) {
+      input = el('select', {id}); if (!required) input.append(el('option', {value: '', textContent: '—'}));
+      for (const c of s.enum) input.append(el('option', {value: c, textContent: c}));
+      read = () => input.value || undefined;
+    } else if (s.type === 'integer' || s.type === 'number') {
+      input = el('input', {type: 'number', id, step: s.type === 'integer' ? '1' : 'any', inputMode: 'decimal'});
+      if (schema.default != null) input.value = schema.default;
+      read = () => input.value === '' ? undefined : Number(input.value);
+    } else {
+      const long = /note|description|statement|root_cause|corrective|headline|qasm|pem|json|defect|reason/.test(name);
+      input = el(long ? 'textarea' : 'input', {id, spellcheck: false}); if (!long) input.type = 'text';
+      if (typeof schema.default === 'string') input.value = schema.default;
+      if (KEY && KEY.mode === 'arg' && name === KEY.arg) { input.type = 'password'; input.value = getKey(); }
+      read = () => input.value.trim() || undefined;
+      if (isHash(name, s) && !long) {
+        const target = input, b = el('button', {type: 'button', className: 'mini', textContent: 'Fingerprint a file (it stays on this device)'});
+        b.onclick = () => pick(false, async files => { if (files[0]) target.value = await sha256File(files[0]); });
+        wrap.append(input, b); placed = true;
+      }
+    }
+    if (!placed) wrap.append(input);
+  }
+  if (s.description || schema.description) wrap.append(el('p', {className: 'help', textContent: schema.description || s.description}));
+  return {wrap, name, required, read};
+}
+
+// ---------------- results people can read ----------------
+function render(v, depth) {
+  if (v === null || v === undefined || v === '') return el('span', {className: 'mut', textContent: '—'});
+  if (typeof v === 'boolean') return el('span', {className: v ? 'yes' : 'no', textContent: v ? 'Yes' : 'No'});
+  if (typeof v === 'string' && /^https?:\/\/\S+$/.test(v)) return el('a', {href: v, target: '_blank', rel: 'noopener', textContent: v});
+  if (typeof v !== 'object') return el('span', {textContent: String(v)});
+  if (Array.isArray(v)) {
+    if (!v.length) return el('span', {className: 'mut', textContent: 'none'});
+    if (v.every(x => typeof x !== 'object' || x === null)) return el('span', {textContent: v.join(', ')});
+    const box = el('div'); v.slice(0, 200).forEach(x => box.append(el('div', {className: 'item'}, render(x, depth + 1)))); return box;
+  }
+  const dl = el('dl', {className: 'kv'});
+  for (const [k, val] of Object.entries(v)) {
+    const nested = val && typeof val === 'object' && (!Array.isArray(val) || val.some(x => x && typeof x === 'object'));
+    dl.append(el('div', {className: nested ? 'stack' : ''}, el('dt', {textContent: k.replace(/_/g, ' ')}), el('dd', null, render(val, depth + 1))));
+  }
+  return dl;
+}
+function showResult(box, res, extra) {
+  const data = content(res);
+  box.textContent = '';
+  if (res.isError) box.append(el('div', {className: 'note bad', textContent: data.error || 'That did not work.'}));
+  else box.append(el('div', {className: 'note ok', textContent: extra || 'Done.'}));
+  const shown = {...data}; if (res.isError) delete shown.error;
+  if (Object.keys(shown).length) {
+    box.append(el('div', {style: 'margin-top:12px'}, render(shown, 0)));
+    const d = el('details', null, el('summary', {textContent: 'Raw result (JSON)'}), el('pre', {textContent: JSON.stringify(data, null, 2)}));
+    const copy = el('button', {type: 'button', className: 'mini', textContent: 'Copy JSON'});
+    copy.onclick = async () => { try { await navigator.clipboard.writeText(JSON.stringify(data, null, 2)); copy.textContent = 'Copied'; } catch (e) { copy.textContent = 'Copy not allowed here'; } };
+    d.append(copy); box.append(d);
+  }
+}
+function showPay(box, call, required) {
+  const req = required.accepts[0];
+  box.textContent = '';
+  box.append(el('div', {className: 'note warn', textContent: 'This costs ' + usd(req) + ' USDC per use' + (CFG.plan_note ? '. ' + CFG.plan_note : '.')}));
+  if (window.ethereum) {
+    const b = el('button', {className: 'btn', textContent: 'Pay ' + usd(req) + ' with wallet and run'}), msg = el('p', {className: 'mut small'});
+    b.onclick = async () => {
+      b.disabled = true;
+      try {
+        const res = await payAndRun(call, required, t => msg.textContent = t);
+        const again = paymentRequired(res);
+        if (again) throw new Error(again.error || 'payment was not accepted');
+        const receipt = (res._meta || {})['x402/payment-response'] || {};
+        showResult(box, res, res.isError ? '' : 'Paid ' + usd(req) + ' USDC. Done.');
+        if (receipt.transaction) box.append(el('p', {className: 'small'}, 'Payment: ', el('a', {href: ((CHAINS[receipt.network] || CHAINS[req.network]).scan) + receipt.transaction, target: '_blank', rel: 'noopener', textContent: receipt.transaction.slice(0, 12) + '…'})));
+      } catch (e) {
+        msg.textContent = e && e.code === 4001 ? 'Cancelled in the wallet. Nothing was charged.' : 'Not paid: ' + ((e && e.message) || e);
+        b.disabled = false;
+      }
+    };
+    box.append(b, msg, el('p', {className: 'mut small', textContent: 'Your wallet signs a USDC payment authorization on Base. The USDC moves only if the request succeeds, and no ETH is needed for gas.'}));
+  } else {
+    const here = location.host + location.pathname + location.hash;
+    box.append(el('p', {className: 'small', textContent: 'No wallet was found in this browser. Open this screen in a wallet browser to pay per use:'}),
+      el('a', {className: 'btn', href: 'https://metamask.app.link/dapp/' + here, textContent: 'Open in MetaMask', style: 'text-align:center;text-decoration:none'}));
+    if (KEY && KEY.mode === 'bearer') box.append(el('p', {className: 'mut small', textContent: KEY.skip_pay || ''}));
+  }
+}
+
+// ---------------- screens ----------------
+function features() {
+  const listed = new Set(CFG.features.flatMap(f => f.tools));
+  const rest = Object.keys(TOOLS).filter(n => !listed.has(n)).sort();
+  return rest.length ? [...CFG.features, {title: 'More ' + CFG.name + ' tools', blurb: 'Everything else this service offers.', tools: rest}] : CFG.features;
+}
+function home() {
+  view.textContent = '';
+  view.append(el('div', {className: 'card'}, el('h2', {textContent: CFG.tagline}), el('p', {className: 'mut', textContent: CFG.intro})));
+  if (KEY && !getKey()) {
+    const b = el('button', {className: 'btn alt', textContent: 'Add your ' + KEY.label.charAt(0).toLowerCase() + KEY.label.slice(1), style: 'margin-top:0'}); b.onclick = () => $('keybtn').click();
+    view.append(el('div', {className: 'card'}, el('p', {className: 'small', textContent: KEY.help}), b));
+  }
+  const grid = el('div', {className: 'grid'});
+  features().forEach((f, i) => {
+    const t = el('button', {className: 'tile'}, el('b', {textContent: f.title}), el('span', {textContent: f.blurb}));
+    t.onclick = () => { location.hash = '#/f/' + i; }; grid.append(t);
+  });
+  view.append(grid, el('footer', null, CFG.name + ' · ', el('a', {href: CFG.site, textContent: 'Privi World Co'}), ' · Record keeping, not legal advice.'));
+}
+function featureScreen(i) {
+  const f = features()[i]; if (!f) return home();
+  view.textContent = '';
+  const back = el('button', {className: 'back', textContent: '‹ All features'}); back.onclick = () => { location.hash = '#/'; };
+  view.append(back, el('div', {className: 'card'}, el('h2', {textContent: f.title}), el('p', {className: 'mut', textContent: f.blurb})));
+  const grid = el('div', {className: 'grid'});
+  for (const name of f.tools) {
+    const t = TOOLS[name]; if (!t) continue;
+    const tile = el('button', {className: 'tile'}, el('b', {textContent: t.title || name}), el('span', {textContent: (t.description || '').split(/(?<=\.)\s/)[0]}));
+    tile.onclick = () => { location.hash = '#/f/' + i + '/' + name; }; grid.append(tile);
+  }
+  view.append(grid);
+}
+function toolScreen(i, name) {
+  const t = TOOLS[name]; if (!t) return featureScreen(i);
+  view.textContent = '';
+  const back = el('button', {className: 'back', textContent: '‹ ' + features()[i].title}); back.onclick = () => { location.hash = '#/f/' + i; };
+  const form = el('form', {className: 'card', noValidate: true}), out = el('div');
+  form.append(el('h2', {textContent: t.title || name}), el('p', {className: 'mut small', textContent: t.description || ''}));
+  const props = (t.inputSchema && t.inputSchema.properties) || {}, req = new Set((t.inputSchema && t.inputSchema.required) || []);
+  const fields = Object.keys(props).sort((a, b) => req.has(b) - req.has(a)).map(n => buildField(t, n, props[n], req.has(n)));
+  fields.forEach(f => form.append(f.wrap));
+  const go = el('button', {className: 'btn', textContent: 'Run'}); form.append(go);
+  form.onsubmit = async ev => {
+    ev.preventDefault(); out.textContent = '';
+    const args = {};
+    try {
+      for (const f of fields) { const v = f.read(); if (v !== undefined && v !== false) args[f.name] = v; else if (v === false && props[f.name].default === true) args[f.name] = false; else if (f.required && v === undefined) throw new Error('Fill in "' + f.name.replace(/_/g, ' ') + '".'); }
+    } catch (e) { out.append(el('div', {className: 'note bad', textContent: e.message})); return; }
+    go.disabled = true; go.textContent = 'Working…';
+    const call = {name, arguments: args};
+    try {
+      const res = await rpc('tools/call', call);
+      const required = paymentRequired(res);
+      if (required) showPay(out, call, required); else showResult(out, res);
+    } catch (e) { out.append(el('div', {className: 'note bad', textContent: (e && e.message) || String(e)})); }
+    finally { go.disabled = false; go.textContent = 'Run'; out.scrollIntoView({behavior: 'smooth', block: 'nearest'}); }
+  };
+  view.append(back, form, el('div', {className: 'card', hidden: false}, out));
+  out.append(el('p', {className: 'mut small', textContent: 'The result shows here.'}));
+}
+async function route() {
+  try { await loadTools(); }
+  catch (e) { view.textContent = ''; view.append(el('div', {className: 'card'}, el('div', {className: 'note bad', textContent: 'Could not reach ' + CFG.name + '. ' + ((e && e.message) || '')}), (() => { const b = el('button', {className: 'btn', textContent: 'Try again'}); b.onclick = route; return b; })())); return; }
+  const m = location.hash.match(/^#\/f\/(\d+)(?:\/([\w-]+))?/);
+  if (!m) home(); else if (m[2]) toolScreen(+m[1], m[2]); else featureScreen(+m[1]);
+  window.scrollTo(0, 0);
+}
+window.addEventListener('hashchange', route);
+view.append(el('p', {className: 'mut', textContent: 'Loading…'}));
+route();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/app/sw.js').catch(() => {});
+</script>
+</body></html>

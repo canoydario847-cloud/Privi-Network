@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="appName">Privi Call</string>
+    <string name="hostName">privi-call.onrender.com</string>
+    <string name="launchUrl">https://privi-call.onrender.com/app/?source=app</string>
+    <string name="assetStatements" translatable="false">
+        [{ \"relation\": [\"delegate_permission/common.handle_all_urls\"],
+           \"target\": { \"namespace\": \"web\", \"site\": \"https://privi-call.onrender.com\" } }]
+    </string>
+</resources>

@@ -41,7 +41,7 @@ from .x402 import NO_CHARGE_KEY, Facilitator, Paywall
 from .payments import ALWAYS_FREE as ALWAYS_FREE_TOOLS
 from . import benchmarks
 
-__version__ = "0.12.0"
+__version__ = "0.13.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/quantum-server"
 PUBLIC_URL = os.getenv("QUANTUM_PUBLIC_URL", "https://privi-quantum.onrender.com").rstrip("/")
 EXPLORER_URL = os.getenv("PRIVI_EXPLORER_URL", "").rstrip("/") or f"{PUBLIC_URL}/explorer/lookup"
@@ -1784,6 +1784,10 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     cars = Car(settings.db_path, attestor, PUBLIC_URL)
     _register_car(mcp, cars, attestor, PUBLIC_URL, cpu, bool(anchor_client))
     mcp._car = cars
+    from . import webapp as _webapp
+    _webapp.register(mcp, __version__, assetlinks=False)   # installable web app at /app/; assetlinks served by realcheck_web
+    from . import toolkit as _toolkit
+    _toolkit.register(mcp, attestor, PUBLIC_URL)
 
     # Central paywall: every priced tool that doesn't gate itself goes through x402 here (payments off -> unchanged).
     from .payments import ALWAYS_FREE

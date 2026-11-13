@@ -50,6 +50,8 @@ from .scanner import Scanner
 from .guard import Guard
 from . import guard_tools
 from . import musthave_tools
+from . import ops_tools
+from .ops_pack import OpsPack
 from .agent_proof import verify_agent_proof
 from .ai_act import AIActRegister
 from .supplier_proof import SupplierProof
@@ -58,7 +60,7 @@ from .passport import PASSPORT_VERSION as PASSPORT_VERSION_HTTP, PassportError, 
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor.onrender.com/mcp"
 
-__version__ = "0.13.0"
+__version__ = "0.14.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/ledger-server"
 
 INSTRUCTIONS = """\
@@ -118,6 +120,12 @@ to 50 texts at once.
 Every company using AI in the EU (Privi AI Act Pack): ai_act_system_save registers each AI system, screens it against
 the Article 5 bans, classifies it and lists the obligations for your role with dates; ai_act_check flags gaps;
 ai_act_export gives a register sealed on chain that customers and auditors verify free with ai_act_verify_export.
+
+Everyday company records (Privi Ops Pack): trust_page_publish gives a public page of claims with evidence fingerprints
+and live log health; incident_open starts the GDPR / NIS2 / SEC / contract notification clocks and incident_close seals
+the report; policy_publish + policy_acknowledge record who accepted which policy version; control_save +
+control_evidence + controls_due keep recurring controls current; release_seal seals a software release so anyone can
+check a download with release_check.
 
 Buying from suppliers (Privi Supplier Proof): supplier_requirement_create publishes what suppliers must prove; suppliers
 answer with supplier_proof_submit (document fingerprints only); supplier_proof_decide issues an on-chain-sealed
@@ -1485,6 +1493,11 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     seals = ContentSeals(ledger, public_url)
     musthave_tools.register(mcp, ledger, aiact=aiact, suppliers=suppliers, seals=seals, anchor_many=_anchor_many,
                             org_from=org_from, result=_result, unauthorized=unauthorized, over_limit=over_limit)
+    from . import webapp as _webapp
+    _webapp.register(mcp, __version__)          # installable web app at /app/
+    ops = OpsPack(ledger, public_url)
+    ops_tools.register(mcp, ops, anchor_many=_anchor_many, org_from=org_from, result=_result,
+                       unauthorized=unauthorized, over_limit=over_limit)
     def _qj(data, status: int = 200):
         from starlette.responses import JSONResponse
         return JSONResponse(data, status_code=status, headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"})
@@ -1528,7 +1541,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         mcp.custom_route(_p, methods=["GET"], include_in_schema=False)(_h)
     for _path, _methods, _handler in (live.http_routes() + gateways.http_routes() + rooms.http_routes()
                                       + scan_tools.http_routes(scanner) + guard_tools.http_routes(guard, paywall, ledger, settings, plans.signup)
-                                      + musthave_tools.http_routes(suppliers, seals)
+                                      + musthave_tools.http_routes(suppliers, seals) + ops_tools.http_routes(ops)
                                       + privi_network.http_routes(net, os.getenv("LEDGER_REPORT_KEY", "").strip())):
         mcp.custom_route(_path, methods=_methods, include_in_schema=False)(_handler)
 

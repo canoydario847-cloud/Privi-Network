@@ -1,0 +1,100 @@
+{
+  "ledger": {
+    "package_dir": "ledger-server/src/privi_ledger", "host": "privi-ledger.onrender.com",
+    "name": "Privi Ledger", "short_name": "Ledger", "accent": "#3ECF96",
+    "tagline": "The records your company has to keep, sealed so nobody can rewrite them.",
+    "intro": "Publish a trust page for buyers, run an incident against its legal deadlines, collect policy sign-offs, keep controls current and seal software releases. Documents stay on your device; only their fingerprints are recorded.",
+    "site": "https://privi-hub.onrender.com",
+    "key": {"mode": "bearer", "label": "Organization API key", "short": "Key", "placeholder": "plk_...",
+            "help": "Your Privi Ledger organization key. It is kept in this browser only and sent to Privi Ledger with each request.",
+            "skip_pay": "Organizations on the Pro plan use every feature without paying per use."},
+    "plan_note": "Organizations on the Pro plan are not charged per use",
+    "file_lists": {"release_seal.files": "name"},
+    "android": {"package": "us.priviflow.ledger", "dir": "android-ledger", "project": "PriviLedger", "fingerprint_env": "LEDGER_ANDROID_SHA256"},
+    "listing": {"short": "Trust pages, incident deadlines, policy sign-offs and sealed records for your company.",
+                "full": "Privi Ledger keeps the records your company is asked to show, in a log that cannot be quietly rewritten. Publish a trust page for buyers. Open an incident and see the GDPR, NIS2, SEC and contract notification deadlines count down. Record who accepted each policy version. Keep recurring controls current with evidence. Seal a software release so customers can check a download. Documents never leave your device: only their SHA-256 fingerprints are recorded. For companies with a Privi Ledger organization key."},
+    "features": [
+      {"title": "Trust Page", "blurb": "A public page of your claims and evidence to share with buyers.", "tools": ["trust_page_publish", "trust_page_view"]},
+      {"title": "Incident Clock", "blurb": "Open an incident and track the notification deadlines.", "tools": ["incident_open", "incident_update", "incident_status", "incident_close"]},
+      {"title": "Policy Sign-off", "blurb": "Who accepted which version of a policy, and who is missing.", "tools": ["policy_publish", "policy_acknowledge", "policy_status"]},
+      {"title": "Control Calendar", "blurb": "Recurring controls, their evidence, and what is overdue.", "tools": ["control_save", "control_evidence", "controls_due"]},
+      {"title": "Release Seal", "blurb": "Seal a software release; anyone can check a download.", "tools": ["release_seal", "release_check"]}
+    ]
+  },
+  "quantum": {
+    "package_dir": "quantum-server/src/privi_quantum", "host": "privi-quantum.onrender.com",
+    "name": "Privi Quantum", "short_name": "Quantum", "accent": "#B38CFF",
+    "tagline": "Plan your move to post-quantum cryptography.",
+    "intro": "Check certificates for quantum risk, see which data is exposed to record-now-decrypt-later attacks, size the switch to new algorithms, inspect a circuit before running it, and score a supplier's readiness.",
+    "site": "https://privi-hub.onrender.com",
+    "android": {"package": "us.priviflow.quantum", "dir": "android-quantum", "project": "PriviQuantum", "fingerprint_env": "QUANTUM_ANDROID_SHA256"},
+    "listing": {"short": "Post-quantum planning tools: certificate risk, data exposure, supplier scorecards.",
+                "full": "Privi Quantum helps a company plan its move to post-quantum cryptography. Paste a certificate to see which keys a quantum computer could break and whether they outlive the federal dates. List the data you hold to see what is exposed to record-now, decrypt-later attacks. See how much larger handshakes and signatures become after switching algorithm. Check a circuit's size before paying for hardware. Send suppliers ten questions and get a signed scorecard. Each use is paid in USDC from a crypto wallet."},
+    "features": [
+      {"title": "Certificate risk check", "blurb": "Which certificate keys a quantum computer could break.", "tools": ["pqc_certificate_check"]},
+      {"title": "Harvest-now, decrypt-later risk", "blurb": "Which of your data is exposed, and what to migrate first.", "tools": ["pqc_harvest_risk"]},
+      {"title": "Size impact", "blurb": "Extra bytes per handshake or signature after switching.", "tools": ["pqc_size_impact"]},
+      {"title": "Circuit stats", "blurb": "Qubits, gates and depth before you pay to run a circuit.", "tools": ["quantum_circuit_stats"]},
+      {"title": "Supplier scorecard", "blurb": "Ten questions, a 0-100 score and a signed scorecard.", "tools": ["pqc_supplier_score"]}
+    ]
+  },
+  "chainflow": {
+    "package_dir": "mcp-server/src/privi_verify", "host": "privi-verify.onrender.com",
+    "name": "Privi ChainFlow", "short_name": "ChainFlow", "accent": "#FFB454",
+    "tagline": "Shop-floor quality records that buyers can check.",
+    "intro": "Trace a recall through every lot, issue Certificates of Conformance, attach mill test reports, run non-conformance reports and keep gauges in calibration. Every entry joins the lot's tamper-evident history.",
+    "site": "https://chainflow.privishine.info",
+    "key": {"mode": "bearer", "label": "Manufacturer key", "short": "Key", "placeholder": "Your ChainFlow key",
+            "help": "Your ChainFlow manufacturer key lets you record lots, certificates and reports. It is kept in this browser only.",
+            "skip_pay": "Manufacturers with a key are not charged per use."},
+    "plan_note": "Manufacturers with a key are not charged per use",
+    "android": {"package": "us.priviflow.chainflow", "dir": "android-chainflow", "project": "PriviChainFlow", "fingerprint_env": "CHAINFLOW_ANDROID_SHA256"},
+    "listing": {"short": "Recall trace, Certificates of Conformance, NCRs and gauge calibration for small shops.",
+                "full": "Privi ChainFlow replaces the paper quality records of a small manufacturer. Link each lot to the material it was made from, and list every lot a bad batch went into with one tap. Issue a Certificate of Conformance your customer can check. Attach mill test reports and inspection reports by fingerprint, so the files stay with you. Open and close non-conformance reports. See which gauges are due for calibration. Every entry joins the lot's tamper-evident history. For manufacturers with a ChainFlow key."},
+    "features": [
+      {"title": "Recall Trace", "blurb": "Every lot a bad batch went into, and which have shipped.", "tools": ["chainflow_recall_trace", "chainflow_link_lots"]},
+      {"title": "Certificate of Conformance", "blurb": "Issue a certificate the buyer can check.", "tools": ["chainflow_coc_issue", "chainflow_coc_verify", "chainflow_coc_revoke"]},
+      {"title": "Lot Documents", "blurb": "Mill test reports and inspection reports, by fingerprint.", "tools": ["chainflow_attach_document", "chainflow_documents", "chainflow_document_check"]},
+      {"title": "Non-Conformance Reports", "blurb": "Open, disposition and close NCRs.", "tools": ["chainflow_ncr_open", "chainflow_ncr_close", "chainflow_ncr_list"]},
+      {"title": "Gauge Calibration", "blurb": "What is due, and what must not be used.", "tools": ["chainflow_gauges_due", "chainflow_gauge_calibrated", "chainflow_gauge_save"]},
+      {"title": "Lots", "blurb": "Record lot events and check a lot's history.", "tools": ["privi_record_event", "privi_verify_lot", "privi_chain_of_custody", "privi_lookup_fingerprint"]}
+    ]
+  },
+  "anchor": {
+    "package_dir": "anchor-server/src/privi_anchor", "host": "privi-anchor.onrender.com",
+    "name": "Privi Anchor", "short_name": "Anchor", "accent": "#5CC8FF",
+    "tagline": "Prove a file existed, without showing it to anyone.",
+    "intro": "Fingerprint files on your device, anchor them on the Base blockchain, and get a certificate you can hand to someone else. One anchor can cover a whole folder.",
+    "site": "https://privi-hub.onrender.com",
+    "key": {"mode": "bearer", "label": "Anchor API key", "short": "Key", "placeholder": "Your Anchor key",
+            "help": "Privi Anchor is a paid service. Your API key is kept in this browser only."},
+    "file_lists": {"anchor_manifest.files": "path"},
+    "android": {"package": "us.priviflow.anchor", "dir": "android-anchor", "project": "PriviAnchor", "fingerprint_env": "ANCHOR_ANDROID_SHA256"},
+    "listing": {"short": "Proof that a file existed on a date. Files never leave your device.",
+                "full": "Privi Anchor gives you dated proof that a file existed, for designs, drafts, contracts, photos and research notes. The app fingerprints the file on your device (SHA-256), so the file itself is never uploaded. The fingerprint is anchored on the Base blockchain and you get a certificate with a public page. Anchor a whole folder with one transaction and later prove any single file was part of it. For customers with a Privi Anchor API key."},
+    "features": [
+      {"title": "Anchor a file", "blurb": "Put one or more fingerprints on chain.", "tools": ["anchor_hashes", "anchor_hash_text"]},
+      {"title": "Folder Manifest", "blurb": "Anchor up to 2,000 files at once; prove any one later.", "tools": ["anchor_manifest", "anchor_manifest_check"]},
+      {"title": "Certificate", "blurb": "A readable proof-of-existence certificate with a public page.", "tools": ["anchor_certificate", "anchor_certificate_get"]},
+      {"title": "Check a proof", "blurb": "Confirm on chain that a fingerprint was anchored, and when.", "tools": ["anchor_verify", "anchor_status"]}
+    ]
+  },
+  "call": {
+    "package_dir": "call-server/src/privi_call", "host": "privi-call.onrender.com",
+    "name": "Privi Call", "short_name": "Privi Call", "accent": "#FF7A9A",
+    "tagline": "Check before you dial.",
+    "intro": "One answer before each call: is the number on your do-not-call list, is it within calling hours where the person is, and do you hold the consent the call needs. Numbers are stored only as scrambled fingerprints.",
+    "site": "https://privi-call.onrender.com",
+    "key": {"mode": "arg", "arg": "call_key", "label": "Prepaid call key", "short": "Key", "placeholder": "pck_...",
+            "help": "Your lists belong to your prepaid call key (pck_...). It is kept in this browser only and filled in for you."},
+    "android": {"package": "us.priviflow.call", "dir": "android-call", "project": "PriviCall", "fingerprint_env": "CALL_ANDROID_SHA256"},
+    "listing": {"short": "Pre-call checks: do-not-call list, calling hours and consent records.",
+                "full": "Privi Call answers one question before anyone dials: go or no-go. Keep your own do-not-call list. Check that it is between 8 a.m. and 9 p.m. where the called person is. Record who agreed to marketing calls, an AI voice, call recording or texts, in a log that cannot be back-filled. Phone numbers are stored only as salted fingerprints. These checks cover your own records; they do not check the National Do Not Call Registry and are not legal advice. Each use is paid in USDC from a crypto wallet."},
+    "features": [
+      {"title": "Pre-call check", "blurb": "Go or no-go, with the reasons.", "tools": ["call_precheck"]},
+      {"title": "Do-Not-Call list", "blurb": "Add, remove or check a number.", "tools": ["call_do_not_call"]},
+      {"title": "Calling hours", "blurb": "Is it 8 a.m. to 9 p.m. where they are?", "tools": ["call_hours_check"]},
+      {"title": "Consent records", "blurb": "Who agreed to what, and when.", "tools": ["call_consent_record", "call_consent_revoke", "call_consent_check"]}
+    ]
+  }
+}

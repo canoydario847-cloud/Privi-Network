@@ -3,7 +3,7 @@
   "name": "io.github.canoydario847-cloud/privi-anchor",
   "title": "Privi Anchor",
   "description": "Hash anchoring and proof-of-existence on chain for AI agents and apps. Free with an API key.",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "websiteUrl": "https://privi-discovery.onrender.com",
   "repository": {
     "url": "https://github.com/canoydario847-cloud/Privi-Network",

@@ -1,0 +1,59 @@
+{
+ "slug": "anchor",
+ "host": "privi-anchor.onrender.com",
+ "name": "Privi Anchor",
+ "short_name": "Anchor",
+ "tagline": "Prove a file existed, without showing it to anyone.",
+ "intro": "Fingerprint files on your device, anchor them on the Base blockchain, and get a certificate you can hand to someone else. One anchor can cover a whole folder.",
+ "site": "https://privi-hub.onrender.com",
+ "key": {
+  "mode": "bearer",
+  "label": "Anchor API key",
+  "short": "Key",
+  "placeholder": "Your Anchor key",
+  "help": "Privi Anchor is a paid service. Your API key is kept in this browser only."
+ },
+ "file_lists": {
+  "anchor_manifest.files": "path"
+ },
+ "android": {
+  "package": "us.priviflow.anchor",
+  "dir": "android-anchor",
+  "project": "PriviAnchor",
+  "fingerprint_env": "ANCHOR_ANDROID_SHA256"
+ },
+ "features": [
+  {
+   "title": "Anchor a file",
+   "blurb": "Put one or more fingerprints on chain.",
+   "tools": [
+    "anchor_hashes",
+    "anchor_hash_text"
+   ]
+  },
+  {
+   "title": "Folder Manifest",
+   "blurb": "Anchor up to 2,000 files at once; prove any one later.",
+   "tools": [
+    "anchor_manifest",
+    "anchor_manifest_check"
+   ]
+  },
+  {
+   "title": "Certificate",
+   "blurb": "A readable proof-of-existence certificate with a public page.",
+   "tools": [
+    "anchor_certificate",
+    "anchor_certificate_get"
+   ]
+  },
+  {
+   "title": "Check a proof",
+   "blurb": "Confirm on chain that a fingerprint was anchored, and when.",
+   "tools": [
+    "anchor_verify",
+    "anchor_status"
+   ]
+  }
+ ]
+}
