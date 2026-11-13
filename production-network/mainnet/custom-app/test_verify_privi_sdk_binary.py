@@ -87,6 +87,19 @@ class ProvenanceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "missing unique guard|executable|enforcement"):
             self.check()
 
+    @unittest.expectedFailure
+    def test_unused_interpreted_string_marker_must_not_qualify(self):
+        """Known gap: a diagnostic marker in an unused Go string is not a guard."""
+        path = self.root / "x/bank/keeper/send.go"
+        function_marker, diagnostic_marker = mod.MARKERS["x/bank/keeper/send.go"]
+        path.write_text(
+            "package keeper\\n" + function_marker +
+            "\\nvar unrelated = " + json.dumps(diagnostic_marker) + "\\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(ValueError, "missing unique guard|executable|enforcement"):
+            self.check()
+
     def test_reject_module_graph_without_local_replace(self):
         self.module.pop("Replace")
         with self.assertRaisesRegex(ValueError, "module graph"):
