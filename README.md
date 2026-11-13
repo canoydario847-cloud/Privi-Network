@@ -2,6 +2,20 @@
 
 [![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/canoydario847-cloud/privi-network)
 
+## Privi World paid B2B services — available today
+
+Privi World Corp offers three **human-delivered service engagements** with independently verified live Stripe Payment Links. These services are separate from Privi's not-yet-activated prepaid API-credit checkout:
+
+| Service | Price (USD) | Learn more | Stripe purchase |
+| --- | ---: | --- | --- |
+| Privi Guard Security Review | $99 | [Service details](https://privi-services.onrender.com/ai-agent-security-review/) | [Stripe Checkout](https://buy.stripe.com/28EcN4gN510y0ot8ZQ6J201) |
+| Privi Agent Evidence Review | $149 | [Service details](https://privi-services.onrender.com/agent-audit-evidence-review/) | [Stripe Checkout](https://buy.stripe.com/28E7sK7cvfVsgnr2Bs6J202) |
+| Privi Enterprise Integration Consultation | $249 | [Service details](https://privi-services.onrender.com/enterprise-mcp-consultation/) | [Stripe Checkout](https://buy.stripe.com/28E28qcwP6kSc7b2Bs6J203) |
+
+**[Compare all services and contact Privi →](https://privi-services.onrender.com/)**
+
+Buyers should confirm scope and deliverable expectations before paying if needed; after payment, respond to the Stripe receipt email with project details to arrange service delivery. These are not subscriptions, audited certifications, or automatic API-key purchases. The seller is Privi World Corp.
+
 ## Privi Agent Survival & Premium — prepaid AI-agent utility gateway
 
 **51 new premium analyzers** plus 32 standard survival utilities available through a commercial MCP connector. The premium tools cover agent authorization, SLO/incident triage, data quality, API unit economics, procurement and release readiness. Premium calls cost **5 prepaid credits** and ordinary calls cost **1 credit**; tool discovery is public, but free execution will be disabled in the paid-only release.
@@ -11,7 +25,7 @@
 - [Public MCP directory metadata and listing guide](privi-agent-survival/README.md).
 - [32 Agent Skills](https://privi-ai-21-gateway.onrender.com/skills/index.json) · [Live 51-premium website](https://privi-premium-tools.onrender.com).
 
-**Commercial status:** Checkout is not accepting real payments while durable storage, Stripe webhook credentials/tax configuration, Base confirmation and fulfillment tests remain unverified. Do not transfer funds without a verified order. The commercial gateway is separate from Privi Ledger's existing plans.
+**Commercial status:** The three human-delivered review/consultation services above use existing active Stripe-hosted payment links. The separate automated API-credit checkout is not accepting payments while durable storage, Stripe webhook credentials/tax configuration, Base confirmation and fulfillment tests remain unverified. Do not transfer funds without a verified order. The commercial gateway is separate from Privi Ledger's existing plans.
 
 Remote MCP servers that make AI agents safer and accountable, paid in USDC through [x402](https://x402.org) with free tiers.
 Built by **Dario Canoy**, Privi World Co, Port Huron, Michigan. Live status of every service: **[Privi Hub](https://privi-hub.onrender.com)**.
