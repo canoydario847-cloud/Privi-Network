@@ -51,7 +51,7 @@ class ProvenanceTests(unittest.TestCase):
         """
         for rel, markers in mod.MARKERS.items():
             path = self.root / rel
-            path.write_text("\\n".join("// " + marker for marker in markers),
+            path.write_text("\n".join("// " + marker for marker in markers),
                             encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "comment|executable|enforcement"):
             self.check()
