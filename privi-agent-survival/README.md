@@ -6,6 +6,8 @@
 
 This is the **public metadata and directory-submission page** for Privi's remotely hosted commercial MCP service. The app's implementation is maintained separately. Nothing in this folder is a credential or a full source release.
 
+**[MCP publisher distribution checklist — 20 channels](directory-opportunities.md)** · **[MCP developer buyer page](https://privi-services.onrender.com/mcp-server-owners/)**
+
 ## B2B services customers can purchase now
 
 Alongside the non-purchasable API-credit catalog, Privi World Corp offers three **human-delivered services** through independently verified live Stripe Payment Links: [Guard Security Review ($99)](https://privi-services.onrender.com/ai-agent-security-review/), [Agent Evidence Review ($149)](https://privi-services.onrender.com/agent-audit-evidence-review/) and [Enterprise Integration Consultation ($249)](https://privi-services.onrender.com/enterprise-mcp-consultation/). Read the [public service one-pager](../privi-business-services/README.md). These purchases **do not** provide automatic API credits.
