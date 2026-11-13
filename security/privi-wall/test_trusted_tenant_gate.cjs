@@ -52,3 +52,29 @@ test('inherited signing-key resolver is rejected',async()=>{
  const gate=createTrustedTenantGate({gate:{verify:async()=>true},resolveIdentity:async()=>identity});
  assert.equal(await gate.verify({request}),false);
 });
+
+test('accessor identity claims fail closed without invoking getter',async()=>{
+ let accessed=0,called=false;
+ const identity=trusted();
+ Object.defineProperty(identity,'tenantId',{enumerable:true,get(){accessed++;return 'tenantA';}});
+ const gate=createTrustedTenantGate({gate:{verify:async()=>{called=true;return true;}},resolveIdentity:async()=>identity});
+ assert.equal(await gate.verify({request}),false);
+ assert.equal(accessed,0);
+ assert.equal(called,false);
+});
+test('accessor key resolver fails closed without invoking getter',async()=>{
+ let accessed=0,called=false;
+ const identity=trusted();
+ Object.defineProperty(identity,'resolveTenantKey',{enumerable:true,get(){accessed++;return ()=>({});}});
+ const gate=createTrustedTenantGate({gate:{verify:async()=>{called=true;return true;}},resolveIdentity:async()=>identity});
+ assert.equal(await gate.verify({request}),false);
+ assert.equal(accessed,0);
+ assert.equal(called,false);
+});
+test('proxy descriptor traps fail closed before receipt verification',async()=>{
+ let called=false;
+ const identity=new Proxy(trusted(),{getOwnPropertyDescriptor(){throw Error('untrusted proxy');}});
+ const gate=createTrustedTenantGate({gate:{verify:async()=>{called=true;return true;}},resolveIdentity:async()=>identity});
+ assert.equal(await gate.verify({request}),false);
+ assert.equal(called,false);
+});
