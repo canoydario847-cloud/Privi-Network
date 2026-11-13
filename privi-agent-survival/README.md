@@ -2,7 +2,7 @@
 
 **Maintainer:** Privi World Corp · **Remote MCP endpoint:** https://privi-ai-21-gateway.onrender.com/mcp
 
-**Directory entry:** [Official MCP Registry](https://registry.modelcontextprotocol.io/) — name `io.github.canoydario847-cloud/privi-agent-survival`, v0.6.0 already registered; a v0.7.0 update is being prepared.
+**Directory entry:** [Official MCP Registry](https://registry.modelcontextprotocol.io/) — name `io.github.canoydario847-cloud/privi-agent-survival`, v0.7.0 successfully published.
 
 This is the **public metadata and directory-submission page** for Privi's remotely hosted commercial MCP service. The app's implementation is maintained separately. Nothing in this folder is a credential or a full source release.
 
@@ -41,7 +41,7 @@ This is the **public metadata and directory-submission page** for Privi's remote
 
 ## Current registration status
 
-- **Official MCP Registry:** v0.6.0 previously published successfully. New paid-only v0.7.0 publish depends on the production rollout.
+- **Official MCP Registry:** v0.7.0 published through GitHub OIDC and verified by GitHub Actions. Tool execution stays paywalled; customer checkout is not yet active.
 - **Glama:** Maintainer must submit/claim in the Glama web interface if not already indexed.
 - **Smithery, mcp.so, PulseMCP, mcpservers.org and curated GitHub lists:** No approval or indexed listing claimed until independently verified. Public documentation is available for their forms and pull requests.
 
