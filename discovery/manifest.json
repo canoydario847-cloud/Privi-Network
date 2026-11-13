@@ -217,7 +217,7 @@
       "registry_id": "io.github.canoydario847-cloud/privi-quantum",
       "url": "https://privi-quantum.onrender.com/mcp",
       "transport": "streamable-http",
-      "description": "Quantum Agent Accelerator: upgrade any AI agent to a certified quantum agent (post-quantum ML-DSA identity, hybrid post-quantum TLS, and a verified quantum run), listed in the free Quantum Agent Directory where any agent can verify another agent's post-quantum signature (qagent_verify). Every quantum agent is approved by a verified human (passkey with biometric or screen-lock check on the person's own device, plus government ID via Stripe Identity) and graded A+ to F by Privi Inspector. Privi Inspector guards it: only certified, current quantum agents get a pass in, and its patrol keeps a public watchlist of revoked, outdated and impersonated agents that any service can check (inspector_check, inspector_watchlist). The Privi quantum realm: Dream Scape workspaces, Dream Weaver races one quantum job across realms for the fastest or best answer, and Privilege ranks realms by measured time to the proven optimum. Quantum optimization (CVaR-QAOA, up to 16 qubits) for manufacturing decisions; every result signed Ed25519 + ML-DSA-87 and anchored on Base. Also scans code and endpoints for quantum-vulnerable cryptography.",
+      "description": "Quantum Agent Accelerator: upgrade any AI agent to a certified quantum agent (post-quantum ML-DSA identity, hybrid post-quantum TLS, and a verified quantum run), listed in the free Quantum Agent Directory where any agent can verify another agent's post-quantum signature (qagent_verify). Every quantum agent is approved by a verified human (passkey with biometric or screen-lock check on the person's own device, plus government ID via Stripe Identity) and graded A+ to F by Privi Inspector. Privi Inspector guards it: only certified, current quantum agents get a pass in, and its patrol keeps a public watchlist of revoked, outdated and impersonated agents that any service can check (inspector_check, inspector_watchlist). The Privi quantum realm: Dream Scape workspaces, Dream Weaver races one quantum job across realms for the fastest or best answer, and Privilege ranks realms by measured time to the proven optimum. Quantum optimization (CVaR-QAOA, up to 16 qubits) for manufacturing decisions; every result signed Ed25519 + ML-DSA-87 and anchored on Base. Also scans code and endpoints for quantum-vulnerable cryptography. Privi Car: post-quantum signed vehicle passports, hash-chained odometer and service records with rollback flags, signed vehicle history reports, time-limited digital keys, and proven-best route, fleet and EV charging plans with a sealed quantum-vs-classical receipt; it never connects to or controls a vehicle.",
       "pricing": "free",
       "auth": "none",
       "tools": [
@@ -252,7 +252,20 @@
         "inspector_report",
         "inspector_patrol",
         "qagent_human_request",
-        "inspector_grade"
+        "inspector_grade",
+        "car_info",
+        "car_vin_check",
+        "car_register",
+        "car_record_add",
+        "car_verify",
+        "car_history",
+        "car_key_issue",
+        "car_key_check",
+        "car_key_revoke",
+        "car_route",
+        "car_fleet_assign",
+        "car_charge_plan",
+        "car_edge_job"
       ]
     },
     {
