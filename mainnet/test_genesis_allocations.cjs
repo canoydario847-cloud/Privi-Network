@@ -30,3 +30,16 @@ test('accepts complete multi-denom allocations',()=>{
  extra.app_state.bank.supply.push({denom:'other',amount:'7'});
  assert.deepEqual(auditGenesisAllocations(extra,{allocations:[...allocations,{address:'vesting1',denom:'other',amount:'7'}]}),[]);
 });
+
+test('rejects whitespace-only allocation address',()=>{
+ const bad={allocations:[{...allocations[0],address:'  '},allocations[1]]};
+ assert.ok(auditGenesisAllocations(genesis,bad).some(e=>/invalid allocation/.test(e)));
+});
+test('rejects control characters in allocation denomination',()=>{
+ const bad={allocations:[{...allocations[0],denom:'aprvi\n'},allocations[1]]};
+ assert.ok(auditGenesisAllocations(genesis,bad).some(e=>/invalid allocation/.test(e)));
+});
+test('rejects whitespace in otherwise valid allocation address',()=>{
+ const bad={allocations:[{...allocations[0],address:'vesting 1'},allocations[1]]};
+ assert.ok(auditGenesisAllocations(genesis,bad).some(e=>/invalid allocation/.test(e)));
+});

@@ -1,0 +1,33 @@
+name: PRVI offline financial accounting regressions
+on:
+  pull_request:
+    paths:
+      - 'mainnet/audit_bank_supply.cjs'
+      - 'mainnet/test_bank_supply.cjs'
+      - 'mainnet/audit_monetary_policy.cjs'
+      - 'mainnet/test_monetary_policy.cjs'
+      - 'mainnet/verify_signed_policy.cjs'
+      - 'mainnet/test_signed_policy.cjs'
+      - 'mainnet/audit_signed_genesis.cjs'
+      - 'mainnet/test_signed_genesis.cjs'
+      - 'production-network/ops/prvi_genesis_preflight.py'
+      - 'production-network/ops/test_prvi_genesis_preflight.py'
+      - '.github/workflows/prvi-bank-supply-regression.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bank-supply-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run offline genesis preflight regression suite
+        run: python3 -m unittest discover -s production-network/ops -p 'test_prvi_genesis_preflight.py' -v
+      - name: Run offline bank supply and monetary policy regression suites
+        run: node --test mainnet/test_bank_supply.cjs mainnet/test_monetary_policy.cjs mainnet/test_signed_policy.cjs mainnet/test_signed_genesis.cjs
