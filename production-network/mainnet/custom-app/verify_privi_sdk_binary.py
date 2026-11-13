@@ -32,6 +32,57 @@ MARKERS = {
 }
 
 
+
+def without_go_comments(source: str) -> str:
+    """Remove Go line/block comments while preserving strings and line breaks.
+
+    This is a source-marker screening aid, NOT Go parsing or runtime proof.
+    """
+    out = []
+    state = "code"
+    i = 0
+    while i < len(source):
+        ch = source[i]
+        nxt = source[i + 1] if i + 1 < len(source) else ""
+        if state == "code":
+            if ch == "/" and nxt == "/":
+                state = "line"
+                out.extend("  ")
+                i += 2
+                continue
+            if ch == "/" and nxt == "*":
+                state = "block"
+                out.extend("  ")
+                i += 2
+                continue
+            if ch in ('"', "'", "`"):
+                state = ch
+            out.append(ch)
+        elif state == "line":
+            if ch == "\n":
+                state = "code"
+                out.append(ch)
+            else:
+                out.append(" ")
+        elif state == "block":
+            if ch == "*" and nxt == "/":
+                state = "code"
+                out.extend("  ")
+                i += 2
+                continue
+            out.append("\n" if ch == "\n" else " ")
+        else:
+            out.append(ch)
+            if state != "`" and ch == "\\" and i + 1 < len(source):
+                i += 1
+                out.append(source[i])
+            elif ch == state:
+                state = "code"
+        i += 1
+    if state == "block":
+        raise ValueError("unterminated Go block comment in SDK guard source")
+    return "".join(out)
+
 def verify(module_json: str, build_info: str, sdk_dir: Path) -> dict:
     root = sdk_dir.resolve(strict=True)
     if not root.is_dir() or root.name != "privi-patched-sdk-app-only":
@@ -59,14 +110,12 @@ def verify(module_json: str, build_info: str, sdk_dir: Path) -> dict:
         path = root / relpath
         data = path.read_bytes()
         content = data.decode("utf-8")
-        # Fail closed on a fixture made entirely of Go line comments.
-        # This is only a narrow negative check, NOT executable-code proof.
-        lines = [line.strip() for line in content.splitlines() if line.strip()]
-        if lines and all(line.startswith("//") for line in lines):
-            raise ValueError("comment-only SDK source cannot establish executable enforcement")
+        # Do not count markers inside Go comments as executable guard evidence.
+        # This remains marker screening; it does not prove compiled enforcement.
+        uncommented = without_go_comments(content)
         for marker in required:
-            if content.count(marker) != 1:
-                raise ValueError("hardened SDK source missing unique guard in " + relpath)
+            if uncommented.count(marker) != 1:
+                raise ValueError("hardened SDK source missing unique guard outside comments in " + relpath)
         fingerprints[relpath] = hashlib.sha256(data).hexdigest()
     return {
         "status": "BUILD_ONLY_SDK_INPUT_VERIFIED",
