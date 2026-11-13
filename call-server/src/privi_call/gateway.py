@@ -364,6 +364,10 @@ def register_gateway(mcp, s, store, router, paywall, limiter, version: str) -> N
             bad = paywall._matches(payment, req)
             if bad:
                 return signup_required("Invalid payment: " + bad)
+            fingerprint = hashlib.sha256(
+                json.dumps(payment, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+            if store.paid_payment_used(fingerprint, ""):
+                return out({"error": "this signed payment has already registered an AI agent"}, 409)
             verified = await paywall.facilitator.verify(payment, req)
             if not verified.get("isValid"):
                 return signup_required("Payment could not be verified: " +
@@ -375,7 +379,6 @@ def register_gateway(mcp, s, store, router, paywall, limiter, version: str) -> N
             tx = str(settled.get("transaction") or settled.get("txHash") or "").strip()
             if not tx:
                 return out({"error": "settlement returned no transaction reference; contact support with receipt"}, 502)
-            fingerprint = hashlib.sha256(json.dumps(payment, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
             clean_tags = [x.strip()[:30] for x in raw_tags]
             try:
                 agent, key = store.enroll_paid_agent(
