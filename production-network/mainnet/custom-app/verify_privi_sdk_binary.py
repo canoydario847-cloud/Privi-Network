@@ -121,8 +121,8 @@ def verify(module_json: str, build_info: str, sdk_dir: Path) -> dict:
         # fixture; production enforcement still requires compiled tests.
         for marker in required:
             if marker.startswith("PRVI SDK bank:"):
-                declaration = (r"(?m)^\\s*(?:var|const)\\s+\\w+\\s*=\\s*"
-                               r'["\\x60][^\\n]*' + re.escape(marker))
+                declaration = (r'(?m)^\s*(?:var|const)\s+\w+\s*=\s*'
+                               r'["\x60][^\n]*' + re.escape(marker))
                 if re.search(declaration, uncommented):
                     raise ValueError("unused diagnostic declaration cannot establish enforcement")
         for marker in required:
