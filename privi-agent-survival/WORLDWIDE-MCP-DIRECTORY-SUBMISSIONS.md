@@ -69,3 +69,34 @@ Status terminology: **maintainer-reported** means recorded in repository documen
 4. Save each submitted URL, date, review result, and visible public listing link.
 5. For platforms requiring OAuth, logos, packages, or maintainer verification, complete those prerequisites before claiming availability.
 6. Promote globally using language-neutral links; translate the listing text for relevant markets without manufacturing user counts or uptime.
+
+## Verified external discovery results (2026-11-13 search)
+
+These pages were found by public search and are already indexed. Their reported health-test dates are historical; **do not treat as live uptime checks**.
+
+| Privi service | Glama public URL | Directory status at time of search |
+|---|---|---|
+| Privi Verify | https://glama.ai/mcp/connectors/io.github.canoydario847-cloud/privi-verify | Indexed; reported healthy, test 2026-10-21 |
+| Privi Call | https://glama.ai/mcp/connectors/io.github.canoydario847-cloud/privi-call | Indexed; reported healthy, test 2026-10-31 |
+| Privi Anchor | https://glama.ai/mcp/connectors/io.github.canoydario847-cloud/privi-anchor | Indexed; reported healthy, test 2026-10-21 |
+| Privi Ledger | https://glama.ai/mcp/connectors/io.github.canoydario847-cloud/privi-ledger | Indexed; reported **unhealthy**, test 2026-10-21; needs current verification |
+| Privi Agent Survival & Premium | https://glama.ai/mcp/connectors/io.github.canoydario847-cloud/privi-agent-survival | **Not verified**: do not count as indexed without a working page |
+
+Additional third-party indexed page: https://mcprepository.com/canoydario847-cloud/privi-network (covers broader Privi Network; not proof of current availability).
+
+### Current directory-policy corrections
+
+- Glama distinguishes open-source GitHub MCP servers from **hosted remote connectors**. For this separately maintained gateway, use the *hosted endpoint* submission flow rather than implying this public metadata repository is the gateway's deployable source. See https://glama.ai/mcp/faq.
+- PulseMCP's submission page remains paused according to October/November 2026 directory reports; official registry indexing is the appropriate route.
+- Smithery announced the end of its hosted proxy/SDK/CLI on 2026-10-31. Treat direct listing availability as needing fresh verification; **do not propose deploying the gateway to discontinued Smithery hosting**.
+- GitHub MCP Registry is curated and a listing in the official registry is not proof of appearing in GitHub's curated list.
+- A GitHub submission to a third-party repo attempted through this integration returned **HTTP 403**. No successful external publication is claimed from that attempt.
+- Attempts to fetch the Privi gateway health and server-card pages from the web retrieval environment failed; **current live service health is unverified**.
+
+## Highest-priority remaining work
+
+1. Validate public gateway health, MCP initialize and tools/list using an environment with permitted outbound connectivity. Resolve any defects first.
+2. Submit **Privi Agent Survival & Premium** as a hosted *connector* at Glama, using the endpoint and truthful paid-checkout disclosure.
+3. Claim/refresh already indexed Privi Verify, Call, Anchor and Ledger listings; investigate stale unhealthy Ledger status.
+4. Submit canonical gateway info via free review options on mcp.so and mcpservers.org and retain confirmation IDs; do not pay for priority review.
+5. Do not claim premium automated API usage is purchasable until durable billing/fulfillment is end-to-end verified.
