@@ -1,10 +1,10 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.canoydario847-cloud/privi-ledger",
-  "title": "Privi Quantum Ledger",
-  "description": "Quantum-sealed audit logs for AI agents (ML-DSA-87, SHA3-512), plus Privi Guard and trust passports.",
-  "version": "0.14.0",
-  "websiteUrl": "https://privi-discovery.onrender.com",
+  "title": "Privi Ledger — Recovery Evaluation",
+  "description": "Evaluation-only MCP recovery endpoint for Privi agent ledger tools. Original ledger data unavailable; new instance uses temporary storage, so do not rely on it for durable audit evidence. Payments disabled.",
+  "version": "0.14.1",
+  "websiteUrl": "https://privi-ledger-mcp-recovery.onrender.com",
   "repository": {
     "url": "https://github.com/canoydario847-cloud/Privi-Network",
     "source": "github",
@@ -13,7 +13,7 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://privi-ledger.onrender.com/mcp"
+      "url": "https://privi-ledger-mcp-recovery.onrender.com/mcp"
     }
   ]
 }
