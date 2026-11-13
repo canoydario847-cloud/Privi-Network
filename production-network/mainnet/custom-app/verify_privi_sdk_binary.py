@@ -59,6 +59,11 @@ def verify(module_json: str, build_info: str, sdk_dir: Path) -> dict:
         path = root / relpath
         data = path.read_bytes()
         content = data.decode("utf-8")
+        # Fail closed on a fixture made entirely of Go line comments.
+        # This is only a narrow negative check, NOT executable-code proof.
+        lines = [line.strip() for line in content.splitlines() if line.strip()]
+        if lines and all(line.startswith("//") for line in lines):
+            raise ValueError("comment-only SDK source cannot establish executable enforcement")
         for marker in required:
             if content.count(marker) != 1:
                 raise ValueError("hardened SDK source missing unique guard in " + relpath)
