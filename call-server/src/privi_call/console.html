@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privi Console for call agents</title>
+<meta name="description" content="Run Privi checks during a live call and get a sealed record for each one.">
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#14171c;--mute:#5d6673;--line:#d9dee6;--accent:#0b5fff;--ok:#0a7a43;--bad:#b3261e}
+@media (prefers-color-scheme:dark){:root{--bg:#0e1116;--card:#171b22;--ink:#e9ecf1;--mute:#98a2b1;--line:#2a313c;--accent:#6ea0ff;--ok:#4cc38a;--bad:#ff7b72}}
+*{box-sizing:border-box}body{margin:0;font:16px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+main{max-width:720px;margin:0 auto;padding:20px 16px 60px}h1{font-size:22px;margin:0 0 4px}p.sub{color:var(--mute);margin:0 0 18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
+label{display:block;font-size:13px;font-weight:600;color:var(--mute);margin:10px 0 4px}label:first-child{margin-top:0}
+input,select,textarea,button{font:inherit;width:100%;padding:11px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+textarea{min-height:110px;font:14px/1.45 ui-monospace,monospace}
+button{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;cursor:pointer;margin-top:12px}
+button.ghost{background:transparent;color:var(--accent)}button:disabled{opacity:.55;cursor:default}
+.row{display:flex;gap:10px}.row>*{flex:1}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;overflow-x:auto;font:13px/1.45 ui-monospace,monospace;white-space:pre-wrap;word-break:break-word;margin:10px 0 0}
+.status{font-weight:600;margin-top:10px}.ok{color:var(--ok)}.bad{color:var(--bad)}.hint{font-size:13px;color:var(--mute);margin:6px 0 0}
+a{color:var(--accent)}
+</style></head><body><main>
+<h1>Privi Console</h1>
+<p class="sub">For call-center agents: run a Privi check while the caller is on the line. Every check gets a sealed record you can read back.</p>
+
+<div class="card">
+  <label for="key">Your Privi key</label>
+  <input id="key" type="password" autocomplete="off" placeholder="pck_...">
+  <p class="hint" id="bal">One credit per check. Your supervisor buys keys: {{PACK}} at <code>POST /v1/keys</code>.</p>
+  <button class="ghost" id="load">Load services</button>
+</div>
+
+<div class="card">
+  <div class="row">
+    <div><label for="agent">Service</label><select id="agent" disabled><option>Load services first</option></select></div>
+    <div><label for="tool">Check</label><select id="tool" disabled><option>Pick a service</option></select></div>
+  </div>
+  <p class="hint" id="desc"></p>
+  <label for="args">Details (JSON)</label>
+  <textarea id="args" spellcheck="false">{}</textarea>
+  <button id="run" disabled>Run check</button>
+  <div class="status" id="status" role="status"></div>
+  <pre id="result" hidden></pre>
+  <p class="hint" id="record"></p>
+</div>
+<p class="hint">Privi World Co · <a href="/">Call log</a> · <a href="/openapi.json">API</a> · <a href="/kits">Kits for AI agents</a></p>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let tools = {};
+try { $("key").value = sessionStorage.getItem("privi_key") || ""; } catch (e) {}
+function say(text, cls) { $("status").textContent = text; $("status").className = "status " + (cls || ""); }
+async function api(path, opts) {
+  const key = $("key").value.trim();
+  if (!key) throw new Error("Enter your Privi key first.");
+  try { sessionStorage.setItem("privi_key", key); } catch (e) {}
+  const r = await fetch(path, Object.assign({ headers: { "Authorization": "Bearer " + key, "Content-Type": "application/json" } }, opts || {}));
+  const data = await r.json().catch(() => ({}));
+  if (data.billing && data.billing.credits_left != null) $("bal").textContent = data.billing.credits_left + " credits left on this key.";
+  if (!r.ok) throw new Error(data.error || ("Request failed (" + r.status + ")"));
+  return data;
+}
+function template(schema) {
+  const o = {}, p = (schema && schema.properties) || {};
+  for (const k of Object.keys(p)) if ((schema.required || []).includes(k)) o[k] = p[k].type === "number" || p[k].type === "integer" ? 0 : p[k].type === "boolean" ? false : p[k].type === "array" ? [] : p[k].type === "object" ? {} : "";
+  return JSON.stringify(o, null, 2);
+}
+$("load").onclick = async () => {
+  say("Loading services...");
+  try {
+    const d = await api("/v1/agents");
+    $("agent").innerHTML = '<option value="">Choose...</option>' + d.agents.map(a => '<option value="' + a.number + '"></option>').join("");
+    d.agents.forEach((a, i) => { $("agent").options[i + 1].textContent = a.number + " · " + a.name; });
+    $("agent").disabled = false; say("");
+  } catch (e) { say(e.message, "bad"); }
+};
+$("agent").onchange = async () => {
+  const n = $("agent").value; $("tool").disabled = true; $("run").disabled = true; tools = {};
+  if (!n) return;
+  say("Loading checks...");
+  try {
+    const d = await api("/v1/agents/" + encodeURIComponent(n) + "/tools");
+    $("tool").innerHTML = "";
+    d.tools.forEach(t => { tools[t.name] = t; const o = document.createElement("option"); o.value = t.name; o.textContent = t.title || t.name; $("tool").appendChild(o); });
+    $("tool").disabled = false; $("tool").onchange(); say("");
+  } catch (e) { say(e.message, "bad"); }
+};
+$("tool").onchange = () => {
+  const t = tools[$("tool").value]; if (!t) return;
+  $("desc").textContent = t.description || ""; $("args").value = template(t.inputSchema); $("run").disabled = false;
+};
+$("run").onclick = async () => {
+  let args;
+  try { args = JSON.parse($("args").value || "{}"); } catch (e) { return say("Details must be valid JSON.", "bad"); }
+  $("run").disabled = true; say("Running..."); $("result").hidden = true; $("record").textContent = "";
+  try {
+    const d = await api("/v1/call", { method: "POST", body: JSON.stringify({ number: $("agent").value, tool: $("tool").value, arguments: args }) });
+    $("result").textContent = JSON.stringify(d.result, null, 2); $("result").hidden = false;
+    say(d.is_error ? "The service returned an error." : "Done.", d.is_error ? "bad" : "ok");
+    if (d.call) { $("record").innerHTML = 'Sealed record <a target="_blank" rel="noopener"></a>'; const a = $("record").querySelector("a"); a.href = d.call.record_url; a.textContent = d.call.id; }
+  } catch (e) { say(e.message, "bad"); }
+  $("run").disabled = false;
+};
+</script></body></html>
