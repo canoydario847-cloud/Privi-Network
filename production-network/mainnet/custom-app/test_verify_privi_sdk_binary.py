@@ -48,10 +48,9 @@ class ProvenanceTests(unittest.TestCase):
             path = self.root / rel
             path.write_text("\n".join("// " + marker for marker in markers),
                             encoding="utf-8")
-        with self.assertRaisesRegex(ValueError, "comment|executable|enforcement"):
+        with self.assertRaisesRegex(ValueError, "comment|executable|enforcement|missing unique guard"):
             self.check()
 
-    @unittest.expectedFailure
     def test_mixed_executable_and_commented_guards_must_not_qualify(self):
         """Known gap: harmless Go code plus commented guards must fail closed."""
         for rel, markers in mod.MARKERS.items():
@@ -61,7 +60,19 @@ class ProvenanceTests(unittest.TestCase):
                 "\n".join("// " + marker for marker in markers) + "\n",
                 encoding="utf-8",
             )
-        with self.assertRaisesRegex(ValueError, "comment|executable|enforcement"):
+        with self.assertRaisesRegex(ValueError, "comment|executable|enforcement|missing unique guard"):
+            self.check()
+
+    def test_block_commented_guards_must_not_qualify(self):
+        """Markers inside Go block comments must never satisfy screening."""
+        for rel, markers in mod.MARKERS.items():
+            path = self.root / rel
+            path.write_text(
+                "package keeper\\nfunc unrelated() {}\\n/*\\n" +
+                "\\n".join(markers) + "\\n*/\\n",
+                encoding="utf-8",
+            )
+        with self.assertRaisesRegex(ValueError, "missing unique guard"):
             self.check()
 
     def test_reject_module_graph_without_local_replace(self):
