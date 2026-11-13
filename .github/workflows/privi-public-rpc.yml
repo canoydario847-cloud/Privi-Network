@@ -1,0 +1,49 @@
+name: Verify live Privi EVM RPC and valueless transfer
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/privi-public-rpc.yml"
+      - "production-network/testnet/probe_public_devnet.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-rpc:
+    name: Remote chain ID, blocks and signed TEST transfer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Ethereum developer transaction signer
+        run: python -m pip install --disable-pip-version-check eth-account==0.13.7
+      - name: Probe public RPC and broadcast ONE valueless TEST transfer
+        run: python production-network/testnet/probe_public_devnet.py --send-test
+      - name: Check browser CORS preflight for standalone wallet
+        if: success()
+        run: |
+          python - <<'PY'
+          from urllib.request import Request,urlopen
+          endpoint='https://privi-evm-devnet-development.up.railway.app/'
+          req=Request(endpoint,method='OPTIONS',headers={
+              'Origin':'http://localhost:8088',
+              'Access-Control-Request-Method':'POST',
+              'Access-Control-Request-Headers':'content-type'})
+          try:
+              with urlopen(req,timeout=15) as res:
+                  allowed=res.headers.get('Access-Control-Allow-Origin','')
+                  methods=res.headers.get('Access-Control-Allow-Methods','')
+                  print('CORS status:',res.status,'allow origin:',allowed,'methods:',methods)
+                  if allowed not in ('*','http://localhost:8088'):
+                      print('WARNING: Standalone HTML wallet may need a CORS-enabled RPC gateway')
+          except Exception as e:
+              print('WARNING: CORS preflight not yet verified:',str(e))
+          PY
+
+# One disposable upstream PUBLIC demo account signs one 1-wei TEST transfer.
+# DO NOT USE mnemonic or genesis funds on real chains. No real PRIV assets.
