@@ -1,0 +1,72 @@
+name: Privi static pages and domain smoke test
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/privi-static-pages-check.yml'
+permissions:
+  contents: read
+jobs:
+  static-page-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check live Render static pages, DNS and HTML
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import concurrent.futures, json, socket, urllib.error, urllib.parse, urllib.request
+          sites = {
+            "world": "https://privi-world.onrender.com/",
+            "fortress": "https://privi-fortress.onrender.com/",
+            "passport": "https://privi-passport.onrender.com/",
+            "kya": "https://privi-kya.onrender.com/",
+            "mandates": "https://privi-mandates.onrender.com/",
+            "government": "https://privi-gov.onrender.com/",
+            "guard": "https://privi-guard-814f.onrender.com/",
+            "live": "https://privi-live.onrender.com/",
+            "hub": "https://privi-hub.onrender.com/",
+            "chainflow": "https://privi-chainflow.onrender.com/",
+            "developers": "https://privi-developers.onrender.com/",
+            "car-trace": "https://privi-car-trace.onrender.com/",
+            "car-demo": "https://privi-car-demo.onrender.com/",
+            "jose": "https://jose-site.onrender.com/",
+          }
+          domains = [
+            "privishine.info", "www.privishine.info",
+            "fortress.privishine.info", "passport.privishine.info",
+            "kya.privishine.info", "mandates.privishine.info",
+            "gov.privishine.info", "guard.privishine.info",
+            "live.privishine.info", "hub.privishine.info",
+            "chainflow.privishine.info", "developers.privishine.info",
+            "priviflow.us", "www.priviflow.us"
+          ]
+          def page(item):
+            name, url = item
+            result = {"site": name, "url": url}
+            try:
+              req = urllib.request.Request(url, headers={"User-Agent":"Privi-Static-Audit/1.0","Accept":"text/html"})
+              with urllib.request.urlopen(req, timeout=15) as response:
+                body = response.read(262144)
+                result.update(status=response.status, content_type=response.headers.get("Content-Type", ""), bytes_read=len(body))
+                result["html"] = b"<html" in body.lower() or b"<!doctype html" in body.lower()
+            except urllib.error.HTTPError as err:
+              result["status"] = err.code
+            except Exception as err:
+              result["error"] = type(err).__name__
+            result["ok"] = result.get("status") == 200 and result.get("html", False)
+            return result
+          with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            pages = list(pool.map(page, sites.items()))
+          for p in pages:
+            print(json.dumps(p), flush=True)
+          for host in domains:
+            try:
+              answers = sorted(set(x[4][0] for x in socket.getaddrinfo(host,443,type=socket.SOCK_STREAM)))
+              print(json.dumps({"domain":host,"dns":answers[:6]}), flush=True)
+            except Exception as err:
+              print(json.dumps({"domain":host,"dns_error":type(err).__name__}), flush=True)
+          bad = [p["site"] for p in pages if not p["ok"]]
+          if bad: raise SystemExit("FAIL: static page check failed: " + ", ".join(bad))
+          print("PASS: all 14 Render static site homepages returned HTML and HTTP 200")
+          PY
