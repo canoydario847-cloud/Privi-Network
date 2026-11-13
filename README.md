@@ -2,6 +2,17 @@
 
 [![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/canoydario847-cloud/privi-network)
 
+## Privi Agent Survival & Premium — prepaid AI-agent utility gateway
+
+**51 new premium analyzers** plus 32 standard survival utilities available through a commercial MCP connector. The premium tools cover agent authorization, SLO/incident triage, data quality, API unit economics, procurement and release readiness. Premium calls cost **5 prepaid credits** and ordinary calls cost **1 credit**; tool discovery is public, but free execution will be disabled in the paid-only release.
+
+- [Live agent hub](https://privi-ai-21-gateway.onrender.com/agent-hub) · [Premium catalog](https://privi-ai-21-gateway.onrender.com/premium.json) · [Pricing/checkout status](https://privi-ai-21-gateway.onrender.com/pricing)
+- **Remote MCP:** `https://privi-ai-21-gateway.onrender.com/mcp` · official registry `io.github.canoydario847-cloud/privi-agent-survival`.
+- [Public MCP directory metadata and listing guide](privi-agent-survival/README.md).
+- [32 Agent Skills](https://privi-ai-21-gateway.onrender.com/skills/index.json) · [51-premium website](https://privi-premium-tools.onrender.com) (available after deployment).
+
+**Commercial status:** Checkout is not accepting real payments while durable storage, Stripe webhook credentials/tax configuration, Base confirmation and fulfillment tests remain unverified. Do not transfer funds without a verified order. The commercial gateway is separate from Privi Ledger's existing plans.
+
 Remote MCP servers that make AI agents safer and accountable, paid in USDC through [x402](https://x402.org) with free tiers.
 Built by **Dario Canoy**, Privi World Co, Port Huron, Michigan. Live status of every service: **[Privi Hub](https://privi-hub.onrender.com)**.
 
