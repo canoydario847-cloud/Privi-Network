@@ -7,7 +7,15 @@ import unittest
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives import serialization
-from privi_ledger.agent_proof import verify_agent_proof
+# Load isolated signature verifier without importing the entire MCP server package.
+import importlib.util
+from pathlib import Path
+_spec = importlib.util.spec_from_file_location(
+    "privi_agent_proof_isolated", Path(__file__).parents[1] / "src" / "privi_ledger" / "agent_proof.py"
+)
+_module = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_module)
+verify_agent_proof = _module.verify_agent_proof
 
 
 def canon(data):
