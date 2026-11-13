@@ -2,11 +2,12 @@
 
 *(formerly Privi Ledger)*
 
+> **Recovery notice (November 13, 2026):** The original `https://privi-ledger.onrender.com/mcp` instance is suspended because its Render account has a billing hold. The new **evaluation-only** endpoint is `https://privi-ledger-mcp-recovery.onrender.com/mcp`. This recovery instance uses temporary storage and **does not contain historical ledger records**. Payments are disabled. **Do not rely on this endpoint for production logging, persistent audit evidence, previous receipt verification, or financial services.** The original data must be recovered before production can resume.\n\n
 **Quantum-sealed, tamper-evident audit logs for AI agents.** Every company running agents needs to prove what those agents did: what data they touched, what they paid for, what they changed, and that nobody rewrote the record afterwards. Privi Ledger gives any MCP-capable agent a place to log each action, and gives auditors a way to verify the log, paid per check in USDC on Base via [x402](https://github.com/x402-foundation/x402).
 
 Works with Claude, ChatGPT, Cursor, VS Code and custom agents. Built by [Privi World Co](https://github.com/canoydario847-cloud) on the same record technology as [Privi Verify](../mcp-server).
 
-**Live (testnet):** `https://privi-ledger.onrender.com/mcp`
+**Available evaluation endpoint:** `https://privi-ledger-mcp-recovery.onrender.com/mcp` (not production-ready)
 
 ## Tools
 
