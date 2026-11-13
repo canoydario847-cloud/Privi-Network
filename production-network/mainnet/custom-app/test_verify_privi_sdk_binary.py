@@ -68,8 +68,8 @@ class ProvenanceTests(unittest.TestCase):
         for rel, markers in mod.MARKERS.items():
             path = self.root / rel
             path.write_text(
-                "package keeper\\nfunc unrelated() {}\\n/*\\n" +
-                "\\n".join(markers) + "\\n*/\\n",
+                "package keeper\nfunc unrelated() {}\n/*\n" +
+                "\n".join(markers) + "\n*/\n",
                 encoding="utf-8",
             )
         with self.assertRaisesRegex(ValueError, "missing unique guard"):
