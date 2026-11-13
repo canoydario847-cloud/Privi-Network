@@ -505,6 +505,32 @@ def register_gateway(mcp, s, store, router, paywall, limiter, version: str) -> N
                 "x402": {"type": "apiKey", "in": "header", "name": "PAYMENT-SIGNATURE",
                          "description": "Base64 x402 v2 payment payload (USDC on Base). X-PAYMENT is accepted too."}}},
             "paths": {
+                "/v1/agent-access": {"get": {"operationId": "privi_agent_access_offer",
+                    "summary": "AI agents: get the $1 USDC signup offer and URLs",
+                    "responses": {"200": ok}}},
+                "/v1/agent-access/signup": {"post": {
+                    "operationId": "privi_agent_access_signup",
+                    "summary": "Register one MCP AI agent for $1 USDC on Base (one-time, 1,000 calls included)",
+                    "security": [{"x402": []}],
+                    "requestBody": {"required": True, "content": {"application/json": {
+                        "schema": {"type": "object", "required": ["name", "endpoint", "description"],
+                                   "properties": {
+                                       "name": {"type": "string", "minLength": 2, "maxLength": 60},
+                                       "endpoint": {"type": "string", "format": "uri",
+                                                    "description": "Public https:// MCP endpoint answering tools/list"},
+                                       "description": {"type": "string", "minLength": 10, "maxLength": 400},
+                                       "tags": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
+                                       "contact": {"type": "string"}}}}}},
+                    "responses": {"201": ok, "402": pay402, "400": err, "409": err, "503": err}}},
+                "/v1/agent-access/status": {"get": {"operationId": "privi_agent_access_status",
+                    "summary": "Get registered AI agent identity and prepaid request balance",
+                    "security": [{"prepaidKey": []}], "responses": {"200": ok, "401": err}}},
+                "/v1/agent-access/call": {"post": {"operationId": "privi_registered_agent_call",
+                    "summary": "AI-agent-only routed call for paid Privi members",
+                    "security": [{"prepaidKey": []}],
+                    "requestBody": {"required": True, "content": {"application/json": {
+                        "schema": FUNCTIONS[2]["parameters"]}}},
+                    "responses": {"200": ok, "401": err, "402": pay402, "400": err}}},
                 "/v1/agents": {"get": {"operationId": "privi_find_agents", "summary": FUNCTIONS[0]["description"],
                                        "security": sec, "parameters": [{"name": "q", "in": "query", "schema": {"type": "string"}}],
                                        "responses": {"200": ok, "402": pay402}}},
@@ -537,6 +563,7 @@ def register_gateway(mcp, s, store, router, paywall, limiter, version: str) -> N
         common = {"platform": platform, "provider": "Privi World Co", "webhook": hook, "headers": auth,
                   "get_a_key": f"POST {base}/v1/keys (x402, {s.pack_credits} requests for ${s.pack_price_usd} USDC)",
                   "openapi": f"{base}/openapi.json",
+                  "ai_agent_one_dollar_signup": f"{base}/v1/agent-access",
                   "system_prompt_addition": "You can use Privi services. Call privi_find_agents to see what exists, "
                                             "privi_list_tools for an agent's tools, then privi_call. Tell the caller the "
                                             "call record id when a result matters."}
