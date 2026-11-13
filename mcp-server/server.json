@@ -3,7 +3,7 @@
   "name": "io.github.canoydario847-cloud/privi-verify",
   "title": "Privi Verify",
   "description": "Manufacturing lot verification and chain of custody for AI agents, paid per call in USDC (x402).",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "websiteUrl": "https://privi-discovery.onrender.com",
   "repository": {
     "url": "https://github.com/canoydario847-cloud/Privi-Network",
