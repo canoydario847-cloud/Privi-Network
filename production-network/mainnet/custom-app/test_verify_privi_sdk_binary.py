@@ -93,8 +93,8 @@ class ProvenanceTests(unittest.TestCase):
         path = self.root / "x/bank/keeper/send.go"
         function_marker, diagnostic_marker = mod.MARKERS["x/bank/keeper/send.go"]
         path.write_text(
-            "package keeper\\n" + function_marker +
-            "\\nvar unrelated = " + json.dumps(diagnostic_marker) + "\\n",
+            "package keeper\n" + function_marker +
+            "\nvar unrelated = " + json.dumps(diagnostic_marker) + "\n",
             encoding="utf-8",
         )
         with self.assertRaisesRegex(ValueError, "missing unique guard|executable|enforcement"):
