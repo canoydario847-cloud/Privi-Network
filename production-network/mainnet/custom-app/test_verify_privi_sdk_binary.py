@@ -42,6 +42,20 @@ class ProvenanceTests(unittest.TestCase):
         self.assertEqual(result["financial_mainnet"], "NO_GO")
         self.assertEqual(len(result["security_source_sha256"]), 3)
 
+    @unittest.expectedFailure
+    def test_comment_only_markers_must_not_qualify_as_enforcement(self):
+        """Known security gap (#237): comments can satisfy marker-only checks.
+
+        Expected failure is deliberate until the verifier has stronger evidence.
+        This test MUST NOT be interpreted as proof of executable guards.
+        """
+        for rel, markers in mod.MARKERS.items():
+            path = self.root / rel
+            path.write_text("\\n".join("// " + marker for marker in markers),
+                            encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "comment|executable|enforcement"):
+            self.check()
+
     def test_reject_module_graph_without_local_replace(self):
         self.module.pop("Replace")
         with self.assertRaisesRegex(ValueError, "module graph"):
