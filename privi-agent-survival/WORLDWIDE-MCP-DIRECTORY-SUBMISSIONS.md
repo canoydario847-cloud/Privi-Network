@@ -117,3 +117,10 @@ Additional third-party indexed page: https://mcprepository.com/canoydario847-clo
 - Render reports Ledger recovery deployment `dep-dbrq2qeq1p3s73e37gfg` **live** following the distribution documentation commit. Latest available Ledger recovery warning/error logs include a third-party `api.filepad.ai/mcp` HTTP 500 response, apparently from external registry scanning, not by itself proof that Privi Ledger's own MCP endpoint is broken.
 - The direct external web retrieval environment could not fetch either gateway or recovery `/health` URL. Separate public GET /health 200 responses have appeared in gateway Render request logs; direct current checks remain incomplete.
 - Do not mark Glama's stale unhealthy Ledger listing repaired without testing the canonical MCP connector and updating its registration endpoint if appropriate.
+
+## Continued validation — 2026-11-13
+
+- Privi gateway hotfix deployment `dep-dbrq2im417fc73epl8o0` confirmed **live** by Render.
+- A third-party crawler identified itself as Neuronto and requested `GET /mcp`; Render logged HTTP 405. The server is an HTTP JSON-RPC POST implementation, and a GET 405 is an expected allowed transport response here, **not evidence of outage or a new marketplace listing**.
+- Added regression test to `agent-gateway/server.test.js` for `HEAD /health` HTTP 200, empty response body, and unchanged `GET /health` status. Commit [af0a963](https://github.com/canoydario847-cloud/Privi/commit/af0a96319265d6f187b1b580e74ad6819490b6cb). Render auto-deploy `dep-dbrq3te417fc73epmji0` started; test execution on CI and HEAD response in production are not yet independently attested.
+- Requests for direct HTTP checks from this environment could not resolve the remote hostname. Do not interpret these environment errors as service outages.
