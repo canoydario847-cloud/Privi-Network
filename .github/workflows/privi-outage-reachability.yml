@@ -1,0 +1,40 @@
+name: Privi public outage reachability (read-only)
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/privi-outage-reachability.yml'
+      - 'call-server/tools/latency_probe.py'
+permissions:
+  contents: read
+jobs:
+  public-health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Check public Privi service /health from GitHub runner
+        run: |
+          python3 call-server/tools/latency_probe.py \
+            --region github-actions-unverified \
+            --requests 1 --workers 1 --timeout 12 \
+            --url https://privi-ledger.onrender.com/health \
+            --url https://privi-verify.onrender.com/health \
+            --url https://privi-anchor.onrender.com/health \
+            --url https://privi-quantum.onrender.com/health \
+            --url https://privi-call.onrender.com/health \
+            --url https://privi-discovery.onrender.com/health \
+            --output /tmp/privi-public-health.json
+      - name: Publish sanitized diagnosis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: privi-public-health
+          path: /tmp/privi-public-health.json
+          if-no-files-found: ignore
+          retention-days: 7
