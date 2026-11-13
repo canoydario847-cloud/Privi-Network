@@ -138,3 +138,11 @@ Additional third-party indexed page: https://mcprepository.com/canoydario847-clo
 - The workflow uses Node 22 and PostgreSQL 16 and runs `npm test` in `agent-gateway`. A prior code change added a `HEAD /health` regression test.
 - GitHub combined commit status returned no statuses at time of verification. This does **not** show tests passed or failed. Check workflow run details separately before asserting green CI. GitHub workflow success alone does not gate Render auto-deployment unless Render is separately configured to wait for those checks.
 - Render detected the workflow file commit and began auto-deploy `dep-dbrq69h5efls73e19mfg`; preceding gateway deployment `dep-dbrq3te417fc73epmji0` was live.
+
+## Registry publication workflow repaired — 2026-11-13
+
+- Found the repository's official MCP Registry GitHub Actions workflow [`.github/workflows/mcp-registry-publish.yml`](https://github.com/canoydario847-cloud/Privi-Network/blob/main/.github/workflows/mcp-registry-publish.yml) **did not include `privi-agent-survival`** in its push path filters or publish matrix, even though `privi-agent-survival/server.json` existed and its v0.7.0 was described as published.
+- Fixed both workflow path filter and matrix to include `privi-agent-survival`; commit [b6321cc](https://github.com/canoydario847-cloud/Privi-Network/commit/b6321cc73cbcc09b57948e7cb7f9aadabaccc3f2).
+- Updated metadata `privi-agent-survival/server.json` to v0.7.1, linking the Agent Hub as the website and explaining credential requirements and unfinished automated checkout; commit [bba431f](https://github.com/canoydario847-cloud/Privi-Network/commit/bba431ffbb58dfdac243461e07021842a8e02170).
+- **Status: committed; publish triggered by matching GitHub push when Actions operates, but registry acceptance cannot be confirmed here.** Do not claim official v0.7.1 listed until an Actions publish success and registry lookup both verify it.
+- Inspect [Registry publish workflow runs](https://github.com/canoydario847-cloud/Privi-Network/actions/workflows/mcp-registry-publish.yml) and look for the `privi-agent-survival` matrix job. Verify success before using v0.7.1 on external marketplace submissions.
