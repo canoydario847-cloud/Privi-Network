@@ -1,0 +1,67 @@
+'use strict';
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const {createTrustedExecutionContextGate}=require('./create_trusted_execution_context_gate.cjs');
+const trusted=()=>({tenantId:'tenant-a',agentId:'agent-a',actionId:'read',sessionId:'session-a'});
+test('request cannot override trusted execution identity',async()=>{
+ let seen;
+ const gate=createTrustedExecutionContextGate({resolveTrustedContext:trusted,authorize:async ({session})=>{seen=session;return true;},executeAuthorized:async()=>({ok:true})});
+ assert.equal((await gate.execute({request:{tenantId:'attacker',agentId:'attacker',actionId:'delete'}})).ok,true);
+ assert.deepEqual(seen,{tenantId:'tenant-a',agentId:'agent-a',actionId:'read',sessionId:'session-a'});
+ assert.equal(Object.isFrozen(seen),true);
+});
+test('missing trusted identity fails closed before authorization',async()=>{
+ let calls=0;
+ const gate=createTrustedExecutionContextGate({resolveTrustedContext:()=>({tenantId:'t'}),authorize:async()=>{calls++;return true;},executeAuthorized:async()=>({ok:true})});
+ assert.deepEqual(await gate.execute({request:{tenantId:'t'}}),{ok:false,reason:'untrusted_context'});
+ assert.equal(calls,0);
+});
+test('accessor identity never executes getter',async()=>{
+ let reads=0;const ctx=trusted();Object.defineProperty(ctx,'tenantId',{get(){reads++;return 't';}});
+ const gate=createTrustedExecutionContextGate({resolveTrustedContext:()=>ctx,authorize:async()=>true,executeAuthorized:async()=>({ok:true})});
+ assert.equal((await gate.execute({})).ok,false);assert.equal(reads,0);
+});
+test('resolver errors fail closed',async()=>{
+ const gate=createTrustedExecutionContextGate({resolveTrustedContext:async()=>{throw Error('unavailable');},authorize:async()=>true,executeAuthorized:async()=>({ok:true})});
+ assert.equal((await gate.execute({})).ok,false);
+});
+test('execution-time backend denial remains final',async()=>{
+ const gate=createTrustedExecutionContextGate({resolveTrustedContext:trusted,authorize:async()=>true,executeAuthorized:async()=>({ok:false})});
+ assert.deepEqual(await gate.execute({}),{ok:false,reason:'executor_denied'});
+});
+
+test('rejects ambiguous or oversized trusted identifiers before authorization',async()=>{
+  for (const invalid of [' tenant-a','tenant-a ','tenant\\nadmin','tenant/other','té nant','a'.repeat(129),'']) {
+    let calls=0;
+    const gate=createTrustedExecutionContextGate({resolveTrustedContext:()=>({...trusted(),tenantId:invalid}),authorize:async()=>{calls++;return true;},executeAuthorized:async()=>{calls++;return {ok:true};}});
+    assert.deepEqual(await gate.execute({}),{ok:false,reason:'untrusted_context'});
+    assert.equal(calls,0);
+  }
+});
+test('accepts bounded canonical identifiers including namespace separators',async()=>{
+  const gate=createTrustedExecutionContextGate({resolveTrustedContext:()=>({tenantId:'t:org_1',agentId:'a.service-2',actionId:'read:files',sessionId:'s'.repeat(128)}),authorize:async()=>true,executeAuthorized:async()=>({ok:true})});
+  assert.deepEqual(await gate.execute({}),{ok:true});
+});
+
+test('canonical identity enforcement covers every trusted identity field',async()=>{
+  for (const field of ['tenantId','agentId','actionId','sessionId']) {
+    let authorized=0;
+    const gate=createTrustedExecutionContextGate({
+      resolveTrustedContext:()=>({...trusted(),[field]:'invalid/segment'}),
+      authorize:async()=>{authorized++;return true;},
+      executeAuthorized:async()=>({ok:true})
+    });
+    assert.deepEqual(await gate.execute({}),{ok:false,reason:'untrusted_context'});
+    assert.equal(authorized,0);
+  }
+});
+test('throwing trusted context proxy fails closed before authorization',async()=>{
+  let authorized=0;
+  const gate=createTrustedExecutionContextGate({
+    resolveTrustedContext:()=>new Proxy(trusted(),{getOwnPropertyDescriptor(){throw Error('trap');}}),
+    authorize:async()=>{authorized++;return true;},
+    executeAuthorized:async()=>({ok:true})
+  });
+  assert.deepEqual(await gate.execute({}),{ok:false,reason:'untrusted_context'});
+  assert.equal(authorized,0);
+});
