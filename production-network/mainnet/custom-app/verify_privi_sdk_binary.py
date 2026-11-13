@@ -74,7 +74,7 @@ def without_go_comments(source: str) -> str:
         else:
             # Raw string contents can contain arbitrary marker text; never
             # treat those bytes as evidence of executable SDK guards.
-            out.append(("\\n" if ch == "\\n" else " ") if state == "`" else ch)
+            out.append(("\n" if ch == "\n" else " ") if state == "`" else ch)
             if state != "`" and ch == "\\" and i + 1 < len(source):
                 i += 1
                 out.append(source[i])
