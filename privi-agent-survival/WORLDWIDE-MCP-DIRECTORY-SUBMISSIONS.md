@@ -100,3 +100,13 @@ Additional third-party indexed page: https://mcprepository.com/canoydario847-clo
 3. Claim/refresh already indexed Privi Verify, Call, Anchor and Ledger listings; investigate stale unhealthy Ledger status.
 4. Submit canonical gateway info via free review options on mcp.so and mcpservers.org and retain confirmation IDs; do not pay for priority review.
 5. Do not claim premium automated API usage is purchasable until durable billing/fulfillment is end-to-end verified.
+
+## Infrastructure and gateway checks — 2026-11-13, subsequent repair pass
+
+- **New Render workspace** `tea-dbr1aqjrjlhs73ccmcbg`: `privi-ai-21-gateway`, premium-tools site, services site, agent skills and Ledger recovery service were reported **not suspended**. Not suspended is not an uptime guarantee.
+- **Old Render workspace** `tea-db83bk8n74is73dklo00`: many legacy Privi services were reported **suspended due to billing**. This includes original Call, Quantum, Hub and Devnet. A code redeploy alone cannot clear provider billing suspensions; do not use those as reliable fresh customer acquisition endpoints until account billing is addressed.
+- **Live gateway evidence:** Render deployment `dep-dbrq0clbedkc73bev6hg` was reported live on 2026-11-13; logs included successful `POST /mcp` HTTP 200 and `GET /health` HTTP 200. This confirms recent HTTP traffic but not end-to-end tool execution for paying users.
+- **Concrete compatibility fix committed:** the gateway's `HEAD /health` returned 404 while `GET /health` returned 200. Commit [792ae296cdac](https://github.com/canoydario847-cloud/Privi/commit/792ae296cdacfb532c6971ac0a1dd2a6fc1e8ad5) adds an HTTP 200 HEAD health response. Render auto-deploy `dep-dbrq2im417fc73epl8o0` started; deployment/runtime verification still pending at time this note was written.
+- **Ledger recovery:** new-workspace `privi-ledger-mcp-recovery` deploy `dep-dbrq13ajnfac73bi9c30` was reported live, but MCP/health functionality on that recovery URL has not been independently validated. The existing Glama canonical Ledger connector still needs rechecking.
+- **Third-party distribution:** no new directory approval in this repair pass; don't count GitHub issue creation as marketplace publication.
+
