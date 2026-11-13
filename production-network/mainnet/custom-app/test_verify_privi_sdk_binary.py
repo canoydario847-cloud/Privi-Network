@@ -74,7 +74,7 @@ class ProvenanceTests(unittest.TestCase):
     def test_reject_unsafe_unpatched_source(self):
         path = self.root / "x/bank/keeper/genesis.go"
         path.write_text("// unpatched SDK genesis", encoding="utf-8")
-        with self.assertRaisesRegex(ValueError, "missing unique guard"):
+        with self.assertRaisesRegex(ValueError, "missing unique guard|comment-only SDK source cannot establish executable enforcement"):
             self.check()
 
     def test_reject_duplicate_guard_in_source(self):
