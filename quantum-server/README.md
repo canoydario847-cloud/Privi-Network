@@ -306,6 +306,20 @@ installer builds in the check (`car_key_check` or offline verification against `
 Not built: any connection to a real vehicle, charger, gas station or payment for fuel; road distances (pass your own
 `distances_km`); lookups in outside title, insurance or theft databases; rewards for edge compute.
 
+## v0.13: Privi Quantum Toolkit
+
+Five planning tools for the move to post-quantum cryptography. None of them stores what you send.
+
+| Tool | Price | What it does |
+|---|---|---|
+| `pqc_certificate_check` | $0.05 | Reads X.509 certificates (PEM) and reports each key's algorithm, whether a quantum computer could break it, its expiry, and whether it outlives the federal post-quantum dates |
+| `pqc_harvest_risk` | $0.05 | "Record now, decrypt later" exposure for each kind of data, under the planning years you choose (Mosca's inequality), and what to migrate first |
+| `pqc_size_impact` | $0.01 | Added bytes per handshake or signature after switching algorithm, and added traffic per day and year (sizes from FIPS 203, 204, 205) |
+| `quantum_circuit_stats` | $0.01 | Qubits, gate counts, two-qubit gates and depth of an OpenQASM circuit before you pay to run it |
+| `pqc_supplier_score` | $1 | Ten post-quantum questions for a supplier; scores the answers 0-100 with a grade and ranked gaps, and issues a signed scorecard (Ed25519 + ML-DSA-87) |
+
+Prices are proposals; override each with `QUANTUM_PRICE_<TOOL NAME IN CAPITALS>`. The harvest-risk years are scenarios the caller picks, not predictions, and the supplier score rests on self-reported answers.
+
 ## Honest limits
 
 - At 16 qubits a classical computer solves these exactly, which is how the service grades

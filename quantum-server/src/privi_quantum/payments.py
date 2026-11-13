@@ -57,6 +57,9 @@ DEFAULT_PRICES_USD = {
     "car_info": "0.001", "car_vin_check": "0.001", "car_verify": "0.001", "car_key_check": "0.001",
     "car_record_add": "0.01", "car_key_revoke": "0.01", "car_edge_job": "0.01", "car_key_issue": "0.05",
     "car_charge_plan": "0.10", "car_route": "0.25", "car_fleet_assign": "0.25", "car_register": "1", "car_history": "2",
+    # Privi Quantum Toolkit (toolkit.PRICES): planning tools $0.01-$0.05, signed supplier scorecard $1.
+    "pqc_certificate_check": "0.05", "pqc_harvest_risk": "0.05", "pqc_size_impact": "0.01",
+    "quantum_circuit_stats": "0.01", "pqc_supplier_score": "1",
 }
 
 # No tool is free. The x402 payment-required reply states each price, so agents can learn prices by calling.
@@ -113,7 +116,8 @@ class PaySettings:
         for tool, env in PRICE_ENV.items():
             if os.getenv(env):
                 s.prices_usd[tool] = os.environ[env].strip()
-        for tool in [t for t in s.prices_usd if t.startswith("car_")]:      # QUANTUM_PRICE_CAR_ROUTE=0.5, ...
+        _toolkit = ("pqc_certificate_check", "pqc_harvest_risk", "pqc_size_impact", "quantum_circuit_stats", "pqc_supplier_score")
+        for tool in [t for t in s.prices_usd if t.startswith("car_") or t in _toolkit]:      # QUANTUM_PRICE_CAR_ROUTE=0.5, ...
             env = "QUANTUM_PRICE_" + tool.upper()
             if os.getenv(env):
                 s.prices_usd[tool] = os.environ[env].strip()
