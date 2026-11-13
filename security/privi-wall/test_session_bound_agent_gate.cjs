@@ -42,3 +42,38 @@ test('non-boolean admission result rejects',async()=>{
   const gate=createSessionBoundAgentGate({verifySession:async()=>({active:true,expiresAtMs:2000}),admitSignedCall:async()=>1,clock:()=>1000});
   assert.equal(await gate.authorize({}),false);
 });
+
+test('revocation during asynchronous admission rejects before execution',async()=>{
+  let checks=0;
+  const gate=createSessionBoundAgentGate({
+    verifySession:async()=>({active:++checks===1,expiresAtMs:2000}),
+    admitSignedCall:async()=>true,clock:()=>1000
+  });
+  assert.equal(await gate.authorize({session:'s',request:{}}),false);
+  assert.equal(checks,2);
+});
+test('expiry during asynchronous admission rejects',async()=>{
+  let now=1000;
+  const gate=createSessionBoundAgentGate({
+    verifySession:async()=>({active:true,expiresAtMs:1002}),
+    admitSignedCall:async()=>{now=1002;return true;},clock:()=>now
+  });
+  assert.equal(await gate.authorize({}),false);
+});
+test('revalidation backend failure rejects',async()=>{
+  let checks=0;
+  const gate=createSessionBoundAgentGate({
+    verifySession:async()=>{if(++checks===2)throw Error('session store unavailable');return {active:true,expiresAtMs:2000};},
+    admitSignedCall:async()=>true,clock:()=>1000
+  });
+  assert.equal(await gate.authorize({}),false);
+});
+test('valid session is checked before and after admission',async()=>{
+  let checks=0;
+  const gate=createSessionBoundAgentGate({
+    verifySession:async()=>{checks++;return {active:true,expiresAtMs:2000};},
+    admitSignedCall:async()=>true,clock:()=>1000
+  });
+  assert.equal(await gate.authorize({}),true);
+  assert.equal(checks,2);
+});
