@@ -54,6 +54,15 @@ def valid_evidence_url(value):
         return False
     return True
 
+def reject_duplicate_keys(pairs):
+    """Reject ambiguous evidence JSON instead of silently taking the last key."""
+    record = {}
+    for key, value in pairs:
+        if key in record:
+            raise ValueError(f"duplicate evidence JSON key: {key}")
+        record[key] = value
+    return record
+
 def check(document):
     if not isinstance(document, dict):
         return ["evidence must be a JSON object"]
@@ -77,7 +86,7 @@ def main():
     parser.add_argument("evidence", type=Path)
     args = parser.parse_args()
     try:
-        document = json.loads(args.evidence.read_text(encoding="utf-8"))
+        document = json.loads(args.evidence.read_text(encoding="utf-8"), object_pairs_hook=reject_duplicate_keys)
     except (OSError, ValueError) as exc:
         print(f"BLOCKED: cannot load evidence: {exc}")
         return 2
