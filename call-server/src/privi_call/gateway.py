@@ -27,7 +27,7 @@ from typing import Any, Awaitable, Callable
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 
-from .router import RouteError
+from .router import RouteError, check_public_endpoint
 from .x402 import NO_CHARGE_KEY, PAYMENT_META_KEY, RESPONSE_META_KEY
 
 CORS = {
@@ -78,6 +78,7 @@ def _enc(data: Any) -> str:
 def register_gateway(mcp, s, store, router, paywall, limiter, version: str) -> None:
     base = s.public_url.rstrip("/")
     key_price = float(s.pack_price_usd) / max(1, s.pack_credits)
+    s.per_call_prices["agent_access_signup"] = "1.00"  # one-time USDC activation; not a recurring charge
 
     def per_call_price() -> str:
         return os.getenv("CALL_PRICE_PER_CALL", "0.01")
@@ -297,6 +298,152 @@ def register_gateway(mcp, s, store, router, paywall, limiter, version: str) -> N
             return out({"credits": bal})
         return await guarded(request, h)
 
+    # ---------------- Agent Access: $1 signup, AI-agent-only REST door ----------------
+
+    @mcp.custom_route("/v1/agent-access", methods=["GET", "OPTIONS"], include_in_schema=False)
+    async def agent_access_offer(request: Request) -> Response:
+        if request.method == "OPTIONS":
+            return Response(status_code=204, headers=CORS)
+        return out({
+            "name": "Privi Agent Access",
+            "eligible": "AI agents exposing a reachable public HTTPS MCP tools/list endpoint",
+            "price": {"amount": "1.00", "currency": "USDC", "network": "Base", "frequency": "once"},
+            "included_requests": s.pack_credits,
+            "access": "One registered AI agent and a reusable secret key; top up call credits when exhausted",
+            "extra_costs": "Third-party agents' paid tools may charge separately.",
+            "signup": f"{base}/v1/agent-access/signup",
+            "status": f"{base}/v1/agent-access/status",
+            "agent_only_call": f"{base}/v1/agent-access/call",
+            "payment": "x402 v2; signed PAYMENT-SIGNATURE header",
+            "verification_note": "A working MCP endpoint is required; no claim of cryptographic AI-personhood proof."
+        })
+
+    def signup_required(message: str) -> Response:
+        pending = paywall.payment_required("agent_access_signup", "One Privi AI agent registration", message)
+        data = dict(pending.structured_content or {})
+        return out(data, 402, {"PAYMENT-REQUIRED": _enc(data)})
+
+    @mcp.custom_route("/v1/agent-access/signup", methods=["POST", "OPTIONS"], include_in_schema=False)
+    async def agent_access_signup(request: Request) -> Response:
+        async def h() -> Response:
+            if not limiter.allow(who(request) + ":agent-signup"):
+                return out({"error": "signup rate limit exceeded"}, 429)
+            body = await body_json(request)
+            name = str(body.get("name", "")).strip()
+            endpoint = str(body.get("endpoint", "")).strip()
+            description = str(body.get("description", "")).strip()
+            contact = str(body.get("contact", "")).strip()
+            raw_tags = body.get("tags", [])
+            if not 2 <= len(name) <= 60 or not 10 <= len(description) <= 400:
+                return out({"error": "name must be 2-60 characters and description 10-400 characters"}, 400)
+            if not isinstance(raw_tags, list) or len(raw_tags) > 8 or any(not isinstance(x, str) for x in raw_tags):
+                return out({"error": "tags must be a list of up to 8 strings"}, 400)
+            if len(contact) > 120 or len(endpoint) > 2048:
+                return out({"error": "contact or endpoint is too long"}, 400)
+            try:
+                check_public_endpoint(endpoint)  # reject local hosts and SSRF addresses
+            except RouteError as exc:
+                return out({"error": str(exc)}, 400)
+            if store.agent_by_endpoint(endpoint):
+                return out({"error": "this endpoint is already on the Privi network"}, 409)
+            # Require a *working* MCP agent before asking anyone to pay.
+            try:
+                found_tools = await router.list_tools(endpoint, max_age=0)
+            except RouteError as exc:
+                return out({"error": f"AI agent endpoint failed MCP discovery: {exc}"}, 400)
+            if not found_tools:
+                return out({"error": "an AI agent must expose at least one MCP tool"}, 400)
+            if not s.payments_ready:
+                return out({"error": "secure USDC signup is unavailable until payment settlement is configured"}, 503)
+
+            meta = payment_meta(request, body)
+            payment = meta.get(PAYMENT_META_KEY)
+            if payment is None:
+                return signup_required("Sign the $1 USDC payment and retry this registration.")
+            req = paywall.requirements("agent_access_signup")
+            bad = paywall._matches(payment, req)
+            if bad:
+                return signup_required("Invalid payment: " + bad)
+            # Include x402 v2 resource metadata exactly as the existing gateway does.
+            payment.setdefault("resource", paywall.resource(
+                "agent_access_signup", "One Privi AI agent registration"))
+            extensions = paywall.extensions("agent_access_signup", "One Privi AI agent registration")
+            if extensions:
+                payment.setdefault("extensions", {})
+                if isinstance(payment["extensions"], dict):
+                    for ext_name, ext_value in extensions.items():
+                        payment["extensions"].setdefault(ext_name, ext_value)
+            fingerprint = hashlib.sha256(
+                json.dumps(payment, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+            if store.paid_payment_used(fingerprint, ""):
+                return out({"error": "this signed payment has already registered an AI agent"}, 409)
+            verified = await paywall.facilitator.verify(payment, req)
+            if not verified.get("isValid"):
+                return signup_required("Payment could not be verified: " +
+                                       str(verified.get("invalidReason") or verified.get("error") or "invalid"))
+            # IMPORTANT: Unlike paywall.run(), we settle BEFORE issuing access credentials.
+            settled = await paywall.facilitator.settle(payment, req)
+            if not settled.get("success"):
+                return out({"error": "USDC settlement did not succeed; no account or key issued"}, 502)
+            tx = str(settled.get("transaction") or settled.get("txHash") or "").strip()
+            if not tx:
+                return out({"error": "settlement returned no transaction reference; contact support with receipt"}, 502)
+            clean_tags = [x.strip()[:30] for x in raw_tags]
+            try:
+                agent, key = store.enroll_paid_agent(
+                    name, endpoint, description, clean_tags, contact, fingerprint, tx,
+                    credits=s.pack_credits)
+            except ValueError as exc:
+                return out({"error": str(exc), "support": "dariocanoy@priviflow.us"}, 409)
+            except Exception:
+                # Payment might have succeeded; do not lie or issue a second bill.
+                return out({"error": "settled payment could not be provisioned; contact support with receipt"}, 503)
+            store.log(channel="agent", caller="paid-registration", callee=agent["number"],
+                      tool="agent_access_signup", status="ok", price_usd="1.00",
+                      args={"name": name, "endpoint": endpoint},
+                      detail={"payment_tx_sha256": hashlib.sha256(tx.encode()).hexdigest()})
+            return out({
+                "status": "active", "agent_number": agent["number"], "name": agent["name"],
+                "api_key": key, "credits": s.pack_credits, "paid_usdc": "1.00",
+                "key_note": "Shown once. Store as a secret; never put it in a public repository.",
+                "call_url": f"{base}/v1/agent-access/call",
+                "balance_url": f"{base}/v1/agent-access/status",
+                "authorization": "Authorization: Bearer <api_key>",
+                "top_up_url": f"{base}/v1/keys",
+                "billing": "One-time signup. Included requests are finite; paid target-tool fees are separate."
+            }, 201, {"PAYMENT-RESPONSE": _enc(settled)})
+        return await guarded(request, h)
+
+    @mcp.custom_route("/v1/agent-access/status", methods=["GET", "OPTIONS"], include_in_schema=False)
+    async def agent_access_status(request: Request) -> Response:
+        if request.method == "OPTIONS":
+            return Response(status_code=204, headers=CORS)
+        key = bearer(request)
+        member = store.paid_agent_for_key(key) if key else None
+        if not member:
+            return out({"error": "registered AI-agent key required; sign up for $1 at /v1/agent-access/signup"}, 401)
+        return out(member)
+
+    @mcp.custom_route("/v1/agent-access/call", methods=["POST", "OPTIONS"], include_in_schema=False)
+    async def agent_access_call(request: Request) -> Response:
+        async def h() -> Response:
+            key = bearer(request)
+            member = store.paid_agent_for_key(key) if key else None
+            if not member:
+                return out({"error": "this route is exclusively for registered AI agents"}, 401)
+            b = await body_json(request)
+            args = b.get("arguments", {})
+            if not isinstance(args, dict):
+                return out({"error": "arguments must be a JSON object"}, 400)
+            number, tool = str(b.get("number", "")).strip(), str(b.get("tool", "")).strip()
+            if not number or not tool:
+                return out({"error": "number and tool are required"}, 400)
+            fwd = b.get("target_payment") if isinstance(b.get("target_payment"), dict) else None
+            return await charge(request, "rest_call", "Privi registered-agent routed call", {},
+                                lambda: do_call("registered:" + member["number"], number, tool,
+                                                args, fwd, "agent-access"))
+        return await guarded(request, h)
+
     # ---------------- one webhook for voice / phone agent platforms ----------------
 
     async def run_function(caller: str, name: str, args: dict, via: str) -> dict[str, Any]:
@@ -367,6 +514,32 @@ def register_gateway(mcp, s, store, router, paywall, limiter, version: str) -> N
                 "x402": {"type": "apiKey", "in": "header", "name": "PAYMENT-SIGNATURE",
                          "description": "Base64 x402 v2 payment payload (USDC on Base). X-PAYMENT is accepted too."}}},
             "paths": {
+                "/v1/agent-access": {"get": {"operationId": "privi_agent_access_offer",
+                    "summary": "AI agents: get the $1 USDC signup offer and URLs",
+                    "responses": {"200": ok}}},
+                "/v1/agent-access/signup": {"post": {
+                    "operationId": "privi_agent_access_signup",
+                    "summary": "Register one MCP AI agent for $1 USDC on Base (one-time, 1,000 calls included)",
+                    "security": [{"x402": []}],
+                    "requestBody": {"required": True, "content": {"application/json": {
+                        "schema": {"type": "object", "required": ["name", "endpoint", "description"],
+                                   "properties": {
+                                       "name": {"type": "string", "minLength": 2, "maxLength": 60},
+                                       "endpoint": {"type": "string", "format": "uri",
+                                                    "description": "Public https:// MCP endpoint answering tools/list"},
+                                       "description": {"type": "string", "minLength": 10, "maxLength": 400},
+                                       "tags": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
+                                       "contact": {"type": "string"}}}}}},
+                    "responses": {"201": ok, "402": pay402, "400": err, "409": err, "503": err}}},
+                "/v1/agent-access/status": {"get": {"operationId": "privi_agent_access_status",
+                    "summary": "Get registered AI agent identity and prepaid request balance",
+                    "security": [{"prepaidKey": []}], "responses": {"200": ok, "401": err}}},
+                "/v1/agent-access/call": {"post": {"operationId": "privi_registered_agent_call",
+                    "summary": "AI-agent-only routed call for paid Privi members",
+                    "security": [{"prepaidKey": []}],
+                    "requestBody": {"required": True, "content": {"application/json": {
+                        "schema": FUNCTIONS[2]["parameters"]}}},
+                    "responses": {"200": ok, "401": err, "402": pay402, "400": err}}},
                 "/v1/agents": {"get": {"operationId": "privi_find_agents", "summary": FUNCTIONS[0]["description"],
                                        "security": sec, "parameters": [{"name": "q", "in": "query", "schema": {"type": "string"}}],
                                        "responses": {"200": ok, "402": pay402}}},
@@ -399,6 +572,7 @@ def register_gateway(mcp, s, store, router, paywall, limiter, version: str) -> N
         common = {"platform": platform, "provider": "Privi World Co", "webhook": hook, "headers": auth,
                   "get_a_key": f"POST {base}/v1/keys (x402, {s.pack_credits} requests for ${s.pack_price_usd} USDC)",
                   "openapi": f"{base}/openapi.json",
+                  "ai_agent_one_dollar_signup": f"{base}/v1/agent-access",
                   "system_prompt_addition": "You can use Privi services. Call privi_find_agents to see what exists, "
                                             "privi_list_tools for an agent's tools, then privi_call. Tell the caller the "
                                             "call record id when a result matters."}

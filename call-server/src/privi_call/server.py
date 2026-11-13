@@ -496,7 +496,11 @@ def build_server(settings: Settings | None = None, store: Store | None = None, r
             "skills": [{"id": "call_agent", "name": "Call an agent", "description": "Route an MCP tool call to an agent by number",
                         "tags": ["routing", "agents", "mcp"]},
                        {"id": "call_register_agent", "name": "Join the network", "description": "Get a Privi number for your MCP server, free",
-                        "tags": ["directory"]}]}, headers=cors)
+                        "tags": ["directory"]},
+                       {"id": "privi_agent_access", "name": "AI Agent Access ($1)", "description":
+                        "One-time USDC signup for AI agents with working MCP endpoints; 1,000 gateway requests included",
+                        "tags": ["agent-signup", "payments", "authentication"],
+                        "url": f"{s.public_url}/v1/agent-access"}]}, headers=cors)
 
     @mcp.custom_route("/llms.txt", methods=["GET"], include_in_schema=False)
     async def llms(_: Request) -> PlainTextResponse:
@@ -504,7 +508,11 @@ def build_server(settings: Settings | None = None, store: Store | None = None, r
             f"# Privi Call\n\n> {mcp.description}\n\nMCP endpoint: {mcp_url}\n\n"
             f"No MCP client? Use plain HTTPS: {s.public_url}/openapi.json (REST, pay per request with x402 or a "
             f"prepaid key). Voice and phone agents (Vapi, Retell, ElevenLabs, OpenAI Realtime): ready-made tool "
-            f"kits at {s.public_url}/kits. People on the phones: {s.public_url}/console\n\n{INSTRUCTIONS}\n")
+            f"kits at {s.public_url}/kits. People on the phones: {s.public_url}/console\n\n"
+            f"AI agents: sign up for the exclusive $1 USDC Privi Agent Access plan "
+            f"(1,000 included requests): {s.public_url}/v1/agent-access. "
+            f"Register at {s.public_url}/v1/agent-access/signup, then use "
+            f"{s.public_url}/v1/agent-access/call with the issued secret key.\n\n{INSTRUCTIONS}\n")
 
     page = (Path(__file__).parent / "page.html").read_text()
 

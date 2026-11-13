@@ -36,6 +36,12 @@ CREATE TABLE IF NOT EXISTS calls (
 CREATE TABLE IF NOT EXISTS credits (
   key_sha256 TEXT PRIMARY KEY, remaining INTEGER NOT NULL, bought INTEGER NOT NULL, created_at REAL NOT NULL,
   last_tx TEXT NOT NULL DEFAULT '');
+CREATE TABLE IF NOT EXISTS paid_agent_access (
+  number TEXT PRIMARY KEY REFERENCES agents(number),
+  key_sha256 TEXT NOT NULL UNIQUE,
+  payment_fingerprint TEXT NOT NULL UNIQUE,
+  payment_tx TEXT NOT NULL UNIQUE,
+  created_at REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS usage (who TEXT NOT NULL, day TEXT NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (who, day));
 CREATE TABLE IF NOT EXISTS checkpoints (
   seq INTEGER PRIMARY KEY, hash TEXT NOT NULL, tx_hash TEXT NOT NULL, chain_id INTEGER, network TEXT,
@@ -120,6 +126,68 @@ class Store:
     def bump_agent(self, number: str) -> None:
         with self._lock:
             self._db.execute("UPDATE agents SET calls=calls+1 WHERE number=?", (number,))
+
+    # ---------------- $1 agent-only membership ----------------
+
+    def agent_by_endpoint(self, endpoint: str) -> bool:
+        return self._db.execute("SELECT 1 FROM agents WHERE endpoint=?", (endpoint,)).fetchone() is not None
+
+    def paid_payment_used(self, fingerprint: str, tx: str) -> bool:
+        return self._db.execute(
+            "SELECT 1 FROM paid_agent_access WHERE payment_fingerprint=? OR payment_tx=?",
+            (fingerprint, tx)).fetchone() is not None
+
+    def enroll_paid_agent(self, name: str, endpoint: str, description: str, tags: list[str],
+                          contact: str, payment_fingerprint: str, payment_tx: str,
+                          credits: int = 1000) -> tuple[dict, str]:
+        """Atomic activation only AFTER facilitator settlement has succeeded.
+
+        Never store the raw bearer key or signed payment. A settled payment can activate
+        one agent only; its unique transaction ID and payment fingerprint cannot be reused.
+        """
+        if credits <= 0 or not payment_fingerprint or not payment_tx:
+            raise ValueError("invalid paid enrollment")
+        key = "pck_" + secrets.token_urlsafe(32)
+        with self._lock:
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                if self._db.execute("SELECT 1 FROM agents WHERE endpoint=?", (endpoint,)).fetchone():
+                    raise ValueError("that endpoint is already registered")
+                if self.paid_payment_used(payment_fingerprint, payment_tx):
+                    raise ValueError("payment has already activated an agent")
+                row = self._db.execute(
+                    "SELECT MAX(CAST(number AS INTEGER)) m FROM agents WHERE official=0").fetchone()
+                number = str(max(2000, (row["m"] or 1999) + 1))
+                self._db.execute(
+                    "INSERT INTO agents (number,name,endpoint,description,tags,official,owner_contact,created_at) "
+                    "VALUES (?,?,?,?,?,0,?,?)",
+                    (number, name, endpoint, description, json.dumps(tags), contact, time.time()))
+                self._db.execute(
+                    "INSERT INTO credits (key_sha256,remaining,bought,created_at,last_tx) VALUES (?,?,?,?,?)",
+                    (sha(key), credits, credits, time.time(), payment_tx))
+                self._db.execute(
+                    "INSERT INTO paid_agent_access "
+                    "(number,key_sha256,payment_fingerprint,payment_tx,created_at) VALUES (?,?,?,?,?)",
+                    (number, sha(key), payment_fingerprint, payment_tx, time.time()))
+                self._db.execute("COMMIT")
+            except Exception:
+                self._db.execute("ROLLBACK")
+                raise
+        return self.agent(number), key
+
+    def paid_agent_for_key(self, key: str) -> dict | None:
+        if not key.startswith("pck_"):
+            return None
+        row = self._db.execute(
+            "SELECT p.number,c.remaining,c.bought,c.created_at "
+            "FROM paid_agent_access p JOIN credits c ON p.key_sha256=c.key_sha256 "
+            "WHERE p.key_sha256=?", (sha(key),)).fetchone()
+        if not row:
+            return None
+        a = self.agent(row["number"])
+        return {"number": row["number"], "name": a["name"], "endpoint": a["endpoint"],
+                "credits_left": row["remaining"], "credits_included": row["bought"],
+                "active": True, "created_at": row["created_at"]}
 
     # ---------------- free tier and credits ----------------
 
