@@ -123,7 +123,13 @@ def verify(module_json: str, build_info: str, sdk_dir: Path) -> dict:
             if marker.startswith("PRVI SDK bank:"):
                 declaration = (r'(?m)^\s*(?:var|const)\s+\w+\s*=\s*'
                                r'["\x60][^\n]*' + re.escape(marker))
-                if re.search(declaration, uncommented):
+                # Also reject diagnostic-only entries in parenthesized Go
+                # var/const blocks. This is conservative screening, not an AST.
+                block = (r'(?ms)^\\s*(?:var|const)\\s*\\(\\s*'
+                         r'(?:(?!^\\s*\\)).)*?'
+                         r'^\\s*\\w+\\s*=\\s*["\\x60][^\\n]*'
+                         + re.escape(marker))
+                if re.search(declaration, uncommented) or re.search(block, uncommented):
                     raise ValueError("unused diagnostic declaration cannot establish enforcement")
         for marker in required:
             if uncommented.count(marker) != 1:
