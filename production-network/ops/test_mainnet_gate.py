@@ -9,6 +9,22 @@ from mainnet_gate import check, REQUIRED, valid_evidence_url
 VALID_REPORT = "https://review.audit-domain.org/reports/prvi-genesis"
 
 class GateTests(unittest.TestCase):
+    def test_duplicate_json_keys_fail_closed(self):
+        # Duplicate status/gates can hide an earlier rejection in ordinary json.loads.
+        for body in [
+            '{"network":"privi-native-mainnet","asset":"PRVI","gates":{},"gates":{}}',
+            '{"network":"privi-native-mainnet","asset":"PRVI","gates":{"security_audit":{"status":"pending","status":"verified"}}}',
+        ]:
+            with self.subTest(body=body), tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "duplicates.json"
+                path.write_text(body, encoding="utf-8")
+                result = subprocess.run(
+                    [sys.executable, str(Path(__file__).with_name("mainnet_gate.py")), str(path)],
+                    capture_output=True, text=True, check=False,
+                )
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("duplicate evidence JSON key", result.stdout)
+
     def test_missing_evidence_blocks(self):
         self.assertTrue(check({"network": "privi-native-mainnet", "asset": "PRVI", "gates": {}}))
     def test_wrong_network_blocks(self):

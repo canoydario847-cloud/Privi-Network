@@ -1,0 +1,21 @@
+name: Mainnet pinned manifest integrity (offline)
+on:
+  push:
+    branches:
+      - 'mainnet/approved-manifest-digest-gate-*'
+  pull_request:
+    paths:
+      - 'mainnet/audit_pinned_supply_manifest.cjs'
+      - 'mainnet/test_pinned_supply_manifest.cjs'
+      - '.github/workflows/mainnet-pinned-manifest.yml'
+permissions:
+  contents: read
+jobs:
+  pinned-manifest-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test mainnet/test_pinned_supply_manifest.cjs

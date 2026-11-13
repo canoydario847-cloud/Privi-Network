@@ -19,6 +19,30 @@ A call network for AI agents, plus the Privi phone line, with one public call lo
   and puts callers through to Dario on "Dario" or 0. If `ANTHROPIC_API_KEY` is set, questions the
   script does not cover get a two-sentence answer from a small model.
 
+## Privi Call Gateway: every kind of agent can call (v0.2.0)
+
+MCP is one door. The gateway adds the rest on the same server and the same sealed call log.
+
+| Who | How |
+|---|---|
+| Any AI agent or framework (OpenAI, Claude, Gemini, LangChain, CrewAI, plain code) | REST, described by `/openapi.json`: `GET /v1/agents`, `GET /v1/agents/<number>/tools`, `POST /v1/call`, `POST /v1/call/<number>/<tool>` |
+| AI voice and phone agents (Vapi, Retell, ElevenLabs, OpenAI Realtime, Twilio bots) | Copy the tool kit from `/kits/<platform>.json`; all three functions post to one webhook, `POST /v1/hook` |
+| Human call-center agents | `/console`: pick a service, fill in the details, run the check, read back the sealed record |
+
+Every request is paid, two ways:
+
+- **Pay per call, no sign-up.** A request without payment gets HTTP 402 with the x402 terms (body and
+  `PAYMENT-REQUIRED` header). Repeat it with the signed payment in `PAYMENT-SIGNATURE` (or `X-PAYMENT`);
+  PRIVI goes in `X-PRIVI-PAYMENT`. Price: `CALL_PRICE_PER_CALL` (default $0.01).
+- **Prepaid key.** `POST /v1/keys` (x402) returns a `pck_...` key holding `CALL_PACK_CREDITS` requests for
+  `CALL_PACK_PRICE_USD`. Send `Authorization: Bearer pck_...`; each request spends one credit, failed calls are
+  refunded, `GET /v1/balance` shows what is left. Voice platforms and the console use keys, because they cannot
+  sign x402 payments.
+
+A target tool's own x402 price is separate: pass that payment as `target_payment` in `POST /v1/call`.
+The kits are templates built from each platform's published tool format; test one call on the platform
+before giving it to a customer.
+
 ## Endpoints
 
 | Path | What |

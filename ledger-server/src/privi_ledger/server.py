@@ -41,6 +41,7 @@ from .kya import KYA, KYAError, checksum as eth_checksum
 from .mandate import MandateError, Mandates
 from .fortress import Fortress, FortressError
 from .quantum_ledger import QuantumLedger, QuantumLedgerError
+from . import network as privi_network
 from .live import LiveService, TrustWatcher, mount_ws
 from .gateway import Gateways
 from .rooms import Rooms
@@ -56,7 +57,7 @@ from .passport import PASSPORT_VERSION as PASSPORT_VERSION_HTTP, PassportError, 
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor.onrender.com/mcp"
 
-__version__ = "0.12.1"
+__version__ = "0.13.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/ledger-server"
 
 INSTRUCTIONS = """\
@@ -177,7 +178,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     checkpoints = Checkpoints(ledger._db, ledger._lock)
     anchor_url = os.getenv("LEDGER_ANCHOR_URL", DEFAULT_ANCHOR_URL)
     if anchor_client is None and os.getenv("LEDGER_ANCHOR_KEY"):
-        anchor_client = HttpAnchorClient(anchor_url, os.environ["LEDGER_ANCHOR_KEY"])
+        anchor_client = HttpAnchorClient(anchor_url, os.environ["LEDGER_ANCHOR_KEY"], headers=_settlement_headers())
     reports = ReportStore(ledger._db, ledger._lock)
     handshakes = Handshakes(ledger, ledger._db, ledger._lock)
     plans = Plans(ledger)
@@ -209,6 +210,8 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     mcp.privi_fortress = fortress  # used by the tree-head anchoring loop in main()
     qledger = QuantumLedger(ledger, fortress)
     mcp.privi_qledger = qledger  # sealed and settled by the block loop in main()
+    net = privi_network.Network(ledger)   # every Privi service reports into this one ledger
+    mcp.privi_network = net
     live = LiveService(ledger, plans, passports, kya, mandates, fortress, public_url)
     ledger.on_record = live.on_record
     gateways = Gateways(live, allow_private=bool(os.getenv("GW_ALLOW_PRIVATE")))
@@ -1495,7 +1498,8 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         mcp.custom_route(_p, methods=["GET"], include_in_schema=False)(_h)
     for _path, _methods, _handler in (live.http_routes() + gateways.http_routes() + rooms.http_routes()
                                       + scan_tools.http_routes(scanner) + guard_tools.http_routes(guard, paywall, ledger, settings, plans.signup)
-                                      + musthave_tools.http_routes(suppliers, seals)):
+                                      + musthave_tools.http_routes(suppliers, seals)
+                                      + privi_network.http_routes(net, os.getenv("LEDGER_REPORT_KEY", "").strip())):
         mcp.custom_route(_path, methods=_methods, include_in_schema=False)(_handler)
 
     @mcp.custom_route("/admin/orgs", methods=["POST"], include_in_schema=False)
@@ -1909,6 +1913,28 @@ def first_passport(mcp: MCPServer, ledger: Ledger, delay_s: float = 150.0) -> No
     threading.Thread(target=run, daemon=True).start()
 
 
+def _settlement_headers() -> dict[str, str]:
+    """Marks this Ledger's own Privi Anchor calls so Anchor does not report them back (that would grow the
+    ledger, which seals and settles another block, forever). They are already on the ledger as settlements."""
+    key = os.getenv("LEDGER_REPORT_KEY", "").strip()
+    return {privi_network.SETTLEMENT_HEADER: privi_network.settlement_token(key)} if key else {}
+
+
+def _watch_network(net, interval_s: float) -> None:
+    def loop():
+        time.sleep(30)
+        while True:
+            try:
+                n = net.watch_once()
+                if n:
+                    print(f"privi-ledger: network watch recorded {n} service change(s)", flush=True)
+            except Exception as e:  # keep serving; check again next round
+                print(f"privi-ledger: network watch error: {e}", flush=True)
+            time.sleep(interval_s)
+
+    threading.Thread(target=loop, daemon=True, name="privi-network-watch").start()
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Privi Ledger MCP server")
     p.add_argument("--stdio", action="store_true", help="run over stdio instead of HTTP")
@@ -1921,7 +1947,7 @@ def main() -> None:
     mcp = build_server(settings, ledger)
     key = os.getenv("LEDGER_ANCHOR_KEY", "")
     if key:
-        client = HttpAnchorClient(os.getenv("LEDGER_ANCHOR_URL", DEFAULT_ANCHOR_URL), key)
+        client = HttpAnchorClient(os.getenv("LEDGER_ANCHOR_URL", DEFAULT_ANCHOR_URL), key, headers=_settlement_headers())
         cps = Checkpoints(ledger._db, ledger._lock)
         fort = mcp.privi_fortress
 
@@ -1965,6 +1991,8 @@ def main() -> None:
 
     start_loop(seal_and_settle, float(os.getenv("LEDGER_QBLOCK_INTERVAL", "300")), "privi-quantum-ledger")
     start_loop(mcp.privi_trust.run_once, float(os.getenv("LIVE_TRUST_INTERVAL", "120")), "privi-trust-watch")
+    if os.getenv("LEDGER_NETWORK_WATCH", "1") != "0":
+        _watch_network(mcp.privi_network, float(os.getenv("LEDGER_NETWORK_WATCH_INTERVAL", "300")))
     mcp.privi_guard.start(float(os.getenv("GUARD_BATCH_INTERVAL", "300")))
     if os.getenv("SCAN_ENABLED", "1") != "0":
         mcp.privi_scan.start(float(os.getenv("SCAN_INTERVAL", "120")))

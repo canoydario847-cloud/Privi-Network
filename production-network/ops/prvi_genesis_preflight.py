@@ -36,6 +36,10 @@ DECIMALS = 18
 CAP = MAX_PRVI * 10**DECIMALS
 DENOM = "aprvi"
 
+def valid_denom(value):
+    return (isinstance(value, str) and bool(value) and value == value.strip()
+            and all(ch.isprintable() and not ch.isspace() for ch in value))
+
 def check(genesis):
     errors = []
     if not isinstance(genesis, dict) or not isinstance(genesis.get("app_state"), dict):
@@ -56,7 +60,8 @@ def check(genesis):
             errors.append("malformed account or coin list")
             continue
         address = account.get("address")
-        if not isinstance(address, str) or not address:
+        if (not isinstance(address, str) or not address or address != address.strip()
+                or any(not ch.isprintable() or ch.isspace() for ch in address)):
             errors.append("missing account address")
         elif address in seen_addresses:
             errors.append("duplicate account address")
@@ -64,7 +69,7 @@ def check(genesis):
             seen_addresses.add(address)
         seen_denoms = set()
         for coin in account.get("coins", []):
-            if not isinstance(coin, dict) or not isinstance(coin.get("denom"), str):
+            if not isinstance(coin, dict) or not valid_denom(coin.get("denom")):
                 errors.append("malformed coin")
                 continue
             denom = coin.get("denom")
@@ -82,18 +87,13 @@ def check(genesis):
             if denom != DENOM:
                 continue
             seen_native = True
-            amount = coin.get("amount")
-            if not isinstance(amount, str) or not amount.isascii() or not amount.isdecimal() or len(amount) > MAX_COIN_AMOUNT_DIGITS or (len(amount) > 1 and amount.startswith("0")):
-                errors.append("noncanonical native amount")
-                continue
-            n = int(amount)
-            if n <= 0:
-                errors.append("zero/negative native amount")
-            total += n
+            # The amount was already validated and parsed above. Reuse that
+            # value so native accounting cannot diverge from bank accounting.
+            total += value
     supply = bank.get("supply")
     if not isinstance(supply, list):
         return errors + ["missing or malformed bank supply"], total
-    if any(not isinstance(coin, dict) or not isinstance(coin.get("denom"), str) for coin in supply):
+    if any(not isinstance(coin, dict) or not valid_denom(coin.get("denom")) for coin in supply):
         return errors + ["malformed bank supply coin"], total
     # Reject ambiguous duplicate supply entries, including non-native denoms.
     supply_denoms = set()

@@ -33,9 +33,10 @@ from .config import PHONE_COST_PER_MIN, SPEECH_COST_PER_TURN, Settings
 from .router import RouteError, Router, check_public_endpoint
 from .store import Store, anchor_head, mask_phone, sha
 from .x402 import NO_CHARGE_KEY, PAYMENT_META_KEY, Paywall
+from .gateway import register_gateway
 from . import privi_token
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/call-server"
 COPYRIGHT = "Copyright (c) 2026 Privi World Co. All rights reserved."
 ROUTED_PRICE = "0.001"
@@ -499,7 +500,11 @@ def build_server(settings: Settings | None = None, store: Store | None = None, r
 
     @mcp.custom_route("/llms.txt", methods=["GET"], include_in_schema=False)
     async def llms(_: Request) -> PlainTextResponse:
-        return PlainTextResponse(f"# Privi Call\n\n> {mcp.description}\n\nMCP endpoint: {mcp_url}\n\n{INSTRUCTIONS}\n")
+        return PlainTextResponse(
+            f"# Privi Call\n\n> {mcp.description}\n\nMCP endpoint: {mcp_url}\n\n"
+            f"No MCP client? Use plain HTTPS: {s.public_url}/openapi.json (REST, pay per request with x402 or a "
+            f"prepaid key). Voice and phone agents (Vapi, Retell, ElevenLabs, OpenAI Realtime): ready-made tool "
+            f"kits at {s.public_url}/kits. People on the phones: {s.public_url}/console\n\n{INSTRUCTIONS}\n")
 
     page = (Path(__file__).parent / "page.html").read_text()
 
@@ -509,6 +514,9 @@ def build_server(settings: Settings | None = None, store: Store | None = None, r
                             .replace("{{PHONE}}", s.phone_number or "")
                             .replace("{{FREE}}", str(s.free_calls_per_day))
                             .replace("{{PACK}}", f"{s.pack_credits:,} calls for ${s.pack_price_usd}"))
+
+    # REST + OpenAPI, voice-agent kits and webhook, and the console for human call agents.
+    register_gateway(mcp, s, store, router, paywall, limiter, __version__)
 
     mcp._privi = {"store": store, "anchor": anchor_client, "settings": s, "router": router}
 
@@ -573,9 +581,12 @@ def main() -> None:
         return
     import uvicorn
     from .front import QuickGet
-    uvicorn.run(QuickGet(mcp.streamable_http_app(host=args.host, stateless_http=True, json_response=True),
-                         "Privi Call", "privi-call", st["settings"].public_url),
-                host=args.host, port=args.port, proxy_headers=True, forwarded_allow_ips="*")
+    from .ledger_report import link
+    app = QuickGet(mcp.streamable_http_app(host=args.host, stateless_http=True, json_response=True),
+                   "Privi Call", "privi-call", st["settings"].public_url)
+    # Every routed call and phone call is reported to the Quantum Ledger (one entry per phone call, not per turn).
+    app = link(app, "privi-call", __version__, st["settings"].db_path, skip_paths=("/voice/turn",))
+    uvicorn.run(app, host=args.host, port=args.port, proxy_headers=True, forwarded_allow_ips="*")
 
 
 if __name__ == "__main__":

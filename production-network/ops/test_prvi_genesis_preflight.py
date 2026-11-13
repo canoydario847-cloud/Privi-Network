@@ -37,6 +37,16 @@ class PreflightTests(unittest.TestCase):
         g["app_state"]["bank"]["balances"].append(dict(g["app_state"]["bank"]["balances"][0]))
         self.assertIn("duplicate account address", check(g)[0])
 
+    def test_whitespace_only_account_address_rejected(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["balances"][0]["address"] = "   "
+        self.assertIn("missing account address", check(g)[0])
+
+    def test_padded_account_address_rejected(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["balances"][0]["address"] = " test "
+        self.assertIn("missing account address", check(g)[0])
+
     def test_duplicate_native_denom(self):
         g = genesis(100)
         g["app_state"]["bank"]["balances"][0]["coins"].append({"denom": "aprvi", "amount": "1"})
@@ -82,6 +92,76 @@ class PreflightTests(unittest.TestCase):
         g["app_state"]["bank"]["balances"][0]["coins"].append({"denom": "uatom", "amount": "5"})
         g["app_state"]["bank"]["supply"].append({"denom": "uatom", "amount": "5"})
         self.assertEqual(check(g)[0], [])
+
+    def test_duplicate_non_native_supply_denom_rejected(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["balances"][0]["coins"].append({"denom": "uatom", "amount": "5"})
+        g["app_state"]["bank"]["supply"].extend([
+            {"denom": "uatom", "amount": "5"},
+            {"denom": "uatom", "amount": "5"},
+        ])
+        self.assertIn("duplicate supply denom", check(g)[0])
+
+    def test_zero_non_native_balance_and_supply_rejected(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["balances"][0]["coins"].append({"denom": "uatom", "amount": "0"})
+        g["app_state"]["bank"]["supply"].append({"denom": "uatom", "amount": "0"})
+        self.assertIn("nonpositive coin amount", check(g)[0])
+
+    def test_empty_balance_denom_rejected(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["balances"][0]["coins"].append({"denom": "", "amount": "1"})
+        self.assertIn("malformed coin", check(g)[0])
+
+    def test_empty_supply_denom_rejected(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["supply"].append({"denom": "", "amount": "1"})
+        self.assertIn("malformed bank supply coin", check(g)[0])
+
+    def test_whitespace_only_balance_denom_rejected(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["balances"][0]["coins"].append({"denom": "   ", "amount": "1"})
+        self.assertIn("malformed coin", check(g)[0])
+
+    def test_whitespace_only_supply_denom_rejected(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["supply"].append({"denom": "\t ", "amount": "1"})
+        self.assertIn("malformed bank supply coin", check(g)[0])
+
+    def test_padded_balance_denom_rejected(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["balances"][0]["coins"].append({"denom": " uatom", "amount": "1"})
+        self.assertIn("malformed coin", check(g)[0])
+
+    def test_padded_supply_denom_rejected(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["supply"].append({"denom": "uatom ", "amount": "1"})
+        self.assertIn("malformed bank supply coin", check(g)[0])
+
+    def test_embedded_whitespace_balance_denom_rejected(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["balances"][0]["coins"].append({"denom": "ua tom", "amount": "1"})
+        self.assertIn("malformed coin", check(g)[0])
+
+    def test_control_character_supply_denom_rejected(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["supply"].append({"denom": "uatom\x00", "amount": "1"})
+        self.assertIn("malformed bank supply coin", check(g)[0])
+
+    def test_embedded_whitespace_account_address_rejected(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["balances"][0]["address"] = "privi bad"
+        self.assertIn("missing account address", check(g)[0])
+
+    def test_control_character_account_address_rejected(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["balances"][0]["address"] = "privi\x00bad"
+        self.assertIn("missing account address", check(g)[0])
+
+    def test_nonprintable_unicode_account_address_rejected(self):
+        g = genesis(100)
+        g["app_state"]["bank"]["balances"][0]["address"] = "privi\u200bbad"
+        self.assertIn("missing account address", check(g)[0])
 
     def test_missing_balances(self):
         self.assertTrue(check({"app_state": {"bank": {"balances": [], "supply": [{"denom": "aprvi", "amount": "0"}]}}})[0])

@@ -1,0 +1,17 @@
+'use strict';
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const {generateKeyPairSync,sign,createHash}=require('node:crypto');
+const {approvalPayload,auditSignedGenesisApproval}=require('./audit_signed_genesis_approval.cjs');
+const genesis={app_state:{bank:{balances:[{address:'addr1',coins:[{denom:'aprvi',amount:'100'}]}],supply:[{denom:'aprvi',amount:'100'}]}}};
+const raw=Buffer.from(JSON.stringify({denom:'aprvi',expectedSupply:'100',maxSupply:'1000'}));
+const sha=createHash('sha256').update(raw).digest('hex');
+const {privateKey,publicKey}=generateKeyPairSync('ed25519');
+const pem=publicKey.export({type:'spki',format:'pem'});
+const make=(releaseId='release-1',hash=sha)=>({releaseId,manifestSha256:hash,signatureBase64:sign(null,approvalPayload(releaseId,hash),privateKey).toString('base64')});
+test('accepts approved release and valid bank reconciliation',()=>assert.deepEqual(auditSignedGenesisApproval(genesis,raw,make(),pem),[]));
+test('rejects release substitution',()=>{const a=make();a.releaseId='release-2';assert.ok(auditSignedGenesisApproval(genesis,raw,a,pem).length);});
+test('rejects signature substitution',()=>{const a=make();a.signatureBase64=Buffer.alloc(64).toString('base64');assert.ok(auditSignedGenesisApproval(genesis,raw,a,pem).length);});
+test('rejects modified manifest after valid approval',()=>assert.ok(auditSignedGenesisApproval(genesis,Buffer.from(raw.toString().replace('1000','2000')),make(),pem).length));
+test('rejects unpinned key',()=>assert.ok(auditSignedGenesisApproval(genesis,raw,make(),'invalid').length));
+test('rejects malformed approval and missing signature',()=>{assert.ok(auditSignedGenesisApproval(genesis,raw,null,pem).length);const a=make();delete a.signatureBase64;assert.ok(auditSignedGenesisApproval(genesis,raw,a,pem).length);});

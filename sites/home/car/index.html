@@ -1,0 +1,775 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Privi Car, Privi Trace and Privi Pro: explainer video and live demos.">
+<style>[hidden]{display:none!important}img{max-width:100%}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}</style>
+</head>
+<body>
+<title>Privi Car &amp; Trace</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@112,600;112,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: instrument-panel page. Sticky top bar, a hero with the explainer film, then two product bays (Car, Trace), each a demo console beside plain copy. */
+:root{
+  --bg:#f3f5f4; --panel:#ffffff; --panel-2:#e8ecea; --ink:#15201d; --muted:#56635f; --line:#cdd5d2;
+  --accent:#1d5fd1; --accent-ink:#ffffff; --amber:#c98400; --ok:#1f8a4c; --bad:#c23a2b;
+  --film-bg:#0f1a17; --film-ink:#eef3f1; --film-muted:#93a39e; --film-panel:#1b2925;
+  --display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1513; --panel:#16201d; --panel-2:#1d2a26; --ink:#e7eeeb; --muted:#9aa9a4; --line:#2c3b37;
+  --accent:#5b93f2; --accent-ink:#06132b; --amber:#f0b33a; --ok:#4cc27d; --bad:#ef6a5a;
+  --film-bg:#070d0b; --film-ink:#eef3f1; --film-muted:#8d9c97; --film-panel:#15221e; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1513; --panel:#16201d; --panel-2:#1d2a26; --ink:#e7eeeb; --muted:#9aa9a4; --line:#2c3b37;
+  --accent:#5b93f2; --accent-ink:#06132b; --amber:#f0b33a; --ok:#4cc27d; --bad:#ef6a5a;
+  --film-bg:#070d0b; --film-ink:#eef3f1; --film-muted:#8d9c97; --film-panel:#15221e; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.55}
+.wrap{max-width:1160px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1,h2,h3{font-family:var(--display);font-stretch:112%;letter-spacing:-.01em;text-wrap:balance;margin:0}
+h1{font-size:clamp(2rem,5vw,3.4rem);font-weight:800;line-height:1.02}
+h2{font-size:clamp(1.6rem,3.4vw,2.3rem);font-weight:800;line-height:1.08}
+h3{font-size:1.1rem;font-weight:600}
+p{margin:0}
+.label{font-family:var(--mono);font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+header.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
+header.bar .wrap{display:flex;align-items:center;gap:20px;padding-block:12px;flex-wrap:wrap}
+.brand{font-family:var(--display);font-weight:800;font-stretch:112%;font-size:1.1rem;color:var(--ink);text-decoration:none}
+nav{display:flex;gap:16px;flex-wrap:wrap;margin-left:auto}
+nav a{color:var(--muted);text-decoration:none;font-size:.92rem}
+nav a:hover{color:var(--ink)}
+
+.hero .wrap{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:40px;padding-block:44px 28px;align-items:start}
+.hero .copy{display:flex;flex-direction:column;gap:16px;min-width:0}
+.hero .copy p.lead{font-size:1.08rem;color:var(--muted);max-width:52ch}
+.pillrow{display:flex;gap:8px;flex-wrap:wrap}
+.pill{font-family:var(--mono);font-size:.72rem;padding:4px 9px;border:1px solid var(--line);border-radius:99px;color:var(--muted);background:var(--panel)}
+.pill.warn{border-color:color-mix(in srgb,var(--amber) 60%,var(--line));color:var(--amber)}
+
+/* film */
+.film{background:var(--film-bg);border-radius:14px;overflow:hidden;color:var(--film-ink);min-width:0}
+.film canvas{display:block;width:100%;height:auto;aspect-ratio:16/9;max-width:100%}
+.caption{min-height:3.4em;padding:12px 16px 4px;font-size:.98rem;line-height:1.45;color:var(--film-ink)}
+.ctrls{display:flex;align-items:center;gap:10px;padding:8px 14px 14px;flex-wrap:wrap}
+.ctrls button{font:600 .85rem var(--body);background:var(--film-panel);color:var(--film-ink);border:1px solid #2f413b;border-radius:8px;padding:7px 12px;cursor:pointer}
+.ctrls button.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.ctrls input[type=range]{flex:1 1 160px;min-width:120px;accent-color:var(--accent)}
+.ctrls .time{font:500 .8rem var(--mono);color:var(--film-muted);font-variant-numeric:tabular-nums}
+.chapters{display:flex;gap:6px;flex-wrap:wrap;padding:0 14px 14px}
+.chapters button{font:500 .74rem var(--mono);background:transparent;color:var(--film-muted);border:1px solid #2b3c37;border-radius:99px;padding:3px 9px;cursor:pointer}
+.chapters button.on{color:var(--film-ink);border-color:var(--accent)}
+
+section.bay{border-top:1px solid var(--line)}
+section.bay>.wrap{padding-block:56px}
+.bayhead{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:32px;margin-bottom:28px}
+.bayhead p{color:var(--muted);max-width:60ch}
+.grid2{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:28px;align-items:start}
+.facts{display:flex;flex-direction:column;gap:18px;min-width:0}
+.fact h3{margin-bottom:4px}
+.fact p{color:var(--muted);font-size:.96rem}
+.console{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:20px;min-width:0;display:flex;flex-direction:column;gap:16px}
+.console .top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field label{font-size:.82rem;color:var(--muted)}
+.field input,.field select{font:inherit;font-size:.95rem;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);min-width:0;width:100%}
+.row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.gates{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.gate{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;cursor:pointer;background:var(--bg)}
+.gate input{width:18px;height:18px;accent-color:var(--ok)}
+.gate.on{border-color:color-mix(in srgb,var(--ok) 55%,var(--line))}
+.btnrow{display:flex;gap:10px;flex-wrap:wrap}
+.btn{font:600 .92rem var(--body);padding:9px 14px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);cursor:pointer}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.btn.warn{border-color:color-mix(in srgb,var(--amber) 55%,var(--line));color:var(--amber);background:transparent}
+.out{border-radius:8px;padding:14px;background:var(--panel-2);font-size:.92rem;min-height:72px}
+.out.ok{box-shadow:inset 3px 0 0 var(--ok)}
+.out.bad{box-shadow:inset 3px 0 0 var(--bad)}
+.out .k{font-family:var(--mono);font-size:.78rem;color:var(--muted)}
+.mono{font-family:var(--mono);font-size:.82rem;overflow-wrap:anywhere}
+dl.kv{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 14px;margin:8px 0 0}
+dl.kv dt{font-family:var(--mono);font-size:.76rem;color:var(--muted)}
+dl.kv dd{margin:0;font-family:var(--mono);font-size:.8rem;overflow-wrap:anywhere}
+
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tabs button{font:600 .86rem var(--body);padding:7px 12px;border-radius:99px;border:1px solid var(--line);background:var(--bg);color:var(--muted);cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chain{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.cp{display:grid;grid-template-columns:28px minmax(0,1fr);gap:12px;position:relative;padding-bottom:14px}
+.cp:not(:last-child)::before{content:"";position:absolute;left:13px;top:26px;bottom:0;width:2px;background:var(--line)}
+.cp.broken:not(:last-child)::before,.cp.after::before{background:var(--bad)}
+.dot{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font:600 .74rem var(--mono);background:var(--panel-2);border:2px solid var(--line);color:var(--muted)}
+.cp.good .dot{border-color:var(--ok);color:var(--ok)}
+.cp.broken .dot{border-color:var(--amber);color:var(--amber)}
+.cp.after .dot{border-color:var(--bad);color:var(--bad)}
+.cp .body{min-width:0}
+.cp .t{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.cp .t b{font-weight:600}
+.cp .when{font-family:var(--mono);font-size:.76rem;color:var(--muted)}
+.cp .d{font-size:.9rem;color:var(--muted)}
+.cp .seal{font-family:var(--mono);font-size:.74rem;color:var(--muted);overflow-wrap:anywhere}
+.cp.broken .d{color:var(--amber)}
+.verdict{font-weight:600}
+.verdict.ok{color:var(--ok)} .verdict.bad{color:var(--bad)}
+
+.how .wrap{padding-block:56px}
+.steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;margin-top:24px}
+.step{border-top:2px solid var(--ink);padding-top:12px}
+.step .n{font:600 .8rem var(--mono);color:var(--muted)}
+.step p{color:var(--muted);font-size:.95rem;margin-top:4px}
+
+table.price{width:100%;border-collapse:collapse;font-size:.95rem}
+table.price th,table.price td{text-align:left;padding:12px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+table.price th{font-family:var(--mono);font-size:.74rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500}
+table.price td.p{font-family:var(--mono);white-space:nowrap;font-variant-numeric:tabular-nums}
+.tablebox{overflow-x:auto;margin-top:20px}
+.contact{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px}
+.copy-chip{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:8px 10px}
+.copy-chip span{font-family:var(--mono);font-size:.9rem;user-select:all}
+.copy-chip button{font:600 .78rem var(--body);border:0;background:var(--panel-2);color:var(--ink);border-radius:6px;padding:5px 8px;cursor:pointer}
+.probadge{display:inline-flex;align-items:center;gap:6px;font:600 .74rem var(--mono);letter-spacing:.04em;padding:4px 9px;border-radius:99px;background:var(--ink);color:var(--bg)}
+.dash{background:var(--film-bg);color:var(--film-ink);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.dash .scr-top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font:500 .78rem var(--mono);color:var(--film-muted)}
+.dash .scr-top b{color:var(--film-ink)}
+.dtabs{display:flex;gap:6px;flex-wrap:wrap}
+.dtabs button{font:600 .84rem var(--body);padding:8px 12px;border-radius:10px;border:1px solid #2b3c37;background:var(--film-panel);color:var(--film-muted);cursor:pointer}
+.dtabs button[aria-selected="true"]{color:var(--film-ink);border-color:var(--accent)}
+.dpanel{display:flex;flex-direction:column;gap:12px;min-width:0}
+.dash .field label{color:var(--film-muted)}
+.dash .field input,.dash .field select{background:var(--film-panel);color:var(--film-ink);border-color:#2f413b}
+.dash .gate{background:var(--film-panel);border-color:#2f413b;color:var(--film-ink)}
+.dash .btn{background:var(--film-panel);color:var(--film-ink);border-color:#2f413b}
+.dash .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.dash .out{background:var(--film-panel);color:var(--film-ink)}
+.dash .out .k,.dash dl.kv dt{color:var(--film-muted)}
+.stations{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px}
+.st{border:1px solid #2f413b;background:var(--film-panel);border-radius:10px;padding:10px;cursor:pointer;text-align:left;color:var(--film-ink);font:inherit}
+.st[aria-pressed="true"]{border-color:var(--accent)}
+.st small{display:block;color:var(--film-muted);font-family:var(--mono);font-size:.74rem}
+.stat3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.stat{background:var(--film-panel);border-radius:10px;padding:10px;min-width:0}
+.stat span{display:block;font:500 .72rem var(--mono);color:var(--film-muted);text-transform:uppercase;letter-spacing:.06em}
+.stat b{font:700 1.15rem var(--mono);font-variant-numeric:tabular-nums}
+.ledgerlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto}
+.ledgerlist li{display:flex;justify-content:space-between;gap:10px;background:var(--film-panel);border-radius:8px;padding:8px 10px;font-size:.88rem}
+.ledgerlist li span:last-child{font-family:var(--mono);font-size:.8rem;color:var(--film-muted);white-space:nowrap}
+.region{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--film-panel);border-radius:8px;padding:8px 10px}
+.region label{display:flex;gap:8px;align-items:center;cursor:pointer}
+.region span{font-family:var(--mono);font-size:.8rem;color:var(--film-muted)}
+.toggle{display:flex;align-items:center;gap:10px;cursor:pointer}
+.toggle input{width:18px;height:18px;accent-color:var(--amber)}
+.signup{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.signup .full{grid-column:1/-1}
+.feebox{border:1px dashed var(--line);border-radius:8px;padding:12px;font-size:.92rem;color:var(--muted)}
+.feebox b{color:var(--ink);font-family:var(--mono)}
+.err{color:var(--bad);font-size:.85rem}
+.ownerlist{border-top:1px solid var(--line);padding-top:14px}
+.ownerlist table{width:100%;border-collapse:collapse;font-size:.86rem}
+.ownerlist td,.ownerlist th{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+@media (max-width:600px){.signup{grid-template-columns:minmax(0,1fr)}.stat3{grid-template-columns:minmax(0,1fr)}}
+footer{border-top:1px solid var(--line)}
+footer .wrap{padding-block:28px;color:var(--muted);font-size:.85rem;display:flex;flex-direction:column;gap:6px}
+
+@media (max-width:860px){
+  .hero .wrap,.grid2,.bayhead{grid-template-columns:minmax(0,1fr)}
+  .steps{grid-template-columns:minmax(0,1fr)}
+  .row{grid-template-columns:minmax(0,1fr)}
+  nav{margin-left:0}
+}
+@media (max-width:480px){.gates{grid-template-columns:minmax(0,1fr)}}
+@media (prefers-reduced-motion: reduce){*{scroll-behavior:auto!important}}
+</style>
+
+<header class="bar"><div class="wrap">
+  <a class="brand" href="#top">Privi</a>
+  <nav aria-label="Sections">
+    <a href="#film">Video</a><a href="#car">Privi Car</a><a href="#trace">Privi Trace</a><a href="#pro">Privi Pro</a><a href="#stations">Gas stations</a><a href="#how">How sealing works</a><a href="#buy">Pricing</a>
+  </nav>
+</div></header>
+
+<main id="top">
+<section class="hero"><div class="wrap">
+  <div class="copy">
+    <span class="label">Privi World Co · Port Huron, Michigan</span>
+    <h1>Privi Car and Privi Trace</h1>
+    <p class="lead">Privi Car lets a parked car do useful computing work while the owner stays in control, with no access to driving systems. Privi Trace keeps a sealed, step-by-step record of where something came from: a part, a stablecoin payment, an AI agent's actions, or a car's history.</p>
+    <p class="lead">Watch the short explainer, then try both demos on this page. Everything here runs in your browser on example data.</p>
+    <div class="pillrow">
+      <span class="pill warn">Privi Car: research prototype</span>
+      <span class="pill warn">Privi Trace: concept demo</span>
+      <span class="pill">Demos use example data only</span>
+    </div>
+  </div>
+
+  <div class="film" id="film" aria-label="Explainer video">
+    <canvas id="cv" width="1280" height="720" role="img" aria-label="Animated explainer of Privi Car and Privi Trace"></canvas>
+    <div class="caption" id="cap" aria-live="polite"></div>
+    <div class="ctrls">
+      <button class="primary" id="play" type="button">Play</button>
+      <input type="range" id="seek" min="0" max="1000" value="0" aria-label="Video position">
+      <span class="time" id="time">0:00 / 0:00</span>
+      <button id="voice" type="button" aria-pressed="false">Voice: off</button>
+    </div>
+    <div class="chapters" id="chapters"></div>
+  </div>
+</div></section>
+
+<section class="bay" id="car"><div class="wrap">
+  <div class="bayhead">
+    <div><span class="label">Product 1</span><h2>Privi Car</h2></div>
+    <p>A small AI helper that runs on a companion device next to the car, or on compute the carmaker has approved. It only works when the owner has opted in and the car is parked, plugged in and cool. It can never touch steering, brakes, firmware or the car's internal network.</p>
+  </div>
+  <div class="grid2">
+    <div class="facts">
+      <div class="fact"><h3>The owner decides</h3><p>Every permission starts switched off. The owner turns on what they want and can switch it all off at any time. The car keeps working normally when the helper is disconnected.</p></div>
+      <div class="fact"><h3>Four checks before any job</h3><p>Opted in, parked, on external power, safe temperature. If any check fails, the job is refused. Nothing runs while driving.</p></div>
+      <div class="fact"><h3>A receipt for every job</h3><p>Each finished job produces a signed receipt: what ran, on which device (by pseudonym, not VIN), how much power and time it used, and a hash of the result. Rewards in the prototype are test credits that cannot be transferred.</p></div>
+      <div class="fact"><h3>A sealed vehicle passport</h3><p>Service visits, ownership changes and digital keys go into a passport that can't be quietly edited later. That passport also feeds Privi Trace.</p></div>
+    </div>
+
+    <div class="console" aria-labelledby="carDemoTitle">
+      <div class="top"><h3 id="carDemoTitle">Edge job console</h3><span class="label">Simulation · no car connected</span></div>
+      <div class="row">
+        <div class="field"><label for="make">Make</label><input id="make" value="Ford"></div>
+        <div class="field"><label for="model">Model</label><input id="model" value="Mustang Mach-E"></div>
+        <div class="field"><label for="job">Job</label>
+          <select id="job">
+            <option value="tiles">Cache map tiles for the week</option>
+            <option value="speech">Update offline voice model</option>
+            <option value="blur">Blur faces in dashcam clips</option>
+          </select></div>
+      </div>
+      <p class="label" style="margin-top:-4px">Do not enter a VIN, plate or location</p>
+      <div class="gates" id="gates">
+        <label class="gate"><input type="checkbox" id="g-opt" data-name="Owner opted in"> Owner opted in</label>
+        <label class="gate"><input type="checkbox" id="g-park" data-name="Vehicle parked"> Vehicle parked</label>
+        <label class="gate"><input type="checkbox" id="g-pow" data-name="External power connected"> External power connected</label>
+        <label class="gate"><input type="checkbox" id="g-temp" data-name="Temperature safe"> Temperature safe</label>
+      </div>
+      <div class="btnrow">
+        <button class="btn primary" id="runJob" type="button">Run edge job</button>
+        <button class="btn warn" id="badJob" type="button">Try a brake-control request</button>
+        <button class="btn" id="allOn" type="button">Turn on all checks</button>
+      </div>
+      <div class="out" id="carOut"><span class="k">Result</span><p>No job has run yet. Turn on the four checks, then run a job. Leave one off to see it refused.</p></div>
+      <div>
+        <div class="top"><h3>Vehicle passport</h3><span class="label" id="passCount">0 receipts</span></div>
+        <ol class="chain" id="passport" style="margin-top:10px"></ol>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<section class="bay" id="trace"><div class="wrap">
+  <div class="bayhead">
+    <div><span class="label">Product 2</span><h2>Privi Trace</h2></div>
+    <p>A chain of signed checkpoints. Each checkpoint records who did what and when, and is sealed together with the one before it. Change any earlier step and every seal after it stops matching, so anyone can see exactly where a record was altered.</p>
+  </div>
+  <div class="grid2">
+    <div class="facts">
+      <div class="fact"><h3>Parts and materials</h3><p>Follow a lot from the steel mill to heat treat, machining, inspection and shipment. Built on Privi Supplier Proof.</p></div>
+      <div class="fact"><h3>Stablecoin payments</h3><p>Check the issuer's status and its latest sealed reserve report, then record the transfer and the receipt. Built on the GENIUS Act tools.</p></div>
+      <div class="fact"><h3>AI agent actions</h3><p>A replayable trail of what an agent read, which tools it called, what Guard flagged, and who approved the result. Built on Privi Ledger Pro.</p></div>
+      <div class="fact"><h3>Vehicle history</h3><p>Owners, service, mileage and digital keys from the Privi Car passport, in one record a buyer can verify.</p></div>
+    </div>
+
+    <div class="console" aria-labelledby="traceTitle">
+      <div class="top"><h3 id="traceTitle">Trace viewer</h3><span class="label">Example records</span></div>
+      <div class="tabs" role="tablist" id="tabs"></div>
+      <div class="top"><b id="traceSubject"></b><span class="verdict" id="verdict"></span></div>
+      <ol class="chain" id="chain"></ol>
+      <div class="btnrow">
+        <button class="btn primary" id="verify" type="button">Verify every seal</button>
+        <button class="btn warn" id="tamper" type="button">Quietly edit step 3</button>
+        <button class="btn" id="reset" type="button">Reset</button>
+      </div>
+      <p class="label" id="traceNote">Seals are real SHA-256 hashes computed in your browser.</p>
+    </div>
+  </div>
+</div></section>
+
+<section class="bay" id="pro"><div class="wrap">
+  <div class="bayhead">
+    <div><span class="label">Privi Pro · $99 / month</span><h2>Privi Pro for your car</h2></div>
+    <p>Pro turns the car into its own small computer with its own records: pay at the pump from the dashboard, keep a car wallet, earn rewards for verified compute jobs, and carry your own offline maps and ledger. These features are only for Privi Pro accounts.</p>
+  </div>
+  <div class="grid2">
+    <div class="facts">
+      <div class="fact"><h3>Pay at the pump from the dashboard</h3><p>Pick a Privi gas station and a pump, choose an amount, and confirm with Face ID or a fingerprint on your phone. Payment only works when the car is parked with the engine off. The receipt is sealed into the car's ledger.</p></div>
+      <div class="fact"><h3>Car wallet</h3><p>A USDC wallet tied to the car, with every fuel payment and reward listed. The owner approves each payment; the car never spends on its own.</p></div>
+      <div class="fact"><h3>Compute rewards</h3><p>When the car runs a verified compute or storage job while parked, it earns reward credits. In this preview they are test credits that can't be transferred or cashed out. Paid rewards come later, from a funded pool, after legal review. No coins are created or mined.</p></div>
+      <div class="fact"><h3>The car is its own database</h3><p>The car keeps its ledger, passport and receipts on board and anchors them on Base when it has a connection. Offline maps live on the car too, so navigation and records keep working with no signal.</p></div>
+      <p><span class="probadge">PRIVI PRO · $99 / MONTH</span></p>
+      <p style="color:var(--muted);font-size:.92rem">To start Pro, call or email Dario for an invoice (details under Pricing), or pay in USDC on Base on the <a href="https://privi-hub.onrender.com/pay/" target="_blank" rel="noopener">Privi buy page</a>.</p>
+    </div>
+
+    <div class="dash" aria-labelledby="dashTitle">
+      <div class="scr-top"><b id="dashTitle">Car dashboard · Privi Pro preview</b><span id="netState">Online · ledger anchored 2 min ago</span></div>
+      <div class="dtabs" role="tablist" id="dtabs">
+        <button type="button" role="tab" data-p="pay" aria-selected="true">Pay at pump</button>
+        <button type="button" role="tab" data-p="wallet" aria-selected="false">Wallet</button>
+        <button type="button" role="tab" data-p="db" aria-selected="false">Maps &amp; ledger</button>
+      </div>
+
+      <div class="dpanel" id="p-pay">
+        <div class="stations" id="stationList"></div>
+        <div class="row">
+          <div class="field"><label for="pump">Pump</label><select id="pump"><option>Pump 1</option><option>Pump 2</option><option selected>Pump 3</option><option>Pump 4</option></select></div>
+          <div class="field"><label for="fuelAmt">Amount (USDC)</label><input id="fuelAmt" type="number" min="5" max="200" step="1" value="45"></div>
+          <div class="field"><label for="grade">Grade</label><select id="grade"><option value="0">Regular</option><option value="0.5">Mid-grade</option><option value="0.9">Premium</option></select></div>
+        </div>
+        <label class="gate" id="parkGate"><input type="checkbox" id="parked"> Parked at the pump, engine off</label>
+        <div class="btnrow"><button class="btn primary" id="payBtn" type="button">Pay from dashboard</button></div>
+        <div class="out" id="payOut"><span class="k">Payment</span><p>Choose a station, then pay. The station's 1% processing fee is shown before you confirm.</p></div>
+      </div>
+
+      <div class="dpanel" id="p-wallet" hidden>
+        <div class="stat3">
+          <div class="stat"><span>USDC (test)</span><b id="wBal">250.00</b></div>
+          <div class="stat"><span>Reward credits</span><b id="wCred">0</b></div>
+          <div class="stat"><span>Payments</span><b id="wCount">0</b></div>
+        </div>
+        <p style="color:var(--film-muted);font-size:.86rem">Reward credits come from verified edge jobs. Run one in the Privi Car console above and it appears here. Credits are test credits only.</p>
+        <ul class="ledgerlist" id="wList"></ul>
+      </div>
+
+      <div class="dpanel" id="p-db" hidden>
+        <div class="stat3">
+          <div class="stat"><span>Ledger entries</span><b id="dbEntries">2</b></div>
+          <div class="stat"><span>Stored on car</span><b id="dbSize">1.9 GB</b></div>
+          <div class="stat"><span>Last anchored</span><b id="dbAnchor">2 min</b></div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="offline"> Simulate no signal</label>
+        <div><div class="label" style="color:var(--film-muted);margin-bottom:6px">Offline maps on this car</div>
+          <div style="display:flex;flex-direction:column;gap:6px" id="regions"></div></div>
+        <div><div class="label" style="color:var(--film-muted);margin-bottom:6px">Car ledger (newest first)</div>
+          <ul class="ledgerlist" id="dbList"></ul></div>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<section class="bay" id="stations"><div class="wrap">
+  <div class="bayhead">
+    <div><span class="label">For gas station owners</span><h2>Register your station</h2></div>
+    <p>Let Privi Pro drivers pay at your pumps in USDC. There is no sign-up cost. Privi takes a 1% processing fee on each sale, paid in USDC, and the rest goes to your wallet on Base.</p>
+  </div>
+  <div class="grid2">
+    <div class="facts">
+      <div class="fact"><h3>How the fee works</h3><p>On a $45.00 fill-up, Privi keeps $0.45 in USDC and your wallet gets $44.55. No monthly charge, and no card fees on these sales.</p></div>
+      <div class="fact"><h3>What happens after you sign up</h3><p>Dario contacts you to confirm your pumps, payout wallet and pilot start date. No payments run until both sides confirm the setup in writing.</p></div>
+      <div class="fact"><h3>Status of the program</h3><p>Pump payments are in pilot sign-up. Payment terms, and any licensing the program needs, will be confirmed with each station before launch.</p></div>
+    </div>
+    <form class="console" id="stForm" novalidate aria-labelledby="stTitle">
+      <div class="top"><h3 id="stTitle">Station sign-up</h3><span class="label" id="stMode">Checking sign-in…</span></div>
+      <div class="signup">
+        <div class="field full"><label for="stName">Station name</label><input id="stName" required maxlength="120" autocomplete="organization"></div>
+        <div class="field full"><label for="stAddr">Street address</label><input id="stAddr" required maxlength="160" autocomplete="street-address"></div>
+        <div class="field"><label for="stCity">City</label><input id="stCity" required maxlength="80"></div>
+        <div class="field"><label for="stState">State</label><input id="stState" required maxlength="40" value="MI"></div>
+        <div class="field"><label for="stPumps">Number of pumps</label><input id="stPumps" type="number" min="1" max="99" value="8" required></div>
+        <div class="field"><label for="stBrand">Fuel brand (if any)</label><input id="stBrand" maxlength="60"></div>
+        <div class="field"><label for="stContact">Contact name</label><input id="stContact" required maxlength="100" autocomplete="name"></div>
+        <div class="field"><label for="stPhone">Phone</label><input id="stPhone" required maxlength="30" autocomplete="tel"></div>
+        <div class="field full"><label for="stEmail">Business email</label><input id="stEmail" type="email" required maxlength="120" autocomplete="email"></div>
+        <div class="field full"><label for="stWallet">USDC payout wallet on Base</label><input id="stWallet" required maxlength="42" placeholder="0x…" spellcheck="false"></div>
+      </div>
+      <div class="feebox">Fee: <b>1%</b> of each sale, in USDC. On <b id="feeEx">$45.00</b>, Privi keeps <b id="feeCut">$0.45</b> and you receive <b id="feeNet">$44.55</b>.</div>
+      <label class="toggle" style="color:var(--ink)"><input type="checkbox" id="stAgree" style="accent-color:var(--accent)"> I'm authorized to sign this station up for the Privi pump-pay pilot, and I understand the 1% USDC fee.</label>
+      <p class="err" id="stErr" role="alert"></p>
+      <div class="btnrow"><button class="btn primary" type="submit" id="stSubmit">Register station</button></div>
+      <div class="out" id="stOut" hidden></div>
+      <div class="ownerlist" id="ownerBox" hidden>
+        <div class="top"><h3>Station sign-ups</h3><span class="label">Only you can see this</span></div>
+        <div style="overflow-x:auto"><table><thead><tr><th>Station</th><th>Contact</th><th>Pumps</th><th>Wallet</th><th>Date</th></tr></thead><tbody id="ownerRows"><tr><td colspan="5">No sign-ups yet.</td></tr></tbody></table></div>
+      </div>
+    </form>
+  </div>
+</div></section>
+
+<section class="bay how" id="how"><div class="wrap">
+  <span class="label">Under both products</span>
+  <h2>How sealing works</h2>
+  <div class="steps">
+    <div class="step"><span class="n">Step 1</span><h3>Record the event</h3><p>Who acted, what happened, when, and the key data, such as a certificate number, a mileage reading or a transaction hash.</p></div>
+    <div class="step"><span class="n">Step 2</span><h3>Seal it to the last one</h3><p>Hash the event together with the previous seal. The new seal depends on the entire history before it.</p></div>
+    <div class="step"><span class="n">Step 3</span><h3>Anchor and share</h3><p>Checkpoints are anchored on Base, and anyone with the record can recompute every seal to confirm nothing changed.</p></div>
+  </div>
+</div></section>
+
+<section class="bay" id="buy"><div class="wrap">
+  <span class="label">What you can buy today</span>
+  <h2>Pricing</h2>
+  <p style="color:var(--muted);max-width:64ch;margin-top:10px">Privi Pro brings the Privi Car features to your car for $99 a month, as an early-access preview. Privi Trace is not on sale yet, but each Trace mode runs on a paid Privi product you can buy now. Pay in USDC on Base on the buy page, or ask for an invoice.</p>
+  <div class="tablebox">
+    <table class="price">
+      <thead><tr><th>Use</th><th>Product</th><th>Price</th><th>Buy</th></tr></thead>
+      <tbody>
+        <tr><td>Trace parts and certificates</td><td>Privi Supplier Proof</td><td class="p">$99 / month</td><td><a href="https://privi-hub.onrender.com/pay/#supplier-proof" target="_blank" rel="noopener">pay/#supplier-proof</a></td></tr>
+        <tr><td>Trace AI agent actions</td><td>Privi Ledger Pro</td><td class="p">$29 / month</td><td><a href="https://privi-hub.onrender.com/pay/#ledger-pro" target="_blank" rel="noopener">pay/#ledger-pro</a></td></tr>
+        <tr><td>Check a stablecoin's issuer and reserves</td><td>genius_stablecoin_check (MCP)</td><td class="p">$0.01 / call</td><td><a href="https://privi-hub.onrender.com/pay/#genius" target="_blank" rel="noopener">pay/#genius</a></td></tr>
+        <tr><td>Seal monthly reserve reports (issuers)</td><td>Privi GENIUS Reserve Seal</td><td class="p">$499 / month</td><td><a href="https://privi-hub.onrender.com/pay/#genius" target="_blank" rel="noopener">pay/#genius</a></td></tr>
+        <tr><td>Stop fake payment requests</td><td>Privi RealCheck</td><td class="p">$49 / month</td><td><a href="https://privi-hub.onrender.com/pay/#realcheck" target="_blank" rel="noopener">pay/#realcheck</a></td></tr>
+        <tr><td>Pay at the pump, car wallet, rewards, offline maps and car ledger</td><td>Privi Pro</td><td class="p">$99 / month</td><td>Invoice from Dario, or <a href="https://privi-hub.onrender.com/pay/" target="_blank" rel="noopener">pay in USDC</a></td></tr>
+        <tr><td>Accept Privi Pro payments at your gas station</td><td>Station pump-pay (pilot)</td><td class="p">1% per sale, in USDC</td><td><a href="#stations">Register</a></td></tr>
+        <tr><td>Ledger Pro, Supplier Proof and a quarterly Post-Quantum report for a year (first 10 customers)</td><td>Founding Customer</td><td class="p">$499 / year</td><td><a href="https://privi-hub.onrender.com/pay/#founding" target="_blank" rel="noopener">pay/#founding</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3 style="margin-top:32px">Carmakers, fleets and partners</h3>
+  <p style="color:var(--muted);max-width:64ch;margin-top:6px">If you want to pilot Privi Car on authorized hardware, or need Privi Trace for your supply chain, talk to Dario directly.</p>
+  <div class="contact">
+    <div class="copy-chip"><span id="ph">313-413-8532</span><button type="button" data-copy="ph">Copy</button></div>
+    <div class="copy-chip"><span id="em">dariocanoy@priviflow.us</span><button type="button" data-copy="em">Copy</button></div>
+  </div>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+  <span>Privi World Co, 1920 24th St, Port Huron, MI 48060</span>
+  <span>Privi Car is a research prototype: no vehicle connections, payments or production rewards. Privi Trace is a concept demo built on Privi's existing sealing products. All records on this page are examples.</span>
+</div></footer>
+
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+const enc=new TextEncoder();
+async function sha256(str){
+  try{const b=await crypto.subtle.digest('SHA-256',enc.encode(str));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');}
+  catch(e){let h=0x811c9dc5;for(const c of str){h^=c.charCodeAt(0);h=Math.imul(h,0x01000193)>>>0}return ('fnv'+h.toString(16)).padEnd(64,'0');}
+}
+const short=h=>h.slice(0,10)+'…'+h.slice(-6);
+
+/* ---------- copy chips ---------- */
+document.querySelectorAll('[data-copy]').forEach(b=>b.addEventListener('click',()=>{
+  const el=document.getElementById(b.dataset.copy);const t=el.textContent;
+  const done=()=>{b.textContent='Copied';setTimeout(()=>b.textContent='Copy',1500)};
+  try{navigator.clipboard.writeText(t).then(done,()=>sel(el))}catch(e){sel(el)}
+}));
+function sel(el){const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r)}
+
+/* ---------- Privi Car demo ---------- */
+const gates=[...document.querySelectorAll('#gates input')];
+gates.forEach(g=>g.addEventListener('change',()=>g.closest('.gate').classList.toggle('on',g.checked)));
+$('#allOn').onclick=()=>gates.forEach(g=>{g.checked=true;g.closest('.gate').classList.add('on')});
+const passport=[];let prevSeal='0'.repeat(64);
+const jobs={tiles:{name:'Cache map tiles for the week',cpu:6,min:14,mb:410},speech:{name:'Update offline voice model',cpu:11,min:22,mb:180},blur:{name:'Blur faces in dashcam clips',cpu:18,min:9,mb:95}};
+function out(cls,html){const o=$('#carOut');o.className='out '+cls;o.innerHTML=html}
+$('#badJob').onclick=()=>out('bad','<span class="k">Refused</span><p><b>Brake control is never available.</b> Privi Car exposes no steering, braking, battery, firmware or CAN bus access, so this request is rejected before any check runs.</p>');
+$('#runJob').onclick=async()=>{
+  const make=$('#make').value.trim(),model=$('#model').value.trim();
+  if(!make||!model){out('bad','<span class="k">Refused</span><p>Enter a make and model first.</p>');return}
+  if(/\b[A-HJ-NPR-Z0-9]{17}\b/i.test(make+' '+model)){out('bad','<span class="k">Refused</span><p>That looks like a VIN. Remove it; the demo only needs make and model.</p>');return}
+  const off=gates.filter(g=>!g.checked).map(g=>g.dataset.name);
+  if(off.length){out('bad','<span class="k">Refused</span><p><b>Job not started.</b> Failed check'+(off.length>1?'s':'')+': '+off.join(', ')+'. Nothing ran on the vehicle side.</p>');return}
+  const j=jobs[$('#job').value];
+  const device=await sha256('privi-car|'+make.toLowerCase()+'|'+model.toLowerCase()+'|demo-salt');
+  const jobDigest=await sha256(j.name+'|'+Date.now());
+  const result=await sha256(jobDigest+'|result');
+  const entry={type:'Edge job',job:j.name,device:'node-'+device.slice(0,8),minutes:j.min,cpu:j.cpu,mb:j.mb,result};
+  const seal=await sha256(prevSeal+JSON.stringify(entry));prevSeal=seal;
+  passport.unshift({entry,seal,when:new Date()});
+  out('ok','<span class="k">Accepted · receipt sealed</span><p><b>'+j.name+'</b> ran in the sandbox on '+esc(make)+' '+esc(model)+'.</p><dl class="kv"><dt>device</dt><dd>node-'+device.slice(0,8)+' (pseudonym)</dd><dt>job digest</dt><dd>'+short(jobDigest)+'</dd><dt>resources</dt><dd>'+j.min+' min · '+j.cpu+' Wh · '+j.mb+' MB</dd><dt>result hash</dt><dd>'+short(result)+'</dd><dt>seal</dt><dd>'+short(seal)+'</dd><dt>credit</dt><dd>'+(j.cpu*2)+' test credits (not transferable)</dd></dl>');
+  renderPassport();
+  document.dispatchEvent(new CustomEvent('privi:job',{detail:{credits:j.cpu*2,job:j.name,seal}}));
+};
+function renderPassport(){
+  $('#passCount').textContent=passport.length+' receipt'+(passport.length===1?'':'s');
+  const base=[{t:'Passport created',d:'Owner enrolled the companion device. All permissions off by default.',w:'Oct 30, 2026'},{t:'Service: brake pads',d:'Dealer service at 42,180 mi, signed by the shop.',w:'Nov 4, 2026'}];
+  $('#passport').innerHTML=passport.map((p,i)=>cpHTML(passport.length-i+2,'Receipt: '+p.entry.job,p.entry.device+' · '+p.entry.minutes+' min · result '+short(p.entry.result),p.when.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}),p.seal,'good')).join('')+base.slice().reverse().map((b,i)=>cpHTML(2-i,b.t,b.d,b.w,null,'good')).join('');
+}
+function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function cpHTML(n,title,detail,when,seal,cls){return '<li class="cp '+cls+'"><span class="dot">'+n+'</span><div class="body"><div class="t"><b>'+esc(title)+'</b><span class="when">'+esc(when)+'</span></div><div class="d">'+esc(detail)+'</div>'+(seal?'<div class="seal">seal '+short(seal)+'</div>':'')+'</div></li>'}
+renderPassport();
+
+/* ---------- Privi Trace demo ---------- */
+const traces={
+  part:{tab:'Part',subject:'Brake bracket lot BX-2291 (example)',steps:[
+    {who:'Lakeshore Steel (example mill)',what:'Mill certificate issued',when:'Sep 18, 2026',data:'Heat 77420 · ASTM A36 · cert MC-55190'},
+    {who:'Blue Water Heat Treat (example)',what:'Heat treatment',when:'Sep 26, 2026',data:'Quench & temper · 42 HRC · furnace log FT-118'},
+    {who:'Port Huron machine shop (example)',what:'Machined and drilled',when:'Oct 3, 2026',data:'480 pcs · program BX-2291-r4 · operator badge 2207'},
+    {who:'Quality lab',what:'Final inspection passed',when:'Oct 6, 2026',data:'CMM report Q-9031 · 32/32 dims in tolerance'},
+    {who:'Shipping',what:'Shipped to OEM plant',when:'Oct 8, 2026',data:'ASN 600017 · 2 skids · 480 pcs'}],tamper:'480 pcs · program BX-2291-r4 · operator badge 9999'},
+  pay:{tab:'Payment',subject:'USDC 2,500.00 from a customer wallet (example)',steps:[
+    {who:'genius_stablecoin_check',what:'Issuer status checked',when:'Nov 12, 2026 09:14',data:'USDC · issuer listed as permitted (example result)'},
+    {who:'Reserve Seal',what:'Latest reserve report verified',when:'Nov 12, 2026 09:14',data:'October report · coverage 101.2% · sealed Nov 5'},
+    {who:'Base network',what:'Transfer confirmed',when:'Nov 12, 2026 09:15',data:'2,500.00 USDC · tx 0x8f3c…a21d · block 22,914,077'},
+    {who:'Merchant',what:'Receiver matched invoice',when:'Nov 12, 2026 09:15',data:'Invoice INV-4410 · amount and wallet match'},
+    {who:'Privi',what:'Receipt issued',when:'Nov 12, 2026 09:16',data:'Receipt R-20261112-018 sent to both parties'}],tamper:'25,000.00 USDC · tx 0x8f3c…a21d · block 22,914,077'},
+  agent:{tab:'AI agent',subject:'Invoice agent run #4471 (example)',steps:[
+    {who:'Accounts payable inbox',what:'Task received',when:'Nov 10, 2026 13:02',data:'"Pay vendor invoice 88-210 from Delta Fasteners"'},
+    {who:'Agent',what:'Tool call: read invoice',when:'Nov 10, 2026 13:02',data:'invoice 88-210 · $18,400.00 · due Nov 20'},
+    {who:'Guard',what:'Bank change flagged',when:'Nov 10, 2026 13:03',data:'New account ending 7731 differs from vendor record ending 0042'},
+    {who:'RealCheck',what:'Vendor confirmed on own phone',when:'Nov 10, 2026 13:41',data:'Face ID by known vendor contact · original account 0042 confirmed'},
+    {who:'Agent',what:'Payment scheduled',when:'Nov 10, 2026 13:42',data:'$18,400.00 to account ending 0042 · approved by controller'}],tamper:'Guard check skipped'},
+  car:{tab:'Vehicle',subject:'2021 sedan, passport P-3318 (example)',steps:[
+    {who:'Privi Car',what:'Passport created',when:'Mar 2, 2021',data:'Make and model only · no VIN stored on this page'},
+    {who:'Dealer',what:'Ownership transfer',when:'Jun 14, 2024',data:'Owner 1 → Owner 2 · odometer 31,005 mi'},
+    {who:'Service shop',what:'Brake pads replaced',when:'Nov 4, 2026',data:'Odometer 42,180 mi · work order 5521'},
+    {who:'Owner 2',what:'Digital key issued',when:'Nov 6, 2026',data:'Key for a family member · expires Dec 31, 2026'},
+    {who:'Privi Trace',what:'History report generated',when:'Nov 12, 2026',data:'5 checkpoints · all seals valid at generation'}],tamper:'Odometer 22,180 mi · work order 5521'}
+};
+let cur='part',state={};
+const tabs=$('#tabs');
+Object.entries(traces).forEach(([k,v])=>{const b=document.createElement('button');b.type='button';b.role='tab';b.textContent=v.tab;b.dataset.k=k;b.setAttribute('aria-selected',k===cur);b.onclick=()=>{cur=k;[...tabs.children].forEach(x=>x.setAttribute('aria-selected',x.dataset.k===k));load()};tabs.appendChild(b)});
+async function seal(steps){let prev='0'.repeat(64);const out=[];for(const s of steps){prev=await sha256(prev+JSON.stringify(s));out.push(prev)}return out}
+async function load(){
+  const t=traces[cur];const steps=t.steps.map(s=>({...s}));
+  state={steps,seals:await seal(steps),status:steps.map(()=>'good'),tampered:false};
+  $('#traceSubject').textContent=t.subject;setVerdict('ok','All seals valid');render();
+}
+function render(){
+  $('#chain').innerHTML=state.steps.map((s,i)=>cpHTML(i+1,s.what,s.who+' · '+s.data,s.when,state.seals[i],state.status[i])).join('');
+}
+function setVerdict(c,t){const v=$('#verdict');v.className='verdict '+c;v.textContent=t}
+$('#tamper').onclick=()=>{state.steps[2].data=traces[cur].tamper;state.tampered=true;state.status=state.steps.map(()=> 'good');setVerdict('','Step 3 edited · not yet verified');render();$('#traceNote').textContent='The stored seals were not updated. Press Verify to recompute them.'};
+$('#reset').onclick=()=>{load();$('#traceNote').textContent='Seals are real SHA-256 hashes computed in your browser.'};
+$('#verify').onclick=async()=>{
+  const fresh=await seal(state.steps);let bad=-1;
+  state.status=fresh.map((h,i)=>{if(bad<0&&h!==state.seals[i])bad=i;return bad<0?'good':(i===bad?'broken':'after')});
+  render();
+  if(bad<0){setVerdict('ok','All '+fresh.length+' seals valid');$('#traceNote').textContent='Every seal recomputed and matched.'}
+  else{setVerdict('bad','Failed at step '+(bad+1));$('#traceNote').textContent='Step '+(bad+1)+' no longer matches its seal, so every later seal fails too. The record shows exactly where it was changed.'}
+};
+load();
+
+/* ---------- Privi Pro dashboard ---------- */
+const money=n=>n.toFixed(2);
+const stationsDemo=[
+  {id:'s1',name:'Blue Water Fuel (example)',where:'Port Huron, MI',price:3.19},
+  {id:'s2',name:'Thumb Coast Gas (example)',where:'Marysville, MI',price:3.15},
+  {id:'s3',name:'Lakeshore Stop (example)',where:'Lexington, MI',price:3.24}
+];
+let selStation=stationsDemo[0];
+const W_={bal:250,cred:0,pays:0,items:[]};
+const ledger=[{t:'Passport created',d:'Oct 30'},{t:'Service: brake pads',d:'Nov 4'}];
+const regions=[{n:'Port Huron & St. Clair County',mb:310,on:true},{n:'Detroit metro',mb:1420,on:true},{n:'Thumb region',mb:240,on:false},{n:'Lansing & Grand Rapids',mb:980,on:false}];
+let offline=false,anchorMin=2;
+const sl=$('#stationList');
+stationsDemo.forEach(s=>{const b=document.createElement('button');b.type='button';b.className='st';b.setAttribute('aria-pressed',s===selStation);b.innerHTML='<b>'+esc(s.name)+'</b><small>'+esc(s.where)+' · $'+s.price.toFixed(2)+'/gal</small>';b.onclick=()=>{selStation=s;[...sl.children].forEach((x,i)=>x.setAttribute('aria-pressed',stationsDemo[i]===s))};sl.appendChild(b)});
+$('#parked').addEventListener('change',e=>$('#parkGate').classList.toggle('on',e.target.checked));
+document.querySelectorAll('#dtabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#dtabs button').forEach(x=>x.setAttribute('aria-selected',x===b));['pay','wallet','db'].forEach(p=>$('#p-'+p).hidden=p!==b.dataset.p)});
+function payOut(cls,html){const o=$('#payOut');o.className='out '+cls;o.innerHTML=html}
+let pending=null;
+$('#payBtn').onclick=async()=>{
+  if(pending){return}
+  const amt=Number($('#fuelAmt').value);
+  if(offline){payOut('bad','<span class="k">Not sent</span><p>No signal. Payments need a connection. Your offline maps and car ledger keep working, and you can pay once the signal is back.</p>');return}
+  if(!$('#parked').checked){payOut('bad','<span class="k">Refused</span><p>Payment only works when the car is parked at the pump with the engine off.</p>');return}
+  if(!(amt>=5&&amt<=200)){payOut('bad','<span class="k">Check the amount</span><p>Enter between 5 and 200 USDC.</p>');return}
+  if(amt>W_.bal){payOut('bad','<span class="k">Not enough</span><p>The car wallet has '+money(W_.bal)+' test USDC.</p>');return}
+  const price=selStation.price+Number($('#grade').value);const gal=amt/price;const fee=amt*0.01;
+  pending={amt,price,gal,fee};
+  payOut('','<span class="k">Confirm on your phone</span><p>Approve <b>'+money(amt)+' USDC</b> at '+esc(selStation.name)+', '+esc($('#pump').value)+'. About '+gal.toFixed(2)+' gal at $'+price.toFixed(2)+'. The station pays a '+money(fee)+' USDC processing fee to Privi.</p><div class="btnrow" style="margin-top:10px"><button class="btn primary" type="button" id="faceOk">Approve with Face ID (simulated)</button><button class="btn" type="button" id="faceNo">Cancel</button></div>');
+  $('#faceNo').onclick=()=>{pending=null;payOut('','<span class="k">Payment</span><p>Cancelled. Nothing was paid.</p>')};
+  $('#faceOk').onclick=async()=>{
+    const p=pending;pending=null;
+    const tx=await sha256('tx|'+selStation.id+'|'+p.amt+'|'+Date.now());
+    const seal=await sha256(prevSeal+JSON.stringify({type:'fuel',station:selStation.name,amt:p.amt,tx}));prevSeal=seal;
+    W_.bal-=p.amt;W_.pays++;W_.items.unshift({t:'Fuel · '+selStation.name,v:'−'+money(p.amt)+' USDC'});
+    ledger.unshift({t:'Fuel payment · '+money(p.amt)+' USDC',d:'now'});anchorMin=0;
+    payOut('ok','<span class="k">Paid · pump '+esc($('#pump').value.replace('Pump ',''))+' unlocked (simulated)</span><dl class="kv"><dt>amount</dt><dd>'+money(p.amt)+' USDC</dd><dt>station receives</dt><dd>'+money(p.amt-p.fee)+' USDC</dd><dt>Privi fee (1%)</dt><dd>'+money(p.fee)+' USDC</dd><dt>network</dt><dd>Base (simulated)</dd><dt>tx</dt><dd>0x'+short(tx)+'</dd><dt>sealed to car ledger</dt><dd>'+short(seal)+'</dd></dl>');
+    renderWallet();renderDb();
+  };
+};
+document.addEventListener('privi:job',e=>{W_.cred+=e.detail.credits;W_.items.unshift({t:'Reward · '+e.detail.job,v:'+'+e.detail.credits+' credits'});ledger.unshift({t:'Job receipt · '+e.detail.job,d:'now'});anchorMin=0;renderWallet();renderDb()});
+function renderWallet(){
+  $('#wBal').textContent=money(W_.bal);$('#wCred').textContent=W_.cred;$('#wCount').textContent=W_.pays;
+  $('#wList').innerHTML=W_.items.length?W_.items.map(i=>'<li><span>'+esc(i.t)+'</span><span>'+esc(i.v)+'</span></li>').join(''):'<li><span>Starting balance (test funds)</span><span>250.00 USDC</span></li>';
+}
+function renderDb(){
+  const mb=regions.filter(r=>r.on).reduce((a,r)=>a+r.mb,0)+ledger.length*0.2;
+  $('#dbEntries').textContent=ledger.length;$('#dbSize').textContent=(mb/1024).toFixed(1)+' GB';
+  $('#dbAnchor').textContent=offline?'queued':(anchorMin===0?'just now':anchorMin+' min');
+  $('#netState').textContent=offline?'No signal · maps and ledger on the car':'Online · ledger anchored '+(anchorMin===0?'just now':anchorMin+' min ago');
+  $('#dbList').innerHTML=ledger.map(l=>'<li><span>'+esc(l.t)+'</span><span>'+esc(l.d)+(offline&&l.d==='now'?' · queued':'')+'</span></li>').join('');
+  $('#regions').innerHTML=regions.map((r,i)=>'<div class="region"><label><input type="checkbox" data-r="'+i+'"'+(r.on?' checked':'')+(offline&&!r.on?' disabled':'')+'> '+esc(r.n)+'</label><span>'+(r.mb>=1000?(r.mb/1024).toFixed(1)+' GB':r.mb+' MB')+(r.on?' · on car':'')+'</span></div>').join('');
+  document.querySelectorAll('#regions input').forEach(c=>c.onchange=()=>{regions[c.dataset.r].on=c.checked;renderDb()});
+}
+$('#offline').onchange=e=>{offline=e.target.checked;if(!offline)anchorMin=0;renderDb()};
+renderWallet();renderDb();
+
+/* ---------- Gas station sign-up ---------- */
+const fmtUSD=n=>'$'+n.toFixed(2);
+let stDb=null,stUser=null,stUid=null;
+function stModeText(t){$('#stMode').textContent=t}
+stModeText('Sign-ups go to Dario');
+(async()=>{
+  try{
+    if(!window.claude||!window.claude.use){stModeText('Email sign-up');return}
+    const timer=setTimeout(()=>{if(!stDb)stModeText('Email sign-up')},10000);
+    stDb=await window.claude.use('db');stUser=await window.claude.use('user');clearTimeout(timer);
+    if(!stDb||!stUser){stDb=null;stModeText('Email sign-up');return}
+    stUid=await stUser.id();if(!stUid){stDb=null;stModeText('Email sign-up');return}
+    stModeText('Sign-ups go straight to Dario');
+    try{const mine=await stDb.collection('stations').doc(stUid).get();if(mine.exists){const d=mine.data();showSaved(d.station_name,true)}}catch(e){}
+    if(stUser.isOwner()){$('#ownerBox').hidden=false;
+      stDb.collection('stations').orderBy('created_at','desc').onSnapshot(snap=>{
+        const rows=snap.docs.map(d=>d.data());
+        $('#ownerRows').innerHTML=rows.length?rows.map(r=>'<tr><td><b>'+esc(String(r.station_name||''))+'</b><br>'+esc(String(r.address||''))+', '+esc(String(r.city||''))+' '+esc(String(r.state||''))+'</td><td>'+esc(String(r.contact_name||''))+'<br>'+esc(String(r.email||''))+'<br>'+esc(String(r.phone||''))+'</td><td>'+esc(String(r.pumps||''))+'</td><td class="mono">'+esc(String(r.wallet||''))+'</td><td>'+esc(String(r.created_at||'').slice(0,10))+'</td></tr>').join(''):'<tr><td colspan="5">No sign-ups yet.</td></tr>';
+      },()=>{$('#ownerRows').innerHTML='<tr><td colspan="5">Could not load sign-ups.</td></tr>'});
+    }
+  }catch(e){stDb=null;stModeText('Email sign-up')}
+})();
+function showSaved(name,already){const o=$('#stOut');o.hidden=false;o.className='out ok';o.innerHTML='<span class="k">'+(already?'Already registered':'Registered')+'</span><p><b>'+esc(name)+'</b> is on the pilot list. Dario will contact you to confirm your pumps and payout wallet. You can update the form and register again to change details.</p>'}
+const val=id=>$('#'+id).value.trim();
+$('#stForm').addEventListener('submit',async e=>{
+  e.preventDefault();const err=$('#stErr');err.textContent='';
+  const need=[['stName','station name'],['stAddr','street address'],['stCity','city'],['stState','state'],['stContact','contact name'],['stPhone','phone'],['stEmail','business email'],['stWallet','payout wallet']];
+  const miss=need.filter(([id])=>!val(id)).map(([,n])=>n);
+  if(miss.length){err.textContent='Please fill in: '+miss.join(', ')+'.';return}
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val('stEmail'))){err.textContent='That email address doesn’t look complete.';return}
+  if(!/^0x[0-9a-fA-F]{40}$/.test(val('stWallet'))){err.textContent='The payout wallet should be a Base address: 0x followed by 40 letters and numbers.';return}
+  const pumps=Number($('#stPumps').value);if(!(pumps>=1&&pumps<=99)){err.textContent='Enter between 1 and 99 pumps.';return}
+  if(!$('#stAgree').checked){err.textContent='Tick the box to confirm you can sign this station up.';return}
+  const rec={station_name:val('stName'),address:val('stAddr'),city:val('stCity'),state:val('stState'),pumps,brand:val('stBrand'),contact_name:val('stContact'),phone:val('stPhone'),email:val('stEmail'),wallet:val('stWallet'),fee_percent:1,status:'new',created_at:new Date().toISOString()};
+  if(stDb&&stUid){
+    const btn=$('#stSubmit');btn.disabled=true;btn.textContent='Saving…';
+    try{await stDb.collection('stations').doc(stUid).set(rec);showSaved(rec.station_name,false)}
+    catch(x){err.textContent='Couldn’t save right now. Please email the details to dariocanoy@priviflow.us.'}
+    finally{btn.disabled=false;btn.textContent='Register station'}
+  }else{
+    const summary='Privi station sign-up\n'+Object.entries(rec).map(([k,v])=>k+': '+v).join('\n');
+    const o=$('#stOut');o.hidden=false;o.className='out';
+    o.innerHTML='<span class="k">Send this to Dario</span><p>This page can’t save sign-ups here. Email the details below to <b class="mono" style="user-select:all">dariocanoy@priviflow.us</b> or call <b class="mono">313-413-8532</b>.</p><pre class="mono" id="stSum" style="white-space:pre-wrap;margin:8px 0 0;user-select:all">'+esc(summary)+'</pre><div class="btnrow" style="margin-top:8px"><button class="btn" type="button" id="stCopy">Copy details</button></div>';
+    $('#stCopy').onclick=()=>{const b=$('#stCopy');try{navigator.clipboard.writeText(summary).then(()=>b.textContent='Copied',()=>sel($('#stSum')))}catch(_){sel($('#stSum'))}};
+  }
+});
+const updFee=()=>{const a=45;$('#feeEx').textContent=fmtUSD(a);$('#feeCut').textContent=fmtUSD(a*.01);$('#feeNet').textContent=fmtUSD(a*.99)};updFee();
+
+/* ---------- Explainer film ---------- */
+const cv=$('#cv'),ctx=cv.getContext('2d');const W=1280,H=720;
+const scenes=[
+ {name:'Intro',dur:8,cap:'Two products from Privi World Co in Port Huron, Michigan: Privi Car and Privi Trace. Both are built on one idea, the sealed record.'},
+ {name:'Parked cars',dur:9,cap:'A car sits parked for most of the day. Privi Car lets an owner put that idle time to work with a small AI helper on a companion device, never inside the car’s driving systems.'},
+ {name:'Safety checks',dur:10,cap:'Before any job runs, four checks must pass: the owner opted in, the car is parked, it is on external power, and the temperature is safe. Steering, brakes and firmware are never reachable.'},
+ {name:'Receipts',dur:9,cap:'Each finished job produces a signed receipt: what ran, on which device, how long it took and a hash of the result. In the prototype, rewards are test credits only.'},
+ {name:'Passport',dur:9,cap:'Receipts, service visits, ownership changes and digital keys go into a vehicle passport that cannot be quietly edited later.'},
+ {name:'Privi Trace',dur:9,cap:'Privi Trace turns any process into a chain of checkpoints. Each one records who did what and when, sealed together with the step before it.'},
+ {name:'Four traces',dur:11,cap:'Trace a part from the steel mill to the OEM, a stablecoin payment back to its issuer’s reserves, an AI agent’s actions and approvals, or a car’s full history.'},
+ {name:'Tamper test',dur:10,cap:'If someone quietly edits step three, its seal no longer matches, and every seal after it fails too. Anyone can see exactly where the record changed.'},
+ {name:'Pump pay',dur:11,cap:'With Privi Pro, the driver pays at the pump from the dashboard, parked with the engine off, and confirms with Face ID. The station gets 99% in USDC; Privi keeps a 1% fee. Gas stations can register on this page.'},
+ {name:'Try it',dur:9,cap:'Try both demos below. Each Trace mode runs on a Privi product you can buy today, from $29 a month. Pilots: call Dario at 313-413-8532.'}
+];
+const total=scenes.reduce((a,s)=>a+s.dur,0);const starts=[];{let a=0;scenes.forEach(s=>{starts.push(a);a+=s.dur})}
+let t=0,playing=false,last=0,voice=false,lastScene=-1;
+const chap=$('#chapters');
+scenes.forEach((s,i)=>{const b=document.createElement('button');b.type='button';b.textContent=s.name;b.onclick=()=>{t=starts[i]+.01;lastScene=-1;frame(true)};chap.appendChild(b)});
+const fmt=s=>Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));const ease=x=>1-Math.pow(1-clamp(x),3);
+const ap=(lt,s,d=.8)=>ease((lt-s)/d);
+let C={};
+function rr(x,y,w,h,r,fill,stroke,lw=2){ctx.beginPath();ctx.roundRect(x,y,w,h,r);if(fill){ctx.fillStyle=fill;ctx.fill()}if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=lw;ctx.stroke()}}
+function txt(s,x,y,size,color,weight=600,align='left',font='body'){ctx.font=weight+' '+size+'px '+(font==='display'?'Archivo, Arial Narrow, sans-serif':font==='mono'?'IBM Plex Mono, monospace':'IBM Plex Sans, sans-serif');ctx.fillStyle=color;ctx.textAlign=align;ctx.textBaseline='middle';ctx.fillText(s,x,y)}
+function car(x,y,s,color){ctx.save();ctx.translate(x,y);ctx.scale(s,s);ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(-170,20);ctx.lineTo(-160,-20);ctx.quadraticCurveTo(-120,-30,-80,-35);ctx.lineTo(-40,-75);ctx.quadraticCurveTo(0,-90,60,-75);ctx.lineTo(110,-35);ctx.quadraticCurveTo(160,-30,170,-5);ctx.lineTo(172,20);ctx.closePath();ctx.fill();
+ ctx.fillStyle=C.bg;ctx.beginPath();ctx.moveTo(-30,-66);ctx.quadraticCurveTo(0,-78,20,-74);ctx.lineTo(20,-38);ctx.lineTo(-62,-38);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(32,-73);ctx.quadraticCurveTo(55,-70,92,-38);ctx.lineTo(32,-38);ctx.closePath();ctx.fill();
+ [-105,105].forEach(wx=>{ctx.fillStyle=C.bg;ctx.beginPath();ctx.arc(wx,22,34,0,7);ctx.fill();ctx.fillStyle=color;ctx.beginPath();ctx.arc(wx,22,26,0,7);ctx.fill();ctx.fillStyle=C.bg;ctx.beginPath();ctx.arc(wx,22,10,0,7);ctx.fill()});ctx.restore()}
+function check(x,y,r,color,p=1){ctx.save();ctx.strokeStyle=color;ctx.lineWidth=r*.22;ctx.lineCap='round';ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2*p);ctx.stroke();if(p>=1){ctx.beginPath();ctx.moveTo(x-r*.45,y);ctx.lineTo(x-r*.1,y+r*.38);ctx.lineTo(x+r*.5,y-r*.35);ctx.stroke()}ctx.restore()}
+function cross(x,y,r,color){ctx.save();ctx.strokeStyle=color;ctx.lineWidth=r*.22;ctx.lineCap='round';ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.stroke();ctx.beginPath();ctx.moveTo(x-r*.4,y-r*.4);ctx.lineTo(x+r*.4,y+r*.4);ctx.moveTo(x+r*.4,y-r*.4);ctx.lineTo(x-r*.4,y+r*.4);ctx.stroke();ctx.restore()}
+function block(x,y,w,h,label,sub,stroke,a=1){ctx.globalAlpha=a;rr(x,y,w,h,12,C.panel,stroke,3);txt(label,x+w/2,y+h*.38,22,C.ink,600,'center');txt(sub,x+w/2,y+h*.7,16,C.muted,400,'center','mono');ctx.globalAlpha=1}
+const fakeHash=i=>['a3f9…1c07','7be2…9d44','c01d…5ef8','4d8a…b213','e66f…0a9c','19bc…77e1'][i%6];
+const draw=[
+ lt=>{ // intro
+  txt('PRIVI WORLD CO · PORT HURON, MI',W/2,170,20,C.muted,500,'center','mono');
+  ctx.globalAlpha=ap(lt,.2);txt('Privi Car',W/2-150,290,86,C.ink,800,'center','display');ctx.globalAlpha=ap(lt,.8);txt('+',W/2+40,290,70,C.accent,800,'center','display');ctx.globalAlpha=ap(lt,1.2);txt('Privi Trace',W/2+260,290,86,C.ink,800,'center','display');ctx.globalAlpha=1;
+  for(let i=0;i<5;i++){const a=ap(lt,2+i*.5);const x=200+i*190;ctx.globalAlpha=a;if(i<4){ctx.strokeStyle=C.accent;ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(x+150,480);ctx.lineTo(x+190,480);ctx.stroke()}block(x,430,150,100,'Step '+(i+1),fakeHash(i),C.accent,a)}
+  ctx.globalAlpha=ap(lt,5);txt('One idea underneath: the sealed record',W/2,620,28,C.muted,500,'center');ctx.globalAlpha=1},
+ lt=>{ // parked
+  ctx.fillStyle=C.panel;ctx.fillRect(0,520,W,200);
+  ctx.strokeStyle=C.muted;ctx.setLineDash([30,24]);ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(0,620);ctx.lineTo(W,620);ctx.stroke();ctx.setLineDash([]);
+  car(480,470,1.5,C.ink);
+  txt('P',150,200,64,C.accent,800,'center','display');rr(110,155,80,90,10,null,C.accent,4);
+  const a=ap(lt,2);ctx.globalAlpha=a;rr(840,250,190,300,26,C.panel,C.accent,4);rr(860,290,150,200,8,C.bg);txt('Privi Car',935,320,20,C.ink,600,'center');
+  ['Opt-in','Jobs','Receipts'].forEach((s,i)=>{rr(875,350+i*42,120,32,6,C.accent+'33');txt(s,935,366+i*42,16,C.ink,500,'center')});
+  txt('companion device',935,580,18,C.muted,500,'center','mono');ctx.globalAlpha=1;
+  ctx.globalAlpha=ap(lt,4);txt('Parked most of the day',150,300,30,C.ink,600,'left');txt('idle compute, owner in control',150,342,20,C.muted,400,'left');ctx.globalAlpha=1},
+ lt=>{ // gates
+  const names=['Owner opted in','Vehicle parked','External power','Temperature safe'];
+  txt('Four checks before any job',W/2,90,38,C.ink,800,'center','display');
+  names.forEach((n,i)=>{const p=clamp((lt-1-i*1.2)/.8);const x=110+i*275;rr(x,160,240,140,14,C.panel,p>=1?C.ok:C.line,3);check(x+120,210,26,p>=1?C.ok:C.muted,p<1?p:1);txt(n,x+120,268,20,C.ink,600,'center')});
+  const j=ap(lt,6);ctx.globalAlpha=j;rr(470,360,340,90,14,C.accent,null);txt('Edge job runs',640,405,28,'#fff',700,'center');ctx.globalAlpha=1;
+  const z=ap(lt,7.2);ctx.globalAlpha=z;['Steering','Brakes','Firmware','CAN bus'].forEach((n,i)=>{const x=170+i*250;rr(x,500,210,100,14,null,C.bad,3);cross(x+50,550,24,C.bad);txt(n,x+130,550,22,C.ink,600,'center')});txt('Never reachable',W/2,650,22,C.bad,600,'center','mono');ctx.globalAlpha=1},
+ lt=>{ // receipts
+  txt('A signed receipt for every job',W/2,90,38,C.ink,800,'center','display');
+  const a=ap(lt,.8);ctx.globalAlpha=a;rr(150,180,360,380,16,C.accent,null);txt('Edge job',330,240,30,'#fff',700,'center');txt('Cache map tiles',330,290,22,'#ffffffcc',500,'center');txt('14 min · 6 Wh',330,330,22,'#ffffffcc',500,'center','mono');ctx.globalAlpha=1;
+  const p=ap(lt,2,1.4);ctx.strokeStyle=C.accent;ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(520,370);ctx.lineTo(520+170*p,370);ctx.stroke();
+  const r=ap(lt,3);ctx.globalAlpha=r;rr(720,160,420,420,16,C.panel,C.ok,3);txt('RECEIPT',930,205,20,C.ok,600,'center','mono');
+  [['device','node-3fa1c2d9'],['job digest','b81e…44c0'],['resources','14 min · 6 Wh'],['result hash','0d7a…e912'],['seal','a3f9…1c07'],['credit','12 test credits']].forEach(([k,v],i)=>{txt(k,760,260+i*48,18,C.muted,400,'left','mono');txt(v,1100,260+i*48,18,C.ink,500,'right','mono')});ctx.globalAlpha=1},
+ lt=>{ // passport
+  txt('Vehicle passport',W/2,90,38,C.ink,800,'center','display');car(240,330,.9,C.ink);
+  const items=[['Passport created','Mar 2, 2021'],['Ownership transfer','Jun 14, 2024'],['Service: brake pads','Nov 4, 2026'],['Digital key issued','Nov 6, 2026'],['Job receipt sealed','Nov 12, 2026']];
+  items.forEach((it,i)=>{const a=ap(lt,.8+i*.9);ctx.globalAlpha=a;const y=150+i*96;rr(500,y,640,76,12,C.panel,C.line,2);check(545,y+38,18,C.ok);txt(it[0],580,y+38,24,C.ink,600,'left');txt(it[1],1110,y+38,18,C.muted,400,'right','mono');ctx.globalAlpha=1});
+  ctx.globalAlpha=ap(lt,6);txt('No quiet edits',240,470,26,C.accent,700,'center');ctx.globalAlpha=1},
+ lt=>{ // trace intro
+  txt('Privi Trace',W/2,110,56,C.ink,800,'center','display');txt('a chain of signed checkpoints',W/2,170,24,C.muted,400,'center');
+  for(let i=0;i<5;i++){const a=ap(lt,1+i*.7);const x=110+i*220;ctx.globalAlpha=a;if(i<4){ctx.strokeStyle=C.ok;ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(x+180,380);ctx.lineTo(x+220,380);ctx.stroke()}rr(x,290,180,180,14,C.panel,C.ok,3);txt(['who','what','when','data','seal'][i],x+90,340,24,C.ink,600,'center');txt(fakeHash(i),x+90,400,16,C.muted,400,'center','mono');check(x+90,440,14,C.ok);ctx.globalAlpha=1}
+  ctx.globalAlpha=ap(lt,5);txt('seal = hash(previous seal + this step)',W/2,560,26,C.accent,500,'center','mono');ctx.globalAlpha=1},
+ lt=>{ // four traces
+  const q=[['Part','Mill → heat treat → machining → QC → OEM','Supplier Proof · $99/mo'],['Payment','Issuer check → reserves → transfer → receipt','GENIUS tools · $0.01/call'],['AI agent','Task → tools → Guard → approval → action','Ledger Pro · $29/mo'],['Vehicle','Passport → owners → service → keys','Privi Car passport']];
+  q.forEach((it,i)=>{const a=ap(lt,.6+i*1.4);const x=80+(i%2)*580,y=60+Math.floor(i/2)*320;ctx.globalAlpha=a;rr(x,y,540,290,18,C.panel,C.line,2);txt(it[0],x+30,y+55,40,C.ink,800,'left','display');txt(it[1],x+30,y+125,20,C.muted,400,'left');for(let k=0;k<5;k++){rr(x+30+k*98,y+165,78,46,8,C.accent+'26',C.accent,2);if(k<4){ctx.strokeStyle=C.accent;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x+108+k*98,y+188);ctx.lineTo(x+128+k*98,y+188);ctx.stroke()}}txt(it[2],x+30,y+250,20,C.accent,600,'left','mono');ctx.globalAlpha=1})},
+ lt=>{ // tamper
+  txt('What happens if someone edits step 3?',W/2,100,38,C.ink,800,'center','display');
+  const broke=lt>3,ver=lt>5;
+  for(let i=0;i<5;i++){const x=110+i*220;let col=C.ok;if(ver&&i===2)col=C.amber;else if(ver&&i>2)col=C.bad;else if(broke&&i===2)col=C.amber;
+   if(i<4){ctx.strokeStyle=(ver&&i>=2)?C.bad:C.ok;ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(x+180,380);ctx.lineTo(x+220,380);ctx.stroke()}
+   rr(x,290,180,180,14,C.panel,col,4);txt('Step '+(i+1),x+90,340,26,C.ink,600,'center');txt(i===2&&broke?'42,180 → 22,180':fakeHash(i),x+90,395,i===2&&broke?15:16,i===2&&broke?C.amber:C.muted,500,'center','mono');
+   if(ver&&i>=2)cross(x+90,440,14,i===2?C.amber:C.bad);else check(x+90,440,14,C.ok)}
+  if(broke&&!ver){txt('odometer quietly changed',W/2,540,26,C.amber,600,'center','mono')}
+  if(ver){ctx.globalAlpha=ap(lt,5);rr(340,520,600,90,14,C.bad,null);txt('Verification failed at step 3',640,565,30,'#fff',700,'center');ctx.globalAlpha=1}},
+ lt=>{ // pump pay
+  txt('Pay at the pump from the dashboard',W/2,80,38,C.ink,800,'center','display');
+  rr(90,140,620,400,22,C.panel,C.line,2);txt('PRIVI PRO',130,180,16,C.accent,600,'left','mono');
+  txt('Blue Water Fuel (example)',130,225,26,C.ink,600,'left');txt('Pump 3 · Regular · $3.19/gal',130,262,18,C.muted,400,'left','mono');
+  const a=ap(lt,1);ctx.globalAlpha=a;rr(130,300,540,60,10,C.bg,null);txt('Amount',150,330,18,C.muted,400,'left');txt('45.00 USDC',650,330,26,C.ink,700,'right','mono');ctx.globalAlpha=1;
+  const g=clamp((lt-2)/.8);rr(130,380,540,52,10,null,g>=1?C.ok:C.line,2);check(160,406,14,g>=1?C.ok:C.muted,g<1?g:1);txt('Parked, engine off',190,406,20,C.ink,500,'left');
+  const b=ap(lt,3.2);ctx.globalAlpha=b;rr(130,452,540,60,12,C.accent,null);txt('Pay from dashboard',400,482,22,'#fff',700,'center');ctx.globalAlpha=1;
+  const ph=ap(lt,4.4);ctx.globalAlpha=ph;rr(800,150,200,360,28,C.panel,C.accent,3);rr(818,190,164,280,10,C.bg);txt('Face ID',900,260,22,C.ink,600,'center');check(900,330,34,C.ok,clamp((lt-5)/1));txt('Approved',900,410,20,C.ok,600,'center');ctx.globalAlpha=1;
+  const sp=ap(lt,6.5);ctx.globalAlpha=sp;rr(1040,180,180,140,14,C.panel,C.ok,3);txt('Station',1130,215,18,C.muted,400,'center');txt('44.55',1130,260,30,C.ink,700,'center','mono');txt('99% · USDC',1130,298,16,C.ok,500,'center','mono');
+  rr(1040,350,180,140,14,C.panel,C.accent,3);txt('Privi fee',1130,385,18,C.muted,400,'center');txt('0.45',1130,430,30,C.ink,700,'center','mono');txt('1% · USDC',1130,468,16,C.accent,500,'center','mono');ctx.globalAlpha=1;
+  ctx.globalAlpha=ap(lt,8);txt('Receipt sealed to the car ledger · gas stations register below',W/2,620,24,C.muted,500,'center');ctx.globalAlpha=1},
+ lt=>{ // cta
+  txt('Try both demos below',W/2,170,60,C.ink,800,'center','display');
+  ctx.globalAlpha=ap(lt,1);txt('Privi Car · research prototype   |   Privi Trace · concept demo',W/2,250,24,C.muted,500,'center');ctx.globalAlpha=1;
+  const rows=[['Privi Pro (car)','$99 / month'],['Ledger Pro','$29 / month'],['RealCheck','$49 / month'],['Gas stations','1% per sale']];
+  rows.forEach((r,i)=>{const a=ap(lt,2+i*.5);ctx.globalAlpha=a;rr(330,310+i*66,620,54,10,C.panel,C.line,2);txt(r[0],360,337+i*66,22,C.ink,600,'left');txt(r[1],920,337+i*66,22,C.accent,600,'right','mono');ctx.globalAlpha=1});
+  ctx.globalAlpha=ap(lt,4.5);txt('Pilots: 313-413-8532 · dariocanoy@priviflow.us',W/2,620,24,C.ink,500,'center','mono');ctx.globalAlpha=1}
+];
+function sceneAt(time){let i=scenes.length-1;for(let k=0;k<scenes.length;k++){if(time<starts[k]+scenes[k].dur){i=k;break}}return i}
+function frame(force){
+  C={bg:css('--film-bg'),ink:css('--film-ink'),muted:css('--film-muted'),panel:css('--film-panel'),accent:css('--accent'),ok:css('--ok'),bad:css('--bad'),amber:css('--amber'),line:'#30443e'};
+  const i=sceneAt(t);const lt=t-starts[i];
+  ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
+  const fade=Math.min(1,lt/.4,(scenes[i].dur-lt)/.4+ (i===scenes.length-1?1:0));
+  ctx.globalAlpha=1;ctx.save();draw[i](lt);ctx.restore();
+  if(fade<1&&playing){ctx.fillStyle=C.bg;ctx.globalAlpha=1-fade;ctx.fillRect(0,0,W,H);ctx.globalAlpha=1}
+  // progress ticks
+  ctx.fillStyle=C.panel;ctx.fillRect(0,H-6,W,6);ctx.fillStyle=C.accent;ctx.fillRect(0,H-6,W*(t/total),6);
+  if(i!==lastScene){lastScene=i;$('#cap').textContent=scenes[i].cap;[...chap.children].forEach((b,k)=>b.classList.toggle('on',k===i));if(voice&&playing)speak(scenes[i].cap)}
+  $('#seek').value=Math.round(t/total*1000);$('#time').textContent=fmt(t)+' / '+fmt(total);
+}
+function loop(now){if(!playing)return;const dt=(now-last)/1000;last=now;t+=Math.min(dt,.1);if(t>=total){t=total-.001;setPlaying(false);frame(true);return}frame();requestAnimationFrame(loop)}
+function setPlaying(p){playing=p;$('#play').textContent=p?'Pause':(t>=total-.01?'Replay':'Play');if(p){if(t>=total-.01){t=0;lastScene=-1}last=performance.now();lastScene=-1;requestAnimationFrame(loop)}else{try{speechSynthesis.cancel()}catch(e){}}}
+$('#play').onclick=()=>setPlaying(!playing);
+$('#seek').oninput=e=>{t=e.target.value/1000*total;if(t>=total)t=total-.001;lastScene=-1;try{speechSynthesis.cancel()}catch(_){};frame(true)};
+function speak(s){try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(s);u.rate=1.02;speechSynthesis.speak(u)}catch(e){}}
+$('#voice').onclick=()=>{voice=!voice;$('#voice').textContent='Voice: '+(voice?'on':'off');$('#voice').setAttribute('aria-pressed',voice);if(voice&&playing)speak(scenes[sceneAt(t)].cap);if(!voice){try{speechSynthesis.cancel()}catch(e){}}};
+// resting frame: intro fully drawn
+t=7.5;frame(true);t=0;$('#seek').value=0;$('#time').textContent='0:00 / '+fmt(total);
+const mq=matchMedia('(prefers-color-scheme: dark)');mq.addEventListener&&mq.addEventListener('change',()=>{if(!playing){const k=t;t=k||7.5;frame(true);t=k}});
+document.fonts&&document.fonts.ready.then(()=>{if(!playing){t=7.5;lastScene=-1;frame(true);t=0;$('#seek').value=0;$('#time').textContent='0:00 / '+fmt(total)}});
+})();
+</script>
+
+</body>
+</html>

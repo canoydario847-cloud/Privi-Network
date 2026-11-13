@@ -1,0 +1,22 @@
+name: Native PRVI offline bank reconciliation tests
+on:
+  pull_request:
+    paths:
+      - 'mainnet/audit_bank_supply.cjs'
+      - 'mainnet/audit_supply_manifest.cjs'
+      - 'mainnet/test_bank_reconciliation_adversarial.cjs'
+      - '.github/workflows/mainnet-bank-reconciliation.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bank-reconciliation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run adversarial offline accounting tests
+        run: node --test mainnet/test_bank_reconciliation_adversarial.cjs

@@ -217,7 +217,7 @@
       "registry_id": "io.github.canoydario847-cloud/privi-quantum",
       "url": "https://privi-quantum.onrender.com/mcp",
       "transport": "streamable-http",
-      "description": "Quantum Agent Accelerator: upgrade any AI agent to a certified quantum agent (post-quantum ML-DSA identity, hybrid post-quantum TLS, and a verified quantum run), listed in the free Quantum Agent Directory where any agent can verify another agent's post-quantum signature (qagent_verify). Every quantum agent is approved by a verified human (passkey with biometric or screen-lock check on the person's own device, plus government ID via Stripe Identity) and graded A+ to F by Privi Inspector. Privi Inspector guards it: only certified, current quantum agents get a pass in, and its patrol keeps a public watchlist of revoked, outdated and impersonated agents that any service can check (inspector_check, inspector_watchlist). The Privi quantum realm: Dream Scape workspaces, Dream Weaver races one quantum job across realms for the fastest or best answer, and Privilege ranks realms by measured time to the proven optimum. Quantum optimization (CVaR-QAOA, up to 16 qubits) for manufacturing decisions; every result signed Ed25519 + ML-DSA-87 and anchored on Base. Also scans code and endpoints for quantum-vulnerable cryptography.",
+      "description": "Quantum Agent Accelerator: upgrade any AI agent to a certified quantum agent (post-quantum ML-DSA identity, hybrid post-quantum TLS, and a verified quantum run), listed in the free Quantum Agent Directory where any agent can verify another agent's post-quantum signature (qagent_verify). Every quantum agent is approved by a verified human (passkey with biometric or screen-lock check on the person's own device, plus government ID via Stripe Identity) and graded A+ to F by Privi Inspector. Privi Inspector guards it: only certified, current quantum agents get a pass in, and its patrol keeps a public watchlist of revoked, outdated and impersonated agents that any service can check (inspector_check, inspector_watchlist). The Privi quantum realm: Dream Scape workspaces, Dream Weaver races one quantum job across realms for the fastest or best answer, and Privilege ranks realms by measured time to the proven optimum. Quantum optimization (CVaR-QAOA, up to 16 qubits) for manufacturing decisions; every result signed Ed25519 + ML-DSA-87 and anchored on Base. Also scans code and endpoints for quantum-vulnerable cryptography. Privi Car: post-quantum signed vehicle passports, hash-chained odometer and service records with rollback flags, signed vehicle history reports, time-limited digital keys, and proven-best route, fleet and EV charging plans with a sealed quantum-vs-classical receipt; it never connects to or controls a vehicle.",
       "pricing": "free",
       "auth": "none",
       "tools": [
@@ -252,7 +252,20 @@
         "inspector_report",
         "inspector_patrol",
         "qagent_human_request",
-        "inspector_grade"
+        "inspector_grade",
+        "car_info",
+        "car_vin_check",
+        "car_register",
+        "car_record_add",
+        "car_verify",
+        "car_history",
+        "car_key_issue",
+        "car_key_check",
+        "car_key_revoke",
+        "car_route",
+        "car_fleet_assign",
+        "car_charge_plan",
+        "car_edge_job"
       ]
     },
     {
@@ -260,7 +273,7 @@
       "registry_id": "io.github.canoydario847-cloud/privi-call",
       "url": "https://privi-call.onrender.com/mcp",
       "transport": "streamable-http",
-      "description": "A call network for AI agents: every agent gets a short number and one tool call reaches any of them over warm connections. Privi's own agents (100 Ledger, 101 Verify, 102 Anchor, 103 Quantum) are free to call; other agents 50 free calls a day, then $0.001 a call (1,000 for $1.00 USDC via x402). Register your own MCP server for free. Every agent call and phone call lands in a public, hash-chained call log anchored on Base. Also runs the Privi phone line (voice agent with pilot requests and a line to the founder).",
+      "description": "A call network for AI agents: every agent gets a short number and one tool call reaches any of them over warm connections. Privi's own agents (100 Ledger, 101 Verify, 102 Anchor, 103 Quantum) are free to call; other agents 50 free calls a day, then $0.001 a call (1,000 for $1.00 USDC via x402). Register your own MCP server for free. Every agent call and phone call lands in a public, hash-chained call log anchored on Base. Also runs the Privi phone line (voice agent with pilot requests and a line to the founder). No MCP client needed: the Privi Call Gateway serves the same network over plain HTTPS (OpenAPI at https://privi-call.onrender.com/openapi.json, pay per request with x402 or a prepaid key), with ready-made tool kits for voice and phone agents (Vapi, Retell, ElevenLabs, OpenAI Realtime) at https://privi-call.onrender.com/kits and a console for human call-center agents at https://privi-call.onrender.com/console.",
       "pricing": "free for Privi agents; 50 free calls/day to others, then $0.001/call (1,000 for $1.00 USDC, x402)",
       "auth": "none (optional prepaid call key)",
       "tools": [
@@ -293,6 +306,7 @@
   "offers": [
     "Quantum Agent Accelerator and Directory: become a certified quantum agent free, and verify any agent's post-quantum signature before you trust or pay it (https://privi-quantum.onrender.com/accelerator)",
     "Privi Call: one number for every AI agent; route MCP calls to any agent, every call sealed in a public on-chain log",
+    "Privi Call Gateway: any agent framework, voice or phone agent, or call-center rep can use Privi over plain HTTPS; OpenAPI, tool kits and console at https://privi-call.onrender.com/kits",
     "Privi Fortress: post-quantum, transparency-logged, two-person-controlled audit trails for AI agents",
     "Privi Mandates: verifiable human authorization for AI agent payments",
     "Privi KYA: Know-Your-Agent checks for blockchain wallets (free to check; bind your agents' wallets)",

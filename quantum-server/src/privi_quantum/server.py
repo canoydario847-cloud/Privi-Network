@@ -41,7 +41,7 @@ from .x402 import NO_CHARGE_KEY, Facilitator, Paywall
 from .payments import ALWAYS_FREE as ALWAYS_FREE_TOOLS
 from . import benchmarks
 
-__version__ = "0.9.0"
+__version__ = "0.12.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/quantum-server"
 PUBLIC_URL = os.getenv("QUANTUM_PUBLIC_URL", "https://privi-quantum.onrender.com").rstrip("/")
 EXPLORER_URL = os.getenv("PRIVI_EXPLORER_URL", "").rstrip("/") or f"{PUBLIC_URL}/explorer/lookup"
@@ -111,6 +111,12 @@ factory decisions and returns answers you can prove later.
 16. Bring your own circuit: quantum_run_circuit takes the OpenQASM 2.0/3.0 that Qiskit writes (qasm2.dumps / qasm3.dumps)
    and runs it on IBM Quantum, IonQ, Amazon Braket or the local simulator; the counts are sealed and anchored.
 17. quantum_leaderboard (and /leaderboard) ranks every backend only by runs Privi measured and sealed.
+
+18. Privi Car (vehicles; start with car_info, page /car): car_register gives a vehicle a post-quantum signed passport;
+   car_record_add seals odometer, service, trip, fuel and charge records in a hash chain and flags odometer rollbacks;
+   car_history is the signed report for a buyer; car_key_issue / car_key_check / car_key_revoke are time-limited
+   digital keys; car_route, car_fleet_assign and car_charge_plan return proven-best plans with a sealed
+   quantum-vs-classical receipt. Privi Car never connects to or controls a vehicle.
 
 15. Honest benchmarks: quantum_benchmarks and the public page /benchmarks show, problem by problem, how the
    quantum answer compares with exact search and simulated annealing, including the cases classical wins.
@@ -1773,6 +1779,11 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     genius = Genius(settings.db_path, humans, attestor, PUBLIC_URL)
     _register_genius(mcp, genius, _admin)
     mcp._genius = genius
+    from .car import Car
+    from .car_web import register as _register_car
+    cars = Car(settings.db_path, attestor, PUBLIC_URL)
+    _register_car(mcp, cars, attestor, PUBLIC_URL, cpu, bool(anchor_client))
+    mcp._car = cars
 
     # Central paywall: every priced tool that doesn't gate itself goes through x402 here (payments off -> unchanged).
     from .payments import ALWAYS_FREE
@@ -2408,8 +2419,10 @@ def main() -> None:
         return
     import uvicorn
     from .front import QuickGet
-    uvicorn.run(QuickGet(http_app(mcp, host=args.host), "Privi Quantum", "privi-quantum", PUBLIC_URL),
-                host=args.host, port=args.port)
+    from .ledger_report import link
+    app = QuickGet(http_app(mcp, host=args.host), "Privi Quantum", "privi-quantum", PUBLIC_URL)
+    # Every tool call and state-changing request is reported to the Quantum Ledger.
+    uvicorn.run(link(app, "privi-quantum", __version__, settings.db_path), host=args.host, port=args.port)
 
 
 if __name__ == "__main__":
