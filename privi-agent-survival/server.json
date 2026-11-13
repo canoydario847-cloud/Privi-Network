@@ -1,0 +1,19 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.canoydario847-cloud/privi-agent-survival",
+  "title": "Privi Agent Survival & Premium",
+  "description": "83 tools for AI agents: 32 standard, 51 paid security, reliability and business analyzers.",
+  "version": "0.7.0",
+  "websiteUrl": "https://privi-ai-21-gateway.onrender.com/pricing",
+  "repository": {
+    "url": "https://github.com/canoydario847-cloud/Privi-Network",
+    "source": "github",
+    "subfolder": "privi-agent-survival"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://privi-ai-21-gateway.onrender.com/mcp"
+    }
+  ]
+}
