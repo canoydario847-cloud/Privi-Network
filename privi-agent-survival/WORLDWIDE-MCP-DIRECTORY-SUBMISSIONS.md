@@ -110,3 +110,10 @@ Additional third-party indexed page: https://mcprepository.com/canoydario847-clo
 - **Ledger recovery:** new-workspace `privi-ledger-mcp-recovery` deploy `dep-dbrq13ajnfac73bi9c30` was reported live, but MCP/health functionality on that recovery URL has not been independently validated. The existing Glama canonical Ledger connector still needs rechecking.
 - **Third-party distribution:** no new directory approval in this repair pass; don't count GitHub issue creation as marketplace publication.
 
+
+## Follow-up verification — 2026-11-13
+
+- Render reports gateway deployment `dep-dbrq2im417fc73epl8o0` **live** after commit `792ae296cdac` (HEAD /health compatibility fix). Previous deployment was deactivated. This confirms deployment completion, **not independently a successful HEAD probe**.
+- Render reports Ledger recovery deployment `dep-dbrq2qeq1p3s73e37gfg` **live** following the distribution documentation commit. Latest available Ledger recovery warning/error logs include a third-party `api.filepad.ai/mcp` HTTP 500 response, apparently from external registry scanning, not by itself proof that Privi Ledger's own MCP endpoint is broken.
+- The direct external web retrieval environment could not fetch either gateway or recovery `/health` URL. Separate public GET /health 200 responses have appeared in gateway Render request logs; direct current checks remain incomplete.
+- Do not mark Glama's stale unhealthy Ledger listing repaired without testing the canonical MCP connector and updating its registration endpoint if appropriate.
