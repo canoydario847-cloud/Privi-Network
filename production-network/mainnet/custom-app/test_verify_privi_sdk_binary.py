@@ -51,6 +51,19 @@ class ProvenanceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "comment|executable|enforcement"):
             self.check()
 
+    @unittest.expectedFailure
+    def test_mixed_executable_and_commented_guards_must_not_qualify(self):
+        """Known gap: harmless Go code plus commented guards must fail closed."""
+        for rel, markers in mod.MARKERS.items():
+            path = self.root / rel
+            path.write_text(
+                "package keeper\n\nfunc unrelated() {}\n" +
+                "\n".join("// " + marker for marker in markers) + "\n",
+                encoding="utf-8",
+            )
+        with self.assertRaisesRegex(ValueError, "comment|executable|enforcement"):
+            self.check()
+
     def test_reject_module_graph_without_local_replace(self):
         self.module.pop("Replace")
         with self.assertRaisesRegex(ValueError, "module graph"):
