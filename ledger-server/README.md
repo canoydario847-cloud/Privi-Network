@@ -63,6 +63,20 @@ The customer adds the server to their agent with header `Authorization: Bearer p
 
 Each report is **sealed**. Its SHA-256 hash, taken over canonical JSON, is anchored on the Privi blockchain through Privi Anchor. Anyone holding the report can run `ledger_verify_report`, which recomputes the hash, confirms Privi Ledger issued exactly that content, and checks the anchor on chain. Editing even one number, such as hiding a failure, makes verification fail.
 
+## Privi Ops Pack
+
+Five records every company has to keep, each written to its tamper-evident log. Privi stores fingerprints (SHA-256), never the documents.
+
+| Feature | Tools | What it does |
+|---|---|---|
+| Trust Page | `trust_page_publish`, `trust_page_view`, `GET /trust/<slug>` | A public page of your claims with evidence fingerprints, plus the live health of your logs. Share it with buyers |
+| Incident Clock | `incident_open`, `incident_update`, `incident_status`, `incident_close` | Starts the notification clocks when you learn of an incident (GDPR Art. 33: 72 hours; NIS2 Art. 23: 24 hours, 72 hours, one month; SEC Form 8-K Item 1.05: four business days after the materiality decision; your contract's hours). Closing produces a report sealed on chain |
+| Policy Sign-off | `policy_publish`, `policy_acknowledge`, `policy_status` | Who acknowledged which exact version of a policy, and who is missing |
+| Control Calendar | `control_save`, `control_evidence`, `controls_due` | Recurring controls with evidence fingerprints; shows overdue, never done and due soon |
+| Release Seal | `release_seal`, `release_check`, `GET /releases/check/<sha256>` | Seals a software release's file fingerprints on chain so anyone can check a download |
+
+> Incident deadlines follow the rule text; business days skip weekends only, not public holidays. This is a record-keeping tool, not legal advice.
+
 ## Privi Gov AI Inventory (OMB M-25-21)
 
 Federal agencies must keep an inventory of their AI use cases, publish the releasable ones as a machine-readable file, and show minimum risk practices for high-impact AI. That requirement comes from OMB Memorandum M-25-21 and OMB's guidance on 2025 agency AI reporting. Privi Ledger covers the whole loop:
