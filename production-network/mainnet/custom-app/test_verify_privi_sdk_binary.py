@@ -99,7 +99,6 @@ class ProvenanceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "missing unique guard|executable|enforcement|unused diagnostic declaration"):
             self.check()
 
-    @unittest.expectedFailure
     def test_parenthesized_var_declaration_must_not_qualify(self):
         """Known gap: Go var blocks can spoof a diagnostic without a guard."""
         path = self.root / "x/bank/keeper/send.go"
