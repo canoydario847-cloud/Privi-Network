@@ -1,0 +1,56 @@
+name: Verify Privi Ledger recovery MCP for Glama
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/glama-recovery-smoke.yml'
+      - 'ledger-server/server.json'
+  workflow_dispatch:
+jobs:
+  remote-mcp-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    permissions:
+      contents: read
+    steps:
+      - name: Verify public health, initialize and tools/list without credentials or tool execution
+        env:
+          MCP_BASE: https://privi-ledger-mcp-recovery.onrender.com
+        run: |
+          python3 - <<'PY'
+          import json, os, time, urllib.error, urllib.request
+          base=os.environ["MCP_BASE"].rstrip("/")
+          def send(path, payload=None, attempts=3):
+              headers={"Accept":"application/json, text/event-stream", "MCP-Protocol-Version":"2025-11-25"}
+              body=None if payload is None else json.dumps(payload).encode()
+              if body is not None:
+                  headers["Content-Type"]="application/json"
+              last=None
+              for attempt in range(attempts):
+                  try:
+                      req=urllib.request.Request(base+path,data=body,headers=headers,method="POST" if body is not None else "GET")
+                      with urllib.request.urlopen(req,timeout=75) as r:
+                          code=r.status
+                          data=r.read(2_000_000).decode("utf8")
+                          ct=r.headers.get("Content-Type","")
+                      if body is None: return code,json.loads(data)
+                      if "text/event-stream" in ct:
+                          events=[line[6:] for line in data.splitlines() if line.startswith("data: ")]
+                          if not events: raise RuntimeError("empty SSE")
+                          return code,json.loads(events[-1])
+                      return code,json.loads(data)
+                  except Exception as e:
+                      last=e
+                      if attempt<attempts-1: time.sleep(8*(attempt+1))
+              raise RuntimeError(f"{path}: {type(last).__name__}: {last}")
+          status,health=send("/health")
+          assert status==200 and health.get("ok") is True, (status,health)
+          print("HEALTH_OK", health.get("service"), health.get("version"))
+          status,reply=send("/mcp",{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"privi-glama-ci","version":"1.0.0"}}})
+          assert status==200 and reply.get("result",{}).get("serverInfo"), (status,reply)
+          print("MCP_INITIALIZE_OK",reply["result"]["serverInfo"].get("name"))
+          status,tools=send("/mcp",{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}})
+          assert status==200 and len(tools.get("result",{}).get("tools",[]))>0, (status,tools)
+          print("MCP_TOOLS_LIST_OK",len(tools["result"]["tools"]))
+          print("No MCP tool was invoked; no credentials, purchases or customer records were used.")
+          PY
