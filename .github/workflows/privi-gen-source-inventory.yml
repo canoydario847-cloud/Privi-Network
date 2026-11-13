@@ -1,0 +1,38 @@
+name: Privi-Gen source inventory
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-inventory:
+    name: Inventory tracked source (read-only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Privi project
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout pinned Privi-Gen
+        uses: actions/checkout@v4
+        with:
+          repository: canoydario847-cloud/Privi-Gen
+          ref: fe40156ec9a1d20539c87402bb207d4fa4d33e35
+          path: .privi-gen-tool
+          persist-credentials: false
+      - name: Configure Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Create tracked-source checksum inventory
+        run: python3 .privi-gen-tool/privi_gen.py inventory --repo . --out privi-source-index.json
+      - name: Upload source inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: privi-source-index
+          path: privi-source-index.json
+          retention-days: 7
