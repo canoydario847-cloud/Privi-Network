@@ -130,3 +130,11 @@ Additional third-party indexed page: https://mcprepository.com/canoydario847-clo
 - The latest Privi agent gateway deploy `dep-dbrq3te417fc73epmji0` (commit `af0a96319265d6f187b1b580e74ad6819490b6cb`) is reported **live** by Render after successful startup, at 23:49:41 UTC. The previous HEAD-health compatibility build was already live before this deployment.
 - On the gateway, Render logged HTTP 200 responses for `GET /health`, `GET /agent-hub`, `GET /agent-skills`, `GET /tools.json`, `GET /skills/index.json`, and multiple `POST /mcp` requests during a pre-deploy smoke test. These do not demonstrate paid purchase fulfillment or paid tool usage.
 - Public URL fetches from the web retrieval environment for `/health`, Ledger recovery `/health`, and the server-card URL remained inaccessible in that environment, so **direct external HEAD /health, Ledger health and server-card checks remain unconfirmed**. Render's build command performs syntax checks but does not execute `npm test`; new regression test passing is not proven merely by a live deployment.
+
+## CI gate improvement — 2026-11-13
+
+- Found `Privi Agent Gateway Tests` GitHub Actions workflow only triggered on pushes to `agent-api-21-launch`, omitting production `main` branch push events.
+- Fixed the workflow to trigger on `main` and `agent-api-21-launch` while retaining the existing `agent-gateway/**` and workflow file path filters. Commit [a36d9546](https://github.com/canoydario847-cloud/Privi/commit/a36d9546ca4af3dd8861763342f559537a5c5d3c).
+- The workflow uses Node 22 and PostgreSQL 16 and runs `npm test` in `agent-gateway`. A prior code change added a `HEAD /health` regression test.
+- GitHub combined commit status returned no statuses at time of verification. This does **not** show tests passed or failed. Check workflow run details separately before asserting green CI. GitHub workflow success alone does not gate Render auto-deployment unless Render is separately configured to wait for those checks.
+- Render detected the workflow file commit and began auto-deploy `dep-dbrq69h5efls73e19mfg`; preceding gateway deployment `dep-dbrq3te417fc73epmji0` was live.
