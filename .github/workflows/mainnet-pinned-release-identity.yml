@@ -1,0 +1,25 @@
+name: Native PRVI pinned release identity tests
+on:
+  push:
+    branches:
+      - 'mainnet/pin-release-identity-*'
+  pull_request:
+    paths:
+      - 'mainnet/audit_pinned_release_identity.cjs'
+      - 'mainnet/test_pinned_release_identity.cjs'
+      - 'mainnet/audit_signed_genesis_approval.cjs'
+      - 'mainnet/audit_pinned_supply_manifest.cjs'
+      - '.github/workflows/mainnet-pinned-release-identity.yml'
+permissions:
+  contents: read
+jobs:
+  pinned-release-identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Pinned release identity regression suite
+        run: node --test mainnet/test_pinned_release_identity.cjs
