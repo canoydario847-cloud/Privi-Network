@@ -1,0 +1,50 @@
+# Privi Agent Survival & Premium — Remote MCP
+
+**Maintainer:** Privi World Corp · **Remote MCP endpoint:** https://privi-ai-21-gateway.onrender.com/mcp
+
+**Directory entry:** [Official MCP Registry](https://registry.modelcontextprotocol.io/) — name `io.github.canoydario847-cloud/privi-agent-survival`, v0.6.0 already registered; a v0.7.0 update is being prepared.
+
+This is the **public metadata and directory-submission page** for Privi's remotely hosted commercial MCP service. The app's implementation is maintained separately. Nothing in this folder is a credential or a full source release.
+
+## What agents can find
+
+- **51 premium deterministic tools**, including agent permissions, hash-chain verification calculations, service-level budget analysis, incident priority, dataset quality, pricing simulation, vendor procurement and workflow-readiness checks. Premium operations consume **5 prepaid credits per call**.
+- **32 standard survival utilities** including SHA-256 payload fingerprints, scoped URL checks, retries, backoff, latency percentiles, text redaction and agent workflow dependency checks. Standard operations consume **1 prepaid credit per call**.
+- **32 portable `SKILL.md` workflow guides** at https://privi-ai-21-gateway.onrender.com/skills/index.json
+- **21 optional external-model-backed AI workflows** (these are *not activated* without a provider, credentials, and a separate commercial plan).
+
+**Access:** MCP `initialize` and `tools/list` provide free discovery so catalog scanners can index the definitions; **tool execution requires an authenticated prepaid API credential**. No free execution is offered in the commercial version. Authorization is by fixed `Authorization: Bearer <api-key>` header in compatible MCP clients; the service does **not yet support OAuth 2.1 or DCR**, which some AI platforms require.
+
+**Commercial readiness:** Stripe and native Base USDC checkouts are implemented as guarded routes, but **live paid checkout and automated API-key issuance are not yet operational** until durable database setup, Stripe signing secrets, tax review, payment-provider configuration and live end-to-end tests pass. Do not send funds directly to a posted wallet address. No confirmed third-party adoption or revenue is claimed.
+
+## Directory submission details
+
+| Field | Value |
+|---|---|
+| Name | Privi Agent Survival & Premium |
+| Category | Developer tools / Security / Productivity |
+| Endpoint | https://privi-ai-21-gateway.onrender.com/mcp |
+| Transport | Streamable HTTP |
+| Auth | Bearer API key for tool execution; public discovery |
+| Official registry name | `io.github.canoydario847-cloud/privi-agent-survival` |
+| Website | https://privi-ai-21-gateway.onrender.com/agent-hub |
+| Premium catalog | https://privi-ai-21-gateway.onrender.com/premium.json |
+| Pricing | https://privi-ai-21-gateway.onrender.com/pricing |
+| Agent skills | https://privi-ai-21-gateway.onrender.com/skills/index.json |
+| Health | https://privi-ai-21-gateway.onrender.com/health |
+| Server card | https://privi-ai-21-gateway.onrender.com/.well-known/mcp/server-card.json |
+| Public organization source | https://github.com/canoydario847-cloud/Privi-Network |
+
+### Directory copy
+
+> Privi Agent Survival & Premium is a remote Streamable HTTP MCP service offering 32 deterministic agent reliability tools and 51 prepaid enterprise-oriented analyzers for authorization, security evidence, error budgets, data quality, costing and workflow planning. Discovery is public; execution requires a prepaid API key. Stripe and Base USDC purchase flows are in development; live billing is not yet enabled. Portable Agent Skills and integration guides are provided for MCP-compatible clients.
+
+## Current registration status
+
+- **Official MCP Registry:** v0.6.0 previously published successfully. New paid-only v0.7.0 publish depends on the production rollout.
+- **Glama:** Maintainer must submit/claim in the Glama web interface if not already indexed.
+- **Smithery, mcp.so, PulseMCP, mcpservers.org and curated GitHub lists:** No approval or indexed listing claimed until independently verified. Public documentation is available for their forms and pull requests.
+
+This page is suitable for sharing with AI-agent directories; it makes **no claim of an independently security-audited service**, guaranteed availability, or certification.
+
+© 2026 Privi World Corp. All rights reserved.
