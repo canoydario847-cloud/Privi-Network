@@ -36,7 +36,7 @@ from .x402 import NO_CHARGE_KEY, PAYMENT_META_KEY, Paywall
 from .gateway import register_gateway
 from . import privi_token
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/call-server"
 COPYRIGHT = "Copyright (c) 2026 Privi World Co. All rights reserved."
 ROUTED_PRICE = "0.001"
@@ -522,6 +522,9 @@ def build_server(settings: Settings | None = None, store: Store | None = None, r
                             .replace("{{PHONE}}", s.phone_number or "")
                             .replace("{{FREE}}", str(s.free_calls_per_day))
                             .replace("{{PACK}}", f"{s.pack_credits:,} calls for ${s.pack_price_usd}"))
+
+    from . import outreach as _outreach
+    _outreach.register(mcp, _outreach.Outreach(store))
 
     # REST + OpenAPI, voice-agent kits and webhook, and the console for human call agents.
     register_gateway(mcp, s, store, router, paywall, limiter, __version__)

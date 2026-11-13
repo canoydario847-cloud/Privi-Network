@@ -17,6 +17,17 @@ Works with Claude, ChatGPT, Cursor, VS Code and custom agents. Part of the Privi
 
 Only hashes go on chain, never content.
 
+## Folder manifests and certificates (v0.5.0)
+
+| Tool | What it does |
+|---|---|
+| `anchor_manifest` | Anchor a whole folder, dataset or evidence bundle (up to 2,000 files) with one transaction |
+| `anchor_manifest_check` | Prove one file (path and fingerprint) was part of an anchored manifest without showing the others. A changed or renamed file fails |
+| `anchor_certificate` | Turn a confirmed anchor into a readable proof-of-existence certificate with a public page at `/certificates/<id>` |
+| `anchor_certificate_get` | Read a certificate and the receipt needed to re-check it on chain |
+
+File paths and certificate text stay in this server's index; only hashes go on chain. A certificate shows that a file with that fingerprint existed by the block time, not who wrote it. Set `ANCHOR_PUBLIC_URL` if the server is not at privi-anchor.onrender.com.
+
 ## How it works
 
 1. The hashes in a call become leaves of a SHA-256 Merkle tree (`node = sha256(min(a,b) || max(a,b))`).

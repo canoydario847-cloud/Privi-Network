@@ -27,7 +27,7 @@ from . import merkle
 from .chain import Chain, JsonRpcChain, RpcError, wait_receipt
 from .store import AnchorStore
 
-__version__ = "0.4.1"
+__version__ = "0.5.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/anchor-server"
 MAX_HASHES = 100
 
@@ -273,6 +273,11 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
             "receipts": [{"hash": h, "proof": p, "tx_hash": tx_hash} for h, p in proofs.items()],
             "note": None if status == "confirmed" else "Not mined yet; anchor_verify will confirm it once it is.",
         }, is_error=(status == "failed"))
+
+    from . import proofs
+    proofs.register(mcp, store, anchor=anchor_hashes, verify_hash=verify_hash, client_key=client_key, tx_link=tx_link,
+                    network_name=settings.network_name,
+                    public_url=os.getenv("ANCHOR_PUBLIC_URL", "https://privi-anchor.onrender.com").rstrip("/"))
 
     # ---------------- http ----------------
 

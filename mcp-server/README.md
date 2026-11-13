@@ -20,6 +20,20 @@ Built by [Privi World Co](https://github.com/canoydario847-cloud) (Port Huron, M
 
 Prices are set with environment variables.
 
+## ChainFlow Shop Floor (v0.5)
+
+Five quality records small manufacturers keep on paper today. Writes need a manufacturer key and each one adds an event to the lot's hash chain, so it is covered by the on-chain checkpoints. Privi stores document fingerprints (SHA-256), never the files.
+
+| Feature | Tools | What it does |
+|---|---|---|
+| Recall Trace | `chainflow_link_lots`, `chainflow_recall_trace` | Link a lot to the lots it was made from; one call lists every lot a bad batch went into, which have shipped and which are not yet recalled |
+| Certificate of Conformance | `chainflow_coc_issue`, `chainflow_coc_verify`, `chainflow_coc_revoke`, `GET /coc/<id>` | Issue a certificate tied to the lot's record. Refused for recalled lots, open NCRs or altered histories. The buyer checks it; it stops verifying if the lot is later recalled |
+| Lot Documents | `chainflow_attach_document`, `chainflow_documents`, `chainflow_document_check` | Attach mill test reports, material certificates and inspection reports by fingerprint; anyone handed the file can check it is the one on record |
+| Non-Conformance Reports | `chainflow_ncr_open`, `chainflow_ncr_close`, `chainflow_ncr_list` | Open an NCR against a lot, close it with a disposition (use as is, rework, repair, scrap, return to supplier) and corrective action |
+| Gauge Calibration | `chainflow_gauge_save`, `chainflow_gauge_calibrated`, `chainflow_gauges_due` | Calibration list for measuring tools, with certificate fingerprints, and which gauges must not be used |
+
+NCR lists and the gauge list are manufacturer-only. The other read tools are paid per call like every Privi Verify tool.
+
 ## How records stay honest
 
 Each event's fingerprint is a SHA-256 of its contents **plus the previous event's fingerprint** in the same lot. Editing or deleting any past event breaks every fingerprint after it, and both verify tools report exactly where the chain broke.

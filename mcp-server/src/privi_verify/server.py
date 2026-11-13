@@ -22,6 +22,8 @@ from starlette.responses import JSONResponse, Response
 
 from .config import Settings
 from .store import EVENT_TYPES, LotStore, seed_demo
+from . import shopfloor
+from .shopfloor import ShopFloor
 from . import chainflow
 from .anchoring import Checkpoints, HttpAnchorClient, describe, start_loop
 from .x402 import NO_CHARGE_KEY, Facilitator, Paywall
@@ -29,7 +31,7 @@ from . import privi_token
 
 DEFAULT_ANCHOR_URL = "https://privi-anchor.onrender.com/mcp"
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 INSTRUCTIONS = """\
 Privi Verify checks where a manufactured lot came from and whether its records
@@ -230,6 +232,18 @@ def build_server(
         except ValueError as e:
             return _text_result({"error": str(e)}, is_error=True)
         return _text_result({"recorded": True, "event": ev})
+
+    # ---------------- ChainFlow Shop Floor ----------------
+
+    def _can_write(ctx: Context) -> bool:
+        headers = ctx.headers
+        if headers is None:
+            return os.getenv("PRIVI_ALLOW_LOCAL_WRITES") == "1"
+        auth = headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        return bool(token) and any(hmac.compare_digest(token, k) for k in settings.write_keys)
+
+    shopfloor.register(mcp, ShopFloor(store, _pub), _can_write)
 
     # ---------------- http extras ----------------
 
