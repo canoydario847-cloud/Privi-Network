@@ -244,6 +244,8 @@ def build_server(
         return bool(token) and any(hmac.compare_digest(token, k) for k in settings.write_keys)
 
     shopfloor.register(mcp, ShopFloor(store, _pub), _can_write)
+    from . import webapp as _webapp
+    _webapp.register(mcp, __version__)          # installable web app at /app/
 
     # ---------------- http extras ----------------
 

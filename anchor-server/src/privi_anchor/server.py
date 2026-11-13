@@ -274,6 +274,8 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
             "note": None if status == "confirmed" else "Not mined yet; anchor_verify will confirm it once it is.",
         }, is_error=(status == "failed"))
 
+    from . import webapp as _webapp
+    _webapp.register(mcp, __version__)          # installable web app at /app/
     from . import proofs
     proofs.register(mcp, store, anchor=anchor_hashes, verify_hash=verify_hash, client_key=client_key, tx_link=tx_link,
                     network_name=settings.network_name,

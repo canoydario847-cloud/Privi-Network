@@ -1,0 +1,80 @@
+{
+ "slug": "chainflow",
+ "host": "privi-verify.onrender.com",
+ "name": "Privi ChainFlow",
+ "short_name": "ChainFlow",
+ "tagline": "Shop-floor quality records that buyers can check.",
+ "intro": "Trace a recall through every lot, issue Certificates of Conformance, attach mill test reports, run non-conformance reports and keep gauges in calibration. Every entry joins the lot's tamper-evident history.",
+ "site": "https://chainflow.privishine.info",
+ "key": {
+  "mode": "bearer",
+  "label": "Manufacturer key",
+  "short": "Key",
+  "placeholder": "Your ChainFlow key",
+  "help": "Your ChainFlow manufacturer key lets you record lots, certificates and reports. It is kept in this browser only.",
+  "skip_pay": "Manufacturers with a key are not charged per use."
+ },
+ "plan_note": "Manufacturers with a key are not charged per use",
+ "android": {
+  "package": "us.priviflow.chainflow",
+  "dir": "android-chainflow",
+  "project": "PriviChainFlow",
+  "fingerprint_env": "CHAINFLOW_ANDROID_SHA256"
+ },
+ "features": [
+  {
+   "title": "Recall Trace",
+   "blurb": "Every lot a bad batch went into, and which have shipped.",
+   "tools": [
+    "chainflow_recall_trace",
+    "chainflow_link_lots"
+   ]
+  },
+  {
+   "title": "Certificate of Conformance",
+   "blurb": "Issue a certificate the buyer can check.",
+   "tools": [
+    "chainflow_coc_issue",
+    "chainflow_coc_verify",
+    "chainflow_coc_revoke"
+   ]
+  },
+  {
+   "title": "Lot Documents",
+   "blurb": "Mill test reports and inspection reports, by fingerprint.",
+   "tools": [
+    "chainflow_attach_document",
+    "chainflow_documents",
+    "chainflow_document_check"
+   ]
+  },
+  {
+   "title": "Non-Conformance Reports",
+   "blurb": "Open, disposition and close NCRs.",
+   "tools": [
+    "chainflow_ncr_open",
+    "chainflow_ncr_close",
+    "chainflow_ncr_list"
+   ]
+  },
+  {
+   "title": "Gauge Calibration",
+   "blurb": "What is due, and what must not be used.",
+   "tools": [
+    "chainflow_gauges_due",
+    "chainflow_gauge_calibrated",
+    "chainflow_gauge_save"
+   ]
+  },
+  {
+   "title": "Lots",
+   "blurb": "Record lot events and check a lot's history.",
+   "tools": [
+    "privi_record_event",
+    "privi_verify_lot",
+    "privi_chain_of_custody",
+    "privi_lookup_fingerprint"
+   ]
+  }
+ ]
+}

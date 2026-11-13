@@ -189,6 +189,8 @@ document.getElementById('y').onclick=()=>go('confirm');document.getElementById('
         body = [{"relation": ["delegate_permission/common.handle_all_urls"],
                  "target": {"namespace": "android_app", "package_name": "us.priviflow.realcheck",
                             "sha256_cert_fingerprints": fps}}] if fps else []
+        from .webapp import asset_statements
+        body = body + asset_statements()            # the Privi Quantum app (us.priviflow.quantum)
         return JSONResponse(body, headers={"Cache-Control": "max-age=300"})
 
     @route("/real/manifest.webmanifest", methods=["GET"], include_in_schema=False)

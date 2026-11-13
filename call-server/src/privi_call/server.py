@@ -523,6 +523,8 @@ def build_server(settings: Settings | None = None, store: Store | None = None, r
                             .replace("{{FREE}}", str(s.free_calls_per_day))
                             .replace("{{PACK}}", f"{s.pack_credits:,} calls for ${s.pack_price_usd}"))
 
+    from . import webapp as _webapp
+    _webapp.register(mcp, __version__)          # installable web app at /app/
     from . import outreach as _outreach
     _outreach.register(mcp, _outreach.Outreach(store))
 

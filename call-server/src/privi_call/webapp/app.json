@@ -1,0 +1,55 @@
+{
+ "slug": "call",
+ "host": "privi-call.onrender.com",
+ "name": "Privi Call",
+ "short_name": "Privi Call",
+ "tagline": "Check before you dial.",
+ "intro": "One answer before each call: is the number on your do-not-call list, is it within calling hours where the person is, and do you hold the consent the call needs. Numbers are stored only as scrambled fingerprints.",
+ "site": "https://privi-call.onrender.com",
+ "key": {
+  "mode": "arg",
+  "arg": "call_key",
+  "label": "Prepaid call key",
+  "short": "Key",
+  "placeholder": "pck_...",
+  "help": "Your lists belong to your prepaid call key (pck_...). It is kept in this browser only and filled in for you."
+ },
+ "android": {
+  "package": "us.priviflow.call",
+  "dir": "android-call",
+  "project": "PriviCall",
+  "fingerprint_env": "CALL_ANDROID_SHA256"
+ },
+ "features": [
+  {
+   "title": "Pre-call check",
+   "blurb": "Go or no-go, with the reasons.",
+   "tools": [
+    "call_precheck"
+   ]
+  },
+  {
+   "title": "Do-Not-Call list",
+   "blurb": "Add, remove or check a number.",
+   "tools": [
+    "call_do_not_call"
+   ]
+  },
+  {
+   "title": "Calling hours",
+   "blurb": "Is it 8 a.m. to 9 p.m. where they are?",
+   "tools": [
+    "call_hours_check"
+   ]
+  },
+  {
+   "title": "Consent records",
+   "blurb": "Who agreed to what, and when.",
+   "tools": [
+    "call_consent_record",
+    "call_consent_revoke",
+    "call_consent_check"
+   ]
+  }
+ ]
+}

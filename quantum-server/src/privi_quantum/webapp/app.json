@@ -1,0 +1,52 @@
+{
+ "slug": "quantum",
+ "host": "privi-quantum.onrender.com",
+ "name": "Privi Quantum",
+ "short_name": "Quantum",
+ "tagline": "Plan your move to post-quantum cryptography.",
+ "intro": "Check certificates for quantum risk, see which data is exposed to record-now-decrypt-later attacks, size the switch to new algorithms, inspect a circuit before running it, and score a supplier's readiness.",
+ "site": "https://privi-hub.onrender.com",
+ "android": {
+  "package": "us.priviflow.quantum",
+  "dir": "android-quantum",
+  "project": "PriviQuantum",
+  "fingerprint_env": "QUANTUM_ANDROID_SHA256"
+ },
+ "features": [
+  {
+   "title": "Certificate risk check",
+   "blurb": "Which certificate keys a quantum computer could break.",
+   "tools": [
+    "pqc_certificate_check"
+   ]
+  },
+  {
+   "title": "Harvest-now, decrypt-later risk",
+   "blurb": "Which of your data is exposed, and what to migrate first.",
+   "tools": [
+    "pqc_harvest_risk"
+   ]
+  },
+  {
+   "title": "Size impact",
+   "blurb": "Extra bytes per handshake or signature after switching.",
+   "tools": [
+    "pqc_size_impact"
+   ]
+  },
+  {
+   "title": "Circuit stats",
+   "blurb": "Qubits, gates and depth before you pay to run a circuit.",
+   "tools": [
+    "quantum_circuit_stats"
+   ]
+  },
+  {
+   "title": "Supplier scorecard",
+   "blurb": "Ten questions, a 0-100 score and a signed scorecard.",
+   "tools": [
+    "pqc_supplier_score"
+   ]
+  }
+ ]
+}

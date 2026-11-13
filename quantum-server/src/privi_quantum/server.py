@@ -1784,6 +1784,8 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     cars = Car(settings.db_path, attestor, PUBLIC_URL)
     _register_car(mcp, cars, attestor, PUBLIC_URL, cpu, bool(anchor_client))
     mcp._car = cars
+    from . import webapp as _webapp
+    _webapp.register(mcp, __version__, assetlinks=False)   # installable web app at /app/; assetlinks served by realcheck_web
     from . import toolkit as _toolkit
     _toolkit.register(mcp, attestor, PUBLIC_URL)
 

@@ -1493,6 +1493,8 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     seals = ContentSeals(ledger, public_url)
     musthave_tools.register(mcp, ledger, aiact=aiact, suppliers=suppliers, seals=seals, anchor_many=_anchor_many,
                             org_from=org_from, result=_result, unauthorized=unauthorized, over_limit=over_limit)
+    from . import webapp as _webapp
+    _webapp.register(mcp, __version__)          # installable web app at /app/
     ops = OpsPack(ledger, public_url)
     ops_tools.register(mcp, ops, anchor_many=_anchor_many, org_from=org_from, result=_result,
                        unauthorized=unauthorized, over_limit=over_limit)
