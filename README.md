@@ -9,7 +9,7 @@
 - [Live agent hub](https://privi-ai-21-gateway.onrender.com/agent-hub) · [Premium catalog](https://privi-ai-21-gateway.onrender.com/premium.json) · [Pricing/checkout status](https://privi-ai-21-gateway.onrender.com/pricing)
 - **Remote MCP:** `https://privi-ai-21-gateway.onrender.com/mcp` · official registry `io.github.canoydario847-cloud/privi-agent-survival`.
 - [Public MCP directory metadata and listing guide](privi-agent-survival/README.md).
-- [32 Agent Skills](https://privi-ai-21-gateway.onrender.com/skills/index.json) · [51-premium website](https://privi-premium-tools.onrender.com) (available after deployment).
+- [32 Agent Skills](https://privi-ai-21-gateway.onrender.com/skills/index.json) · [Live 51-premium website](https://privi-premium-tools.onrender.com).
 
 **Commercial status:** Checkout is not accepting real payments while durable storage, Stripe webhook credentials/tax configuration, Base confirmation and fulfillment tests remain unverified. Do not transfer funds without a verified order. The commercial gateway is separate from Privi Ledger's existing plans.
 
