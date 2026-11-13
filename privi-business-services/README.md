@@ -42,6 +42,6 @@ Suggested accurate description:
 
 Please do not imply official endorsements from OpenAI, Anthropic, xAI, Toyota, Stripe, the MCP Registry or any other third party. Being discoverable through an MCP registry is not evidence of customer purchases or independent certification.
 
-**Social post ideas and distribution kit:** [November 2026 launch campaign](https://github.com/canoydario847-cloud/Privi/tree/main/agent-gateway/campaigns/2026-11-b2b-launch).
+**Social post ideas and distribution kit:** [November 2026 launch campaign](https://github.com/canoydario847-cloud/Privi-Network/blob/main/privi-business-services/social-posts.md).
 
 © 2026 Privi World Corp. All rights reserved.
