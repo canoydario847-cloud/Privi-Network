@@ -1,0 +1,18 @@
+'use strict';
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const {generateKeyPairSync,sign}=require('node:crypto');
+const {canonicalPolicy,verifySignedPolicy}=require('./verify_signed_policy.cjs');
+const {publicKey,privateKey}=generateKeyPairSync('ed25519');
+const trusted={root:publicKey.export({type:'spki',format:'pem'})};
+const policy={chainId:'privi-1',denom:'aprvi',maxSupply:'1000',version:2};
+const signed=(p=policy)=>({keyId:'root',policy:p,signature:sign(null,canonicalPolicy(p),privateKey).toString('base64')});
+test('accepts valid signature for approved key, chain, version',()=>assert.equal(verifySignedPolicy(signed(),trusted,'privi-1',2),true));
+test('rejects changed cap',()=>{const e=signed();e.policy={...e.policy,maxSupply:'1001'};assert.equal(verifySignedPolicy(e,trusted,'privi-1',2),false);});
+test('rejects wrong chain',()=>assert.equal(verifySignedPolicy(signed(),trusted,'other',2),false));
+test('rejects obsolete version',()=>assert.equal(verifySignedPolicy(signed(),trusted,'privi-1',3),false));
+test('rejects unknown key',()=>assert.equal(verifySignedPolicy({...signed(),keyId:'unknown'},trusted,'privi-1',2),false));
+test('rejects malformed signature',()=>assert.equal(verifySignedPolicy({...signed(),signature:'abc'},trusted,'privi-1',2),false));
+test('rejects caller-injected policy fields',()=>assert.throws(()=>canonicalPolicy({...policy,approved:true}),/invalid policy/));
+test('rejects noncanonical numeric supply',()=>assert.throws(()=>canonicalPolicy({...policy,maxSupply:'01000'}),/invalid policy/));
+test('rejects missing trusted keys',()=>assert.equal(verifySignedPolicy(signed(),{},'privi-1',2),false));
