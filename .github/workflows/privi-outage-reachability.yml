@@ -34,7 +34,7 @@ jobs:
         shell: bash
         run: |
           python3 - <<'PY'
-          import json, socket, ssl, urllib.request, urllib.error
+          import json, socket, urllib.request, urllib.error, urllib.parse
           urls = [
             "https://priviflow.us/",
             "https://www.privishine.info/",
@@ -46,7 +46,7 @@ jobs:
             "https://privi-world.onrender.com/world/",
           ]
           for url in urls:
-              host = urllib.request.urlparse(url).hostname
+              host = urllib.parse.urlparse(url).hostname
               result = {"url": url}
               try:
                   result["dns"] = sorted({x[4][0] for x in socket.getaddrinfo(host,443,type=socket.SOCK_STREAM)})[:6]
