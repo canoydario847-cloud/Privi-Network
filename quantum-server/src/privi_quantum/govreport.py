@@ -40,7 +40,7 @@ def render(att: dict[str, Any], verify: dict[str, Any], public_url: str) -> str:
     aid = att["id"]
     anc = att.get("anchor") or {}
     sig_ok = verify.get("valid")
-    explorer = "https://privi-devnet.onrender.com/tx/" if anc.get("chain_id") == 772626 else (
+    explorer = "https://privi-devnet-32v2.onrender.com/tx/" if anc.get("chain_id") == 772626 else (
         "https://basescan.org/tx/" if anc.get("chain_id") == 8453 else "")
     anchor_html = (f'<span class="ok">Anchored</span> on {e(str(anc.get("network") or "chain"))}, block {e(str(anc.get("block_number")))} · '
                    f'<a class="mono" href="{e(explorer + anc["tx_hash"])}">{e(anc["tx_hash"][:18])}…</a>'

@@ -83,7 +83,7 @@ class Router:
 
     async def _post(self, endpoint: str, body: dict, session: str | None, extra: dict | None = None) -> httpx.Response:
         headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream",
-                   "MCP-Protocol-Version": PROTOCOL, "User-Agent": "privi-call/0.1 (+https://privi-call.onrender.com)"}
+                   "MCP-Protocol-Version": PROTOCOL, "User-Agent": "privi-call/0.1 (+https://privi-call-e3rb.onrender.com)"}
         if session:
             headers["Mcp-Session-Id"] = session
         headers.update(extra or {})

@@ -2,11 +2,11 @@
 // Jose's five-second APPLICATION SERVICE health checks, never consensus/mainnet certification.
 export const MONITOR_INTERVAL_MS = 5000;
 export const TARGETS = Object.freeze([
-  { id: 'privi-ledger', name: 'Privi Ledger', url: 'https://privi-ledger.onrender.com/health' },
-  { id: 'privi-verify', name: 'Privi Verify', url: 'https://privi-verify.onrender.com/health' },
-  { id: 'privi-anchor', name: 'Privi Anchor', url: 'https://privi-anchor.onrender.com/health' },
-  { id: 'privi-call', name: 'Privi Call', url: 'https://privi-call.onrender.com/health' },
-  { id: 'privi-quantum', name: 'Privi Quantum', url: 'https://privi-quantum.onrender.com/health' },
+  { id: 'privi-ledger', name: 'Privi Ledger', url: 'https://privi-ledger-aqe5.onrender.com/health' },
+  { id: 'privi-verify', name: 'Privi Verify', url: 'https://privi-verify-s4jb.onrender.com/health' },
+  { id: 'privi-anchor', name: 'Privi Anchor', url: 'https://privi-anchor-zsbk.onrender.com/health' },
+  { id: 'privi-call', name: 'Privi Call', url: 'https://privi-call-e3rb.onrender.com/health' },
+  { id: 'privi-quantum', name: 'Privi Quantum', url: 'https://privi-quantum-vvmj.onrender.com/health' },
 ]);
 
 export function gradeForScore(score) {

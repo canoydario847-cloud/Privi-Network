@@ -27,7 +27,7 @@ footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--muted)}
 <p class="lead">For people: check an AI tool for safety. For agent builders: add a tamper-evident action log and verifiable receipts. No payment or PRVI token required to try the free tools.</p>
 <div class="grid">
 <article class="panel" id="people"><h2>I'm a person</h2><p>Use Privi Guard to check untrusted text before an AI agent acts on it, or browse the Privi Scan MCP server registry. No wallet needed for the public demos.</p>
-<a class="cta" href="https://guard.privishine.info">Try Guard</a><a class="cta alt" href="https://privi-ledger.onrender.com/scan">Explore Scan</a></article>
+<a class="cta" href="https://guard.privishine.info">Try Guard</a><a class="cta alt" href="https://privi-ledger-aqe5.onrender.com/scan">Explore Scan</a></article>
 <article class="panel" id="agents"><h2>I build AI agents</h2><p>Connect to Privi's public MCP endpoints. Call a free read-only tool first, then create a free organization and record real actions.</p>
 <a class="cta" href="#config">Copy MCP configuration</a><a class="cta alt" href="https://github.com/canoydario847-cloud/Privi-Network/blob/main/llms-install.md">Full install guide</a></article>
 </div>
@@ -38,30 +38,30 @@ footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--muted)}
   "mcpServers": {
     "privi-ledger": {
       "type": "streamableHttp",
-      "url": "https://privi-ledger.onrender.com/mcp"
+      "url": "https://privi-ledger-aqe5.onrender.com/mcp"
     },
     "privi-verify": {
       "type": "streamableHttp",
-      "url": "https://privi-verify.onrender.com/mcp"
+      "url": "https://privi-verify-s4jb.onrender.com/mcp"
     },
     "privi-anchor": {
       "type": "streamableHttp",
-      "url": "https://privi-anchor.onrender.com/mcp"
+      "url": "https://privi-anchor-zsbk.onrender.com/mcp"
     }
   }
 }</pre>
 <button type="button" id="copy" aria-label="Copy Privi MCP configuration">Copy config</button> <span class="minor" id="copystate" role="status"></span>
 <h3 style="margin-top:30px">Your first three successful interactions</h3>
 <ol>
-<li><strong>Try without a key:</strong> call <code>guard_pricing</code> on Privi Ledger or <code>mcp_server_check</code> with <code>{"url":"https://privi-verify.onrender.com/mcp"}</code>.</li>
+<li><strong>Try without a key:</strong> call <code>guard_pricing</code> on Privi Ledger or <code>mcp_server_check</code> with <code>{"url":"https://privi-verify-s4jb.onrender.com/mcp"}</code>.</li>
 <li><strong>Create an organization:</strong> call <code>ledger_signup</code> with <code>{"organization_name":"My Project"}</code>. Store the returned <code>api_key</code> privately; it is displayed only once. Configure the Ledger server with <code>Authorization: Bearer &lt;api_key&gt;</code>.</li>
 <li><strong>Write and read one genuine event:</strong> call <code>ledger_record_action</code> with <code>{"stream_id":"first-agent","actor":"my-agent","action_type":"tool_call","summary":"Checked a tool with Privi","outcome":"success"}</code>, then <code>ledger_read_stream</code> with <code>{"stream_id":"first-agent"}</code>. Only log actions that actually occurred.</li>
 </ol>
 <p class="minor">Never put API keys, seed phrases or private customer data into public prompts. Keep human approval for spending and irreversible actions. The free Ledger plan is documented as 500 entries/month; Guard has separate usage limits.</p>
 </section>
 <section><h2>Free pilot for teams using agents</h2><p class="muted">Building with Claude, Cline, Cursor or another MCP-capable agent? Ask for a 15-minute guided integration. Share the stack you use and the one action you need to audit or protect. We are looking for real integrations and feedback, not artificial activity.</p><a class="cta" href="mailto:dariocanoy@priviflow.us?subject=Privi%20agent%20pilot&body=Our%20agent%20stack%3A%0AWhat%20we%20need%20to%20log%20or%20protect%3A%0A">Request a pilot</a>
-<a class="cta alt" href="https://privi-ledger.onrender.com/stats">View tool activity</a></section>
-</main><footer><div class="wrap">Privi World Co · Built by Dario Canoy · <a href="https://developers.privishine.info/">Developer reference</a> · <a href="https://privi-discovery.onrender.com/llms.txt">Agent discovery</a></div></footer>
+<a class="cta alt" href="https://privi-ledger-aqe5.onrender.com/stats">View tool activity</a></section>
+</main><footer><div class="wrap">Privi World Co · Built by Dario Canoy · <a href="https://developers.privishine.info/">Developer reference</a> · <a href="https://privi-discovery-6lue.onrender.com/llms.txt">Agent discovery</a></div></footer>
 <script>
 document.getElementById('copy').addEventListener('click',async()=>{
 const status=document.getElementById('copystate');

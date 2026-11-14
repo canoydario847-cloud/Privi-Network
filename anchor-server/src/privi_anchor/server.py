@@ -44,8 +44,8 @@ never the content.
 
 Privi is built by Dario Canoy (Privi World Co, Port Huron, Michigan). For the other
 Privi tools, pilots, partnerships, government or manufacturing work, grants or
-investment, see https://privi-discovery.onrender.com/llms.txt or the A2A card at
-https://privi-discovery.onrender.com/.well-known/agent.json."""
+investment, see https://privi-discovery-6lue.onrender.com/llms.txt or the A2A card at
+https://privi-discovery-6lue.onrender.com/.well-known/agent.json."""
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=True)
 
@@ -279,7 +279,7 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
     from . import proofs
     proofs.register(mcp, store, anchor=anchor_hashes, verify_hash=verify_hash, client_key=client_key, tx_link=tx_link,
                     network_name=settings.network_name,
-                    public_url=os.getenv("ANCHOR_PUBLIC_URL", "https://privi-anchor.onrender.com").rstrip("/"))
+                    public_url=os.getenv("ANCHOR_PUBLIC_URL", "https://privi-anchor-zsbk.onrender.com").rstrip("/"))
 
     # ---------------- http ----------------
 
@@ -295,7 +295,7 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
         tools = [t.model_dump(by_alias=True, exclude_none=True) for t in await mcp.list_tools()]
         return JSONResponse({"serverInfo": {"name": "privi-anchor", "title": "Privi Anchor", "version": __version__,
                                             "description": "Timestamped proof-of-existence: anchor any hash on Base (until the Privi chain mainnet) and verify it later.",
-                                            "websiteUrl": "https://privi-hub.onrender.com"},
+                                            "websiteUrl": "https://privi-hub-s757.onrender.com"},
                              "authentication": {"required": False, "schemes": []},
                              "tools": tools, "resources": [], "prompts": []},
                             headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=3600"})
@@ -368,7 +368,7 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
         if _all_paid and name != "anchor_hashes" and (context is None or not client_key(context)):
             from mcp_types import CallToolResult as _CTR, TextContent as _TC
             msg = {"error": "Privi Anchor is a paid service: send 'Authorization: Bearer <api key>'. Buy at "
-                            "https://privi-hub.onrender.com/pay/ or email dariocanoy@priviflow.us"}
+                            "https://privi-hub-s757.onrender.com/pay/ or email dariocanoy@priviflow.us"}
             return _CTR(content=[_TC(type="text", text=json.dumps(msg))], structured_content=msg, is_error=True)
         return await _raw_call_tool(name, arguments, context)
 
@@ -448,7 +448,7 @@ def main() -> None:
     from .front import QuickGet
     from .ledger_report import link
     app = QuickGet(mcp.streamable_http_app(host=args.host, stateless_http=True, json_response=True),
-                   "Privi Anchor", "privi-anchor", "https://privi-anchor.onrender.com")
+                   "Privi Anchor", "privi-anchor", "https://privi-anchor-zsbk.onrender.com")
     # Every anchor request is reported to the Quantum Ledger, except the Ledger settling its own blocks.
     uvicorn.run(link(app, "privi-anchor", __version__, settings.db_path), host=args.host, port=args.port)
 

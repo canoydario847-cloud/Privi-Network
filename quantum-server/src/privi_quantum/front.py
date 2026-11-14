@@ -17,7 +17,7 @@ code,pre{{font:14px ui-monospace,monospace;background:#eef1f6;border-radius:6px}
 @media (prefers-color-scheme:dark){{body{{color:#e8eaee;background:#0f1115}}code,pre{{background:#1d222b}}}}</style></head><body>
 <h1>{name}</h1><p>This address is an MCP server endpoint for AI agents (streamable HTTP, POST). Add it to your MCP client:</p>
 <pre>{{ "mcpServers": {{ "{slug}": {{ "url": "{url}" }} }} }}</pre>
-<p>Everything Privi offers, with live status: <a href="https://privi-hub.onrender.com">Privi Hub</a>.</p></body></html>"""
+<p>Everything Privi offers, with live status: <a href="https://privi-hub-s757.onrender.com">Privi Hub</a>.</p></body></html>"""
 
 
 class QuickGet:

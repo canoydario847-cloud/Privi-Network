@@ -24,7 +24,7 @@ from pathlib import Path
 
 NODE = os.getenv("DEVNET_NODE_RPC", "http://127.0.0.1:8545")
 PORT = int(os.getenv("PORT", "10000"))
-PUBLIC_URL = os.getenv("DEVNET_PUBLIC_URL", "https://privi-devnet.onrender.com").rstrip("/")
+PUBLIC_URL = os.getenv("DEVNET_PUBLIC_URL", "https://privi-devnet-32v2.onrender.com").rstrip("/")
 EVM_ID = int(os.getenv("DEVNET_EVM_CHAIN_ID", "772626"))
 COSMOS_ID = os.getenv("DEVNET_COSMOS_CHAIN_ID", "privi-devnet-1")
 RATE_PER_MIN = int(os.getenv("DEVNET_RATE_PER_MIN", "600"))

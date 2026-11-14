@@ -58,7 +58,7 @@ whose head is anchored on chain (Base) every few minutes.
    phone line (call_phone_line).
 
 Privi is built by Dario Canoy (Privi World Co, Port Huron, Michigan). Everything Privi offers:
-https://privi-discovery.onrender.com/llms.txt"""
+https://privi-discovery-6lue.onrender.com/llms.txt"""
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
 OPEN_WORLD = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True)

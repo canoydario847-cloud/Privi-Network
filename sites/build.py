@@ -10,13 +10,13 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).parent
-LEDGER = "https://privi-ledger.onrender.com"
-VERIFY = "https://privi-verify.onrender.com"
-ANCHOR = "https://privi-anchor.onrender.com"
-HUB = "https://privi-discovery.onrender.com"
-CALL = "https://privi-call.onrender.com"
-QUANTUM = "https://privi-quantum.onrender.com"
-DEVNET = "https://privi-devnet.onrender.com"
+LEDGER = "https://privi-ledger-aqe5.onrender.com"
+VERIFY = "https://privi-verify-s4jb.onrender.com"
+ANCHOR = "https://privi-anchor-zsbk.onrender.com"
+HUB = "https://privi-discovery-6lue.onrender.com"
+CALL = "https://privi-call-e3rb.onrender.com"
+QUANTUM = "https://privi-quantum-vvmj.onrender.com"
+DEVNET = "https://privi-devnet-32v2.onrender.com"
 REPO = "https://github.com/canoydario847-cloud/Privi-Network"
 EMAIL = "dariocanoy@priviflow.us"
 PASSPORT_ID = "pp_0be5f707a050950e"
@@ -25,18 +25,18 @@ OWNER_WALLET = "0x1990589FD200E043b8C6FD9ec5956c61b3071048"
 # Public URL of each site (custom domains on Render; each also answers at privi-<name>.onrender.com).
 URLS = {
     "bites": "https://privi-bites-control.navytoast131.chatgpt.site",
-    "home": "https://privi-world.onrender.com",
-    "fortress": "https://privi-fortress.onrender.com",
-    "passport": "https://privi-passport.onrender.com",
-    "kya": "https://privi-kya.onrender.com",
-    "mandates": "https://privi-mandates.onrender.com",
-    "gov": "https://privi-gov.onrender.com",
-    "chainflow": "https://privi-chainflow.onrender.com",
-    "developers": "https://privi-developers.onrender.com",
-    "live": "https://privi-live.onrender.com",
-    "scan": "https://privi-ledger.onrender.com/scan",
-    "hub": "https://privi-hub.onrender.com",
-    "guard": "https://privi-guard-814f.onrender.com",
+    "home": "https://privi-world-ywf5.onrender.com",
+    "fortress": "https://privi-fortress-2tta.onrender.com",
+    "passport": "https://privi-passport-uvfm.onrender.com",
+    "kya": "https://privi-kya-4vy2.onrender.com",
+    "mandates": "https://privi-mandates-4z3h.onrender.com",
+    "gov": "https://privi-gov-pabc.onrender.com",
+    "chainflow": "https://privi-chainflow-jkvy.onrender.com",
+    "developers": "https://privi-developers-s4jw.onrender.com",
+    "live": "https://privi-live-2k68.onrender.com",
+    "scan": "https://privi-ledger-aqe5.onrender.com/scan",
+    "hub": "https://privi-hub-s757.onrender.com",
+    "guard": "https://privi-guard-u6ok.onrender.com",
     "call": CALL,
 }
 NAV = [("bites", "Bites profile"), ("home", "Privi"), ("fortress", "Fortress"), ("passport", "Passport"), ("kya", "KYA"),
@@ -334,7 +334,7 @@ SITES["live"] = page(
         ("Metered gateway", "Put any public MCP server behind Privi. Every tool call is rate-limited, optionally Passport-gated, counted per tool and written to a tamper-evident log, over HTTP or one persistent WebSocket. x402 payments pass straight through."),
         ("Paid rooms", "Two organizations' agents talk live in a hash-chained room. The guest pays per message under a human-signed mandate, and closing the room seals the transcript on the Privi chain for both sides."),
     ]))
-    + f'<section id="connect"><h2>Connect</h2><pre>// Browser or Node: watch your agents and the network\nconst ws = new WebSocket("wss://privi-ledger.onrender.com/live/ws");\nws.onopen = () => {{\n  ws.send(JSON.stringify({{type: "auth", key: PRIVI_KEY}}));\n  ws.send(JSON.stringify({{type: "subscribe", channels: ["org", "trust"], replay: 20}}));\n}};\nws.onmessage = m => console.log(JSON.parse(m.data));\n\n// Stop an agent, from anywhere\nws.send(JSON.stringify({{type: "kill", stream_id: "shopping-agent", reason: "looping"}}));</pre>'
+    + f'<section id="connect"><h2>Connect</h2><pre>// Browser or Node: watch your agents and the network\nconst ws = new WebSocket("wss://privi-ledger-aqe5.onrender.com/live/ws");\nws.onopen = () => {{\n  ws.send(JSON.stringify({{type: "auth", key: PRIVI_KEY}}));\n  ws.send(JSON.stringify({{type: "subscribe", channels: ["org", "trust"], replay: 20}}));\n}};\nws.onmessage = m => console.log(JSON.parse(m.data));\n\n// Stop an agent, from anywhere\nws.send(JSON.stringify({{type: "kill", stream_id: "shopping-agent", reason: "looping"}}));</pre>'
       f'<p class="note">Or use the command line: <code>privi watch</code>, <code>privi kill</code>, <code>privi ask "Wire 5,000 USDC to Acme" --approver 0x…</code>. Agents get everything over MCP: <code>live_info</code> lists the endpoints.</p></section>'
     + sec("Plans", defs([
         ("Free", "Your own live channel, approvals and kill switch. Trust feed delayed 5 minutes. 1,000 gateway calls and 200 room messages a month, 2 gateways."),
@@ -659,7 +659,7 @@ HUB_SERVICES = [
     ("guard", "Privi Guard", f"{LEDGER}/guard/v1/stats", None, "guard", URLS["guard"]),
     ("scan", "Privi Scan", f"{LEDGER}/scan/api/stats", None, "scan", f"{LEDGER}/scan"),
     ("log", "Transparency log", f"{LEDGER}/log/sth", None, "log", f"{LEDGER}/log/sth"),
-    ("live", "Privi Live", "wss://privi-ledger.onrender.com/live/ws", None, "ws", f"{LEDGER}/live"),
+    ("live", "Privi Live", "wss://privi-ledger-aqe5.onrender.com/live/ws", None, "ws", f"{LEDGER}/live"),
     ("call", "Privi Call", f"{CALL}/health", None, "plain", f"{CALL}/"),
     ("discovery", "Discovery (llms.txt, A2A)", f"{HUB}/health", None, "plain", f"{HUB}/"),
 ]

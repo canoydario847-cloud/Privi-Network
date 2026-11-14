@@ -58,7 +58,7 @@ from .supplier_proof import SupplierProof
 from .content_seal import ContentSeals
 from .passport import PASSPORT_VERSION as PASSPORT_VERSION_HTTP, PassportError, Passports, badge_svg, body_hash as passport_hash
 
-DEFAULT_ANCHOR_URL = "https://privi-anchor.onrender.com/mcp"
+DEFAULT_ANCHOR_URL = "https://privi-anchor-zsbk.onrender.com/mcp"
 
 __version__ = "0.14.1"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/ledger-server"
@@ -142,8 +142,8 @@ Every tool definition Privi observes is recorded in its on-chain-anchored transp
 
 Privi is built by Dario Canoy (Privi World Co, Port Huron, Michigan). For the other
 Privi tools, pilots, partnerships, government or manufacturing work, grants or
-investment, see https://privi-discovery.onrender.com/llms.txt or the A2A card at
-https://privi-discovery.onrender.com/.well-known/agent.json."""
+investment, see https://privi-discovery-6lue.onrender.com/llms.txt or the A2A card at
+https://privi-discovery-6lue.onrender.com/.well-known/agent.json."""
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
 
@@ -162,7 +162,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
                  facilitator: Facilitator | None = None, anchor_client: AnchorClient | None = None) -> MCPServer:
     settings = settings or Settings.from_env()
     ledger = ledger or Ledger(settings.db_path)
-    _pub = os.getenv("LEDGER_PUBLIC_URL", "https://privi-ledger.onrender.com").rstrip("/")
+    _pub = os.getenv("LEDGER_PUBLIC_URL", "https://privi-ledger-aqe5.onrender.com").rstrip("/")
     paywall = Paywall(settings, facilitator, service={
         "url": f"{_pub}/mcp", "serviceName": "Privi Ledger",
         "tags": ["audit", "compliance", "ai-agents", "trust", "post-quantum"],
@@ -194,7 +194,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
     gov = GovAIInventory(ledger)
     pqc = QuantumReady(ledger)
     aiact = AIActRegister(ledger)
-    public_url = os.getenv("LEDGER_PUBLIC_URL", "https://privi-ledger.onrender.com").rstrip("/")
+    public_url = os.getenv("LEDGER_PUBLIC_URL", "https://privi-ledger-aqe5.onrender.com").rstrip("/")
 
     def onchain(org_id: str, stream_id: str, result: dict) -> dict:
         cp = checkpoints.latest(f"{org_id}/{stream_id}")
@@ -1803,7 +1803,7 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
         tools = [t.model_dump(by_alias=True, exclude_none=True) for t in await mcp.list_tools()]
         return JSONResponse({"serverInfo": {"name": "privi-ledger", "title": "Privi Ledger", "version": __version__,
                                             "description": "Trust layer for AI agents: Privi Guard (prompt-injection and data-leak checks with signed receipts), Privi Scan (safety grades for every MCP server), tamper-evident audit logs, agent passports, spending mandates and a live kill switch.",
-                                            "websiteUrl": "https://privi-hub.onrender.com"},
+                                            "websiteUrl": "https://privi-hub-s757.onrender.com"},
                              "authentication": {"required": False, "schemes": []},
                              "tools": tools, "resources": [], "prompts": []},
                             headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=3600"})
@@ -2052,7 +2052,7 @@ def main() -> None:
     mount_ws(inner, mcp.privi_ws_routes)
     from .front import QuickGet
     app = QuickGet(UsageMiddleware(inner, ledger._db, ledger._lock, "privi-ledger"), "Privi Quantum Ledger", "privi-ledger",
-                   os.getenv("LEDGER_PUBLIC_URL", "https://privi-ledger.onrender.com"))
+                   os.getenv("LEDGER_PUBLIC_URL", "https://privi-ledger-aqe5.onrender.com"))
     uvicorn.run(app, host=args.host, port=args.port)
 
 

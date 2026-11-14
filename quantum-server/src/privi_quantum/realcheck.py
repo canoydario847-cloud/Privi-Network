@@ -36,7 +36,7 @@ from .humans import HumanError, HumanRegistry, b64u, unb64u
 
 CHECK_TTL_S = 600
 ENROLL_TTL_S = 7 * 86400
-PRICE = {"plan": "Privi RealCheck", "usd_per_month": 49, "seats": 25, "pay": "https://privi-hub.onrender.com/pay/#realcheck"}
+PRICE = {"plan": "Privi RealCheck", "usd_per_month": 49, "seats": 25, "pay": "https://privi-hub-s757.onrender.com/pay/#realcheck"}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS real_orgs (

@@ -43,7 +43,7 @@ from . import benchmarks
 
 __version__ = "0.13.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/quantum-server"
-PUBLIC_URL = os.getenv("QUANTUM_PUBLIC_URL", "https://privi-quantum.onrender.com").rstrip("/")
+PUBLIC_URL = os.getenv("QUANTUM_PUBLIC_URL", "https://privi-quantum-vvmj.onrender.com").rstrip("/")
 EXPLORER_URL = os.getenv("PRIVI_EXPLORER_URL", "").rstrip("/") or f"{PUBLIC_URL}/explorer/lookup"
 COPYRIGHT = "Copyright (c) 2026 Privi World Co. All rights reserved."
 
@@ -125,7 +125,7 @@ Pricing: every tool is paid per call (x402: USDC on Base, or the PRIVI token): r
 certification $1, readiness packages and inventories $5. Every unpaid call answers with its price.
 A call that fails is never charged. Privi is built by Dario Canoy (Privi World Co, Port Huron, Michigan).
 For the other Privi tools, pilots, partnerships, manufacturing or government work, see
-https://privi-discovery.onrender.com/llms.txt. {COPYRIGHT}"""
+https://privi-discovery-6lue.onrender.com/llms.txt. {COPYRIGHT}"""
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
 
@@ -159,7 +159,7 @@ BAZAAR_DISCOVERY = {
             "name": "tls.py", "content": "from cryptography.hazmat.primitives.asymmetric import rsa\n"
                                          "key = rsa.generate_private_key(public_exponent=65537, key_size=2048)\n"}]},
         "output": {"package_id": "qa_...", "summary": {"assets": 1, "quantum_vulnerable": 1},
-                   "report_url": "https://privi-quantum.onrender.com/reports/qa_...",
+                   "report_url": "https://privi-quantum-vvmj.onrender.com/reports/qa_...",
                    "signatures": "Ed25519 + ML-DSA-87"}},
     "pqc_crypto_inventory": {
         "inputSchema": {"type": "object", "properties": {
@@ -168,11 +168,11 @@ BAZAAR_DISCOVERY = {
             "repos": {"type": "array", "items": {"type": "string"}},
             "long_lived_data": {"type": "boolean"}}, "required": ["organization"]},
         "example": {"organization": "Example Co", "domains": ["example.com"]},
-        "output": {"package_id": "qa_...", "cbom_url": "https://privi-quantum.onrender.com/reports/qa_....cbom.json"}},
+        "output": {"package_id": "qa_...", "cbom_url": "https://privi-quantum-vvmj.onrender.com/reports/qa_....cbom.json"}},
     "quantum_advantage_receipt": {
         "inputSchema": _PROBLEM_SCHEMA,
         "example": {"problem": "balance_lines", "data": _JOBS_EXAMPLE},
-        "output": {"receipt_id": "qa_...", "verdict": "tie", "receipt_url": "https://privi-quantum.onrender.com/receipts/qa_..."}},
+        "output": {"receipt_id": "qa_...", "verdict": "tie", "receipt_url": "https://privi-quantum-vvmj.onrender.com/receipts/qa_..."}},
     "quantum_run_hardware": {
         "inputSchema": {**_PROBLEM_SCHEMA, "properties": {**_PROBLEM_SCHEMA["properties"],
                         "backend": {"type": "string"}, "policy": {"type": "string", "enum": ["cheapest", "fastest", "hardware"]}}},
@@ -192,7 +192,7 @@ PASS_ARG = Field(description="Your Privi pass (ppass_...) from inspector_pass; t
 class Settings:
     db_path: str = "quantum.db"
     signing_seed: str = ""
-    anchor_url: str = "https://privi-anchor.onrender.com/mcp"
+    anchor_url: str = "https://privi-anchor-zsbk.onrender.com/mcp"
     anchor_api_key: str = ""
     anchor_interval: int = 300
     rate_per_min: int = 20
@@ -2101,7 +2101,7 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         tools = [t.model_dump(by_alias=True, exclude_none=True) for t in await mcp.list_tools()]
         return JSONResponse({"serverInfo": {"name": "privi-quantum", "title": "Privi Quantum", "version": __version__,
                                             "description": "Quantum optimization for manufacturing with post-quantum signed, chain-anchored results.",
-                                            "websiteUrl": "https://privi-hub.onrender.com"},
+                                            "websiteUrl": "https://privi-hub-s757.onrender.com"},
                              "authentication": {"required": False, "schemes": []},
                              "tools": tools, "resources": [], "prompts": []},
                             headers={**cors, "Cache-Control": "public, max-age=3600"})
@@ -2132,7 +2132,7 @@ OpenQASM for IBM, Amazon Braket and Azure quantum hardware.</p>
 <p>For agencies and contractors: a signed post-quantum readiness package (EO 14409, OMB M-26-15, CycloneDX 1.6 CBOM)
 in one call. Try the 10-minute demo at <a href="https://gov.priviflow.us/demo.html">gov.priviflow.us/demo.html</a>.
 Public signing keys: <a href="{url}/keys">/keys</a>. Status: <a href="{url}/status">/status</a>.</p>
-<p>Built by Privi World Co, Port Huron, Michigan. <a href="https://privi-hub.onrender.com">Everything Privi offers</a> ·
+<p>Built by Privi World Co, Port Huron, Michigan. <a href="https://privi-hub-s757.onrender.com">Everything Privi offers</a> ·
 <a href="mailto:dariocanoy@priviflow.us">dariocanoy@priviflow.us</a></p>
 <p><small>{copyright}</small></p></body></html>"""
 

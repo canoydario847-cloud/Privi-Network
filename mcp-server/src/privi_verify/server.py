@@ -29,7 +29,7 @@ from .anchoring import Checkpoints, HttpAnchorClient, describe, start_loop
 from .x402 import NO_CHARGE_KEY, Facilitator, Paywall
 from . import privi_token
 
-DEFAULT_ANCHOR_URL = "https://privi-anchor.onrender.com/mcp"
+DEFAULT_ANCHOR_URL = "https://privi-anchor-zsbk.onrender.com/mcp"
 
 __version__ = "0.5.0"
 
@@ -45,8 +45,8 @@ _meta["x402/payment"].
 
 Privi is built by Dario Canoy (Privi World Co, Port Huron, Michigan). For the other
 Privi tools, pilots, partnerships, government or manufacturing work, grants or
-investment, see https://privi-discovery.onrender.com/llms.txt or the A2A card at
-https://privi-discovery.onrender.com/.well-known/agent.json."""
+investment, see https://privi-discovery-6lue.onrender.com/llms.txt or the A2A card at
+https://privi-discovery-6lue.onrender.com/.well-known/agent.json."""
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
 
@@ -75,7 +75,7 @@ def build_server(
     store = store or LotStore(settings.db_path)
     if os.getenv("PRIVI_SEED_DEMO") == "1":
         seed_demo(store)
-    _pub = (settings.public_url or "https://privi-verify.onrender.com").rstrip("/")
+    _pub = (settings.public_url or "https://privi-verify-s4jb.onrender.com").rstrip("/")
     paywall = Paywall(settings, facilitator, service={
         "url": f"{_pub}/mcp", "serviceName": "Privi Verify",
         "tags": ["supply-chain", "provenance", "manufacturing", "traceability", "verification"],
@@ -263,7 +263,7 @@ def build_server(
         tools = [t.model_dump(by_alias=True, exclude_none=True) for t in await mcp.list_tools()]
         return JSONResponse({"serverInfo": {"name": "privi-verify", "title": "Privi Verify", "version": __version__,
                                             "description": "Manufacturing lot verification and chain of custody for AI agents, paid per call in USDC via x402.",
-                                            "websiteUrl": "https://privi-hub.onrender.com"},
+                                            "websiteUrl": "https://privi-hub-s757.onrender.com"},
                              "authentication": {"required": False, "schemes": []},
                              "tools": tools, "resources": [], "prompts": []},
                             headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=3600"})
@@ -368,7 +368,7 @@ def main() -> None:
     app = UsageMiddleware(mcp.streamable_http_app(host=args.host, stateless_http=True, json_response=True),
                           store._db, store._lock, "privi-verify")
     from .front import QuickGet
-    app = QuickGet(app, "Privi Verify", "privi-verify", "https://privi-verify.onrender.com")
+    app = QuickGet(app, "Privi Verify", "privi-verify", "https://privi-verify-s4jb.onrender.com")
     from .ledger_report import link
     app = link(app, "privi-verify", __version__, settings.db_path)   # every tool call is reported to the Quantum Ledger
     uvicorn.run(app, host=args.host, port=args.port)

@@ -5,7 +5,7 @@
  "short_name": "Ledger",
  "tagline": "The records your company has to keep, sealed so nobody can rewrite them.",
  "intro": "Publish a trust page for buyers, run an incident against its legal deadlines, collect policy sign-offs, keep controls current and seal software releases. Documents stay on your device; only their fingerprints are recorded.",
- "site": "https://privi-hub.onrender.com",
+ "site": "https://privi-hub-s757.onrender.com",
  "key": {
   "mode": "bearer",
   "label": "Organization API key",

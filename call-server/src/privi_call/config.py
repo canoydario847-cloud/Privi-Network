@@ -18,16 +18,16 @@ NETWORKS = {
 
 # Privi's own agents. Calls to these are always free: they earn through their own paid tools.
 DEFAULT_OFFICIAL = [
-    {"number": "100", "name": "Privi Ledger", "endpoint": "https://privi-ledger.onrender.com/mcp",
+    {"number": "100", "name": "Privi Ledger", "endpoint": "https://privi-ledger-aqe5.onrender.com/mcp",
      "description": "Tamper-evident audit logs, compliance reports, Passports, KYA, Mandates, Guard and government AI/PQC inventories for AI agents.",
      "tags": ["audit", "compliance", "identity", "payments"]},
-    {"number": "101", "name": "Privi Verify", "endpoint": "https://privi-verify.onrender.com/mcp",
+    {"number": "101", "name": "Privi Verify", "endpoint": "https://privi-verify-s4jb.onrender.com/mcp",
      "description": "Manufacturing lot verification and chain of custody, paid per call in USDC.",
      "tags": ["manufacturing", "supply chain", "traceability"]},
-    {"number": "102", "name": "Privi Anchor", "endpoint": "https://privi-anchor.onrender.com/mcp",
+    {"number": "102", "name": "Privi Anchor", "endpoint": "https://privi-anchor-zsbk.onrender.com/mcp",
      "description": "Hash anchoring and proof-of-existence on chain.",
      "tags": ["blockchain", "proof of existence", "timestamp"]},
-    {"number": "103", "name": "Privi Quantum", "endpoint": "https://privi-quantum.onrender.com/mcp",
+    {"number": "103", "name": "Privi Quantum", "endpoint": "https://privi-quantum-vvmj.onrender.com/mcp",
      "description": "Quantum optimization (CVaR-QAOA) for factory decisions with post-quantum signed results; quantum-vulnerable crypto scanner.",
      "tags": ["quantum", "optimization", "post-quantum"]},
 ]
@@ -55,7 +55,7 @@ def usd_to_atomic(usd: str) -> str:
 @dataclass
 class Settings:
     db_path: str = "call.db"
-    public_url: str = "https://privi-call.onrender.com"
+    public_url: str = "https://privi-call-e3rb.onrender.com"
     admin_key: str = ""
     # payments (x402, USDC on Base) for call credit packs
     payments_enabled: bool = True
@@ -81,7 +81,7 @@ class Settings:
     llm_api_key: str = ""
     llm_model: str = "claude-haiku-5-5"
     # anchoring
-    anchor_url: str = "https://privi-anchor.onrender.com/mcp"
+    anchor_url: str = "https://privi-anchor-zsbk.onrender.com/mcp"
     anchor_api_key: str = ""
     anchor_interval: int = 300
 
