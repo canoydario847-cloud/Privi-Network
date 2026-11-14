@@ -29,7 +29,7 @@ Buyers should confirm scope and deliverable expectations before paying if needed
 
 **Commercial status:** The three human-delivered review/consultation services above use existing active Stripe-hosted payment links. The separate automated API-credit checkout is not accepting payments while durable storage, Stripe webhook credentials/tax configuration, Base confirmation and fulfillment tests remain unverified. Do not transfer funds without a verified order. The commercial gateway is separate from Privi Ledger's existing plans.
 
-Remote MCP servers that make AI agents safer and accountable, paid in USDC through [x402](https://x402.org) with free tiers.
+Remote MCP servers that make AI agents safer and accountable, paid in USDC through [x402](https://x402.org). Every tool is paid; there are no free tiers.
 Built by **Dario Canoy**, Privi World Co, Port Huron, Michigan. Live status of every service: **[Privi Hub](https://privi-hub.onrender.com)**.
 
 ```json
@@ -43,13 +43,13 @@ Built by **Dario Canoy**, Privi World Co, Port Huron, Michigan. Live status of e
 
 | Product | What it does | Start with |
 |---|---|---|
-| **Privi Guard** | Checks what an agent reads for prompt injection and what it sends for leaked keys, card numbers and personal data. Returns allow / warn / block with a signed receipt anchored on-chain. 1,000 checks a month free, then 1 cent. [Try it](https://privi-guard-814f.onrender.com) | `guard_check`, [`pip install privi-guard`](guard-sdk/python), [`npm i privi-guard`](guard-sdk/js), [Claude Code hook](guard-sdk/hooks/claude-code) |
-| **Privi Scan** | Safety grades and tamper-evident tool history for every public MCP server in the official registry. Catches tool poisoning and rug pulls. [Directory](https://privi-ledger.onrender.com/scan) | `mcp_server_check` (free) |
+| **Privi Guard** | Checks what an agent reads for prompt injection and what it sends for leaked keys, card numbers and personal data. Returns allow / warn / block with a signed receipt anchored on-chain. 1 cent per check (1,000 a month included with Ledger Pro). [Try it](https://privi-guard-814f.onrender.com) | `guard_check`, [`pip install privi-guard`](guard-sdk/python), [`npm i privi-guard`](guard-sdk/js), [Claude Code hook](guard-sdk/hooks/claude-code) |
+| **Privi Scan** | Safety grades and tamper-evident tool history for every public MCP server in the official registry. Catches tool poisoning and rug pulls. [Directory](https://privi-ledger.onrender.com/scan) | `mcp_server_check` (paid, 1 cent) |
 | **Privi Ledger** | Tamper-evident audit logs for agent actions: a Merkle transparency log, post-quantum co-signatures and on-chain checkpoints | `ledger_signup`, `ledger_record_action` |
-| **Passport / KYA / Mandates** | Verifiable trust scores for agents, wallet-to-agent binding, and human-signed spending limits | `passport_gate`, `kya_check`, `mandate_check` (free) |
+| **Passport / KYA / Mandates** | Verifiable trust scores for agents, wallet-to-agent binding, and human-signed spending limits | `passport_gate`, `kya_check`, `mandate_check` (paid per call) |
 | **Privi Live** | Kill switch, wallet-signed approvals, trust feed over WebSocket, a metered MCP gateway (optionally Guard-screened) and paid agent-to-agent rooms | `live_info`, `live_kill`, `gateway_create` |
 | **Privi Verify** | Manufacturing lot verification and chain of custody, pay per call | `privi_verify_lot` |
-| **Privi Anchor** | Proof of existence: anchor document or output hashes on Base while native Privi financial mainnet is not launched | `anchor_hashes`, `anchor_verify` (free) |
+| **Privi Anchor** | Proof of existence: anchor document or output hashes on Base while native Privi financial mainnet is not launched | `anchor_hashes`, `anchor_verify` (paid API key) |
 
 | Folder | Service | MCP endpoint | MCP Registry |
 |---|---|---|---|

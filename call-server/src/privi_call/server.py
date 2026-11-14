@@ -176,10 +176,11 @@ def build_server(settings: Settings | None = None, store: Store | None = None, r
         ctx: Context,
         arguments: Annotated[dict[str, Any] | None, Field(description="Arguments for that tool")] = None,
         payment: Annotated[dict[str, Any] | None, Field(description="x402 payment for a paid target tool; forwarded as _meta['x402/payment']")] = None,
-        call_key: Annotated[str, Field(description="Prepaid call key (pck_...) for calls past the free 50 a day")] = "",
+        call_key: Annotated[str, Field(description="Prepaid call key (pck_...); each call to a non-Privi agent uses one call credit ($0.001)")] = "",
     ) -> CallToolResult:
         """Call a tool on any agent on the Privi Call network and get its answer, with a sealed call record.
-        Free to Privi agents; other agents 50 free calls a day, then $0.001 each from a call key."""
+        No Call routing fee for Privi agents (the target tool charges its own x402 price); calls to other agents
+        cost $0.001 each from a call key."""
         who = _who(ctx)
         if not limiter.allow(who):
             return _result({"error": f"rate limit: {s.rate_per_min} calls per minute"}, is_error=True)
@@ -196,7 +197,7 @@ def build_server(settings: Settings | None = None, store: Store | None = None, r
             else:
                 rec = store.log(channel="agent", caller=who, callee=a["number"], tool=tool, status="needs_credits",
                                 args=arguments)
-                return _result({"error": f"you used today's {s.free_calls_per_day} free calls to non-Privi agents",
+                return _result({"error": "calls to non-Privi agents need a call credit ($0.001 each)",
                                 "fix": f"buy {s.pack_credits} calls for ${s.pack_price_usd} USDC with call_credits_buy, "
                                        "then pass the key as call_key", "call_id": rec["id"]}, is_error=True)
         meta = {PAYMENT_META_KEY: payment} if payment else None
@@ -273,7 +274,7 @@ def build_server(settings: Settings | None = None, store: Store | None = None, r
         call key (pck_...). Call without payment first to get the exact payment requirements."""
         if not s.payments_ready:
             return _result({"error": "credit sales open as soon as Privi's payment keys are set; "
-                                     f"until then you have {s.free_calls_per_day} free calls a day"}, is_error=True)
+                                     "until then calls to non-Privi agents are unavailable"}, is_error=True)
 
         async def work() -> dict[str, Any]:
             if call_key.strip():
@@ -427,8 +428,8 @@ def build_server(settings: Settings | None = None, store: Store | None = None, r
     def status_body() -> dict[str, Any]:
         return {"service": "privi-call", "version": __version__, "copyright": COPYRIGHT, "mcp": mcp_url,
                 "phone": s.phone_number or None, "stats": store.stats(), "head": store.head(),
-                "pricing": {"privi_agents": "free", "other_agents": f"{s.free_calls_per_day} free calls/day, then "
-                            f"${ROUTED_PRICE}/call ({s.pack_credits} for ${s.pack_price_usd} USDC via x402)",
+                "pricing": {"privi_agents": "no Call fee (the target tool charges its own x402 price)",
+                            "other_agents": f"${ROUTED_PRICE}/call ({s.pack_credits} for ${s.pack_price_usd} USDC via x402)",
                             "credit_sales_open": s.payments_ready},
                 "anchoring": {"enabled": anchor_client is not None, "interval_seconds": s.anchor_interval,
                               "last_checkpoint": store.last_checkpoint()}}

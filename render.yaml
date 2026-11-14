@@ -297,8 +297,8 @@ services:
         value: "0x1990589FD200E043b8C6FD9ec5956c61b3071048"
       - key: CALL_PACK_PRICE_USD        # 1,000 routed calls; $0.001 a call
         value: "1.00"
-      - key: CALL_FREE_PER_DAY
-        value: "50"
+      - key: CALL_FREE_PER_DAY          # 0 = no free tier
+        value: "0"
       - key: CALL_ADMIN_KEY             # read leads at /admin/calls (value in the Render dashboard)
         generateValue: true
       - key: CALL_ANCHOR_URL
