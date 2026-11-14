@@ -17,6 +17,8 @@ Every Privi tool is paid (x402 USDC on Base, or a paid API key). There are no fr
 
 ## Privi World paid B2B services — available today
 
+**[Try Privi in three minutes: free private AI-agent self-check](https://privi-services.onrender.com/try/)** — Answer six simple questions about one MCP/agent workflow and get an instant browser-only, self-reported summary. No payment, sign-up, telemetry submission or premium API execution. This is not a vulnerability scan, compliance certification or a verified customer evaluation. For one scoped paid review, email **canoydario847@gmail.com**.
+
 Privi World Corp offers three **human-delivered service engagements** with independently verified live Stripe Payment Links. These services are separate from Privi's not-yet-activated prepaid API-credit checkout:
 
 | Service | Price (USD) | Learn more | Stripe purchase |
