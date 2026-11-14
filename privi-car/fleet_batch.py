@@ -23,8 +23,8 @@ def process_rows(rows):
             continue
         try:
             vehicle_id = row["vehicle_id"].strip()
-            if not vehicle_id.startswith("demo-"):
-                raise ValueError("use only demo- prefixed pseudonymous IDs")
+            if not vehicle_id.startswith("demo-") or len(vehicle_id) <= len("demo-") or len(vehicle_id) > 80:
+                raise ValueError("use a nonempty demo- prefixed pseudonymous ID of at most 80 characters")
             if not row["odometer_km"].strip().isdigit():
                 raise ValueError("odometer must be a nonnegative integer")
             receipt = make_receipt(vehicle_id, int(row["odometer_km"]), True)
