@@ -1,0 +1,24 @@
+name: Privi mainnet release commitment contract (build-only)
+on:
+  pull_request:
+    paths:
+      - 'production-network/mainnet/contracts/**'
+      - '.github/workflows/privi-mainnet-release-contract.yml'
+  push:
+    paths:
+      - 'production-network/mainnet/contracts/**'
+      - '.github/workflows/privi-mainnet-release-contract.yml'
+permissions:
+  contents: read
+jobs:
+  offline-contract-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned Solidity compiler only
+        run: npm install --no-save --no-package-lock --ignore-scripts solc@0.8.24
+      - name: Compile contract and verify ABI has no issuance pathways
+        run: node --test production-network/mainnet/contracts/test_release_commitment.cjs
