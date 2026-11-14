@@ -6,7 +6,7 @@
 
 This is the **public metadata and directory-submission page** for Privi's remotely hosted commercial MCP service. The app's implementation is maintained separately. Nothing in this folder is a credential or a full source release.
 
-**[MCP publisher distribution checklist — 20 channels](directory-opportunities.md)** · **[MCP developer buyer page](https://privi-services.onrender.com/mcp-server-owners/)**
+**[FIRST CUSTOMER: agent-ready buyer onboarding](FIRST-CUSTOMER-START-HERE.md)** · **[MCP publisher distribution checklist — 20 channels](directory-opportunities.md)** · **[MCP developer buyer page](https://privi-services.onrender.com/mcp-server-owners/)**
 
 ## B2B services customers can purchase now
 
@@ -48,8 +48,10 @@ Alongside the non-purchasable API-credit catalog, Privi World Corp offers three 
 ## Current registration status
 
 - **Official MCP Registry:** [v0.7.1](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.canoydario847-cloud%2Fprivi-agent-survival/versions/0.7.1) confirmed by GitHub Actions on November 13, 2026. Tool execution stays paywalled; customer checkout is not yet active.
-- **Glama:** Maintainer must submit/claim in the Glama web interface if not already indexed.
+- **Glama:** [Privi Agent Survival & Premium](https://glama.ai/mcp/connectors/io.github.canoydario847-cloud/privi-agent-survival) is indexed and reported Healthy when checked November 14, 2026. The maintainer received a verification confirmation from Glama. Its tool-description quality score was C (2.9/5); overlapping free/pro utilities remain a discoverability problem to address.
 - **Smithery, mcp.so, PulseMCP, mcpservers.org and curated GitHub lists:** No approval or indexed listing claimed until independently verified. Public documentation is available for their forms and pull requests.
+
+**Contact for one-workflow paid evaluations:** [canoydario847@gmail.com](mailto:canoydario847@gmail.com?subject=Privi%20one-workflow%20review%20scope). See [start-here instructions for human buyers and AI agents](FIRST-CUSTOMER-START-HERE.md).
 
 This page is suitable for sharing with AI-agent directories; it makes **no claim of an independently security-audited service**, guaranteed availability, or certification.
 
