@@ -195,6 +195,18 @@ func TestRestrictedBankRejectsRemintAfterNativeBurn(t *testing.T) {
  if got:=guarded.GetSupply(h.ctx,BaseDenom).Amount.String();got!="99" {
    t.Fatalf("rejected remint changed supply to %s",got)
  }
+ // A mixed-denomination request must fail atomically even after burning
+ // native supply; a rejected aprvi reissuance must not mint unrelated units.
+ mixed:=sdk.NewCoins(sdk.NewInt64Coin(BaseDenom,1),sdk.NewInt64Coin("atest",7))
+ if err:=guarded.MintCoins(h.ctx,"genesisfixture",mixed);!errors.Is(err,ErrMintForbidden) {
+   t.Fatalf("mixed-denomination remint must fail before writes, got %v",err)
+ }
+ if got:=guarded.GetSupply(h.ctx,BaseDenom).Amount.String();got!="99" {
+   t.Fatalf("mixed mint changed native supply to %s",got)
+ }
+ if got:=guarded.GetSupply(h.ctx,"atest").Amount.String();got!="0" {
+   t.Fatalf("rejected mixed mint leaked foreign-denom supply %s",got)
+ }
  state,err:=h.cap.Snapshot(h.ctx)
  if err!=nil {t.Fatal(err)}
  if state.GenesisBase!="100" || state.LifetimeIssuedBase!="100" {
