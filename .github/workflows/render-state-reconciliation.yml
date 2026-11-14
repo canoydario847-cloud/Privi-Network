@@ -1,0 +1,17 @@
+name: Render state reconciliation
+on:
+  push:
+    paths: ['operations/compare_sqlite_snapshots.py', 'operations/test_compare_sqlite_snapshots.py', '.github/workflows/render-state-reconciliation.yml']
+  pull_request:
+    paths: ['operations/compare_sqlite_snapshots.py', 'operations/test_compare_sqlite_snapshots.py', '.github/workflows/render-state-reconciliation.yml']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python3 -m unittest discover -s operations -p 'test_compare_sqlite_snapshots.py'
