@@ -46,7 +46,11 @@ def main():
         return 2
     try:
         with src.open(newline="", encoding="utf-8-sig") as f:
-            result = process_rows(csv.DictReader(f))
+            reader = csv.DictReader(f)
+            expected = {"vehicle_id", "odometer_km", "consent"}
+            if reader.fieldnames is None or len(reader.fieldnames) != 3 or set(reader.fieldnames) != expected:
+                raise ValueError("CSV header must contain exactly one each of vehicle_id,odometer_km,consent")
+            result = process_rows(reader)
         dest.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     except (OSError, ValueError, csv.Error) as exc:
         print(str(exc), file=sys.stderr)
