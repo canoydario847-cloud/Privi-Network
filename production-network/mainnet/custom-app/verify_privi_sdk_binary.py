@@ -8,6 +8,7 @@ audit, launch approval, or proof of production execution.
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 
 SDK = "github.com/cosmos/cosmos-sdk"
@@ -31,6 +32,59 @@ MARKERS = {
     ),
 }
 
+
+
+def without_go_comments(source: str) -> str:
+    """Remove Go line/block comments while preserving strings and line breaks.
+
+    This is a source-marker screening aid, NOT Go parsing or runtime proof.
+    """
+    out = []
+    state = "code"
+    i = 0
+    while i < len(source):
+        ch = source[i]
+        nxt = source[i + 1] if i + 1 < len(source) else ""
+        if state == "code":
+            if ch == "/" and nxt == "/":
+                state = "line"
+                out.extend("  ")
+                i += 2
+                continue
+            if ch == "/" and nxt == "*":
+                state = "block"
+                out.extend("  ")
+                i += 2
+                continue
+            if ch in ('"', "'", "`"):
+                state = ch
+            out.append(ch)
+        elif state == "line":
+            if ch == "\n":
+                state = "code"
+                out.append(ch)
+            else:
+                out.append(" ")
+        elif state == "block":
+            if ch == "*" and nxt == "/":
+                state = "code"
+                out.extend("  ")
+                i += 2
+                continue
+            out.append("\n" if ch == "\n" else " ")
+        else:
+            # Raw string contents can contain arbitrary marker text; never
+            # treat those bytes as evidence of executable SDK guards.
+            out.append(("\n" if ch == "\n" else " ") if state == "`" else ch)
+            if state != "`" and ch == "\\" and i + 1 < len(source):
+                i += 1
+                out.append(source[i])
+            elif ch == state:
+                state = "code"
+        i += 1
+    if state == "block":
+        raise ValueError("unterminated Go block comment in SDK guard source")
+    return "".join(out)
 
 def verify(module_json: str, build_info: str, sdk_dir: Path) -> dict:
     root = sdk_dir.resolve(strict=True)
@@ -59,9 +113,27 @@ def verify(module_json: str, build_info: str, sdk_dir: Path) -> dict:
         path = root / relpath
         data = path.read_bytes()
         content = data.decode("utf-8")
+        # Do not count markers inside Go comments as executable guard evidence.
+        # This remains marker screening; it does not prove compiled enforcement.
+        uncommented = without_go_comments(content)
+        # A standalone declaration containing a diagnostic string is not
+        # evidence that any guard executes. This rejects a known spoofing
+        # fixture; production enforcement still requires compiled tests.
         for marker in required:
-            if content.count(marker) != 1:
-                raise ValueError("hardened SDK source missing unique guard in " + relpath)
+            if marker.startswith("PRVI SDK bank:"):
+                declaration = (r'(?m)^\s*(?:var|const)\s+\w+\s*=\s*'
+                               r'["\x60][^\n]*' + re.escape(marker))
+                # Also reject diagnostic-only entries in parenthesized Go
+                # var/const blocks. This is conservative screening, not an AST.
+                block = (r'(?ms)^\s*(?:var|const)\s*\(\s*'
+                         r'(?:(?!^\s*\)).)*?'
+                         r'^\s*\w+\s*=\s*["\x60][^\n]*'
+                         + re.escape(marker))
+                if re.search(declaration, uncommented) or re.search(block, uncommented):
+                    raise ValueError("unused diagnostic declaration cannot establish enforcement")
+        for marker in required:
+            if uncommented.count(marker) != 1:
+                raise ValueError("hardened SDK source missing unique guard outside comments in " + relpath)
         fingerprints[relpath] = hashlib.sha256(data).hexdigest()
     return {
         "status": "BUILD_ONLY_SDK_INPUT_VERIFIED",
