@@ -8,6 +8,16 @@ This is the **public metadata and directory-submission page** for Privi's remote
 
 **[FIRST CUSTOMER: agent-ready buyer onboarding](FIRST-CUSTOMER-START-HERE.md)** · **[MCP publisher distribution checklist — 20 channels](directory-opportunities.md)** · **[MCP developer buyer page](https://privi-services.onrender.com/mcp-server-owners/)**
 
+## Got one MCP security question? Start with a free, specific scope request
+
+**Fastest way to work with Privi:** [Email the one-workflow scope](mailto:canoydario847@gmail.com?subject=Privi%20%2499%20MCP%20security%20review%20%E2%80%94%20scope). Say (1) which MCP/agent workflow you operate, (2) what access or evidence concern you want reviewed, and (3) whether you want a fixed-price human review. **No credentials, API keys or confidential data in the first email.**
+
+- **Free first step:** [12-point MCP security checklist](https://privi-services.onrender.com/mcp-security-checklist/) (public self-check, not an audit).
+- **Optional human services:** [Guard Security Review — $99](https://privi-services.onrender.com/ai-agent-security-review/), [Agent Evidence Review — $149](https://privi-services.onrender.com/agent-audit-evidence-review/), or [Enterprise MCP Integration Consultation — $249](https://privi-services.onrender.com/enterprise-mcp-consultation/).
+- **Before payment:** Confirm the review scope, delivery expectation, and exact-price Stripe checkout with **canoydario847@gmail.com**. These are one-time human services, not automated tool credits. There is no direct wallet checkout and no automatic API-key delivery.
+
+[Detailed buyer instructions and scope template](FIRST-CUSTOMER-START-HERE.md). Public page links are for orientation; live HTTP availability and checkout fulfillment require separate verification.
+
 ## B2B services customers can purchase now
 
 Alongside the non-purchasable API-credit catalog, Privi World Corp offers three **human-delivered services** through independently verified live Stripe Payment Links: [Guard Security Review ($99)](https://privi-services.onrender.com/ai-agent-security-review/), [Agent Evidence Review ($149)](https://privi-services.onrender.com/agent-audit-evidence-review/) and [Enterprise Integration Consultation ($249)](https://privi-services.onrender.com/enterprise-mcp-consultation/). Read the [public service one-pager](../privi-business-services/README.md). These purchases **do not** provide automatic API credits.
