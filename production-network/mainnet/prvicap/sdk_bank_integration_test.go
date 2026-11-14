@@ -28,6 +28,12 @@ type bankHarness struct {
  bank bankkeeper.BaseKeeper
  cap Keeper
  account *banktestutil.MockAccountKeeper
+ // Retain only the in-memory test database and mounted store keys so a
+ // separate CommitMultiStore can reopen previously committed state.
+ db dbm.DB
+ bankKey *storetypes.KVStoreKey
+ capKey *storetypes.KVStoreKey
+ objKey *storetypes.ObjectStoreKey
 }
 
 func newRealBankHarness(t *testing.T) bankHarness {
@@ -51,7 +57,8 @@ func newRealBankHarness(t *testing.T) bankHarness {
  raw=raw.WithObjStoreKey(objKey)
  cap,err:=New(runtime.NewKVStoreService(capKey))
  if err!=nil {t.Fatal(err)}
- return bankHarness{ctx:ctx,bank:raw,cap:cap,account:ak}
+ return bankHarness{ctx:ctx,bank:raw,cap:cap,account:ak,
+  db:db,bankKey:bankKey,capKey:capKey,objKey:objKey}
 }
 func (h bankHarness) genesisFund(t *testing.T,amount int64) {
  t.Helper()
