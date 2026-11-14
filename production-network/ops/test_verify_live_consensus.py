@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Synthetic only read-only PRVI mainnet quorum monitor unit tests."""
 import importlib.util
+import base64
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -18,7 +19,8 @@ COUNT=4
 
 def make_responses():
     validators=[{"address":f"{i:040X}","voting_power":"100"} for i in range(COUNT)]
-    signatures=[{"validator_address":x["address"],"block_id_flag":2} for x in validators]
+    signatures=[{"validator_address":x["address"],"block_id_flag":2,
+                 "signature":base64.b64encode(bytes([i+1])*64).decode()} for i,x in enumerate(validators)]
     def fakepost(url,method,params=None):
         if method=="eth_chainId":return hex(EVM_ID)
         if method=="eth_blockNumber":return hex(100)
@@ -32,7 +34,7 @@ def make_responses():
         if "/validators?" in url:
             return {"result":{"total":str(len(validators)),"validators":validators}}
         if "/commit?" in url:
-            return {"result":{"signed_header":{"header":{"height":"100","chain_id":CHAIN},"commit":{"signatures":signatures}}}}
+            return {"result":{"signed_header":{"header":{"height":"100","chain_id":CHAIN},"commit":{"height":"100","block_id":{"hash":"AB"*32},"signatures":signatures}}}}
         raise AssertionError("unexpected Comet RPC URL: "+url)
     return fakepost,fakeget,validators,signatures
 
@@ -114,9 +116,50 @@ class MainnetQuorumMonitor(unittest.TestCase):
 
     def test_unknown_vote_addresses_not_counted(self):
         p,g,_,signatures=make_responses()
-        signatures[:]=[{"validator_address":"F"*40,"block_id_flag":2} for _ in range(4)]
+        signatures[:]=[{"validator_address":"F"*40,"block_id_flag":2,
+                        "signature":base64.b64encode(b"x"*64).decode()} for _ in range(4)]
         with mock.patch.object(m,"post",p),mock.patch.object(m,"get",g):
-            with self.assertRaisesRegex(RuntimeError,"2/3 voting power"):
+            with self.assertRaisesRegex(RuntimeError,"Unknown or duplicate"):
+                m.check(EVM,COMET,CHAIN,EVM_ID,now=1000)
+
+    def test_missing_vote_signature_never_counts_as_quorum(self):
+        p,g,_,signatures=make_responses()
+        signatures[0].pop("signature")
+        with mock.patch.object(m,"post",p),mock.patch.object(m,"get",g):
+            with self.assertRaisesRegex(RuntimeError,"no signature bytes"):
+                m.check(EVM,COMET,CHAIN,EVM_ID,now=1000)
+
+    def test_malformed_vote_signature_never_counts_as_quorum(self):
+        p,g,_,signatures=make_responses()
+        signatures[0]["signature"]="not-base64%%"
+        with mock.patch.object(m,"post",p),mock.patch.object(m,"get",g):
+            with self.assertRaisesRegex(RuntimeError,"Malformed.*signature"):
+                m.check(EVM,COMET,CHAIN,EVM_ID,now=1000)
+
+    def test_duplicate_committing_votes_rejected(self):
+        p,g,_,signatures=make_responses()
+        signatures[1]["validator_address"]=signatures[0]["validator_address"]
+        with mock.patch.object(m,"post",p),mock.patch.object(m,"get",g):
+            with self.assertRaisesRegex(RuntimeError,"duplicate.*signer"):
+                m.check(EVM,COMET,CHAIN,EVM_ID,now=1000)
+
+    def test_commit_height_and_hash_required(self):
+        p,g,_,_=make_responses()
+        def badheight(url):
+            response=g(url)
+            if "/commit?" in url:
+                response["result"]["signed_header"]["commit"]["height"]="99"
+            return response
+        with mock.patch.object(m,"post",p),mock.patch.object(m,"get",badheight):
+            with self.assertRaisesRegex(RuntimeError,"commit height mismatch"):
+                m.check(EVM,COMET,CHAIN,EVM_ID,now=1000)
+        def badhash(url):
+            response=g(url)
+            if "/commit?" in url:
+                response["result"]["signed_header"]["commit"]["block_id"]["hash"]="00"
+            return response
+        with mock.patch.object(m,"post",p),mock.patch.object(m,"get",badhash):
+            with self.assertRaisesRegex(RuntimeError,"committed block hash"):
                 m.check(EVM,COMET,CHAIN,EVM_ID,now=1000)
 
     def test_two_of_four_votes_insufficient(self):
