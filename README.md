@@ -42,8 +42,8 @@ Buyers should confirm the workflow, scope and expected deliverables before purch
 
 **Commercial status:** The three human-delivered review/consultation services above use existing active Stripe-hosted payment links. The separate automated API-credit checkout is not accepting payments while durable storage, Stripe webhook credentials/tax configuration, Base confirmation and fulfillment tests remain unverified. Do not transfer funds without a verified order. The commercial gateway is separate from Privi Ledger's existing plans.
 
-Remote MCP servers that make AI agents safer and accountable, paid in USDC through [x402](https://x402.org). Every tool is paid; there are no free tiers.
-Built by **Dario Canoy**, Privi World Co, Port Huron, Michigan. Live status of every service: **[Privi Hub](https://privi-hub.onrender.com)**.
+Privi is building remote MCP agent utilities and verifiable-action infrastructure. **The 83-tool API catalog can be discovered, but automated paid API-credit purchases and self-service execution are not enabled.** The three scoped, human-delivered reviews linked above are the only offers confirmed available for purchase in this README. x402/USDC features and native mainnet are not represented as live revenue sources.
+Built by **Dario Canoy**, Privi World Corp. Legacy product URLs below may be unavailable or evaluation-only; do not use them for payments or critical records. The [Privi Agent Survival gateway](https://privi-ai-21-gateway.onrender.com/agent-hub) and the [first-customer guide](privi-agent-survival/FIRST-CUSTOMER-START-HERE.md) are the recommended starting points.
 
 ```json
 { "mcpServers": {
