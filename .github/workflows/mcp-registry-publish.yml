@@ -19,6 +19,7 @@ jobs:
     permissions:
       id-token: write # GitHub OIDC login to the registry, no secrets needed
       contents: read
+      statuses: write # make official Registry proof queryable on the commit
     strategy:
       fail-fast: false
       matrix:
@@ -199,6 +200,7 @@ jobs:
       # Publishing is not considered verified until the version is returned by
       # the official public Registry API (allow time for indexing consistency).
       - name: Confirm official Registry record
+        id: registry_confirm
         shell: bash
         run: |
           python3 - <<'PY'
@@ -226,6 +228,8 @@ jobs:
                       raise RuntimeError("Registry returned mismatched server name or version")
                   message = f"Verified official MCP Registry publication: {entry['name']} v{entry['version']} — {url}"
                   print(message)
+                  with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+                      output.write(f"verified_registry_url={url}\n")
                   with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
                       summary.write(f"### Official MCP Registry verified\n\n{message}\n")
                   break
@@ -239,3 +243,17 @@ jobs:
                   raise RuntimeError(f"Official Registry did not confirm {entry['name']} v{entry['version']}: {url}")
               time.sleep(12)
           PY
+
+      # Publish a commit status only after checking exact version with the public Registry API.
+      - name: Report verified Privi Registry publication to GitHub
+        if: matrix.server == 'privi-agent-survival' && steps.registry_confirm.outputs.verified_registry_url != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERIFIED_URL: ${{ steps.registry_confirm.outputs.verified_registry_url }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$COMMIT_SHA" \
+            -f state=success \
+            -f context="Privi MCP Registry / Agent Survival" \
+            -f description="Official Registry confirms Agent Survival version" \
+            -f target_url="$VERIFIED_URL"
