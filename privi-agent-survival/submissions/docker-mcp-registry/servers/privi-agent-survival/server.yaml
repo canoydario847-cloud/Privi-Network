@@ -1,0 +1,16 @@
+name: privi-agent-survival
+type: remote
+meta:
+  category: developer-tools
+  tags:
+    - ai-agents
+    - security
+    - developer-tools
+    - remote
+about:
+  title: Privi Agent Survival & Premium
+  description: Remote MCP utilities and premium analyzers for AI-agent reliability, authorization, security evidence and workflow diagnostics. Tool discovery is public; execution requires a prepaid API key. Self-service API-credit checkout is not currently active.
+  icon: https://github.com/canoydario847-cloud.png
+remote:
+  transport_type: streamable-http
+  url: https://privi-ai-21-gateway.onrender.com/mcp
