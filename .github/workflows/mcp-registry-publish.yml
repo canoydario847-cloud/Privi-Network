@@ -79,11 +79,24 @@ jobs:
                   if health.get("mcp_endpoint") != "/mcp":
                       raise RuntimeError("Gateway MCP route mismatch")
 
+                  # Compare source registry metadata against the actual served card.
+                  with open("server.json", encoding="utf-8") as f:
+                      expected = json.load(f)
                   card = call("/.well-known/mcp/server-card.json")
-                  if card.get("serverInfo", {}).get("version") != "0.7.1":
-                      raise RuntimeError("Gateway server card version != 0.7.1")
+                  if card.get("serverInfo", {}).get("version") != expected["version"]:
+                      raise RuntimeError("Hosted MCP server-card version mismatches Registry manifest")
                   if card.get("authentication", {}).get("required") is not True:
                       raise RuntimeError("Gateway incorrectly advertises optional auth")
+                  live_manifest = call("/mcp-server.json")
+                  if live_manifest.get("name") != expected["name"]:
+                      raise RuntimeError("Hosted MCP server name mismatches Registry manifest")
+                  if live_manifest.get("version") != expected["version"]:
+                      raise RuntimeError("Hosted MCP version mismatches Registry manifest")
+                  if not any(
+                      remote.get("url") == base + "/mcp"
+                      for remote in live_manifest.get("remotes", [])
+                  ):
+                      raise RuntimeError("Hosted MCP manifest lacks the live remote endpoint")
 
                   init = rpc("initialize", {
                       "protocolVersion": "2025-11-25",
@@ -92,6 +105,8 @@ jobs:
                   }, 1)
                   if init.get("result", {}).get("protocolVersion") != "2025-11-25":
                       raise RuntimeError("MCP initialize failed")
+                  if init.get("result", {}).get("serverInfo", {}).get("version") != expected["version"]:
+                      raise RuntimeError("Live MCP initialization version mismatches Registry manifest")
 
                   catalog = rpc("tools/list", {}, 2)
                   tools = catalog.get("result", {}).get("tools", [])
@@ -111,7 +126,7 @@ jobs:
 
                   summary = (
                       "### Privi hosted MCP gateway verified\n\n"
-                      f"Health, server card v0.7.1, MCP handshake, {len(tools)} tools, "
+                      f"Health, manifest/card v{expected['version']}, MCP handshake, {len(tools)} tools, "
                       "and denied anonymous execution passed.\n"
                   )
                   print(summary)
