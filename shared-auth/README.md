@@ -32,3 +32,18 @@ const verifier = createTokenVerifier({
 5. Roll out behind feature flags; do not claim full-service OAuth support before deployment verification.
 
 Run `node --test shared-auth/oauth21.test.mjs` on Node 20+.
+
+## MCP gateway integration (opt-in, not deployed)
+
+The repository's `privi-agent-survival` directory currently contains public catalog metadata, not the hosted gateway's application source. Integration therefore requires a change to the **actual deployed gateway repository** and Render service; placing files here does not protect its endpoint.
+
+`mcp-gateway-adapter.mjs` is a Node HTTP wrapper that returns RFC 9728 metadata at `/.well-known/oauth-protected-resource/mcp`, challenges unauthorized `/mcp` traffic, validates signed access tokens with the `privi-mcp-gateway` audience and `privi:tools:execute` scope, and forwards non-MCP traffic unchanged. This adapter **denies anonymous MCP discovery** when enabled; adjust to preserve public `initialize` / `tools/list` only after inspecting the actual gateway routing and ensuring tool execution is always gated.
+
+Before connecting production:
+1. Provision a trusted OAuth provider and verify its authorization-code + PKCE S256, refresh rotation, client registration, consent, and OIDC/AS discovery capabilities; do not use an unverified issuer.
+2. Configure `PRIVI_OAUTH_ISSUER`, `PRIVI_OAUTH_JWKS_URI`, audience `privi-mcp-gateway`, and least-privilege scopes as environment settings.
+3. Wire the adapter into the real gateway entrypoint, including transport-specific MCP session checks, RFC 9728 metadata paths, and correct 401/403 challenges.
+4. Validate Claude/ChatGPT compatible clients, valid/expired/wrong-audience/wrong-scope tokens, rotation, logout/revocation design, rate limits, logs, and legacy API-key compatibility.
+5. Keep behind a disabled feature flag until tests and rollback plan are verified.
+
+No automatic API credit checkout is enabled by these changes.
