@@ -8,6 +8,11 @@ on:
     paths: ["mcp-server/server.json", "ledger-server/server.json", "anchor-server/server.json", "quantum-server/server.json", "call-server/server.json", "privi-agent-survival/server.json", ".github/workflows/mcp-registry-publish.yml"]
   workflow_dispatch:
 
+# Avoid overlapping releases racing to publish the same immutable version.
+concurrency:
+  group: mcp-registry-publish-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -121,7 +126,7 @@ jobs:
                   message = f"Verified official MCP Registry publication: {entry['name']} v{entry['version']} — {url}"
                   print(message)
                   with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
-                      summary.write(f"### Official MCP Registry verified\\n\\n{message}\\n")
+                      summary.write(f"### Official MCP Registry verified\n\n{message}\n")
                   break
               except urllib.error.HTTPError as error:
                   if error.code not in retryable:
