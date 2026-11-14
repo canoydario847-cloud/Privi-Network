@@ -22,7 +22,7 @@ Nothing is moved on purpose: `render.yaml`, ~45 GitHub workflows and the MCP Reg
 | `edge/` | Cloudflare Worker, global entry point |
 | `sites/`, `privi-explorer.html` | Static websites and the Privi Explorer |
 | `sales/`, `launch/`, `commercial/`, `GO_TO_MARKET.md`, `ADOPTION_LAUNCH.md` | Outreach, launch and go-to-market material |
-| `privi-business-services/` | Human-delivered paid reviews ($99 / $149 / $249, Stripe) |
+| `privi-business-services/` | Human-delivered paid reviews ($19.99 / $19.99 / $19.99; Pro $35, Stripe) |
 | `privi-agent-survival/` | Separate prepaid agent-utility gateway (older Render workspace) |
 | `apify-actor/`, `skills/`, `integrations/`, `glama.json`, `llms-install.md` | Marketplace and client packaging |
 
@@ -45,3 +45,6 @@ Nothing is moved on purpose: `render.yaml`, ~45 GitHub workflows and the MCP Reg
 
 ## Stray root files
 `Network.jsx`, `privi-network-5000.js`, `LICENSE-MIT-PRIOR`: legacy; left in place because they may be referenced.
+
+
+**Current pricing note (November 14, 2026):** Three separately scoped human services are $19.99 one-time each, and a distinct $35 one-time Privi Pro Unlimited Stripe offer exists. Confirm Pro covered services, activation and fair-use restrictions before any purchase. Automated API-credit/key fulfillment is not operational; old $99/$149/$249 service prices and links are retired.
