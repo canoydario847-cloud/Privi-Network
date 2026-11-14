@@ -113,7 +113,7 @@ class PatcherTests(unittest.TestCase):
         self.assertIn(").WithObjStoreKey(oKeys[banktypes.ObjectStoreKey]).WithMintCoinsRestriction(app.PriviCapKeeper.MintRestriction)", app)
         self.assertEqual(app.count(").WithObjStoreKey(oKeys[banktypes.ObjectStoreKey]).WithMintCoinsRestriction("), 1)
         self.assertEqual(app.count("restrictedBaseBank := bankkeeper.NewBaseKeeper("), 1)
-        self.assertIn("bank.NewAppModule(appCodec,\n\\t\\t\\trestrictedBaseBank,\n".replace("\\t","\\t").replace("\n", "\\n"), app)
+        self.assertIn("bank.NewAppModule(appCodec,\n\t\t\trestrictedBaseBank,\n", app)
         self.assertNotIn("\\tbaseBank :=", app)
         self.assertNotIn("bank.NewAppModule(appCodec, app.BankKeeper", app)
         self.assertIn("prvicap.ValidateEVMChainID(evmChainID)", app)
