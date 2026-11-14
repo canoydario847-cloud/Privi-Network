@@ -96,6 +96,15 @@ def audit(genesis, denom, chain_id):
         "warning": "A one-time genesis bank check does not prove immutable cap enforcement, emissions, vesting, migration rights, or launch readiness"
     }
 
+def no_duplicate_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate genesis JSON key: " + key)
+        result[key] = value
+    return result
+
+
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--genesis",required=True,type=Path)
@@ -103,7 +112,7 @@ def main():
     ap.add_argument("--chain-id",required=True)
     args=ap.parse_args()
     try:
-        result=audit(json.loads(args.genesis.read_text(encoding="utf-8")),args.denom,args.chain_id)
+        result=audit(json.loads(args.genesis.read_text(encoding="utf-8"), object_pairs_hook=no_duplicate_keys),args.denom,args.chain_id)
     except (OSError, UnicodeError, ValueError, AttributeError) as e:
         print(json.dumps({"ok": False, "error": str(e)}))
         return 1
