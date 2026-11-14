@@ -1,49 +1,32 @@
-# Privi World Corp — AI Agent Reviews and MCP Integration Services
+# Privi World Corp — $19.99 one-time services and $35 Privi Pro
 
-**Buyers:** Agentic AI startups, development teams, MSPs, compliance leads, product owners and systems integrators.
+**Public sales contact:** canoydario847@gmail.com
+**Website:** https://privi-services.onrender.com/
 
-**Website:** https://privi-services.onrender.com/ · **Contact:** canoydario847@gmail.com
+Privi offers individually scoped, human-delivered reviews and consultations, plus a separately priced Privi Pro Unlimited offer. Prices below were verified against the connected live Stripe account on November 14, 2026. An active checkout link does not prove completed payment or successful delivery.
 
-Privi World Corp offers three *human-delivered*, separately scoped service engagements. These are existing, verified live Stripe-hosted offers. Prospective buyers should confirm the exact scope and delivery arrangements before purchase.
-
-| Available service | USD price | Service details | Stripe-hosted checkout |
+| Offer | One-time price | Service scope | Active Stripe-hosted checkout |
 | --- | ---: | --- | --- |
-| Privi Guard Security Review | **$99** | [Agent Security](https://privi-services.onrender.com/ai-agent-security-review/) | [Pay via Stripe](https://buy.stripe.com/28EcN4gN510y0ot8ZQ6J201) |
-| Privi Agent Evidence Review | **$149** | [Evidence Review](https://privi-services.onrender.com/agent-audit-evidence-review/) | [Pay via Stripe](https://buy.stripe.com/28E7sK7cvfVsgnr2Bs6J202) |
-| Privi Enterprise Integration Consultation | **$249** | [MCP Consultation](https://privi-services.onrender.com/enterprise-mcp-consultation/) | [Pay via Stripe](https://buy.stripe.com/28E28qcwP6kSc7b2Bs6J203) |
+| Privi Guard Security Review | **$19.99** | One security permissions/prompt-risk review engagement | [Checkout](https://buy.stripe.com/eVqaEWdATbFcc7bfoe6J204) |
+| Privi Agent Evidence Review | **$19.99** | One scoped evidence-record/approval review engagement | [Checkout](https://buy.stripe.com/fZubJ07cv6kS6MR2Bs6J205) |
+| Privi Enterprise Integration Consultation | **$19.99** | One MCP/API architecture consultation; not implementation | [Checkout](https://buy.stripe.com/3cI6oG54nbFcb37b7Y6J206) |
+| Privi Pro Unlimited | **$35** | Pro offer; eligible services, fair-use boundaries and activation require written confirmation before payment | [View offer](https://buy.stripe.com/8x2eVc9kDgZwc7b0tk6J207) |
 
-### Privi Guard Security Review — $99
+**Scope and Pro caveat:** The three $19.99 products are single service engagements, not ongoing subscriptions, certified audits or automated scans. The $35 Pro price is a one-time charge, not a verified monthly subscription. Stripe's existing Pro product names it a lifetime/unlimited offer, but automated MCP API access and key delivery remain unavailable; do not promise immediate lifetime usage or unlimited human consulting. Resolve the exact eligibility and activation terms with the buyer in writing before accepting their payment.
 
-A focused human-led conversation or review about AI-agent permissions, tool-output prompt risks and deployment safeguards, with a scope agreed for each buyer. It is **not a certification**, guaranteed penetration test, or subscription.
+### How to request a service
 
-### Privi Agent Evidence Review — $149
+1. Pick a service and email **canoydario847@gmail.com** with your organization, one non-sensitive workflow and the desired outcome. Agree on the human-delivered scope and timing.
+2. Use only the matching official Stripe-hosted link above for an authorized purchase. **Do not send money directly to a Base wallet.**
+3. Following verified checkout, send your checkout email and agreed scope to **canoydario847@gmail.com** to arrange fulfillment. Do not send keys, passwords or private customer records by email.
 
-A scoped review of identity/approval/policy evidence requirements and the distinction between agent-decision records and actual execution outcomes. It does **not** claim a compliant, independently signed or blockchain-anchored record for each customer.
+### Public evaluation resources
 
-### Enterprise Integration Consultation — $249
+- [Free MCP 12-point security checklist](https://privi-services.onrender.com/mcp-security-checklist/) — no-signup checklist, not certification
+- [Synthetic sample evidence report](https://privi-services.onrender.com/sample-report/) — fictional example, not a customer result
+- [Agent hub and 83-tool catalog](https://privi-ai-21-gateway.onrender.com/agent-hub) — browseable tool definitions; API-credit checkout and automated API-key fulfillment **not operational**
+- [First-customer onboarding instructions](../privi-agent-survival/FIRST-CUSTOMER-START-HERE.md)
 
-A scoped conversation about MCP/API architecture, requirements, authorization, error recovery and a possible pilot. It does **not** automatically deliver deployed integrations or API subscriptions.
-
-### How to buy and arrange delivery
-
-1. Confirm that the offer fits your use case; email **canoydario847@gmail.com** to agree on scope if you require specific deliverables or timelines.
-2. Pay only through the listed official Stripe-hosted checkout link, not via direct wallet transfer.
-3. After paying, email **canoydario847@gmail.com** with your checkout email address and agreed non-sensitive project scope to arrange delivery. Do not send private keys, passwords, or confidential customer documents by ordinary email.
-
-**[AI agents and first-time buyers: choose an actual Privi evaluation](../privi-agent-survival/FIRST-CUSTOMER-START-HERE.md)** · [Free MCP Security Checklist](https://privi-services.onrender.com/mcp-security-checklist/) · [Synthetic Sample Review](https://privi-services.onrender.com/sample-report/)
-
-### AI-agent developer infrastructure
-
-Privi also publishes a remotely accessible MCP discovery catalog with **32 standard utilities and 51 premium analyzers**, 32 Agent Skills, and client integration examples. The public catalog is inspectable at https://privi-ai-21-gateway.onrender.com/agent-hub and https://privi-premium-tools.onrender.com . **Automated prepaid tool purchases and API key provisioning are not yet enabled**, so the Stripe links above sell the three human-delivered services only.
-
-### For the press and partner directories
-
-Suggested accurate description:
-
-> Privi World Corp provides a remote MCP agent-tool catalog and three available B2B services: a $99 AI-agent security review, $149 agent evidence review, and $249 enterprise integration consultation. Its 83 deterministic MCP tools can be browsed, but paid API-key provisioning is still in development. Current service purchases use existing Stripe-hosted links.
-
-Please do not imply official endorsements from OpenAI, Anthropic, xAI, Toyota, Stripe, the MCP Registry or any other third party. Being discoverable through an MCP registry is not evidence of customer purchases or independent certification.
-
-**Social post ideas and distribution kit:** [November 2026 launch campaign](https://github.com/canoydario847-cloud/Privi-Network/blob/main/privi-business-services/social-posts.md).
+Privi World Corp claims no affiliation with OpenAI, Anthropic, xAI, Stripe, or MCP directories. Directory impressions and payment-page visits are not paying customers.
 
 © 2026 Privi World Corp. All rights reserved.
