@@ -1,0 +1,30 @@
+name: Mainnet readiness CLI fail-closed tests
+on:
+  pull_request:
+    paths:
+      - 'mainnet/readiness.cjs'
+      - 'mainnet/*readiness*.test.cjs'
+      - 'mainnet/test_readiness.cjs'
+      - '.github/workflows/mainnet-readiness-cli.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'mainnet/readiness.cjs'
+      - 'mainnet/*readiness*.test.cjs'
+      - 'mainnet/test_readiness.cjs'
+      - '.github/workflows/mainnet-readiness-cli.yml'
+permissions:
+  contents: read
+jobs:
+  offline-readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate CLI syntax
+        run: node --check mainnet/readiness.cjs
+      - name: Run readiness tests including fail-closed process exit
+        run: node --test mainnet/readiness.test.cjs mainnet/test_readiness.cjs mainnet/readiness.cli.test.cjs
