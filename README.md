@@ -2,6 +2,17 @@
 
 [![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/canoydario847-cloud/privi-network)
 
+## Status at a glance (Nov 14, 2026)
+
+| Service | Status |
+|---|---|
+| Privi Ledger (MCP) | **Live, evaluation only**: `https://privi-ledger-mcp-recovery.onrender.com/mcp` (temporary storage; not for durable audit evidence) |
+| Agent Survival & Premium gateway | **Live**: `https://privi-ai-21-gateway.onrender.com/mcp` |
+| Human-delivered reviews ($99 / $149 / $249) | **Live**: [privi-services.onrender.com](https://privi-services.onrender.com/) |
+| Verify, Anchor, Quantum, Call, Hub, Wallet | **Being redeployed** to the current Render workspace; the `*.onrender.com` links further down may not respond yet |
+
+Every Privi tool is paid (x402 USDC on Base, or a paid API key). There are no free tiers. Folder index: [REPO_MAP.md](REPO_MAP.md).
+
 ## Privi World paid B2B services — available today
 
 Privi World Corp offers three **human-delivered service engagements** with independently verified live Stripe Payment Links. These services are separate from Privi's not-yet-activated prepaid API-credit checkout:
@@ -34,7 +45,7 @@ Built by **Dario Canoy**, Privi World Co, Port Huron, Michigan. Live status of e
 
 ```json
 { "mcpServers": {
-    "privi-ledger": { "url": "https://privi-ledger.onrender.com/mcp" },
+    "privi-ledger": { "url": "https://privi-ledger-mcp-recovery.onrender.com/mcp" },
     "privi-verify": { "url": "https://privi-verify.onrender.com/mcp" },
     "privi-anchor": { "url": "https://privi-anchor.onrender.com/mcp" },
     "privi-quantum": { "url": "https://privi-quantum.onrender.com/mcp" },
