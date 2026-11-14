@@ -202,8 +202,8 @@
       "registry_id": "io.github.canoydario847-cloud/privi-anchor",
       "url": "https://privi-anchor.onrender.com/mcp",
       "transport": "streamable-http",
-      "description": "Hash anchoring / proof-of-existence on Base (chain id 8453) until the Privi chain mainnet launches. Free with an API key.",
-      "pricing": "free (API key)",
+      "description": "Hash anchoring / proof-of-existence on Base (chain id 8453) until the Privi chain mainnet launches. Paid API key required (no free tier).",
+      "pricing": "paid API key required (no free tier)",
       "auth": "API key",
       "tools": [
         "anchor_status",

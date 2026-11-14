@@ -10,9 +10,9 @@ Works with Claude, ChatGPT, Cursor, VS Code and custom agents. Part of the Privi
 
 | Tool | Access | What it does |
 |---|---|---|
-| `anchor_status` | free | Chain, anchor wallet, gas balance, totals |
-| `anchor_hash_text` | free | SHA-256 of text, ready to anchor |
-| `anchor_verify` | free | Proves on chain that a hash was anchored, by whom and when. With a receipt's `tx_hash` + `proof`, uses chain data only |
+| `anchor_status` | paid key | Chain, anchor wallet, gas balance, totals |
+| `anchor_hash_text` | paid key | SHA-256 of text, ready to anchor |
+| `anchor_verify` | paid key | Proves on chain that a hash was anchored, by whom and when. With a receipt's `tx_hash` + `proof`, uses chain data only |
 | `anchor_hashes` | API key | Anchors 1-100 hashes in one transaction; returns a receipt per hash |
 
 Only hashes go on chain, never content.
@@ -47,7 +47,7 @@ assert x.hex() == tx_input[12:]   # strip "0x" + "50525641" + "01"
 
 ## Access
 
-`anchor_hashes` needs `Authorization: Bearer <key>` with a key from `ANCHOR_API_KEYS` and is rate-limited per key. It's free with a key. Each call is one Base transaction (a fraction of a cent of gas, paid by the anchor wallet), so the server also enforces a daily budget (`ANCHOR_MAX_TX_PER_DAY`, default 500). Batch up to 100 hashes per call.
+`anchor_hashes` needs `Authorization: Bearer <key>` with a key from `ANCHOR_API_KEYS` and is rate-limited per key. Keys are paid; there is no free tier. Each call is one Base transaction (a fraction of a cent of gas, paid by the anchor wallet), so the server also enforces a daily budget (`ANCHOR_MAX_TX_PER_DAY`, default 500). Batch up to 100 hashes per call.
 
 ## Run, test, deploy
 
