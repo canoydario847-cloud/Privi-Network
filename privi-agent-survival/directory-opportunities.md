@@ -9,7 +9,7 @@
 **Agent Hub:** https://privi-ai-21-gateway.onrender.com/agent-hub
 **Buyer landing page:** https://privi-services.onrender.com/mcp-server-owners/
 **Immediate independent self-check (free, no signup):** https://privi-services.onrender.com/try/
-**Revenue offers:** $99 human-delivered security review; $149 human-delivered evidence review; $249 integration consultation. These **do not include** automated API-credit purchase or issued API keys.
+**Revenue offers:** $99 human-delivered security review; $149 human-delivered evidence review; $19.99 integration consultation. These **do not include** automated API-credit purchase or issued API keys.
 
 ## Verified or high-priority directory channels
 
@@ -69,3 +69,6 @@
 - Do not publish private bearer API keys, Stripe secrets, model-provider tokens, private wallet keys or personal information.
 
 © 2026 Privi World Corp. All rights reserved.
+
+
+**Current pricing note (November 14, 2026):** Three separately scoped human services are $19.99 one-time each, and a distinct $35 one-time Privi Pro Unlimited Stripe offer exists. Confirm Pro covered services, activation and fair-use restrictions before any purchase. Automated API-credit/key fulfillment is not operational; old $99/$149/$249 service prices and links are retired.
