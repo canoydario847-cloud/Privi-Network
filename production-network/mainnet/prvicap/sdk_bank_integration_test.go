@@ -135,3 +135,30 @@ func TestUnrestrictedKeeperCopiesRemainARealBypassRisk(t *testing.T) {
    t.Fatal("periodic reconciliation must flag bypassed supply growth")
  }
 }
+
+// This is an intentional FAIL-OPEN threat demonstration, not a security fix.
+// A raw keeper can mint and burn aprvi before a periodic reconciliation,
+// returning supply to its prior value. End-of-block checks cannot prove that
+// an unauthorized intermediate issuance never occurred. The production app
+// must prevent the mint at the mutation boundary before relying on Reconcile.
+func TestRawKeeperSameBlockMintBurnEvadesSupplyReconciliation(t *testing.T) {
+ h:=newRealBankHarness(t)
+ h.genesisFund(t,100)
+ if err:=h.cap.InitGenesis(h.ctx,"100",h.bank);err!=nil {t.Fatal(err)}
+ before:=h.bank.GetSupply(h.ctx,BaseDenom).Amount.String()
+ if before!="100" {t.Fatalf("unexpected fixture genesis supply %s",before)}
+ minter:=authtypes.NewEmptyModuleAccount("badcopy",authtypes.Minter,authtypes.Burner)
+ h.account.EXPECT().GetModuleAccount(h.ctx,"badcopy").Return(minter).AnyTimes()
+ coin:=sdk.NewCoins(sdk.NewInt64Coin(BaseDenom,1))
+ if err:=h.bank.MintCoins(h.ctx,"badcopy",coin);err!=nil {t.Fatalf("raw keeper bypass mint: %v",err)}
+ if got:=h.bank.GetSupply(h.ctx,BaseDenom).Amount.String();got!="101" {
+   t.Fatalf("expected intermediate unauthorized supply of 101, got %s",got)
+ }
+ if err:=h.bank.BurnCoins(h.ctx,"badcopy",coin);err!=nil {t.Fatalf("raw keeper burn: %v",err)}
+ if got:=h.bank.GetSupply(h.ctx,BaseDenom).Amount.String();got!=before {
+   t.Fatalf("supply after mint/burn = %s, want %s",got,before)
+ }
+ if err:=h.cap.Reconcile(h.ctx,h.bank);err!=nil {
+   t.Fatalf("supply-only reconciliation unexpectedly detected transient issuance: %v",err)
+ }
+}
