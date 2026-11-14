@@ -24,9 +24,9 @@ export function createTokenVerifier({ issuer, audience, jwksUri, fetcher = fetch
     if (parts.length !== 3) fail('JWT required');
     let header, claims;
     try { header = decode(parts[0]); claims = decode(parts[1]); } catch { fail('malformed JWT'); }
-    if (!Object.hasOwn(ALGORITHMS, header.alg) || !header.kid || header.typ && !['JWT','at+jwt','application/at+jwt'].includes(header.typ)) fail('unsupported JWT header');
+    if (!Object.hasOwn(ALGORITHMS, header.alg) || !header.kid || !['at+jwt','application/at+jwt'].includes(header.typ)) fail('unsupported JWT header');
     let jwks = await getKeys();
-    let key = jwks.find(k => k.kid === header.kid && k.kty === (header.alg === 'RS256' ? 'RSA' : 'EC') && (!k.use || k.use === 'sig') && (!k.alg || k.alg === header.alg));
+    let key = jwks.find(k => k.kid === header.kid && k.kty === (header.alg === 'RS256' ? 'RSA' : 'EC') && (!k.use || k.use === 'sig') && (!k.alg || k.alg === header.alg) && (header.alg !== 'ES256' || k.crv === 'P-256') && (header.alg !== 'ES256' || k.crv === 'P-256'));
     if (!key) {
       jwks = await getKeys(true);
       key = jwks.find(k => k.kid === header.kid && k.kty === (header.alg === 'RS256' ? 'RSA' : 'EC') && (!k.use || k.use === 'sig') && (!k.alg || k.alg === header.alg));
@@ -42,6 +42,7 @@ export function createTokenVerifier({ issuer, audience, jwksUri, fetcher = fetch
     if (claims.iss !== issuer || !(Array.isArray(claims.aud) ? claims.aud.includes(audience) : claims.aud === audience)) fail('issuer or audience mismatch');
     if (!Number.isFinite(claims.exp) || claims.exp <= seconds || !Number.isFinite(claims.iat) || claims.iat > seconds + 60 || (claims.nbf !== undefined && (!Number.isFinite(claims.nbf) || claims.nbf > seconds + 60))) fail('invalid token lifetime');
     if (typeof claims.sub !== 'string' || !claims.sub) fail('missing subject');
+    if (typeof claims.client_id !== 'string' || !claims.client_id || typeof claims.jti !== 'string' || !claims.jti) fail('missing access token identifiers');
     const granted = new Set(typeof claims.scope === 'string' ? claims.scope.split(/\s+/) : []);
     if (scopes.some(s => !granted.has(s))) fail('insufficient scope');
     return claims;
