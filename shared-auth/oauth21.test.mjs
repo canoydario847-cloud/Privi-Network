@@ -15,7 +15,7 @@ const verifier = createTokenVerifier({
 });
 function token(overrides = {}) {
   const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'at+jwt', kid: 'test-key' })).toString('base64url');
-  const payload = Buffer.from(JSON.stringify({ iss: 'https://identity.example.test', aud: 'privi-api', sub: 'user-1', iat: time - 10, exp: time + 300, scope: 'privi:read', ...overrides })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({ iss: 'https://identity.example.test', aud: 'privi-api', sub: 'user-1', iat: time - 10, exp: time + 300, scope: 'privi:read', client_id: 'test-client', jti: 'token-1', ...overrides })).toString('base64url');
   const body = header + '.' + payload;
   return body + '.' + sign('RSA-SHA256', Buffer.from(body), privateKey).toString('base64url');
 }
@@ -33,3 +33,5 @@ test('parses only Bearer scheme', () => {
   assert.equal(bearerToken('Bearer abc.def'), 'abc.def');
   assert.equal(bearerToken('Basic abc'), null);
 });
+
+test('rejects ID token claims without access-token identifiers', async () => { await assert.rejects(verifier(token({ client_id: null, jti: null }))); });
