@@ -1,0 +1,21 @@
+name: Privi Chem CI
+on:
+  pull_request:
+    paths:
+      - 'privi-chem/**'
+      - '.github/workflows/privi-chem-ci.yml'
+  push:
+    paths:
+      - 'privi-chem/**'
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11','3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: cd privi-chem && python -m unittest discover -s tests -v
