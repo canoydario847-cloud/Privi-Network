@@ -1,5 +1,7 @@
 # Privi: the trust layer for AI agents
 
+> New here? See **[REPO_MAP.md](REPO_MAP.md)** for what every folder is.
+
 [![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/canoydario847-cloud/privi-network)
 
 ## Status at a glance (Nov 14, 2026)
