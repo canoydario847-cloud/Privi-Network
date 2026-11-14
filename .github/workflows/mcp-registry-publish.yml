@@ -30,6 +30,21 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Report Registry-specific progress independently of unrelated Railway deploys.
+      - name: Mark Privi Registry verification in progress
+        if: matrix.server == 'privi-agent-survival'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT_SHA: ${{ github.sha }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$COMMIT_SHA" \
+            -f state=pending \
+            -f context="Privi MCP Registry / Agent Survival" \
+            -f description="MCP Registry verification in progress" \
+            -f target_url="$RUN_URL"
+
       - name: Install mcp-publisher
         run: |
           set -euo pipefail
@@ -257,3 +272,18 @@ jobs:
             -f context="Privi MCP Registry / Agent Survival" \
             -f description="Official Registry confirms Agent Survival version" \
             -f target_url="$VERIFIED_URL"
+
+      # Failure status is diagnostic; report failures but never mask the original job error.
+      - name: Mark Privi Registry verification failed
+        if: failure() && matrix.server == 'privi-agent-survival'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT_SHA: ${{ github.sha }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$COMMIT_SHA" \
+            -f state=failure \
+            -f context="Privi MCP Registry / Agent Survival" \
+            -f description="Registry job failed; inspect workflow logs" \
+            -f target_url="$RUN_URL"
