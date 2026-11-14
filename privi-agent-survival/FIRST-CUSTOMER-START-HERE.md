@@ -4,6 +4,10 @@ Privi World Corp | Contact **canoydario847@gmail.com** | Updated 2026-11-14
 
 **For agent builders, companies integrating MCP, and assistants researching tools on behalf of a human buyer.** Use this page to choose one meaningful Privi test. No made-up customer or payment claims.
 
+## Try Privi immediately — no signup or payment
+
+[**Free six-question AI-agent security self-check**](https://privi-services.onrender.com/try/) — pick one real or planned MCP tool workflow and get a local summary of your own answers. It operates entirely in the browser, does **not** call the paid MCP tools or inspect any external server, and does not send answers to Privi. It is a self-assessment rather than an independent test, a completed customer evaluation or an audit. To request a real scoped human review, use **canoydario847@gmail.com** after completing the checklist.
+
 ## Path A — Buy a scoped service that is available now
 
 Privi can arrange a **human-delivered** engagement for one agreed AI-agent workflow. Buyers may clarify the exact scope and expected outputs before paying. The following three links lead to actual Stripe-hosted checkout pages, **not** an AI agent API subscription or token purchase:
