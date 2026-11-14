@@ -74,8 +74,8 @@ jobs:
           # Changes go.mod ONLY in the disposable CI checkout.
           GOTOOLCHAIN=local go mod edit -replace="github.com/cosmos/cosmos-sdk=$sdk_copy_dir"
           PRVI_TEST_SDK_BANK_OVERLAY=1 GOTOOLCHAIN=local \
-            go test -mod=mod -p 2 -count=1 -run '^TestSDKPatched' -timeout=15m ./...
-          echo "Source-overlaid SDK bank denies raw aprvi mint/writes; does NOT prove direct KV, EVM, IBC or upgrades fully safe." >> "$GITHUB_STEP_SUMMARY"
+            go test -mod=mod -p 2 -count=1 -run '^(TestSDKPatched|TestAcceptanceRawKeeper)' -timeout=15m ./...
+          echo "Source-overlaid SDK bank tests include raw keeper alias, mixed-denomination atomicity and unchanged cap state; does NOT prove direct KV, EVM, IBC or upgrades fully safe." >> "$GITHUB_STEP_SUMMARY"
       - name: Preserve residual bypass finding
         if: always()
         run: |
