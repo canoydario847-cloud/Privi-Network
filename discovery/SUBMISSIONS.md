@@ -40,10 +40,10 @@ Usage is public at https://privi-ledger.onrender.com/stats and https://privi-ver
 **One-liner:** Verifiable infrastructure for AI agents — pay, prove, and audit on-chain.
 
 **Short description (≤160 chars):**
-Tamper-evident audit logs, sealed compliance reports, and paid lot verification for AI agents. MCP + x402 (USDC on Base). Free tier, no sales call.
+Tamper-evident audit logs, sealed compliance reports, and paid lot verification for AI agents. MCP + x402 (USDC on Base). Every tool is paid, no sales call.
 
 **Long description:**
-Privi gives AI agents the trust layer they need to do real work for companies and governments. Privi Ledger records every agent action in a hash-linked stream, issues sealed PDF compliance reports, produces OMB M-25-21 AI use-case inventories and EO 14409 post-quantum migration plans, and lets two companies seal a shared record with Privi Handshake. Privi Verify checks manufacturing lot provenance and chain of custody, paid per call with x402. Privi Anchor timestamps any hash on the Privi chain so proofs don't depend on trusting us. Everything is callable over MCP; paid tools settle in USDC on Base; the free tier is self-serve via `ledger_signup`. Built by Dario Canoy, Privi World Co, Port Huron, Michigan.
+Privi gives AI agents the trust layer they need to do real work for companies and governments. Privi Ledger records every agent action in a hash-linked stream, issues sealed PDF compliance reports, produces OMB M-25-21 AI use-case inventories and EO 14409 post-quantum migration plans, and lets two companies seal a shared record with Privi Handshake. Privi Verify checks manufacturing lot provenance and chain of custody, paid per call with x402. Privi Anchor timestamps any hash on the Privi chain so proofs don't depend on trusting us. Everything is callable over MCP; every tool is paid: per call in USDC on Base via x402 (1 cent for most Ledger and Verify calls), or included with Privi Ledger Pro ($29 USDC per 30 days). Built by Dario Canoy, Privi World Co, Port Huron, Michigan.
 
 **Endpoints:**
 - Ledger `https://privi-ledger.onrender.com/mcp` (streamable-http)

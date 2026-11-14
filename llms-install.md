@@ -18,14 +18,16 @@ Add this to the MCP settings file (for Cline: `cline_mcp_settings.json`):
 
 `privi-ledger` is the main server: Privi Guard, Privi Scan, audit logs, passports, mandates and Live. The other two are optional.
 
-## 2. Check that it works (no key needed)
+## 2. Check that it works (every call is paid; no key needed)
+
+Every Privi tool is paid. A client with an x402 wallet holding USDC on Base pays per call (1 cent for most calls).
 
 - Call `mcp_server_check` with `{"url": "https://privi-verify.onrender.com/mcp"}`. It returns a verdict and a grade.
 - Call `guard_pricing`. It returns the Guard price list.
 
-## 3. Optional: a free organization key
+## 3. Optional: an organization key
 
-Most tools work without a key. For Guard's 1,000 free checks a month and for audit logs, create a key once:
+For audit logs, and to use every tool under a Privi Ledger Pro plan ($29 USDC per 30 days, includes 1,000 Guard checks a month), create a key once:
 
 - MCP: call `ledger_signup` with `{"organization_name": "<your name>"}`, or
 - HTTP: `curl -X POST https://privi-ledger.onrender.com/guard/v1/signup -H 'content-type: application/json' -d '{"organization_name":"<your name>"}'`
@@ -43,4 +45,4 @@ The key is shown once. Add it as a header on the `privi-ledger` server:
 - Before sending text that may contain secrets: call `guard_check` with `direction: "outbound"` and use `redacted_text` when it is returned.
 - Before connecting to another MCP server: call `mcp_server_check`.
 
-Paid tools (1 cent Guard checks without a key, audits, Verify lookups) settle in USDC on Base through x402. A client without an x402 wallet simply uses the free tiers.
+All calls (1 cent Guard checks, audits, Verify lookups and the rest) settle in USDC on Base through x402, or are included with a Ledger Pro key. There are no free tiers: a client needs an x402 wallet or a Pro key.
