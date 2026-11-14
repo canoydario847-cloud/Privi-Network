@@ -149,6 +149,8 @@ func TestRawKeeperSameBlockMintBurnEvadesSupplyReconciliation(t *testing.T) {
  if before!="100" {t.Fatalf("unexpected fixture genesis supply %s",before)}
  minter:=authtypes.NewEmptyModuleAccount("badcopy",authtypes.Minter,authtypes.Burner)
  h.account.EXPECT().GetModuleAccount(h.ctx,"badcopy").Return(minter).AnyTimes()
+ // SDK bank balance reads consult the account keeper during burn; supply a real module account fixture.
+ h.account.EXPECT().GetAccount(gomock.Any(),gomock.Any()).Return(minter).AnyTimes()
  coin:=sdk.NewCoins(sdk.NewInt64Coin(BaseDenom,1))
  if err:=h.bank.MintCoins(h.ctx,"badcopy",coin);err!=nil {t.Fatalf("raw keeper bypass mint: %v",err)}
  if got:=h.bank.GetSupply(h.ctx,BaseDenom).Amount.String();got!="101" {
