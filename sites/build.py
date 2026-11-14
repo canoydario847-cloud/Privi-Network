@@ -24,6 +24,7 @@ OWNER_WALLET = "0x1990589FD200E043b8C6FD9ec5956c61b3071048"
 
 # Public URL of each site (custom domains on Render; each also answers at privi-<name>.onrender.com).
 URLS = {
+    "bites": "https://privi-bites-control.navytoast131.chatgpt.site",
     "home": "https://privi-world.onrender.com",
     "fortress": "https://privi-fortress.onrender.com",
     "passport": "https://privi-passport.onrender.com",
@@ -38,7 +39,7 @@ URLS = {
     "guard": "https://privi-guard-814f.onrender.com",
     "call": CALL,
 }
-NAV = [("home", "Privi"), ("fortress", "Fortress"), ("passport", "Passport"), ("kya", "KYA"),
+NAV = [("bites", "Bites profile"), ("home", "Privi"), ("fortress", "Fortress"), ("passport", "Passport"), ("kya", "KYA"),
        ("mandates", "Mandates"), ("gov", "Government"), ("guard", "Guard"), ("live", "Live"), ("call", "Call"), ("scan", "Scan"), ("hub", "Hub"), ("chainflow", "ChainFlow"), ("developers", "Developers")]
 
 e = html.escape
