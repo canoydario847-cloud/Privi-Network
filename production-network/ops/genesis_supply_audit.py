@@ -16,8 +16,12 @@ CAP_BASE = CAP_COINS * 10 ** DECIMALS
 DENOM_PATTERN = re.compile(r"^[a-z][a-z0-9/]{2,63}$")
 
 def parse_amount(raw, where):
-    if not isinstance(raw, str) or not raw.isascii() or not raw.isdecimal():
-        raise ValueError(where + ": amount must be a nonnegative base-10 integer string")
+    # Strict canonical ASCII amounts avoid Unicode digits, ambiguous leading zeros,
+    # and extremely large values that can exhaust parsing resources.
+    if (not isinstance(raw, str) or not raw or len(raw) > len(str(CAP_BASE))
+            or not raw.isascii() or not raw.isdecimal()
+            or (len(raw) > 1 and raw[0] == "0")):
+        raise ValueError(where + ": amount must be a nonnegative canonical base-10 integer string within cap precision")
     return int(raw)
 
 def audit(genesis, denom, chain_id):
