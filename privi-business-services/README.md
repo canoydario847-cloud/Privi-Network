@@ -2,7 +2,7 @@
 
 **Buyers:** Agentic AI startups, development teams, MSPs, compliance leads, product owners and systems integrators.
 
-**Website:** https://privi-services.onrender.com/ · **Contact:** dariocanoy@priviflow.us
+**Website:** https://privi-services.onrender.com/ · **Contact:** canoydario847@gmail.com
 
 Privi World Corp offers three *human-delivered*, separately scoped service engagements. These are existing, verified live Stripe-hosted offers. Prospective buyers should confirm the exact scope and delivery arrangements before purchase.
 
@@ -26,9 +26,11 @@ A scoped conversation about MCP/API architecture, requirements, authorization, e
 
 ### How to buy and arrange delivery
 
-1. Confirm that the offer fits your use case; email **dariocanoy@priviflow.us** to agree on scope if you require specific deliverables or timelines.
+1. Confirm that the offer fits your use case; email **canoydario847@gmail.com** to agree on scope if you require specific deliverables or timelines.
 2. Pay only through the listed official Stripe-hosted checkout link, not via direct wallet transfer.
-3. Reply to your Stripe receipt with your project scope to arrange the engagement, as the hosted Stripe confirmation instructs.
+3. After paying, email **canoydario847@gmail.com** with your checkout email address and agreed non-sensitive project scope to arrange delivery. Do not send private keys, passwords, or confidential customer documents by ordinary email.
+
+**[AI agents and first-time buyers: choose an actual Privi evaluation](../privi-agent-survival/FIRST-CUSTOMER-START-HERE.md)** · [Free MCP Security Checklist](https://privi-services.onrender.com/mcp-security-checklist/) · [Synthetic Sample Review](https://privi-services.onrender.com/sample-report/)
 
 ### AI-agent developer infrastructure
 
