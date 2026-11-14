@@ -7,6 +7,7 @@ API key:  anchor_hashes
 from __future__ import annotations
 
 import argparse
+import asyncio
 import hashlib
 import hmac
 import json
@@ -305,6 +306,29 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
         return JSONResponse({"ok": True, "service": "privi-anchor", "version": __version__,
                              "anchor_wallet": chain.address if chain else None, "chain_id": settings.chain_id},
                             headers={"Access-Control-Allow-Origin": "*"})
+
+    @mcp.custom_route("/ready", methods=["GET"], include_in_schema=False)
+    async def ready(_: Request) -> JSONResponse:
+        blockers = []
+        try:
+            store.stats()
+        except Exception:
+            blockers.append("database_unavailable")
+        if chain is None:
+            blockers.append("anchor_signer_not_configured")
+        else:
+            try:
+                def check_chain():
+                    chain.latest_block()
+                    return chain.balance_wei()
+                balance = await asyncio.wait_for(asyncio.to_thread(check_chain), timeout=4)
+                if balance <= 10 ** 15:
+                    blockers.append("anchor_gas_unavailable")
+            except Exception:
+                blockers.append("anchor_chain_unreachable")
+        return JSONResponse({"ready": not blockers, "service": "privi-anchor", "blockers": blockers},
+                            status_code=503 if blockers else 200,
+                            headers={"Cache-Control": "no-store"})
 
     status_cache: dict[str, Any] = {}
 

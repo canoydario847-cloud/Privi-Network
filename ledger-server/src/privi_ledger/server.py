@@ -9,6 +9,9 @@ Admin (HTTP):  POST /admin/orgs         (create an organization and its API key)
 from __future__ import annotations
 
 import argparse
+import asyncio
+import urllib.request
+import urllib.parse
 import base64
 import hashlib
 import hmac
@@ -1807,6 +1810,36 @@ def build_server(settings: Settings | None = None, ledger: Ledger | None = None,
                              "authentication": {"required": False, "schemes": []},
                              "tools": tools, "resources": [], "prompts": []},
                             headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=3600"})
+
+    @mcp.custom_route("/ready", methods=["GET"], include_in_schema=False)
+    async def ready(_: Request) -> JSONResponse:
+        blockers = []
+        try:
+            with ledger._lock:
+                ledger._db.execute("SELECT 1").fetchone()
+        except Exception:
+            blockers.append("database_unavailable")
+        if not os.getenv("LEDGER_ANCHOR_KEY"):
+            blockers.append("anchor_credentials_missing")
+        else:
+            def check_anchor():
+                url = urllib.parse.urljoin(anchor_url, "/status")
+                with urllib.request.urlopen(url, timeout=3) as response:
+                    return json.loads(response.read(65536))
+            try:
+                info = await asyncio.wait_for(asyncio.to_thread(check_anchor), timeout=4)
+                if not info.get("anchoring_enabled"):
+                    blockers.append("anchor_signer_not_configured")
+                elif not info.get("chain_reachable"):
+                    blockers.append("anchor_chain_unreachable")
+                elif not info.get("gas_ok"):
+                    blockers.append("anchor_gas_unavailable")
+            except Exception:
+                blockers.append("anchor_status_unavailable")
+        return JSONResponse({"ready": not blockers, "blockers": blockers,
+                             "service": "privi-ledger"},
+                            status_code=503 if blockers else 200,
+                            headers={"Cache-Control": "no-store"})
 
     @mcp.custom_route("/health", methods=["GET"], include_in_schema=False)
     async def health(_: Request) -> JSONResponse:
