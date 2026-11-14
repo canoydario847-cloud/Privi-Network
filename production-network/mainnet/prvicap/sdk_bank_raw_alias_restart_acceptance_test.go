@@ -35,9 +35,9 @@ func TestAcceptanceRawKeeperDenialsSurviveCommittedStoreReopen(t *testing.T) {
     reopen := func(height int64) sdk.Context {
         t.Helper()
         cms := store.NewCommitMultiStore(h.db, log.NewNopLogger())
-        cms.MountStoreWithDB(h.bankKey, storetypes.StoreTypeIAVL, h.db)
-        cms.MountStoreWithDB(h.capKey, storetypes.StoreTypeIAVL, h.db)
-        cms.MountStoreWithDB(h.objKey, storetypes.StoreTypeObject, h.db)
+        cms.MountStoreWithDB(h.bankKey, storetypes.StoreTypeIAVL, h.bankDB)
+        cms.MountStoreWithDB(h.capKey, storetypes.StoreTypeIAVL, h.capDB)
+        cms.MountStoreWithDB(h.objKey, storetypes.StoreTypeObject, h.objDB)
         if err := cms.LoadLatestVersion(); err != nil { t.Fatal(err) }
         return sdk.NewContext(cms, cmtproto.Header{Height:height}, false, log.NewNopLogger())
     }
