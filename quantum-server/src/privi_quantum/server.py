@@ -2397,6 +2397,8 @@ def http_app(mcp: MCPServer, host: str = "0.0.0.0"):
     from starlette.routing import WebSocketRoute
     app = mcp.streamable_http_app(host=host, stateless_http=True, json_response=True)
     app.router.routes.append(WebSocketRoute("/dreamscape/ws", mcp._dream_ws))
+    from .cloud import routes as quantum_cloud_routes
+    app.router.routes.extend(quantum_cloud_routes())
     return app
 
 
