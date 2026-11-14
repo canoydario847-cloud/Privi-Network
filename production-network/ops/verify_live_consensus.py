@@ -5,6 +5,8 @@ Requires independently approved IDs and real reachable RPC endpoints.
 Does NOT support local-4221/262144 developer TEST chain. No signing, fees or state changes.
 """
 import argparse
+import base64
+import binascii
 import json
 import sys
 import time
@@ -91,14 +93,44 @@ def check(evm_rpc,comet_rpc,expected_cosmos,expected_evm,now=None):
         raise RuntimeError("CometBFT commit header height mismatch")
     if header.get("chain_id")!=expected_cosmos:
         raise RuntimeError("CometBFT commit header chain ID mismatch")
-    signed=commit["signed_header"]["commit"]["signatures"]
+    commit_body=commit["signed_header"]["commit"]
+    # The observed commit must be for the same height and contain a real block ID.
+    if str(commit_body.get("height")) != str(height):
+        raise RuntimeError("CometBFT commit height mismatch")
+    commit_hash=commit_body.get("block_id",{}).get("hash","")
+    if (not isinstance(commit_hash,str) or len(commit_hash)!=64
+            or any(c not in "0123456789abcdefABCDEF" for c in commit_hash)):
+        raise RuntimeError("Missing or malformed CometBFT committed block hash")
+    signed=commit_body["signatures"]
+    if not isinstance(signed,list) or len(signed)!=count:
+        raise RuntimeError("Incomplete or malformed CometBFT commit signatures")
     signers=set()
+    recorded=set()
     for signature in signed:
-        # Flag 2 is a real commit vote; absent/nil flags do not count.
-        if str(signature.get("block_id_flag"))=="2":
-            key=str(signature.get("validator_address","")).upper()
-            if key in power and key not in signers:signers.add(key)
-    signed_power=sum(power.get(k,0) for k in signers)
+        if not isinstance(signature,dict):
+            raise RuntimeError("Malformed CometBFT commit vote")
+        flag=str(signature.get("block_id_flag"))
+        if flag not in ("1","2","3"):
+            raise RuntimeError("Invalid CometBFT vote flag")
+        # Flag 2 denotes a commit, 3 nil, 1 absent; only commit votes count.
+        if flag=="1":
+            continue
+        key=str(signature.get("validator_address","")).upper()
+        if key not in power or key in recorded:
+            raise RuntimeError("Unknown or duplicate CometBFT signer record")
+        recorded.add(key)
+        encoded=signature.get("signature")
+        if not isinstance(encoded,str):
+            raise RuntimeError("CometBFT vote has no signature bytes")
+        try:
+            sig=base64.b64decode(encoded,validate=True)
+        except (ValueError,binascii.Error):
+            raise RuntimeError("Malformed CometBFT vote signature")
+        if len(sig)!=64:
+            raise RuntimeError("CometBFT vote signature has incorrect length")
+        if flag=="2":
+            signers.add(key)
+    signed_power=sum(power[k] for k in signers)
     if 3*signed_power<=2*total:
         raise RuntimeError("CometBFT latest commit did not have >2/3 voting power")
     return {
