@@ -134,11 +134,20 @@ class ChemStore:
                   "payload_sha256":r["payload_hash"],"previous_sha256":r["previous_hash"],
                   "chain_sha256":r["chain_hash"],"token_id":r["token_id"],
                   "created":r["created"],"payload":json.loads(r["payload"])} for r in rows]
+        prev = "0"*64
+        verified = True
+        for e in entries:
+            digest = SHA(CANON(e["payload"]))
+            chain = SHA(CANON({"project_id":pid, "sequence":e["sequence"],
+                               "previous_hash":prev, "payload_hash":digest}))
+            if e["previous_sha256"] != prev or e["payload_sha256"] != digest or e["chain_sha256"] != chain:
+                verified = False
+            prev = e["chain_sha256"]
         root=entries[-1]["chain_sha256"] if entries else "0"*64
         body={"project":p,"entries":entries,"last_chain_sha256":root,
               "simulation_count":sum(x["source_type"]=="simulation" for x in entries),
               "measurement_count":sum(x["source_type"]=="measurement" for x in entries)}
-        return {"report":body,"report_sha256":SHA(CANON(body)),
+        return {"report":body,"report_sha256":SHA(CANON(body)), "hash_chain_valid":verified,
                 "blockchain_anchor_status":"not_submitted",
                 "verification":"locally hash-chained; no on-chain transaction verified"}
 
@@ -152,6 +161,9 @@ class ChemStore:
                 "minted_on_chain":False,"chain":"none","owner_sha256":r["owner"],
                 "project_id":r["project_id"],"formula":r["formula"],"project_title":r["title"],
                 "payload_sha256":r["payload_hash"],"chain_sha256":r["chain_hash"],
+                "source_sha256":json.loads(r["payload"])["source_sha256"],
+                "code_sha256":json.loads(r["payload"])["code_sha256"],
+                "formula_sha256":SHA(r["formula"]),
                 "source_type":r["source_type"],"blockchain_anchor_status":"not_submitted"}
 
 def bearer_owner(headers):
