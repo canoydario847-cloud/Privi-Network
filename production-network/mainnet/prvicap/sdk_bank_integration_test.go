@@ -213,3 +213,24 @@ func TestRestrictedBankRejectsRemintAfterNativeBurn(t *testing.T) {
    t.Fatalf("burn/remint changed immutable issuance record: %+v",state)
  }
 }
+
+
+// Reject native/foreign-denom mixed issuance before the cap is initialized.
+// This proves only the restricted keeper path, not raw keeper safety.
+func TestRestrictedBankRejectsMixedMintBeforeCapInitializationAtomically(t *testing.T) {
+ h:=newRealBankHarness(t)
+ guarded:=RestrictedBank(h.bank,h.cap)
+ coins:=sdk.NewCoins(sdk.NewInt64Coin(BaseDenom,1),sdk.NewInt64Coin("atest",7))
+ if err:=guarded.MintCoins(h.ctx,"mint",coins);!errors.Is(err,ErrNotInitialized) {
+  t.Fatalf("expected uninitialized cap rejection, got %v",err)
+ }
+ if got:=guarded.GetSupply(h.ctx,BaseDenom).Amount.String();got!="0" {
+  t.Fatalf("rejected mint modified native supply: %s",got)
+ }
+ if got:=guarded.GetSupply(h.ctx,"atest").Amount.String();got!="0" {
+  t.Fatalf("rejected mint created other denomination: %s",got)
+ }
+ if _,err:=h.cap.Snapshot(h.ctx);!errors.Is(err,ErrNotInitialized) {
+  t.Fatalf("rejected mint initialized cap state: %v",err)
+ }
+}
