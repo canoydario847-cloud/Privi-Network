@@ -1,0 +1,22 @@
+import http from 'node:http';
+import {readFile} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
+import {dirname,join} from 'node:path';
+const dir=dirname(fileURLToPath(import.meta.url));
+const PORT=Number(process.env.PORT||10000);
+const launchAt=process.env.PRIVI_LAUNCH_AT||'';
+const validDate=launchAt && Number.isFinite(Date.parse(launchAt)) ? new Date(launchAt).toISOString() : null;
+const config=()=>({network:'Privi',symbol:'PRVI',status:'prelaunch',launch_at:validDate,signup_mode:'email_request',stake_enabled:false,deposit_enabled:false,claim_enabled:false,explorer_url:null,rpc_url:null,chain_id:null,contact:'canoydario847@gmail.com'});
+const reply=(res,status,body,type='application/json; charset=utf-8')=>{res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"});res.end(body);};
+const handler=async(req,res)=>{try{
+ const p=new URL(req.url,'http://localhost').pathname;
+ if(req.method!=='GET'&&req.method!=='HEAD')return reply(res,405,JSON.stringify({error:'method_not_allowed'}));
+ if(p==='/health')return reply(res,200,JSON.stringify({status:'ok',service:'privi-mainnet-launch-portal',mainnet:'not_live',signup:'email_request_only'}));
+ if(p==='/api/config')return reply(res,200,JSON.stringify(config()));
+ if(p==='/'||p==='/index.html')return reply(res,200,await readFile(join(dir,'index.html'),'utf8'),'text/html; charset=utf-8');
+ if(p==='/style.css')return reply(res,200,await readFile(join(dir,'style.css'),'utf8'),'text/css; charset=utf-8');
+ if(p==='/app.js')return reply(res,200,await readFile(join(dir,'app.js'),'utf8'),'application/javascript; charset=utf-8');
+ return reply(res,404,JSON.stringify({error:'not_found'}));
+}catch{return reply(res,500,JSON.stringify({error:'server_error'}));}};
+if(process.env.PORTAL_TEST_MODE!=='1')http.createServer(handler).listen(PORT,'0.0.0.0',()=>console.log('Privi mainnet portal listening on '+PORT));
+export {config,handler};
