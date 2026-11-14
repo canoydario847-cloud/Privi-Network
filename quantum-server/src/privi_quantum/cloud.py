@@ -109,7 +109,8 @@ def auth(request):
     return hashlib.sha256(candidate.encode()).hexdigest(), 200
 
 def routes():
-    cloud = QuantumCloud(os.getenv("QUANTUM_CLOUD_DB_PATH", "/data/quantum-cloud.sqlite3"))
+    default_db = str(Path(os.getenv("QUANTUM_DB_PATH", "/tmp/privi-quantum.db")).with_name("quantum-cloud.sqlite3"))
+    cloud = QuantumCloud(os.getenv("QUANTUM_CLOUD_DB_PATH", default_db))
     async def info(request):
         return JSONResponse({"service": "Privi Quantum Cloud", "mode": "simulator_only", "physical_qpu": False,
                              "max_qubits": MAX_QUBITS, "max_shots": MAX_SHOTS, "jobs": "/v1/quantum/cloud/jobs",
