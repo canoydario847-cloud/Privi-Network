@@ -2,6 +2,7 @@ package prvicap
 
 import (
  "bytes"
+ "context"
  "fmt"
  "os"
  "strings"
@@ -219,5 +220,60 @@ func TestSDKPatchedRepeatGenesisDeniedAfterNativeSupplyBurnsToZero(t *testing.T)
  s,err:=h.cap.Snapshot(h.ctx);if err!=nil{t.Fatal(err)}
  if s.GenesisBase!="100"||s.LifetimeIssuedBase!="100"{
    t.Fatalf("replayed genesis corrupted immutable issued units: %+v",s)
+ }
+}
+
+
+// WithMintCoinsRestriction returns a BaseKeeper value copy, and a caller can
+// configure that copy with an allow-all restriction. The PINNED SDK's own
+// raw MintCoins guard must still reject aprvi before bank state changes.
+// This test is overlay-only: it does not prove all production KV writers safe.
+func TestSDKPatchedKeeperCopiesCannotOverrideNativeMintDenial(t *testing.T) {
+ if os.Getenv("PRVI_TEST_SDK_BANK_OVERLAY")!="1" {
+   t.Skip("requires pinned SDK bank source overlay")
+ }
+ h:=newRealBankHarness(t)
+ holder:=sdk.AccAddress(bytes.Repeat([]byte{0x73},20))
+ native:=sdk.NewCoins(sdk.NewInt64Coin(BaseDenom,100))
+ h.bank.InitGenesis(h.ctx,&banktypes.GenesisState{
+   Params:banktypes.DefaultParams(),
+   Balances:[]banktypes.Balance{{Address:holder.String(),Coins:native}},
+   Supply:native,
+ })
+ if err:=h.cap.InitGenesis(h.ctx,"100",h.bank);err!=nil {t.Fatal(err)}
+ // This deliberately attempts to remove all value-copy mint restrictions.
+ // The SDK-level raw MintCoins guard must make that insufficient.
+ copied:=h.bank.WithMintCoinsRestriction(func(_ context.Context,_ sdk.Coins) error {
+   return nil
+ })
+ attempted:=sdk.NewCoins(sdk.NewInt64Coin(BaseDenom,1))
+ aliases:=[]struct{
+   name string
+   mint func(context.Context,string,sdk.Coins) error
+ }{
+   {"original-keeper",h.bank.MintCoins},
+   {"allow-all-keeper-copy",copied.MintCoins},
+ }
+ for _,tc:=range aliases {
+   t.Run(tc.name,func(t *testing.T){
+     err:=tc.mint(h.ctx,"alias-probe",attempted)
+     if err==nil || !strings.Contains(err.Error(),"PRVI SDK bank: native aprvi mint forbidden") {
+       t.Fatalf("raw SDK guard did not reject native mint: %v",err)
+     }
+     if got:=h.bank.GetSupply(h.ctx,BaseDenom).Amount.String();got!="100" {
+       t.Fatalf("rejected alias mint changed supply to %s",got)
+     }
+     if got:=h.bank.GetBalance(h.ctx,holder,BaseDenom).Amount.String();got!="100" {
+       t.Fatalf("rejected alias mint changed holder balance to %s",got)
+     }
+     if err:=h.cap.Reconcile(h.ctx,h.bank);err!=nil {
+       t.Fatalf("rejected alias mint violated accounting: %v",err)
+     }
+     snapshot,err:=h.cap.Snapshot(h.ctx)
+     if err!=nil {t.Fatal(err)}
+     if snapshot.GenesisBase!="100" || snapshot.LifetimeIssuedBase!="100" {
+       t.Fatalf("rejected alias mint changed issuance record: %+v",snapshot)
+     }
+   })
  }
 }
