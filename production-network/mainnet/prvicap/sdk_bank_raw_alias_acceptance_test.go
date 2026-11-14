@@ -7,6 +7,7 @@ import (
 
     sdk "github.com/cosmos/cosmos-sdk/types"
     authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+    banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 )
 
 // These are RED acceptance tests for issue #250, not evidence that the
@@ -26,13 +27,26 @@ func requirePinnedSDKBankOverlay(t *testing.T) {
     }
 }
 
-func TestAcceptanceRawKeeperAliasCannotMintNativePRVI(t *testing.T) {
-    requirePinnedSDKBankOverlay(t)
-    h := newRealBankHarness(t)
-    h.genesisFund(t, 100)
+func initPinnedSDKGenesisForAcceptance(t *testing.T, h bankHarness) {
+    t.Helper()
+    // The pinned SDK patch intentionally forbids MintCoins even before cap
+    // initialization. Use the bank's reviewed one-shot genesis path instead.
+    holder := sdk.AccAddress(bytes.Repeat([]byte{0x60}, 20))
+    native := sdk.NewCoins(sdk.NewInt64Coin(BaseDenom, 100))
+    h.bank.InitGenesis(h.ctx, &banktypes.GenesisState{
+        Params: banktypes.DefaultParams(),
+        Balances: []banktypes.Balance{{Address: holder.String(), Coins: native}},
+        Supply: native,
+    })
     if err := h.cap.InitGenesis(h.ctx, "100", h.bank); err != nil {
         t.Fatal(err)
     }
+}
+
+func TestAcceptanceRawKeeperAliasCannotMintNativePRVI(t *testing.T) {
+    requirePinnedSDKBankOverlay(t)
+    h := newRealBankHarness(t)
+    initPinnedSDKGenesisForAcceptance(t, h)
 
     minter := authtypes.NewEmptyModuleAccount("rawalias", authtypes.Minter)
     h.account.EXPECT().GetModuleAccount(h.ctx, "rawalias").Return(minter).AnyTimes()
@@ -65,10 +79,7 @@ func TestAcceptanceRawKeeperAliasCannotMintNativePRVI(t *testing.T) {
 func TestAcceptanceRawKeeperAliasCannotWriteNativeBalance(t *testing.T) {
     requirePinnedSDKBankOverlay(t)
     h := newRealBankHarness(t)
-    h.genesisFund(t, 100)
-    if err := h.cap.InitGenesis(h.ctx, "100", h.bank); err != nil {
-        t.Fatal(err)
-    }
+    initPinnedSDKGenesisForAcceptance(t, h)
 
     recipient := sdk.AccAddress(bytes.Repeat([]byte{0x61}, 20))
     beforeSupply := h.bank.GetSupply(h.ctx, BaseDenom)
@@ -99,10 +110,7 @@ func TestAcceptanceRawKeeperAliasCannotWriteNativeBalance(t *testing.T) {
 func TestAcceptanceRawKeeperNativeMixedDenomMintIsAtomic(t *testing.T) {
     requirePinnedSDKBankOverlay(t)
     h := newRealBankHarness(t)
-    h.genesisFund(t, 100)
-    if err := h.cap.InitGenesis(h.ctx, "100", h.bank); err != nil {
-        t.Fatal(err)
-    }
+    initPinnedSDKGenesisForAcceptance(t, h)
 
     minter := authtypes.NewEmptyModuleAccount("mixedalias", authtypes.Minter)
     h.account.EXPECT().GetModuleAccount(h.ctx, "mixedalias").Return(minter).AnyTimes()
