@@ -1,0 +1,21 @@
+id: privi-agent-survival
+name: Privi Agent Survival & Premium
+description: Remote MCP utility catalog for agent reliability, security evidence, permission reviews, data quality, and workflow analysis. Tool execution requires prepaid API credentials; self-service checkout is not yet active.
+author: Privi World Corp
+url: https://github.com/canoydario847-cloud/Privi-Network/tree/main/privi-agent-survival
+category: development
+prerequisites:
+  - A prepaid Privi API key is required to execute tools; public tool discovery is available without credentials.
+  - Automated API-credit purchases and key issuance are not yet live.
+content: |
+  {
+    "type": "streamable-http",
+    "url": "https://privi-ai-21-gateway.onrender.com/mcp",
+    "headers": {
+      "Authorization": "Bearer {{API_TOKEN}}"
+    }
+  }
+parameters:
+  - name: Privi API Key
+    key: API_TOKEN
+    placeholder: your_privi_api_key
