@@ -171,3 +171,33 @@ func TestRawKeeperSameBlockMintBurnEvadesSupplyReconciliation(t *testing.T) {
  // A clean immutable record and final supply do NOT establish that no
  // unauthorized aprvi was issued transiently. This remains a NO-GO finding.
 }
+
+
+// Burning outstanding native PRVI never restores issuance permission.
+// This checks the guarded SDK API, NOT unrestricted keeper aliases.
+func TestRestrictedBankRejectsRemintAfterNativeBurn(t *testing.T) {
+ h:=newRealBankHarness(t)
+ h.genesisFund(t,100)
+ if err:=h.cap.InitGenesis(h.ctx,"100",h.bank);err!=nil {t.Fatal(err)}
+ guarded:=RestrictedBank(h.bank,h.cap)
+ burner:=authtypes.NewEmptyModuleAccount("genesisfixture",authtypes.Minter,authtypes.Burner)
+ h.account.EXPECT().GetModuleAccount(h.ctx,"genesisfixture").Return(burner).AnyTimes()
+ h.account.EXPECT().GetAccount(gomock.Any(),gomock.Any()).Return(burner).AnyTimes()
+ native:=sdk.NewCoins(sdk.NewInt64Coin(BaseDenom,1))
+ if err:=guarded.BurnCoins(h.ctx,"genesisfixture",native);err!=nil {t.Fatal(err)}
+ if got:=guarded.GetSupply(h.ctx,BaseDenom).Amount.String();got!="99" {
+   t.Fatalf("fixture burn supply = %s, expected 99",got)
+ }
+ if err:=h.cap.Reconcile(h.ctx,guarded);err!=nil {t.Fatalf("burn should preserve cap invariant: %v",err)}
+ if err:=guarded.MintCoins(h.ctx,"genesisfixture",native);!errors.Is(err,ErrMintForbidden) {
+   t.Fatalf("native reissuance after burn must fail, got %v",err)
+ }
+ if got:=guarded.GetSupply(h.ctx,BaseDenom).Amount.String();got!="99" {
+   t.Fatalf("rejected remint changed supply to %s",got)
+ }
+ state,err:=h.cap.Snapshot(h.ctx)
+ if err!=nil {t.Fatal(err)}
+ if state.GenesisBase!="100" || state.LifetimeIssuedBase!="100" {
+   t.Fatalf("burn/remint changed immutable issuance record: %+v",state)
+ }
+}
