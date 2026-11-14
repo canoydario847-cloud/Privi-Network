@@ -48,7 +48,7 @@ jobs:
               record = json.load(stream)
           name = urllib.parse.quote(record["name"], safe="")
           version = urllib.parse.quote(record["version"], safe="")
-          url = f"https://registry.modelcontextprotocol.io/v0/servers/{name}/versions/{version}"
+          url = f"https://registry.modelcontextprotocol.io/v0.1/servers/{name}/versions/{version}"
           import time
           found = None
           for attempt in range(1, 5):          # the registry sometimes times out on lookups
