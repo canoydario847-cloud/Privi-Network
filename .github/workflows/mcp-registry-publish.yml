@@ -39,6 +39,92 @@ jobs:
       - name: Validate server metadata
         run: ./mcp-publisher validate server.json
 
+
+      # Avoid advertising broken hosted metadata and auth behavior to registries.
+      - name: Verify live Privi remote MCP handshake
+        if: matrix.server == 'privi-agent-survival'
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import time
+          import urllib.error
+          import urllib.request
+
+          base = "https://privi-ai-21-gateway.onrender.com"
+
+          def call(path, payload=None):
+              headers = {"Accept": "application/json, text/event-stream"}
+              data = None
+              if payload is not None:
+                  headers["Content-Type"] = "application/json"
+                  data = json.dumps(payload).encode("utf-8")
+              request = urllib.request.Request(base + path, data=data, headers=headers)
+              with urllib.request.urlopen(request, timeout=40) as response:
+                  if response.status != 200:
+                      raise RuntimeError(f"{path} returned HTTP {response.status}")
+                  return json.load(response)
+
+          def rpc(method, params, identifier):
+              return call("/mcp", {
+                  "jsonrpc": "2.0", "id": identifier,
+                  "method": method, "params": params
+              })
+
+          for attempt in range(1, 6):
+              try:
+                  health = call("/health")
+                  if health.get("status") != "ok":
+                      raise RuntimeError("Gateway health is not ok")
+                  if health.get("mcp_endpoint") != "/mcp":
+                      raise RuntimeError("Gateway MCP route mismatch")
+
+                  card = call("/.well-known/mcp/server-card.json")
+                  if card.get("serverInfo", {}).get("version") != "0.7.1":
+                      raise RuntimeError("Gateway server card version != 0.7.1")
+                  if card.get("authentication", {}).get("required") is not True:
+                      raise RuntimeError("Gateway incorrectly advertises optional auth")
+
+                  init = rpc("initialize", {
+                      "protocolVersion": "2025-11-25",
+                      "capabilities": {},
+                      "clientInfo": {"name": "privi-registry-smoke", "version": "1"}
+                  }, 1)
+                  if init.get("result", {}).get("protocolVersion") != "2025-11-25":
+                      raise RuntimeError("MCP initialize failed")
+
+                  catalog = rpc("tools/list", {}, 2)
+                  tools = catalog.get("result", {}).get("tools", [])
+                  if len(tools) < 83:
+                      raise RuntimeError(f"Expected >=83 MCP tools, got {len(tools)}")
+
+                  # Probe only an unauthenticated call; must not spend credits.
+                  denied = rpc("tools/call", {
+                      "name": "privi_time_now", "arguments": {}
+                  }, 3)
+                  result = denied.get("result", {})
+                  if result.get("isError") is not True:
+                      raise RuntimeError("Unauthenticated execution was not denied")
+                  code = result.get("structuredContent", {}).get("error")
+                  if code not in {"api_key_required", "paid_checkout_not_ready"}:
+                      raise RuntimeError(f"Unexpected unauthenticated result: {code}")
+
+                  summary = (
+                      "### Privi hosted MCP gateway verified\n\n"
+                      f"Health, server card v0.7.1, MCP handshake, {len(tools)} tools, "
+                      "and denied anonymous execution passed.\n"
+                  )
+                  print(summary)
+                  with open(__import__("os").environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as output:
+                      output.write(summary)
+                  break
+              except (ValueError, KeyError, urllib.error.URLError, TimeoutError, RuntimeError) as error:
+                  print(f"Readiness probe {attempt}/5 failed: {error}")
+                  if attempt == 5:
+                      raise
+                  time.sleep(attempt * 10)
+          PY
+
       # Publishing the same version twice is forbidden by the registry.
       # A 200 means this exact version is already listed; 404 means publish.
       # Any other HTTP/network response is a hard failure, never a silent pass.
