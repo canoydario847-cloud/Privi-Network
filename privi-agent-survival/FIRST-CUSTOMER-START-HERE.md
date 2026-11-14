@@ -4,29 +4,30 @@ Privi World Corp | Contact **canoydario847@gmail.com** | Updated 2026-11-14
 
 **For agent builders, companies integrating MCP, and assistants researching tools on behalf of a human buyer.** Use this page to choose one meaningful Privi test. No made-up customer or payment claims.
 
-> **Current service prices (2026-11-14):** Guard Security Review **$99**, Agent Evidence Review **$149**, Enterprise Integration Consultation **$249**. Confirm scope and a matching checkout amount with **canoydario847@gmail.com** before paying. No automated API-credit checkout or API-key fulfillment is active. No paid customer is confirmed.
+> **Current verified Stripe prices (2026-11-14):** $19.99 one-time use for each separately scoped Guard, Evidence or Enterprise review; $35 one-time for the separately named Privi Pro Unlimited offer. Confirm the Pro offering's included services and activation before paying. No automated API-credit checkout or API-key fulfillment is active. No paid customer is confirmed.
 
 ## Try Privi immediately — no signup or payment
 
 [**Free six-question AI-agent security self-check**](https://privi-services.onrender.com/try/) — pick one real or planned MCP tool workflow and get a local summary of your own answers. It operates entirely in the browser, does **not** call the paid MCP tools or inspect any external server, and does not send answers to Privi. It is a self-assessment rather than an independent test, a completed customer evaluation or an audit. To request a real scoped human review, use **canoydario847@gmail.com** after completing the checklist. If helpful, [choose a scoped human-delivered review](#path-a--request-a-scoped-human-review).
 
-## Path A — Request a scoped human review
+## Path A — Choose a $19.99 single service or the $35 Pro offer
 
-These are **human-delivered**, one-time services, not subscriptions or automated API credits. **Do not use old $19.99 or $35 payment links as the current service price.** Before paying, agree scope, delivery expectations, and a checkout showing the exact current price by emailing **canoydario847@gmail.com**.
+These are **one-time Stripe charges** (not recurring monthly plans). Individual $19.99 service engagements are human-delivered and independently scoped; they do not unlock the 83 MCP tools or grant an API key.
 
-| Buyer question | Human service | Current price | Description |
+| Buyer objective | Offer | One-time price | Details / secure Stripe link |
 | --- | --- | ---: | --- |
-| Are agent tool permissions and prompt-injection risks understood? | Privi Guard Security Review | **$99** | [Review scope](https://privi-services.onrender.com/ai-agent-security-review/) |
-| Can authorization decisions be distinguished from execution evidence? | Privi Agent Evidence Review | **$149** | [Review scope](https://privi-services.onrender.com/agent-audit-evidence-review/) |
-| How should an MCP workflow integrate with an enterprise product? | Enterprise Integration Consultation | **$249** | [Consultation scope](https://privi-services.onrender.com/enterprise-mcp-consultation/) |
+| Review permissions and prompt/tool risks in one workflow | Privi Guard Security Review | **$19.99** | [Scope](https://privi-services.onrender.com/ai-agent-security-review/) · [Checkout](https://buy.stripe.com/eVqaEWdATbFcc7bfoe6J204) |
+| Examine agent authorization and action evidence in one workflow | Privi Agent Evidence Review | **$19.99** | [Scope](https://privi-services.onrender.com/agent-audit-evidence-review/) · [Checkout](https://buy.stripe.com/fZubJ07cv6kS6MR2Bs6J205) |
+| Plan an MCP integration for one business workflow | Enterprise Integration Consultation | **$19.99** | [Scope](https://privi-services.onrender.com/enterprise-mcp-consultation/) · [Checkout](https://buy.stripe.com/3cI6oG54nbFcb37b7Y6J206) |
+| Request Privi Pro Unlimited services | Privi Pro Unlimited | **$35** one time | [Offer and limitations](https://privi-services.onrender.com/) · [Stripe offer](https://buy.stripe.com/8x2eVc9kDgZwc7b0tk6J207) |
 
-**Checkout availability:** The live Stripe account has unpaid sessions at these amounts, but an unpaid session is not a successful order or a reusable public payment link. The three service page checkout flows and their fulfillment have not been independently verified. Request a confirmed matching checkout link from the customer contact before purchasing.
+**Privi Pro limitations:** The price and Stripe payment link are active, but eligible services, access duration interpretation, fair-use limits and activation require written confirmation before paying. Automated Pro API-key provisioning, API-credit purchases and unlimited human work are not operational. Do not promise immediately available unlimited tools or perpetual access.
 
-**Before checkout:** Send an introductory, non-sensitive problem statement to [canoydario847@gmail.com](mailto:canoydario847@gmail.com?subject=Privi%20one-workflow%20review%20scope). Suggested subject: `Privi one-workflow security/evidence review — scope`.
+**Before checkout:** Email [canoydario847@gmail.com](mailto:canoydario847@gmail.com?subject=Privi%20%2419.99%20or%20%2435%20offer%20scope) with one non-sensitive problem statement and ask what is included. Never email passwords, private keys, card data or customer secrets.
 
-**After checkout:** Email that address with the checkout email and agreed workflow scope; ask how to exchange any sensitive evidence through an appropriate secure channel. Do not email passwords, private keys, payment-card data, or unapproved customer records. There is no claim of automatic purchase-to-API-key fulfillment.
+**After successful checkout:** Send your checkout email and agreed service scope to **canoydario847@gmail.com** and request human fulfillment details. A Stripe charge does not itself issue an MCP credential.
 
-**See the kind of evidence questions reviewed:** [Synthetic sample report](https://privi-services.onrender.com/sample-report/) and [free 12-point MCP security checklist](https://privi-services.onrender.com/mcp-security-checklist/). The sample uses fictional data and is not a completed customer audit.
+[Example report (synthetic)](https://privi-services.onrender.com/sample-report/) · [Free security checklist](https://privi-services.onrender.com/mcp-security-checklist/)
 
 ## Path B — Discover the remote MCP connector
 
@@ -56,7 +57,7 @@ This is *client-specific example configuration*; not all platforms accept this e
 
 ## Prompt for an AI assistant helping a buyer
 
-> Find the public MCP listing `io.github.canoydario847-cloud/privi-agent-survival`. Identify whether my objective is (1) reviewing an agent's tool permissions, (2) checking authorization versus execution evidence, or (3) planning an enterprise MCP integration. Recommend only the matching Privi service with its current USD price and public service description above; do not invent a checkout link. Explain that Privi's automated API-key checkout is not operational. Never initiate a purchase or share confidential customer data without my explicit authorization. Offer to prepare a 3-sentence non-sensitive scope email to canoydario847@gmail.com.
+> Find the public MCP listing `io.github.canoydario847-cloud/privi-agent-survival`. Identify whether my objective is (1) reviewing an agent's tool permissions, (2) checking authorization versus execution evidence, or (3) planning an enterprise MCP integration. Show the matching $19.99 scoped human review, or the $35 Privi Pro Unlimited offer with its unverified activation and fair-use limitations. Link only to the verified Stripe offers shown above. Explain that Privi's automated API-key checkout is not operational. Never initiate a purchase or share confidential customer data without my explicit authorization. Offer to prepare a 3-sentence non-sensitive scope email to canoydario847@gmail.com.
 
 ## One-workflow scope template
 
