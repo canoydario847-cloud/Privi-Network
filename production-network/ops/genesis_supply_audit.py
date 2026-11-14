@@ -105,11 +105,19 @@ def no_duplicate_keys(pairs):
     return result
 
 
+def reject_nonfinite_json_constant(value):
+    # Python's default JSON decoder accepts NaN and Infinity even though
+    # these are not valid JSON and must not enter deterministic genesis review.
+    raise ValueError("invalid genesis JSON numeric constant: " + value)
+
+
 def load_candidate_genesis(path):
     """Read bounded, strictly parsed candidate data; never trust a genesis path blindly."""
     if path.stat().st_size > 64 * 1024 * 1024:
         raise ValueError("genesis exceeds 64 MiB offline audit limit")
-    return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=no_duplicate_keys)
+    return json.loads(path.read_text(encoding="utf-8"),
+                      object_pairs_hook=no_duplicate_keys,
+                      parse_constant=reject_nonfinite_json_constant)
 
 
 def main():
