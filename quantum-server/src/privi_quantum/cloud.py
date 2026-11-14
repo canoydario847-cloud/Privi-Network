@@ -55,7 +55,8 @@ class QuantumCloud:
         if not 1 <= n <= MAX_QUBITS or len(gates) > MAX_GATES:
             raise ValueError("simulator limit: 1-12 qubits and at most 500 basis gates")
         for gate in gates:
-            if any(isinstance(v, int) and not 0 <= v < n for v in gate[1:3] if not isinstance(v, bool)) and gate[0] in ("h", "cx"):
+            indices = (gate[1], gate[2]) if gate[0] == "cx" else (gate[1],)
+            if any(type(index) is not int or not 0 <= index < n for index in indices):
                 raise ValueError("invalid qubit index")
         jid = "qj_" + secrets.token_hex(16)
         now = utcnow()
@@ -120,9 +121,13 @@ def routes():
             return JSONResponse({"error": "not configured" if status == 503 else "unauthorized"}, status_code=status)
         if int(request.headers.get("content-length", "0") or "0") > MAX_BODY:
             return JSONResponse({"error":"payload too large"},status_code=413)
-        raw = await request.body()
-        if len(raw) > MAX_BODY:
-            return JSONResponse({"error": "payload too large"}, status_code=413)
+        chunks, size = [], 0
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > MAX_BODY:
+                return JSONResponse({"error": "payload too large"}, status_code=413)
+            chunks.append(chunk)
+        raw = b"".join(chunks)
         try:
             data = json.loads(raw)
             if not isinstance(data, dict):
