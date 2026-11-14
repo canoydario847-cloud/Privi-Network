@@ -68,5 +68,5 @@ const server=http.createServer(async(req,res)=>{
   } catch(e) { return send(res,400,{error:'invalid_request',detail:String(e.message).slice(0,100)}); }
 });
 setInterval(()=>{const now=Math.floor(Date.now()/1000);for(const [k,exp] of revoked) if(exp<now) revoked.delete(k);},60000).unref();
-if (!process.argv[1]?.endsWith('/test.mjs') && !process.env.NODE_TEST_CONTEXT) server.listen(PORT,'0.0.0.0',()=>console.log('Privi Bites listening on '+PORT));
+if (process.env.BITES_TEST_MODE !== '1') server.listen(PORT,'0.0.0.0',()=>console.log('Privi Bites listening on '+PORT));
 export {issue,verify,revoke};
