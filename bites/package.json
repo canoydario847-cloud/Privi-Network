@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test test.mjs"
+    "test": "BITES_TEST_MODE=1 node --test test.mjs"
   },
   "engines": {
     "node": ">=20"
