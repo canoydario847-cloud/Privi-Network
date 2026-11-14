@@ -163,4 +163,11 @@ func TestRawKeeperSameBlockMintBurnEvadesSupplyReconciliation(t *testing.T) {
  if err:=h.cap.Reconcile(h.ctx,h.bank);err!=nil {
    t.Fatalf("supply-only reconciliation unexpectedly detected transient issuance: %v",err)
  }
+ state,err:=h.cap.Snapshot(h.ctx)
+ if err!=nil {t.Fatal(err)}
+ if state.GenesisBase!="100" || state.LifetimeIssuedBase!="100" {
+   t.Fatalf("cap record unexpectedly changed: %+v",state)
+ }
+ // A clean immutable record and final supply do NOT establish that no
+ // unauthorized aprvi was issued transiently. This remains a NO-GO finding.
 }
