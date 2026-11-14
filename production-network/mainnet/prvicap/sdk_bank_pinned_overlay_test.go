@@ -246,7 +246,13 @@ func TestSDKPatchedKeeperCopiesCannotOverrideNativeMintDenial(t *testing.T) {
  copied:=h.bank.WithMintCoinsRestriction(func(_ context.Context,_ sdk.Coins) error {
    return nil
  })
- attempted:=sdk.NewCoins(sdk.NewInt64Coin(BaseDenom,1))
+ attempts:=[]struct{
+   name string
+   coins sdk.Coins
+ }{
+   {"native-only",sdk.NewCoins(sdk.NewInt64Coin(BaseDenom,1))},
+   {"native-and-foreign",sdk.NewCoins(sdk.NewInt64Coin(BaseDenom,1),sdk.NewInt64Coin("atest",7))},
+ }
  aliases:=[]struct{
    name string
    mint func(context.Context,string,sdk.Coins) error
@@ -254,26 +260,34 @@ func TestSDKPatchedKeeperCopiesCannotOverrideNativeMintDenial(t *testing.T) {
    {"original-keeper",h.bank.MintCoins},
    {"allow-all-keeper-copy",copied.MintCoins},
  }
- for _,tc:=range aliases {
-   t.Run(tc.name,func(t *testing.T){
-     err:=tc.mint(h.ctx,"alias-probe",attempted)
-     if err==nil || !strings.Contains(err.Error(),"PRVI SDK bank: native aprvi mint forbidden") {
-       t.Fatalf("raw SDK guard did not reject native mint: %v",err)
-     }
-     if got:=h.bank.GetSupply(h.ctx,BaseDenom).Amount.String();got!="100" {
-       t.Fatalf("rejected alias mint changed supply to %s",got)
-     }
-     if got:=h.bank.GetBalance(h.ctx,holder,BaseDenom).Amount.String();got!="100" {
-       t.Fatalf("rejected alias mint changed holder balance to %s",got)
-     }
-     if err:=h.cap.Reconcile(h.ctx,h.bank);err!=nil {
-       t.Fatalf("rejected alias mint violated accounting: %v",err)
-     }
-     snapshot,err:=h.cap.Snapshot(h.ctx)
-     if err!=nil {t.Fatal(err)}
-     if snapshot.GenesisBase!="100" || snapshot.LifetimeIssuedBase!="100" {
-       t.Fatalf("rejected alias mint changed issuance record: %+v",snapshot)
-     }
-   })
+ for _,alias:=range aliases {
+   for _,attempt:=range attempts {
+     t.Run(alias.name+"/"+attempt.name,func(t *testing.T){
+       err:=alias.mint(h.ctx,"alias-probe",attempt.coins)
+       if err==nil || !strings.Contains(err.Error(),"PRVI SDK bank: native aprvi mint forbidden") {
+         t.Fatalf("raw SDK guard did not reject native mint: %v",err)
+       }
+       if got:=h.bank.GetSupply(h.ctx,BaseDenom).Amount.String();got!="100" {
+         t.Fatalf("rejected alias mint changed native supply to %s",got)
+       }
+       if got:=h.bank.GetSupply(h.ctx,"atest").Amount.String();got!="0" {
+         t.Fatalf("rejected mixed alias mint changed foreign supply to %s",got)
+       }
+       if got:=h.bank.GetBalance(h.ctx,holder,BaseDenom).Amount.String();got!="100" {
+         t.Fatalf("rejected alias mint changed holder native balance to %s",got)
+       }
+       if got:=h.bank.GetBalance(h.ctx,holder,"atest").Amount.String();got!="0" {
+         t.Fatalf("rejected alias mint changed holder foreign balance to %s",got)
+       }
+       if err:=h.cap.Reconcile(h.ctx,h.bank);err!=nil {
+         t.Fatalf("rejected alias mint violated accounting: %v",err)
+       }
+       snapshot,err:=h.cap.Snapshot(h.ctx)
+       if err!=nil {t.Fatal(err)}
+       if snapshot.GenesisBase!="100" || snapshot.LifetimeIssuedBase!="100" {
+         t.Fatalf("rejected alias mint changed issuance record: %+v",snapshot)
+       }
+     })
+   }
  }
 }
