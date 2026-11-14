@@ -77,30 +77,33 @@ def apply_patch(upstream, source_repo, *, verify_git=True):
 \tpriviCap, capErr := prvicap.New(runtime.NewKVStoreService(keys[prvicap.StoreKey]))
 \tif capErr != nil { panic(capErr) }
 \tapp.PriviCapKeeper = priviCap
-\tbaseBank := bankkeeper.NewBaseKeeper(
+\trestrictedBaseBank := bankkeeper.NewBaseKeeper(
 \t\tappCodec,
 \t\truntime.NewKVStoreService(keys[banktypes.StoreKey]),
 \t\tapp.AccountKeeper,
 \t\tevmconfig.BlockedAddresses(),
 \t\tauthAddr,
 \t\tlogger,
-\t)
-\tbaseBank = baseBank.WithObjStoreKey(oKeys[banktypes.ObjectStoreKey])
-\tapp.BankKeeper = prvicap.RestrictedBank(baseBank, app.PriviCapKeeper)'''
+\t).WithObjStoreKey(oKeys[banktypes.ObjectStoreKey]).WithMintCoinsRestriction(app.PriviCapKeeper.MintRestriction)
+\tapp.BankKeeper = prvicap.RestrictedBank(restrictedBaseBank, app.PriviCapKeeper)'''
     app = replace_once(app, old_bank, new_bank, "apply restriction before bank injection")
-    # Cosmos SDK v0.54.3 x/bank migration registration currently requires a
-    # concrete BaseKeeper. The only exception receives a mint-restricted copy;
-    # all other modules receive the sealed direct-balance-denying interface.
-    # The residual raw keeper reference remains a financial launch blocker.
+    # Cosmos SDK v0.54.3 x/bank migration registration requires a concrete
+    # BaseKeeper. Construct one mint-restricted concrete keeper directly;
+    # neither app nor the x/bank module receives an unrestricted named alias.
+    # The separate direct-collection / KV-write routes remain launch blockers.
     app = replace_once(app,
         "bank.NewAppModule(appCodec, app.BankKeeper, app.AccountKeeper, nil)",
         "bank.NewAppModule(appCodec,\n"
-        "\t\t\tbaseBank.WithMintCoinsRestriction(app.PriviCapKeeper.MintRestriction),\n"
+        "\t\t\trestrictedBaseBank,\n"
         "\t\t\tapp.AccountKeeper, nil)",
         "SDK bank migration concrete keeper with native mint restriction")
-    if app.count("baseBank.WithMintCoinsRestriction(app.PriviCapKeeper.MintRestriction)") != 1:
-        raise ValueError("raw bank migration exception must be unique")
-    if app.count("app.BankKeeper = prvicap.RestrictedBank(baseBank, app.PriviCapKeeper)") != 1:
+    if app.count(").WithObjStoreKey(oKeys[banktypes.ObjectStoreKey]).WithMintCoinsRestriction(app.PriviCapKeeper.MintRestriction)") != 1:
+        raise ValueError("concrete bank must be mint-restricted at construction")
+    if app.count("bank.NewAppModule(appCodec,\n\t\t\trestrictedBaseBank,\n") != 1:
+        raise ValueError("SDK bank migration must receive the same restricted keeper")
+    if "baseBank" in app:
+        raise ValueError("unrestricted raw bank variable found in customized app")
+    if app.count("app.BankKeeper = prvicap.RestrictedBank(restrictedBaseBank, app.PriviCapKeeper)") != 1:
         raise ValueError("only one guarded module-facing bank injection allowed")
     # Upstream writes the upgrade module version map before calling InitGenesis.
     # Move it after all native PRVI genesis policy checks so rejected
