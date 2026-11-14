@@ -3,7 +3,7 @@
 **Prepared:** November 13, 2026 · **Owner:** Privi World Corp · **No directory fees authorized**
 
 **Hosted MCP endpoint:** `https://privi-ai-21-gateway.onrender.com/mcp` (Streamable HTTP)
-**Verified official MCP Registry namespace:** `io.github.canoydario847-cloud/privi-agent-survival` · v0.7.0 published.
+**Verified official MCP Registry namespace:** `io.github.canoydario847-cloud/privi-agent-survival` · [v0.7.1 confirmed](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.canoydario847-cloud%2Fprivi-agent-survival/versions/0.7.1) through the official Registry check.
 **Public repository:** https://github.com/canoydario847-cloud/Privi-Network
 **MCP overview:** https://github.com/canoydario847-cloud/Privi-Network/tree/main/privi-agent-survival
 **Agent Hub:** https://privi-ai-21-gateway.onrender.com/agent-hub
@@ -14,7 +14,7 @@
 
 | Channel | Action | Listing status | Publisher/owner action |
 | --- | --- | --- | --- |
-| Official MCP Registry | Already published with GitHub OIDC | **Published** v0.7.0 | Keep metadata and service availability current |
+| Official MCP Registry | Exact-version record confirmed by GitHub Actions | **Verified** [v0.7.1](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.canoydario847-cloud%2Fprivi-agent-survival/versions/0.7.1) | Keep metadata and service availability current |
 | Glama — remote connectors | https://glama.ai/mcp/connectors | **Not confirmed for Privi Survival** | Click Add Server, Hosted endpoint. Supply hosted URL, name and description; verify health. Previous Privi-branded Glama entries may refer to *different endpoints*. |
 | Glama — GitHub servers | https://glama.ai/mcp/servers | **Not confirmed for this product** | Click Add MCP Server and submit public repository; distinguish public documentation from private running source. |
 | MCP.so | https://mcp.so/submit | **Not confirmed** | Submit repository URL, product name and hosted endpoint. Site advertises optional $39 immediate placement; free reviewed listing may be available depending on form. Do not pay without approval. |
