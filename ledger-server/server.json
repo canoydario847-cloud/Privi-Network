@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.canoydario847-cloud/privi-ledger",
   "title": "Privi Ledger — Recovery Evaluation",
-  "description": "Evaluation-only MCP recovery endpoint for Privi agent ledger tools. Original ledger data unavailable; new instance uses temporary storage, so do not rely on it for durable audit evidence. Payments disabled.",
+  "description": "Evaluation-only ledger MCP. Temporary storage; not durable audit evidence. Payments disabled.",
   "version": "0.14.1",
   "websiteUrl": "https://privi-ledger-mcp-recovery.onrender.com",
   "repository": {
