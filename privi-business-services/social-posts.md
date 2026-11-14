@@ -4,7 +4,7 @@ All offers: https://privi-services.onrender.com/
 No paid ads or third-party posts are implied by this file. Check platform community rules and avoid repeated unsolicited posts.
 
 ## Facebook launch announcement
-Your AI agent can call tools — but who checks its access permissions, evidence and production-readiness decisions? Privi World Corp now offers three scoped, human-delivered B2B services: AI-agent security review ($99), agent evidence review ($149), and enterprise MCP integration consultation ($249). Browse the options and use Stripe-hosted checkout if one fits. These are not automated API subscriptions. https://privi-services.onrender.com/
+Your AI agent can call tools — but who checks its access permissions, evidence and production-readiness decisions? Privi World Corp now offers three scoped, human-delivered B2B services: AI-agent security review ($19.99), agent evidence review ($19.99), and enterprise MCP integration consultation ($19.99). Browse the options and use Stripe-hosted checkout if one fits. These are not automated API subscriptions. https://privi-services.onrender.com/
 #AIAgents #MCP #AgentSecurity #PriviWorld #AIInfrastructure
 
 ## LinkedIn: security buyer
@@ -12,7 +12,7 @@ Shipping tool-calling agents is different from shipping a chat interface. Permis
 #AgenticAI #AISecurity #MCP #SoftwareEngineering
 
 ## LinkedIn: evidence buyer
-Can you tell the difference between "the agent logged an approval" and "the authorized action actually occurred"? That distinction matters in agent audit trails. Privi's $149 Agent Evidence Review helps teams discuss gaps in recorded actor, policy and action evidence, without pretending to deliver a compliance certification. https://privi-services.onrender.com/agent-audit-evidence-review/
+Can you tell the difference between "the agent logged an approval" and "the authorized action actually occurred"? That distinction matters in agent audit trails. Privi's $19.99 Agent Evidence Review helps teams discuss gaps in recorded actor, policy and action evidence, without pretending to deliver a compliance certification. https://privi-services.onrender.com/agent-audit-evidence-review/
 #AIGovernance #AuditReadiness #AgentObservability
 
 ## LinkedIn: engineering buyer
@@ -27,7 +27,7 @@ Need a second look at your AI-agent setup? Privi Guard Security Review starts at
 Building an MCP agent? Tool permissions and prompt risks deserve a real review. Privi Guard Security Review: a scoped $99 human service, not a security certification. https://privi-services.onrender.com/ai-agent-security-review/ #AIAgents #MCP
 
 ## X / short (evidence)
-An agent decision log is not proof an action happened. Privi's $149 Agent Evidence Review helps teams reason about evidence gaps. Human-delivered, separately scoped. https://privi-services.onrender.com/agent-audit-evidence-review/ #AIGovernance
+An agent decision log is not proof an action happened. Privi's $19.99 Agent Evidence Review helps teams reason about evidence gaps. Human-delivered, separately scoped. https://privi-services.onrender.com/agent-audit-evidence-review/ #AIGovernance
 
 ## X / short (integration)
 Planning an enterprise MCP integration? Start with auth, failure modes and a scoped pilot. Privi's enterprise consultation is $249. https://privi-services.onrender.com/enterprise-mcp-consultation/ #MCP #AgenticAI
@@ -52,4 +52,7 @@ Privi's tools catalog, Agent Skills and demo pages are publicly viewable. But th
 Before deploying an AI agent that calls external tools, document the caller identity, policy version, approval path and what evidence would actually prove execution. A log entry alone doesn't establish what happened. Interested teams can study MCP authorization and auditability as separate requirements. (Only share where the community allows educational posts; do not insert a sales pitch into prohibited communities.)
 
 ## Follow-up for a contact who explicitly asked for service details
-Here are Privi's current scoped services: $99 agent security review, $149 evidence review and $249 enterprise integration consultation. They are human-delivered engagements with Stripe-hosted checkout. They do not activate an automated API subscription. If useful, tell me what your team is trying to decide and I can help choose a service: https://privi-services.onrender.com/
+Here are Privi's current scoped services: $99 agent security review, $19.99 evidence review and $249 enterprise integration consultation. They are human-delivered engagements with Stripe-hosted checkout. They do not activate an automated API subscription. If useful, tell me what your team is trying to decide and I can help choose a service: https://privi-services.onrender.com/
+
+
+**Current pricing note (November 14, 2026):** Three separately scoped human services are $19.99 one-time each, and a distinct $35 one-time Privi Pro Unlimited Stripe offer exists. Confirm Pro covered services, activation and fair-use restrictions before any purchase. Automated API-credit/key fulfillment is not operational; old $99/$149/$249 service prices and links are retired.
