@@ -125,9 +125,9 @@ def verify(module_json: str, build_info: str, sdk_dir: Path) -> dict:
                                r'["\x60][^\n]*' + re.escape(marker))
                 # Also reject diagnostic-only entries in parenthesized Go
                 # var/const blocks. This is conservative screening, not an AST.
-                block = (r'(?ms)^\\s*(?:var|const)\\s*\\(\\s*'
-                         r'(?:(?!^\\s*\\)).)*?'
-                         r'^\\s*\\w+\\s*=\\s*["\\x60][^\\n]*'
+                block = (r'(?ms)^\s*(?:var|const)\s*\(\s*'
+                         r'(?:(?!^\s*\)).)*?'
+                         r'^\s*\w+\s*=\s*["\x60][^\n]*'
                          + re.escape(marker))
                 if re.search(declaration, uncommented) or re.search(block, uncommented):
                     raise ValueError("unused diagnostic declaration cannot establish enforcement")
