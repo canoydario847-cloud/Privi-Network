@@ -4,6 +4,8 @@ Privi World Corp | Contact **canoydario847@gmail.com** | Updated 2026-11-14
 
 **For agent builders, companies integrating MCP, and assistants researching tools on behalf of a human buyer.** Use this page to choose one meaningful Privi test. No made-up customer or payment claims.
 
+> **Current service-price notice (2026-11-14):** Privi's priority human-delivered offers are **Guard Security Review $99**, **Agent Evidence Review $149**, and **Enterprise Integration Consultation $249**. Older $19.99 links and the $35 Unlimited offer below are legacy references and should **not** be used as a current quote or purchased without written confirmation. Start from the linked service description and email **canoydario847@gmail.com** to agree scope, current checkout price, and fulfillment before paying. Automated API-credit checkout is disabled. No paid customer has been confirmed from this notice.
+
 ## Try Privi immediately — no signup or payment
 
 [**Free six-question AI-agent security self-check**](https://privi-services.onrender.com/try/) — pick one real or planned MCP tool workflow and get a local summary of your own answers. It operates entirely in the browser, does **not** call the paid MCP tools or inspect any external server, and does not send answers to Privi. It is a self-assessment rather than an independent test, a completed customer evaluation or an audit. To request a real scoped human review, use **canoydario847@gmail.com** after completing the checklist. If helpful, [choose a $19.99 scoped review or see the $35 Unlimited offer](#path-a--choose-a-live-one-time-checkout).
