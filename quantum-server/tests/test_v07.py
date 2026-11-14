@@ -47,13 +47,15 @@ def test_pay_settings_from_env(monkeypatch):
         monkeypatch.delenv(k, raising=False)
     assert PaySettings.from_env().payments_enabled is False          # unconfigured: everything stays free
     monkeypatch.setenv("QUANTUM_PAY_TO", PAY_TO)
-    with pytest.raises(ValueError):                                  # mainnet needs CDP keys
-        PaySettings.from_env()
+    monkeypatch.delenv("CDP_API_KEY_ID", raising=False)
+    monkeypatch.delenv("CDP_API_KEY_SECRET", raising=False)
+    unavailable = PaySettings.from_env()
+    assert unavailable.payments_enabled and not unavailable.facilitator_ready  # unavailable payment verifier: fail closed
     monkeypatch.setenv("CDP_API_KEY_ID", "kid")
     monkeypatch.setenv("CDP_API_KEY_SECRET", "sec")
     monkeypatch.setenv("QUANTUM_PRICE_RECEIPT", "0.5")
     s = PaySettings.from_env()
-    assert s.payments_enabled and s.prices_usd["quantum_advantage_receipt"] == "0.5"
+    assert s.payments_enabled and s.facilitator_ready and s.prices_usd["quantum_advantage_receipt"] == "0.5"
     assert s.network["network"] == "eip155:8453"
     monkeypatch.setenv("QUANTUM_PAY_TO", "nope")
     with pytest.raises(ValueError):
