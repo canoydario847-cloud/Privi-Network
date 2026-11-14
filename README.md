@@ -10,26 +10,27 @@
 |---|---|
 | Privi Ledger (MCP) | **Live, evaluation only**: `https://privi-ledger-mcp-recovery.onrender.com/mcp` (temporary storage; not for durable audit evidence) |
 | Agent Survival & Premium gateway | **Live**: `https://privi-ai-21-gateway.onrender.com/mcp` |
-| Human-delivered reviews ($99 / $149 / $249) | **Live**: [privi-services.onrender.com](https://privi-services.onrender.com/) |
+| Human-delivered reviews ($19.99) + Pro Unlimited ($35) | **Live**: [privi-services.onrender.com](https://privi-services.onrender.com/) |
 | Verify, Anchor, Quantum, Call, Hub, Wallet | **Being redeployed** to the current Render workspace; the `*.onrender.com` links further down may not respond yet |
 
 Every Privi tool is paid (x402 USDC on Base, or a paid API key). There are no free tiers. Folder index: [REPO_MAP.md](REPO_MAP.md).
 
-## Privi World paid B2B services — available today
+## Privi World paid services — $19.99 one-time or $35 Pro Unlimited
 
-**[Try Privi in three minutes: free private AI-agent self-check](https://privi-services.onrender.com/try/)** — Answer six simple questions about one MCP/agent workflow and get an instant browser-only, self-reported summary. No payment, sign-up, telemetry submission or premium API execution. This is not a vulnerability scan, compliance certification or a verified customer evaluation. For one scoped paid review, email **canoydario847@gmail.com**.
+**[Free browser-only agent self-check](https://privi-services.onrender.com/try/)** · [12-point MCP security checklist](https://privi-services.onrender.com/mcp-security-checklist/). These are self-assessments, not independent audits.
 
-Privi World Corp offers three **human-delivered service engagements** with independently verified live Stripe Payment Links. These services are separate from Privi's not-yet-activated prepaid API-credit checkout:
-
-| Service | Price (USD) | Learn more | Stripe purchase |
+| Offer | USD one-time Stripe price | Service details | Stripe-hosted payment link |
 | --- | ---: | --- | --- |
-| Privi Guard Security Review | $99 | [Service details](https://privi-services.onrender.com/ai-agent-security-review/) | [Stripe Checkout](https://buy.stripe.com/28EcN4gN510y0ot8ZQ6J201) |
-| Privi Agent Evidence Review | $149 | [Service details](https://privi-services.onrender.com/agent-audit-evidence-review/) | [Stripe Checkout](https://buy.stripe.com/28E7sK7cvfVsgnr2Bs6J202) |
-| Privi Enterprise Integration Consultation | $249 | [Service details](https://privi-services.onrender.com/enterprise-mcp-consultation/) | [Stripe Checkout](https://buy.stripe.com/28E28qcwP6kSc7b2Bs6J203) |
+| Privi Guard Security Review (one scoped use) | **$19.99** | [Security review](https://privi-services.onrender.com/ai-agent-security-review/) | [Pay $19.99](https://buy.stripe.com/eVqaEWdATbFcc7bfoe6J204) |
+| Privi Agent Evidence Review (one scoped use) | **$19.99** | [Evidence review](https://privi-services.onrender.com/agent-audit-evidence-review/) | [Pay $19.99](https://buy.stripe.com/fZubJ07cv6kS6MR2Bs6J205) |
+| Privi Enterprise Integration Consultation (one scoped use) | **$19.99** | [Integration consultation](https://privi-services.onrender.com/enterprise-mcp-consultation/) | [Pay $19.99](https://buy.stripe.com/3cI6oG54nbFcb37b7Y6J206) |
+| **Privi Pro Unlimited** | **$35** (one time, not monthly) | [Pro offer and limitations](https://privi-services.onrender.com/) | [View $35 offer](https://buy.stripe.com/8x2eVc9kDgZwc7b0tk6J207) |
 
-**[Compare all services and contact Privi →](https://privi-services.onrender.com/)** · **[AI agents and developers: start here](privi-agent-survival/FIRST-CUSTOMER-START-HERE.md)** · **[Public sales one-pager and organic campaign](privi-business-services/README.md)** · [14 ready-to-share posts](privi-business-services/social-posts.md)
+**Important:** The Stripe account verifies these amounts and payment links are active. Privi Pro's covered services, fair-use terms and access activation must be confirmed with **canoydario847@gmail.com** before purchase. No purchase automatically provisions API keys or premium MCP tool execution. "Unlimited" does not mean unlimited human review work, third-party compute or perpetual access to services that are not yet operational. No independent fulfillment test or paid customer is claimed.
 
-Buyers should confirm the workflow, scope and expected deliverables before purchase. After paying through the Stripe-hosted link, contact **canoydario847@gmail.com** with the checkout email address and the agreed non-sensitive project scope to coordinate delivery. Do not send API keys, passwords, or private records. These are not subscriptions, audited certifications, or automatic API-key purchases. The seller is Privi World Corp.
+[Browse service details](https://privi-services.onrender.com/) · [Agent-ready buyer instructions](privi-agent-survival/FIRST-CUSTOMER-START-HERE.md) · [Seller's service one-pager](privi-business-services/README.md)
+
+After checkout, email **canoydario847@gmail.com** with your checkout email and agreed non-sensitive scope to arrange service delivery; never send secrets or pay an unverified wallet directly.
 
 ## Privi Agent Survival & Premium — prepaid AI-agent utility gateway
 
@@ -42,9 +43,9 @@ Buyers should confirm the workflow, scope and expected deliverables before purch
 
 **Infrastructure caution:** Some legacy Privi MCP URLs listed below belong to an older Render workspace affected by billing suspension. In particular, `privi-ledger.onrender.com` is **not** the validated Ledger recovery endpoint. The replacement `privi-ledger-mcp-recovery.onrender.com` is evaluation-only with temporary storage and must not be used for durable audit evidence. Use the verified Agent Survival link above for its separate hosted gateway.
 
-**Commercial status:** The three human-delivered review/consultation services above use existing active Stripe-hosted payment links. The separate automated API-credit checkout is not accepting payments while durable storage, Stripe webhook credentials/tax configuration, Base confirmation and fulfillment tests remain unverified. Do not transfer funds without a verified order. The commercial gateway is separate from Privi Ledger's existing plans.
+**Commercial status:** The three $19.99 human-delivered services and separate $35 Pro offer above use existing active Stripe-hosted payment links. The separate automated API-credit checkout is not accepting payments while durable storage, Stripe webhook credentials/tax configuration, Base confirmation and fulfillment tests remain unverified. Do not transfer funds without a verified order. The commercial gateway is separate from Privi Ledger's existing plans.
 
-Privi is building remote MCP agent utilities and verifiable-action infrastructure. **The 83-tool API catalog can be discovered, but automated paid API-credit purchases and self-service execution are not enabled.** The three scoped, human-delivered reviews linked above are the only offers confirmed available for purchase in this README. x402/USDC features and native mainnet are not represented as live revenue sources.
+Privi is building remote MCP agent utilities and verifiable-action infrastructure. **The 83-tool API catalog can be discovered, but automated paid API-credit purchases and self-service execution are not enabled.** Only the three scoped $19.99 human-delivered reviews have clearly defined fulfillment. The $35 Pro offer has an active Stripe link but its access terms and activation require written confirmation. x402/USDC features and native mainnet are not represented as live revenue sources.
 Built by **Dario Canoy**, Privi World Corp. Legacy product URLs below may be unavailable or evaluation-only; do not use them for payments or critical records. The [Privi Agent Survival gateway](https://privi-ai-21-gateway.onrender.com/agent-hub) and the [first-customer guide](privi-agent-survival/FIRST-CUSTOMER-START-HERE.md) are the recommended starting points.
 
 ```json
