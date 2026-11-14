@@ -256,6 +256,13 @@ class Paywall:
             return CallToolResult(content=[TextContent(type="text", text=json.dumps(data))], structured_content=data,
                                   is_error=failed)
 
+        if not getattr(self.settings, "facilitator_ready", True):
+            data = {"error": "payment_facilitator_unavailable",
+                    "message": "Paid tools are unavailable until the payment verifier is configured"}
+            return CallToolResult(is_error=True,
+                                  content=[TextContent(type="text", text=json.dumps(data))],
+                                  structured_content=data)
+
         privi_payment = (meta or {}).get("privi/payment")
         if privi_payment is not None and self.privi:
             ok, info = await anyio.to_thread.run_sync(

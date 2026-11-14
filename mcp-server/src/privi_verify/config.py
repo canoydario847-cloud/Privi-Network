@@ -49,6 +49,7 @@ class Settings:
     facilitator_url: str = "https://x402.org/facilitator"
     facilitator_auth: str = ""
     cdp_key_id: str = ""
+    facilitator_ready: bool = True
     cdp_key_secret: str = ""          # optional "Authorization" header value
     prices_usd: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_PRICES_USD))
     write_keys: set[str] = field(default_factory=set)
@@ -84,7 +85,8 @@ class Settings:
             raise ValueError("Base mainnet needs a production facilitator: set PRIVI_FACILITATOR_URL to "
                              "https://api.cdp.coinbase.com/platform/v2/x402 and CDP_API_KEY_ID / CDP_API_KEY_SECRET")
         if self.payments_enabled and "api.cdp.coinbase.com" in self.facilitator_url and not (self.cdp_key_id and self.cdp_key_secret):
-            raise ValueError("The Coinbase facilitator needs CDP_API_KEY_ID and CDP_API_KEY_SECRET")
+            # Keep the service health route available, but NEVER execute paid work.
+            self.facilitator_ready = False
         if self.payments_enabled:
             p = self.pay_to
             if not (p.startswith("0x") and len(p) == 42):

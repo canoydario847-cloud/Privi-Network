@@ -191,10 +191,13 @@ def test_cdp_jwt_and_mainnet_guard():
 
     with pytest.raises(ValueError):          # mainnet on the testnet-only facilitator is refused
         Settings(pay_to=PAY_TO, network_key="base").validate()
-    with pytest.raises(ValueError):          # Coinbase facilitator without credentials is refused
-        Settings(pay_to=PAY_TO, network_key="base", facilitator_url=CDP_FACILITATOR_URL).validate()
-    Settings(pay_to=PAY_TO, network_key="base", facilitator_url=CDP_FACILITATOR_URL,
-             cdp_key_id="k", cdp_key_secret=secret).validate()
+    without_keys = Settings(pay_to=PAY_TO, network_key="base", facilitator_url=CDP_FACILITATOR_URL)
+    without_keys.validate()
+    assert without_keys.payments_enabled and without_keys.facilitator_ready is False
+    with_keys = Settings(pay_to=PAY_TO, network_key="base", facilitator_url=CDP_FACILITATOR_URL,
+                         cdp_key_id="k", cdp_key_secret=secret)
+    with_keys.validate()
+    assert with_keys.facilitator_ready is True
 
 
 def test_server_card(store):
