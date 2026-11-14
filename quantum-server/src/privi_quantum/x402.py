@@ -254,6 +254,14 @@ class Paywall:
             return CallToolResult(content=[TextContent(type="text", text=json.dumps(data))], structured_content=data,
                                   is_error=failed)
 
+        if not getattr(self.settings, "facilitator_ready", True):
+            # Fail closed: do not run tools, accept payments, or settle without the provider credentials.
+            data = {"error": "payment_facilitator_unavailable",
+                    "message": "Privi Quantum paid tools are temporarily unavailable until payment verification is configured"}
+            return CallToolResult(is_error=True,
+                                  content=[TextContent(type="text", text=json.dumps(data))],
+                                  structured_content=data)
+
         privi_payment = (meta or {}).get("privi/payment")
         if privi_payment is not None and self.privi:
             ok, info = await anyio.to_thread.run_sync(

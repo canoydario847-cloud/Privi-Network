@@ -95,6 +95,7 @@ class PaySettings:
     facilitator_auth: str = ""
     cdp_key_id: str = ""
     cdp_key_secret: str = ""
+    facilitator_ready: bool = True
     db_path: str = "quantum.db"
     prices_usd: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_PRICES_USD))
 
@@ -137,7 +138,9 @@ class PaySettings:
         if self.network_key == "base" and "x402.org" in self.facilitator_url:
             raise ValueError("Base mainnet needs a production facilitator (the Coinbase CDP facilitator)")
         if "api.cdp.coinbase.com" in self.facilitator_url and not (self.cdp_key_id and self.cdp_key_secret):
-            raise ValueError("The Coinbase facilitator needs CDP_API_KEY_ID and CDP_API_KEY_SECRET")
+            # Preserve payments_enabled, but never execute or settle an unverified call.
+            # Let public health and the separately authenticated quantum cloud boot.
+            self.facilitator_ready = False
 
     @property
     def network(self) -> dict:
