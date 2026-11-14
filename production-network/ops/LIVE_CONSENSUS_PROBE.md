@@ -16,7 +16,8 @@ Use locally secured HTTPS RPC gateways, not public validator signers. Never past
 
 The probe verifies:
 
-- The live EVM identity and latest block timestamp/height
+- The live EVM identity and latest block timestamp/height; the returned block number must match the requested height
+- The validator response height must match the requested CometBFT commit height, preventing stale or unrelated voting-power sets from being counted
 - Matching Cosmos chain ID, commit header identity and height, and a node that is not catching up
 - A complete set of at least four unique voting validator addresses, nonzero voting power and no individual signer holding one-third or more of the total
 - Actual commit signatures representing **strictly greater than 2/3 of voting power**; absent and nil votes do not count
