@@ -116,9 +116,10 @@ class MainnetQuorumMonitor(unittest.TestCase):
 
     def test_unknown_vote_addresses_not_counted(self):
         p,g,_,signatures=make_responses()
-        signatures[:]=[{"validator_address":"F"*40,"block_id_flag":2} for _ in range(4)]
+        signatures[:]=[{"validator_address":"F"*40,"block_id_flag":2,
+                        "signature":base64.b64encode(b"x"*64).decode()} for _ in range(4)]
         with mock.patch.object(m,"post",p),mock.patch.object(m,"get",g):
-            with self.assertRaisesRegex(RuntimeError,"2/3 voting power"):
+            with self.assertRaisesRegex(RuntimeError,"Unknown or duplicate"):
                 m.check(EVM,COMET,CHAIN,EVM_ID,now=1000)
 
     def test_missing_vote_signature_never_counts_as_quorum(self):
