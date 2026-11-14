@@ -3,11 +3,14 @@ package prvicap
 import (
  "bytes"
  "context"
+ "errors"
  "fmt"
  "os"
  "strings"
  "testing"
 
+ "cosmossdk.io/collections"
+ sdkmath "cosmossdk.io/math"
  sdk "github.com/cosmos/cosmos-sdk/types"
  authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
  banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
@@ -246,7 +249,13 @@ func TestSDKPatchedKeeperCopiesCannotOverrideNativeMintDenial(t *testing.T) {
  copied:=h.bank.WithMintCoinsRestriction(func(_ context.Context,_ sdk.Coins) error {
    return nil
  })
- attempted:=sdk.NewCoins(sdk.NewInt64Coin(BaseDenom,1))
+ attempts:=[]struct{
+   name string
+   coins sdk.Coins
+ }{
+   {"native-only",sdk.NewCoins(sdk.NewInt64Coin(BaseDenom,1))},
+   {"native-and-foreign",sdk.NewCoins(sdk.NewInt64Coin(BaseDenom,1),sdk.NewInt64Coin("atest",7))},
+ }
  aliases:=[]struct{
    name string
    mint func(context.Context,string,sdk.Coins) error
@@ -254,26 +263,82 @@ func TestSDKPatchedKeeperCopiesCannotOverrideNativeMintDenial(t *testing.T) {
    {"original-keeper",h.bank.MintCoins},
    {"allow-all-keeper-copy",copied.MintCoins},
  }
- for _,tc:=range aliases {
-   t.Run(tc.name,func(t *testing.T){
-     err:=tc.mint(h.ctx,"alias-probe",attempted)
-     if err==nil || !strings.Contains(err.Error(),"PRVI SDK bank: native aprvi mint forbidden") {
-       t.Fatalf("raw SDK guard did not reject native mint: %v",err)
-     }
-     if got:=h.bank.GetSupply(h.ctx,BaseDenom).Amount.String();got!="100" {
-       t.Fatalf("rejected alias mint changed supply to %s",got)
-     }
-     if got:=h.bank.GetBalance(h.ctx,holder,BaseDenom).Amount.String();got!="100" {
-       t.Fatalf("rejected alias mint changed holder balance to %s",got)
-     }
-     if err:=h.cap.Reconcile(h.ctx,h.bank);err!=nil {
-       t.Fatalf("rejected alias mint violated accounting: %v",err)
-     }
-     snapshot,err:=h.cap.Snapshot(h.ctx)
-     if err!=nil {t.Fatal(err)}
-     if snapshot.GenesisBase!="100" || snapshot.LifetimeIssuedBase!="100" {
-       t.Fatalf("rejected alias mint changed issuance record: %+v",snapshot)
-     }
-   })
+ for _,alias:=range aliases {
+   for _,attempt:=range attempts {
+     t.Run(alias.name+"/"+attempt.name,func(t *testing.T){
+       err:=alias.mint(h.ctx,"alias-probe",attempt.coins)
+       if err==nil || !strings.Contains(err.Error(),"PRVI SDK bank: native aprvi mint forbidden") {
+         t.Fatalf("raw SDK guard did not reject native mint: %v",err)
+       }
+       if got:=h.bank.GetSupply(h.ctx,BaseDenom).Amount.String();got!="100" {
+         t.Fatalf("rejected alias mint changed native supply to %s",got)
+       }
+       if got:=h.bank.GetSupply(h.ctx,"atest").Amount.String();got!="0" {
+         t.Fatalf("rejected mixed alias mint changed foreign supply to %s",got)
+       }
+       if got:=h.bank.GetBalance(h.ctx,holder,BaseDenom).Amount.String();got!="100" {
+         t.Fatalf("rejected alias mint changed holder native balance to %s",got)
+       }
+       if got:=h.bank.GetBalance(h.ctx,holder,"atest").Amount.String();got!="0" {
+         t.Fatalf("rejected alias mint changed holder foreign balance to %s",got)
+       }
+       if err:=h.cap.Reconcile(h.ctx,h.bank);err!=nil {
+         t.Fatalf("rejected alias mint violated accounting: %v",err)
+       }
+       snapshot,err:=h.cap.Snapshot(h.ctx)
+       if err!=nil {t.Fatal(err)}
+       if snapshot.GenesisBase!="100" || snapshot.LifetimeIssuedBase!="100" {
+         t.Fatalf("rejected alias mint changed issuance record: %+v",snapshot)
+       }
+     })
+   }
  }
+}
+
+
+// NEGATIVE SECURITY DEMONSTRATION: Cosmos SDK v0.54.3 exposes writable
+// bank collections through BaseKeeper.BaseViewKeeper. The pinned overlay
+// hardens MintCoins and UncheckedSetBalance, but direct collection writes
+// bypass both. Reconciliation detects the elevated supply only while it is
+// outstanding; it cannot attest to a transient write that is reverted.
+// This test is deliberately fail-open evidence, NOT production protection.
+func TestSDKPatchedDirectBankCollectionWritesRemainABlocker(t *testing.T) {
+ if os.Getenv("PRVI_TEST_SDK_BANK_OVERLAY")!="1" {
+   t.Skip("requires pinned SDK bank source overlay")
+ }
+ h:=newRealBankHarness(t)
+ holder:=sdk.AccAddress(bytes.Repeat([]byte{0x75},20))
+ native:=sdk.NewCoins(sdk.NewInt64Coin(BaseDenom,100))
+ h.bank.InitGenesis(h.ctx,&banktypes.GenesisState{
+   Params:banktypes.DefaultParams(),
+   Balances:[]banktypes.Balance{{Address:holder.String(),Coins:native}},
+   Supply:native,
+ })
+ if err:=h.cap.InitGenesis(h.ctx,"100",h.bank);err!=nil {t.Fatal(err)}
+ // These writes deliberately avoid MintCoins, UncheckedSetBalance, and every
+ // wrapped keeper interface. Direct store access remains a release blocker.
+ if err:=h.bank.Balances.Set(h.ctx,collections.Join(holder,BaseDenom),sdkmath.NewInt(101));err!=nil {t.Fatal(err)}
+ if err:=h.bank.Supply.Set(h.ctx,BaseDenom,sdkmath.NewInt(101));err!=nil {t.Fatal(err)}
+ if got:=h.bank.GetBalance(h.ctx,holder,BaseDenom).Amount.String();got!="101" {
+   t.Fatalf("direct collection write did not change holder balance: %s",got)
+ }
+ if got:=h.bank.GetSupply(h.ctx,BaseDenom).Amount.String();got!="101" {
+   t.Fatalf("direct collection write did not change total supply: %s",got)
+ }
+ if err:=h.cap.Reconcile(h.ctx,h.bank);!errors.Is(err,ErrUnexpectedSupply) {
+   t.Fatalf("reconciliation must catch outstanding unauthorized supply: %v",err)
+ }
+ // Revert before an end-of-block check: all final invariants look normal.
+ if err:=h.bank.Balances.Set(h.ctx,collections.Join(holder,BaseDenom),sdkmath.NewInt(100));err!=nil {t.Fatal(err)}
+ if err:=h.bank.Supply.Set(h.ctx,BaseDenom,sdkmath.NewInt(100));err!=nil {t.Fatal(err)}
+ if err:=h.cap.Reconcile(h.ctx,h.bank);err!=nil {
+   t.Fatalf("reverted unauthorized store write evaded end-of-block detection: %v",err)
+ }
+ snapshot,err:=h.cap.Snapshot(h.ctx)
+ if err!=nil {t.Fatal(err)}
+ if snapshot.GenesisBase!="100" || snapshot.LifetimeIssuedBase!="100" {
+   t.Fatalf("cap issuance snapshot unexpectedly changed: %+v",snapshot)
+ }
+ // A passing threat-regression means the raw collection bypass exists;
+ // the production mainnet MUST remain NO-GO until the write path is closed.
 }
