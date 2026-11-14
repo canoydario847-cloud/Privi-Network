@@ -68,7 +68,7 @@ class Settings:
     cdp_key_secret: str = ""
     pack_price_usd: str = "1.00"
     pack_credits: int = 1000
-    free_calls_per_day: int = 50
+    free_calls_per_day: int = 0   # no free tier: every call to a non-Privi agent costs a call credit
     rate_per_min: int = 120
     call_timeout: float = 30.0
     official: list[dict] = field(default_factory=lambda: [dict(a) for a in DEFAULT_OFFICIAL])

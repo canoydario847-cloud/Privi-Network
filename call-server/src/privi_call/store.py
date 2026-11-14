@@ -192,6 +192,8 @@ class Store:
     # ---------------- free tier and credits ----------------
 
     def use_free(self, who: str, limit: int) -> bool:
+        if limit <= 0:          # free allowance disabled: never grant a free call
+            return False
         day = time.strftime("%Y-%m-%d", time.gmtime())
         with self._lock:
             r = self._db.execute("SELECT n FROM usage WHERE who=? AND day=?", (who, day)).fetchone()

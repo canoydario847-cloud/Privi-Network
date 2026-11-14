@@ -109,7 +109,7 @@ def test_agent_calls_billing_and_sealed_log(tmp_path, monkeypatch):
             assert r["call"]["charged_usd"] == "0.001" and r["call"]["credits_left"] == 2
             # credits can't be sold before payment keys exist
             b = await c.call_tool("call_credits_buy", {})
-            assert b.is_error and "free calls" in b.structured_content["error"]
+            assert b.is_error and "unavailable" in b.structured_content["error"]
             log = (await c.call_tool("call_log", {"limit": 50})).structured_content
             assert log["calls"][0]["seq"] == log["head"]["seq"] and log["stats"]["agents_on_network"] == 2
             v = (await c.call_tool("call_verify_log", {})).structured_content
