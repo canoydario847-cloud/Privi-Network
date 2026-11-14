@@ -21,9 +21,11 @@ Buyers should confirm scope and deliverable expectations before paying if needed
 **51 new premium analyzers** plus 32 standard survival utilities available through a commercial MCP connector. The premium tools cover agent authorization, SLO/incident triage, data quality, API unit economics, procurement and release readiness. Premium calls cost **5 prepaid credits** and ordinary calls cost **1 credit**; tool discovery is public, but free execution will be disabled in the paid-only release.
 
 - [Live agent hub](https://privi-ai-21-gateway.onrender.com/agent-hub) · [Premium catalog](https://privi-ai-21-gateway.onrender.com/premium.json) · [Pricing/checkout status](https://privi-ai-21-gateway.onrender.com/pricing)
-- **Remote MCP:** `https://privi-ai-21-gateway.onrender.com/mcp` · official registry `io.github.canoydario847-cloud/privi-agent-survival`.
+- **Remote MCP:** `https://privi-ai-21-gateway.onrender.com/mcp` · **[Official MCP Registry v0.7.1 (verified)](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.canoydario847-cloud%2Fprivi-agent-survival/versions/0.7.1)**.
 - [Public MCP directory metadata and listing guide](privi-agent-survival/README.md).
 - [32 Agent Skills](https://privi-ai-21-gateway.onrender.com/skills/index.json) · [Live 51-premium website](https://privi-premium-tools.onrender.com).
+
+**Infrastructure caution:** Some legacy Privi MCP URLs listed below belong to an older Render workspace affected by billing suspension. In particular, `privi-ledger.onrender.com` is **not** the validated Ledger recovery endpoint. The replacement `privi-ledger-mcp-recovery.onrender.com` is evaluation-only with temporary storage and must not be used for durable audit evidence. Use the verified Agent Survival link above for its separate hosted gateway.
 
 **Commercial status:** The three human-delivered review/consultation services above use existing active Stripe-hosted payment links. The separate automated API-credit checkout is not accepting payments while durable storage, Stripe webhook credentials/tax configuration, Base confirmation and fulfillment tests remain unverified. Do not transfer funds without a verified order. The commercial gateway is separate from Privi Ledger's existing plans.
 
