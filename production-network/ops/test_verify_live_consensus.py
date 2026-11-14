@@ -25,14 +25,14 @@ def make_responses():
         if method=="eth_chainId":return hex(EVM_ID)
         if method=="eth_blockNumber":return hex(100)
         if method=="eth_getBlockByNumber":
-            return {"hash":"0x"+("ab"*32),"timestamp":hex(990)}
+            return {"number":hex(100),"hash":"0x"+("ab"*32),"timestamp":hex(990)}
         raise AssertionError("unexpected Ethereum method: "+method)
     def fakeget(url):
         if url.endswith("/status"):
             return {"result":{"node_info":{"network":CHAIN},
                     "sync_info":{"catching_up":False,"latest_block_height":"100"}}}
         if "/validators?" in url:
-            return {"result":{"total":str(len(validators)),"validators":validators}}
+            return {"result":{"block_height":"100","total":str(len(validators)),"validators":validators}}
         if "/commit?" in url:
             return {"result":{"signed_header":{"header":{"height":"100","chain_id":CHAIN},"commit":{"height":"100","block_id":{"hash":"AB"*32},"signatures":signatures}}}}
         raise AssertionError("unexpected Comet RPC URL: "+url)
@@ -48,6 +48,34 @@ class MainnetQuorumMonitor(unittest.TestCase):
         self.assertFalse(result["independent_operator_custody_verified"])
         self.assertEqual(4,result["validatorCount"])
         self.assertEqual(400,result["commitSignedVotingPower"])
+
+    def test_evm_block_response_height_required(self):
+        for reported in (None, hex(99), hex(101)):
+            with self.subTest(reported=reported):
+                p,g,_,_=make_responses()
+                def corrupt(url,method,params=None):
+                    answer=p(url,method,params)
+                    if method=="eth_getBlockByNumber":
+                        if reported is None: answer.pop("number")
+                        else: answer["number"]=reported
+                    return answer
+                with mock.patch.object(m,"post",corrupt),mock.patch.object(m,"get",g):
+                    with self.assertRaisesRegex(RuntimeError,"EVM block response height mismatch"):
+                        m.check(EVM,COMET,CHAIN,EVM_ID,now=1000)
+
+    def test_validator_response_height_required(self):
+        for reported in (None, "99", "101"):
+            with self.subTest(reported=reported):
+                p,g,_,_=make_responses()
+                def corrupt(url):
+                    answer=g(url)
+                    if "/validators?" in url:
+                        if reported is None: answer["result"].pop("block_height")
+                        else: answer["result"]["block_height"]=reported
+                    return answer
+                with mock.patch.object(m,"post",p),mock.patch.object(m,"get",corrupt):
+                    with self.assertRaisesRegex(RuntimeError,"validator set height mismatch"):
+                        m.check(EVM,COMET,CHAIN,EVM_ID,now=1000)
 
     def test_demo_chain_rejected_without_rpc(self):
         with self.assertRaisesRegex(RuntimeError,"mainnet-only"):

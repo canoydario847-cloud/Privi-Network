@@ -52,6 +52,8 @@ def check(evm_rpc,comet_rpc,expected_cosmos,expected_evm,now=None):
     if evmheight<2: raise RuntimeError("EVM chain has not finalized enough blocks")
     evmblock=post(evm_rpc,"eth_getBlockByNumber",[hex(evmheight),False])
     if not evmblock or not evmblock.get("hash"):raise RuntimeError("Missing latest block hash")
+    if int(evmblock.get("number", "-0x1"),16)!=evmheight:
+        raise RuntimeError("EVM block response height mismatch")
     timestamp=int(evmblock["timestamp"],16)
     now=int(time.time()) if now is None else int(now)
     if timestamp>now+30 or now-timestamp>BLOCK_TIME_LIMIT:
@@ -70,6 +72,8 @@ def check(evm_rpc,comet_rpc,expected_cosmos,expected_evm,now=None):
     # Comet RPC /validators returns the actual current power set, NOT peers.
     query=urlencode({"height":str(height),"per_page":"100"})
     vals=get(comet_rpc.rstrip("/")+"/validators?"+query)["result"]
+    if str(vals.get("block_height"))!=str(height):
+        raise RuntimeError("CometBFT validator set height mismatch")
     validators=vals.get("validators",[])
     count=int(vals.get("total",len(validators)))
     if count<4 or count>100 or len(validators)!=count:
