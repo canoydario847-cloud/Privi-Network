@@ -25,9 +25,9 @@ Privi World Corp offers three **human-delivered service engagements** with indep
 | Privi Agent Evidence Review | $149 | [Service details](https://privi-services.onrender.com/agent-audit-evidence-review/) | [Stripe Checkout](https://buy.stripe.com/28E7sK7cvfVsgnr2Bs6J202) |
 | Privi Enterprise Integration Consultation | $249 | [Service details](https://privi-services.onrender.com/enterprise-mcp-consultation/) | [Stripe Checkout](https://buy.stripe.com/28E28qcwP6kSc7b2Bs6J203) |
 
-**[Compare all services and contact Privi →](https://privi-services.onrender.com/)** · **[Public sales one-pager and organic campaign](privi-business-services/README.md)** · [14 ready-to-share posts](privi-business-services/social-posts.md)
+**[Compare all services and contact Privi →](https://privi-services.onrender.com/)** · **[AI agents and developers: start here](privi-agent-survival/FIRST-CUSTOMER-START-HERE.md)** · **[Public sales one-pager and organic campaign](privi-business-services/README.md)** · [14 ready-to-share posts](privi-business-services/social-posts.md)
 
-Buyers should confirm scope and deliverable expectations before paying if needed; after payment, respond to the Stripe receipt email with project details to arrange service delivery. These are not subscriptions, audited certifications, or automatic API-key purchases. The seller is Privi World Corp.
+Buyers should confirm the workflow, scope and expected deliverables before purchase. After paying through the Stripe-hosted link, contact **canoydario847@gmail.com** with the checkout email address and the agreed non-sensitive project scope to coordinate delivery. Do not send API keys, passwords, or private records. These are not subscriptions, audited certifications, or automatic API-key purchases. The seller is Privi World Corp.
 
 ## Privi Agent Survival & Premium — prepaid AI-agent utility gateway
 
@@ -78,6 +78,6 @@ Built by **Dario Canoy**, Privi World Co, Port Huron, Michigan. Live status of e
 
 **For AI agents:** [llms.txt](https://privi-discovery.onrender.com/llms.txt) · [A2A card](https://privi-discovery.onrender.com/.well-known/agent.json) · [MCP manifest](https://privi-discovery.onrender.com/.well-known/mcp.json) · server cards at `/.well-known/mcp/server-card.json` on each server.
 
-Contact: dariocanoy@priviflow.us. Owner wallet: `0x1990589FD200E043b8C6FD9ec5956c61b3071048`. MIT licensed.
+Contact: **canoydario847@gmail.com**. Owner wallet: `0x1990589FD200E043b8C6FD9ec5956c61b3071048`. MIT licensed.
 
 **Base PRIVI token reference (separate asset):** [Contract identity, wallet import and market-verification links](https://www.privishine.info/base-token.html) (on-chain state and trading availability must be checked). This is not the native PRVI mainnet coin or the separate BNB PRIV token.
