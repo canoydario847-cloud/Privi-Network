@@ -31,6 +31,12 @@ type bankHarness struct {
  // Retain only the in-memory test database and mounted store keys so a
  // separate CommitMultiStore can reopen previously committed state.
  db dbm.DB
+ // Each IAVL store needs its own backing database. Sharing the root
+ // multistore DB between bank and cap IAVL trees causes both to attempt
+ // to save conflicting nodes for the same version.
+ bankDB dbm.DB
+ capDB dbm.DB
+ objDB dbm.DB
  bankKey *storetypes.KVStoreKey
  capKey *storetypes.KVStoreKey
  objKey *storetypes.ObjectStoreKey
@@ -39,13 +45,16 @@ type bankHarness struct {
 func newRealBankHarness(t *testing.T) bankHarness {
  t.Helper()
  db := dbm.NewMemDB()
+ bankDB := dbm.NewMemDB()
+ capDB := dbm.NewMemDB()
+ objDB := dbm.NewMemDB()
  cms := store.NewCommitMultiStore(db,log.NewNopLogger())
  bankKey := storetypes.NewKVStoreKey(banktypes.StoreKey)
  capKey := storetypes.NewKVStoreKey("prvicap")
  objKey := storetypes.NewObjectStoreKey(banktypes.ObjectStoreKey)
- cms.MountStoreWithDB(bankKey,storetypes.StoreTypeIAVL,db)
- cms.MountStoreWithDB(capKey,storetypes.StoreTypeIAVL,db)
- cms.MountStoreWithDB(objKey,storetypes.StoreTypeObject,db)
+ cms.MountStoreWithDB(bankKey,storetypes.StoreTypeIAVL,bankDB)
+ cms.MountStoreWithDB(capKey,storetypes.StoreTypeIAVL,capDB)
+ cms.MountStoreWithDB(objKey,storetypes.StoreTypeObject,objDB)
  if err:=cms.LoadLatestVersion();err!=nil {t.Fatal(err)}
  ctx := sdk.NewContext(cms,cmtproto.Header{Time:time.Now()},false,log.NewNopLogger())
  ctrl:=gomock.NewController(t)
@@ -58,7 +67,8 @@ func newRealBankHarness(t *testing.T) bankHarness {
  cap,err:=New(runtime.NewKVStoreService(capKey))
  if err!=nil {t.Fatal(err)}
  return bankHarness{ctx:ctx,bank:raw,cap:cap,account:ak,
-  db:db,bankKey:bankKey,capKey:capKey,objKey:objKey}
+  db:db,bankDB:bankDB,capDB:capDB,objDB:objDB,
+  bankKey:bankKey,capKey:capKey,objKey:objKey}
 }
 func (h bankHarness) genesisFund(t *testing.T,amount int64) {
  t.Helper()
