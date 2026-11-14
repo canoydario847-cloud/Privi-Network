@@ -8,6 +8,7 @@
 **MCP overview:** https://github.com/canoydario847-cloud/Privi-Network/tree/main/privi-agent-survival
 **Agent Hub:** https://privi-ai-21-gateway.onrender.com/agent-hub
 **Buyer landing page:** https://privi-services.onrender.com/mcp-server-owners/
+**Immediate independent self-check (free, no signup):** https://privi-services.onrender.com/try/
 **Revenue offers:** $99 human-delivered security review; $149 human-delivered evidence review; $249 integration consultation. These **do not include** automated API-credit purchase or issued API keys.
 
 ## Verified or high-priority directory channels
@@ -15,7 +16,7 @@
 | Channel | Action | Listing status | Publisher/owner action |
 | --- | --- | --- | --- |
 | Official MCP Registry | Exact-version record confirmed by GitHub Actions | **Verified** [v0.7.1](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.canoydario847-cloud%2Fprivi-agent-survival/versions/0.7.1) | Keep metadata and service availability current |
-| Glama — remote connectors | https://glama.ai/mcp/connectors | **Not confirmed for Privi Survival** | Click Add Server, Hosted endpoint. Supply hosted URL, name and description; verify health. Previous Privi-branded Glama entries may refer to *different endpoints*. |
+| Glama — remote connectors | https://glama.ai/mcp/connectors/io.github.canoydario847-cloud/privi-agent-survival | **Claimed and verified for Privi Survival** on November 14, 2026 (Glama ownership confirmation email); prior check reported Healthy | Review listing details and tool-description clarity in the Glama admin dashboard. Do not pay to boost; the listing is not a paying customer or any execution proof. |
 | Glama — GitHub servers | https://glama.ai/mcp/servers | **Not confirmed for this product** | Click Add MCP Server and submit public repository; distinguish public documentation from private running source. |
 | MCP.so | https://mcp.so/submit | **Not confirmed** | Submit repository URL, product name and hosted endpoint. Site advertises optional $39 immediate placement; free reviewed listing may be available depending on form. Do not pay without approval. |
 | MCP.Directory | https://mcp.directory/submit | **Not confirmed** | Submit GitHub URL; directory claims metadata import and manual review, or claim an existing auto-imported record. |
@@ -46,7 +47,9 @@
 - **MCP endpoint:** https://privi-ai-21-gateway.onrender.com/mcp
 - **Website:** https://privi-ai-21-gateway.onrender.com/agent-hub
 - **Skill catalog:** https://privi-ai-21-gateway.onrender.com/skills/index.json
-- **Contact:** dariocanoy@priviflow.us
+- **Contact:** canoydario847@gmail.com
+- **Free in-browser self-check:** https://privi-services.onrender.com/try/ (not an MCP vulnerability scan)
+- **AI-readable service guide:** https://privi-services.onrender.com/llms.txt
 - **Commercial buyer CTA:** https://privi-services.onrender.com/mcp-server-owners/
 
 ## Funnel experiment
