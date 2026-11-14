@@ -26,10 +26,10 @@ export function createTokenVerifier({ issuer, audience, jwksUri, fetcher = fetch
     try { header = decode(parts[0]); claims = decode(parts[1]); } catch { fail('malformed JWT'); }
     if (!Object.hasOwn(ALGORITHMS, header.alg) || !header.kid || !['at+jwt','application/at+jwt'].includes(header.typ)) fail('unsupported JWT header');
     let jwks = await getKeys();
-    let key = jwks.find(k => k.kid === header.kid && k.kty === (header.alg === 'RS256' ? 'RSA' : 'EC') && (!k.use || k.use === 'sig') && (!k.alg || k.alg === header.alg) && (header.alg !== 'ES256' || k.crv === 'P-256') && (header.alg !== 'ES256' || k.crv === 'P-256'));
+    let key = jwks.find(k => k.kid === header.kid && k.kty === (header.alg === 'RS256' ? 'RSA' : 'EC') && (!k.use || k.use === 'sig') && (!k.alg || k.alg === header.alg) && (header.alg !== 'ES256' || k.crv === 'P-256'));
     if (!key) {
       jwks = await getKeys(true);
-      key = jwks.find(k => k.kid === header.kid && k.kty === (header.alg === 'RS256' ? 'RSA' : 'EC') && (!k.use || k.use === 'sig') && (!k.alg || k.alg === header.alg));
+      key = jwks.find(k => k.kid === header.kid && k.kty === (header.alg === 'RS256' ? 'RSA' : 'EC') && (!k.use || k.use === 'sig') && (!k.alg || k.alg === header.alg) && (header.alg !== 'ES256' || k.crv === 'P-256'));
     }
     if (!key) fail('unknown signing key');
     let publicKey;
