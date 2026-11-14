@@ -36,8 +36,9 @@ export function createMcpOAuthHandler({
     try {
       req.oauth = await verify(token, { scopes: ['privi:tools:execute'] });
       return downstream(req, res);
-    } catch {
-      res.writeHead(401, { 'WWW-Authenticate': challenge + ', error="invalid_token"', 'Cache-Control': 'no-store' });
+    } catch (error) {
+      const insufficient = error.message?.includes('insufficient scope');
+      res.writeHead(insufficient ? 403 : 401, { 'WWW-Authenticate': challenge + (insufficient ? ', error="insufficient_scope"' : ', error="invalid_token"'), 'Cache-Control': 'no-store' });
       res.end();
     }
   };
