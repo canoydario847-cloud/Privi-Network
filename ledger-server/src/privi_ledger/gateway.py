@@ -380,7 +380,7 @@ class Gateways:
         fh["accept-encoding"] = "identity"
         if session_id:
             fh["mcp-session-id"] = session_id
-        fh["user-agent"] = "privi-gateway/1 (+https://privi-ledger.onrender.com)"
+        fh["user-agent"] = "privi-gateway/1 (+https://privi-ledger-aqe5.onrender.com)"
         if method == "POST" and "content-type" not in fh:
             fh["content-type"] = "application/json"
         fh.setdefault("accept", "application/json, text/event-stream")

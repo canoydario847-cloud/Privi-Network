@@ -5,7 +5,7 @@
  "short_name": "Quantum",
  "tagline": "Plan your move to post-quantum cryptography.",
  "intro": "Check certificates for quantum risk, see which data is exposed to record-now-decrypt-later attacks, size the switch to new algorithms, inspect a circuit before running it, and score a supplier's readiness.",
- "site": "https://privi-hub.onrender.com",
+ "site": "https://privi-hub-s757.onrender.com",
  "android": {
   "package": "us.priviflow.quantum",
   "dir": "android-quantum",

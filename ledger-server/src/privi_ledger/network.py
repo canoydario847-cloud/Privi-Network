@@ -45,13 +45,13 @@ OUTCOMES = ("success", "failure", "pending", "blocked")
 
 # "push": the service runs the shared reporter, so it is only linked while its reports keep arriving.
 DEFAULT_SERVICES: dict[str, dict[str, Any]] = {
-    "privi-verify": {"title": "Privi Verify", "url": "https://privi-verify.onrender.com", "health": "/health", "push": True},
-    "privi-anchor": {"title": "Privi Anchor", "url": "https://privi-anchor.onrender.com", "health": "/health", "push": True},
-    "privi-quantum": {"title": "Privi Quantum", "url": "https://privi-quantum.onrender.com", "health": "/health", "push": True},
-    "privi-call": {"title": "Privi Call", "url": "https://privi-call.onrender.com", "health": "/health", "push": True},
-    "privi-wallet": {"title": "Privi Wallet", "url": "https://privi-wallet.onrender.com", "health": "/health", "push": True},
-    "privi-discovery": {"title": "Privi Discovery Hub", "url": "https://privi-discovery.onrender.com", "health": "/health"},
-    "privi-devnet": {"title": "Privi Devnet", "url": "https://privi-devnet.onrender.com", "health": "/health"},
+    "privi-verify": {"title": "Privi Verify", "url": "https://privi-verify-s4jb.onrender.com", "health": "/health", "push": True},
+    "privi-anchor": {"title": "Privi Anchor", "url": "https://privi-anchor-zsbk.onrender.com", "health": "/health", "push": True},
+    "privi-quantum": {"title": "Privi Quantum", "url": "https://privi-quantum-vvmj.onrender.com", "health": "/health", "push": True},
+    "privi-call": {"title": "Privi Call", "url": "https://privi-call-e3rb.onrender.com", "health": "/health", "push": True},
+    "privi-wallet": {"title": "Privi Wallet", "url": "https://privi-wallet-dtte.onrender.com", "health": "/health", "push": True},
+    "privi-discovery": {"title": "Privi Discovery Hub", "url": "https://privi-discovery-6lue.onrender.com", "health": "/health"},
+    "privi-devnet": {"title": "Privi Devnet", "url": "https://privi-devnet-32v2.onrender.com", "health": "/health"},
 }
 
 SCHEMA = """

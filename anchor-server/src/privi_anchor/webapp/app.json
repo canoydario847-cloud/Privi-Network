@@ -5,7 +5,7 @@
  "short_name": "Anchor",
  "tagline": "Prove a file existed, without showing it to anyone.",
  "intro": "Fingerprint files on your device, anchor them on the Base blockchain, and get a certificate you can hand to someone else. One anchor can cover a whole folder.",
- "site": "https://privi-hub.onrender.com",
+ "site": "https://privi-hub-s757.onrender.com",
  "key": {
   "mode": "bearer",
   "label": "Anchor API key",

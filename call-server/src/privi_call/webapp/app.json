@@ -5,7 +5,7 @@
  "short_name": "Privi Call",
  "tagline": "Check before you dial.",
  "intro": "One answer before each call: is the number on your do-not-call list, is it within calling hours where the person is, and do you hold the consent the call needs. Numbers are stored only as scrambled fingerprints.",
- "site": "https://privi-call.onrender.com",
+ "site": "https://privi-call-e3rb.onrender.com",
  "key": {
   "mode": "arg",
   "arg": "call_key",

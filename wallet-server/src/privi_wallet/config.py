@@ -22,7 +22,7 @@ def _dec(name: str, default: str) -> Decimal:
 @dataclass
 class Settings:
     db_path: str = field(default_factory=lambda: os.getenv("WALLET_DB_PATH", "wallet.db"))
-    public_url: str = field(default_factory=lambda: os.getenv("WALLET_PUBLIC_URL", "https://privi-wallet.onrender.com"))
+    public_url: str = field(default_factory=lambda: os.getenv("WALLET_PUBLIC_URL", "https://privi-wallet-dtte.onrender.com"))
     # Custodial wallets (Privi holds the keys) stay OFF until this is set to 1 on purpose.
     custody: bool = field(default_factory=lambda: _flag("WALLET_CUSTODY"))
     # Secret that encrypts every stored private key. Losing it means losing every custodial wallet: back it up.
@@ -30,7 +30,7 @@ class Settings:
     rpc_url: str = field(default_factory=lambda: os.getenv("WALLET_RPC_URL", "https://mainnet.base.org"))
     chain_id: int = field(default_factory=lambda: int(os.getenv("WALLET_CHAIN_ID", "8453")))
     explorer: str = field(default_factory=lambda: os.getenv("WALLET_EXPLORER", "https://basescan.org"))
-    ledger_url: str = field(default_factory=lambda: os.getenv("WALLET_LEDGER_URL", "https://privi-ledger.onrender.com"))
+    ledger_url: str = field(default_factory=lambda: os.getenv("WALLET_LEDGER_URL", "https://privi-ledger-aqe5.onrender.com"))
     # Per-account limits on what can leave a custodial wallet in any rolling 24 hours.
     max_send_privi: Decimal = field(default_factory=lambda: _dec("WALLET_MAX_SEND_PRIVI_24H", "100000"))
     max_send_usdc: Decimal = field(default_factory=lambda: _dec("WALLET_MAX_SEND_USDC_24H", "500"))

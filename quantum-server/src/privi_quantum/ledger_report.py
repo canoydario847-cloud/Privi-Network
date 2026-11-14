@@ -37,7 +37,7 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterable
 
-DEFAULT_LEDGER_URL = "https://privi-ledger.onrender.com"
+DEFAULT_LEDGER_URL = "https://privi-ledger-aqe5.onrender.com"
 SETTLEMENT_HEADER = b"x-privi-ledger-settlement"
 MUTATING = ("POST", "PUT", "PATCH", "DELETE")
 MAX_CAPTURE = 1_000_000            # request bytes kept for hashing/parsing; larger bodies are reported unhashed

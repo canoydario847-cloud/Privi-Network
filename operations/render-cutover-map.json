@@ -1,0 +1,31 @@
+{
+  "workspace": "tea-dbr1aqjrjlhs73ccmcbg",
+  "url_map": {
+    "https://privi-car-trace.onrender.com": "https://privi-car-trace-jidv.onrender.com",
+    "https://privi-car-demo.onrender.com": "https://privi-car-demo-unaq.onrender.com",
+    "https://privi-agent-evidence-demo.onrender.com": "https://privi-agent-evidence-demo-tfpi.onrender.com",
+    "https://privi-devnet.onrender.com": "https://privi-devnet-32v2.onrender.com",
+    "https://privi-wallet.onrender.com": "https://privi-wallet-dtte.onrender.com",
+    "https://privi-life-ai-staging.onrender.com": "https://privi-life-ai-staging-sfez.onrender.com",
+    "https://privi-call.onrender.com": "https://privi-call-e3rb.onrender.com",
+    "https://privi-quantum.onrender.com": "https://privi-quantum-vvmj.onrender.com",
+    "https://privi-guard-814f.onrender.com": "https://privi-guard-u6ok.onrender.com",
+    "https://privi-hub.onrender.com": "https://privi-hub-s757.onrender.com",
+    "https://privi-live.onrender.com": "https://privi-live-2k68.onrender.com",
+    "https://privi-developers.onrender.com": "https://privi-developers-s4jw.onrender.com",
+    "https://privi-chainflow.onrender.com": "https://privi-chainflow-jkvy.onrender.com",
+    "https://privi-gov.onrender.com": "https://privi-gov-pabc.onrender.com",
+    "https://privi-mandates.onrender.com": "https://privi-mandates-4z3h.onrender.com",
+    "https://privi-kya.onrender.com": "https://privi-kya-4vy2.onrender.com",
+    "https://privi-passport.onrender.com": "https://privi-passport-uvfm.onrender.com",
+    "https://privi-fortress.onrender.com": "https://privi-fortress-2tta.onrender.com",
+    "https://privi-world.onrender.com": "https://privi-world-ywf5.onrender.com",
+    "https://privi-verify.onrender.com": "https://privi-verify-s4jb.onrender.com",
+    "https://privi-ledger.onrender.com": "https://privi-ledger-aqe5.onrender.com",
+    "https://privi-anchor.onrender.com": "https://privi-anchor-zsbk.onrender.com",
+    "https://privi-discovery.onrender.com": "https://privi-discovery-6lue.onrender.com",
+    "https://jose-backend-vbuu.onrender.com": "https://jose-backend-075d.onrender.com",
+    "https://jose-site.onrender.com": "https://jose-site-21hs.onrender.com"
+  },
+  "data_migration_verified": false
+}

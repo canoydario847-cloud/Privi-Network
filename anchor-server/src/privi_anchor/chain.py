@@ -49,7 +49,7 @@ class JsonRpcChain:
         req = urllib.request.Request(
             self.rpc_url,
             data=json.dumps({"jsonrpc": "2.0", "id": self._id, "method": method, "params": params}).encode(),
-            headers={"Content-Type": "application/json", "User-Agent": f"privi-anchor/{_VERSION} (+https://privi-anchor.onrender.com)"},
+            headers={"Content-Type": "application/json", "User-Agent": f"privi-anchor/{_VERSION} (+https://privi-anchor-zsbk.onrender.com)"},
             method="POST",
         )
         try:

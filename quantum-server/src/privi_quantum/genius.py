@@ -38,7 +38,7 @@ from .humans import HumanError, HumanRegistry, b64u, unb64u
 
 EFFECTIVE_DATE = "2027-01-18"
 DASP_DEADLINE = "2028-07-18"
-PLAN = {"plan": "Privi GENIUS Reserve Seal", "usd_per_month": 499, "pay": "https://privi-hub.onrender.com/pay/#genius"}
+PLAN = {"plan": "Privi GENIUS Reserve Seal", "usd_per_month": 499, "pay": "https://privi-hub-s757.onrender.com/pay/#genius"}
 LICENSE_STATUSES = ("permitted", "applied", "foreign_comparable", "not_permitted", "unknown")
 ROLES = ("CEO", "CFO", "EXAMINER")
 ENROLL_TTL_S = 7 * 86400
