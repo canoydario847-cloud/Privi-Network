@@ -36,7 +36,7 @@ if (require.main === module) {
       const m = JSON.parse(fs.readFileSync(path.resolve(file), 'utf8'));
       const errors = check(m);
       if (errors.length) { console.error('NO-GO: ' + errors.join('; ')); process.exitCode = 1; }
-      else { console.log('Manifest structure complete; evidence unverified. NO LAUNCH AUTHORIZED.'); }
+      else { console.error('NO-GO: manifest structure complete but evidence and launch authorization remain unverified.'); process.exitCode = 1; }
     } catch (e) { console.error('NO-GO: ' + e.message); process.exitCode = 1; }
   }
 }
