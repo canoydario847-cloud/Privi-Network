@@ -1,0 +1,28 @@
+name: Shared OAuth security tests
+on:
+  pull_request:
+    paths:
+      - 'shared-auth/**'
+      - '.github/workflows/shared-oauth-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'shared-auth/**'
+      - '.github/workflows/shared-oauth-tests.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax validation
+        run: |
+          node --check shared-auth/oauth21.mjs
+          node --check shared-auth/mcp-metadata.mjs
+      - name: Unit tests
+        run: node --test shared-auth/*.test.mjs
