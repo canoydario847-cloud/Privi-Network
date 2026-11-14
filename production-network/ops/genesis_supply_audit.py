@@ -105,6 +105,13 @@ def no_duplicate_keys(pairs):
     return result
 
 
+def load_candidate_genesis(path):
+    """Read bounded, strictly parsed candidate data; never trust a genesis path blindly."""
+    if path.stat().st_size > 64 * 1024 * 1024:
+        raise ValueError("genesis exceeds 64 MiB offline audit limit")
+    return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=no_duplicate_keys)
+
+
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--genesis",required=True,type=Path)
@@ -112,7 +119,7 @@ def main():
     ap.add_argument("--chain-id",required=True)
     args=ap.parse_args()
     try:
-        result=audit(json.loads(args.genesis.read_text(encoding="utf-8"), object_pairs_hook=no_duplicate_keys),args.denom,args.chain_id)
+        result=audit(load_candidate_genesis(args.genesis),args.denom,args.chain_id)
     except (OSError, UnicodeError, ValueError, AttributeError) as e:
         print(json.dumps({"ok": False, "error": str(e)}))
         return 1
