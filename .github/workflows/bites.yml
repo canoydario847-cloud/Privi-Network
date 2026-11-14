@@ -1,0 +1,17 @@
+name: Bites profile and Ledger checks
+on:
+  push:
+    paths: ['bites/**', '.github/workflows/bites.yml']
+  pull_request:
+    paths: ['bites/**', '.github/workflows/bites.yml']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test bites/bites.test.mjs
