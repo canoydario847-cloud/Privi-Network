@@ -8,6 +8,7 @@ on any EVM chain and costs only intrinsic gas.
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 import urllib.error
@@ -69,6 +70,18 @@ class JsonRpcChain:
 
     def balance_wei(self) -> int:
         return int(self._rpc("eth_getBalance", [self.address, "latest"]), 16)
+
+    def erc20_balance_of(self, token_address: str) -> int:
+        """Read an ERC-20 balance without signing or broadcasting an onchain transaction."""
+        if not re.fullmatch(r"0x[0-9a-fA-F]{40}", token_address):
+            raise RpcError("invalid ERC-20 token address")
+        if not re.fullmatch(r"0x[0-9a-fA-F]{40}", self.address):
+            raise RpcError("invalid anchor signer address")
+        data = "0x70a08231" + self.address[2:].lower().zfill(64)
+        result = self._rpc("eth_call", [{"to": token_address, "data": data}, "latest"])
+        if not isinstance(result, str) or not re.fullmatch(r"0x[0-9a-fA-F]{1,64}", result):
+            raise RpcError("malformed ERC-20 balance result")
+        return int(result, 16)
 
     NONCE_ERRORS = ("underpriced", "nonce too low", "already known", "known transaction")
 
