@@ -22,6 +22,12 @@ These flags stop repeated unfunded ETH transfers; they **do not** stop signed Ma
 
 Do not disable the underlying service, delete the onchain receipt queue, or put fake tx hashes into Ledger.
 
+## Read-only signer USDC readiness
+
+The Privi Anchor public `/status` endpoint now checks the signing wallet's **native Base USDC balance** with `eth_call(balanceOf)`, separately from its ETH balance. It reports `base_usdc_balance` in six-decimal USDC units, `usdc_paymaster_funding_possible`, and explicitly `paymaster_transaction_enabled: false`. Checking a balance costs no network gas and does not require the wallet's private key. A positive USDC balance alone is **not** proof that Pimlico/Circle accepts this account or that an approved paymaster is configured.
+
+When `ANCHOR_BASE_TX_ENABLED=0`, external Anchor readiness reports `external_anchor_paused_awaiting_paymaster` rather than claiming usable transaction signing. The startup genesis-anchor loop is also suppressed, including if ETH later arrives unexpectedly.
+
 ## USDC gas option A — permissionless paymaster
 
 Circle Paymaster supports Base and ERC-4337 compatible accounts, including an EIP-7702-upgraded EOA. The paymaster pays network gas in ETH and collects the fee in **native USDC on Base** (typically adding a percentage surcharge). A bundler submits the user operation. The regular EOA transaction code cannot simply switch fee currency; this is a different transaction protocol.
