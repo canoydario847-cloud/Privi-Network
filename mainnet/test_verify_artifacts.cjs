@@ -33,3 +33,20 @@ test('matching hash but malformed genesis JSON fails closed',()=>fixture(x=>{
  x.m.genesis_sha256=digest(fs.readFileSync(x.genesis));
  assert.ok(verify(x.m,x).some(e=>e.includes('invalid genesis JSON')));
 }));
+
+test('rejects oversized sparse genesis before buffering it',()=>fixture(x=>{
+ const fd=fs.openSync(x.genesis,'w');
+ try{fs.ftruncateSync(fd,64*1024*1024+1);}finally{fs.closeSync(fd);}
+ assert.ok(verify(x.m,x).some(e=>e.includes('64 MiB')));
+}));
+test('streams multi-megabyte binary without changing its SHA-256 result',()=>fixture(x=>{
+ const binaryBytes=Buffer.alloc(5*1024*1024,0x52);
+ fs.writeFileSync(x.binary,binaryBytes);
+ x.m.binary_sha256=digest(binaryBytes);
+ assert.deepEqual(verify(x.m,x),[]);
+}));
+test('rejects nonregular artifacts, including directories',()=>fixture(x=>{
+ const directory=path.join(x.dir,'not-a-binary');
+ fs.mkdirSync(directory);
+ assert.ok(verify(x.m,{genesis:x.genesis,binary:directory}).some(e=>e.includes('regular file')));
+}));
