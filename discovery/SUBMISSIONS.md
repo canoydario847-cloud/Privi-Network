@@ -1,5 +1,7 @@
 # Submissions — copy-paste pack
 
+> **November 15, 2026 update:** For Glama, the current 6-server catalog, migrated Render endpoints, payment limitations, and existing listing URLs are in **[GLAMA_PUBLICATION_2026-11-15.md](GLAMA_PUBLICATION_2026-11-15.md)**. Earlier descriptions below may contain retired addresses, unverified on-chain claims, or stale prices; use the updated catalog for Glama submissions and do not duplicate existing connector records.
+
 Everything below is pre-written. Each one takes 2–5 minutes and needs your own sign-in, which is why it isn't automated. Order is by expected payoff.
 
 ## Already done automatically
