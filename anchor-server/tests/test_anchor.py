@@ -329,3 +329,58 @@ def test_base_eth_submission_paused_without_disabling_receipts(store, monkeypatc
     anyio.run(go)
 
 
+
+def test_base_usdc_balance_helper_never_sends_transaction():
+    """ERC-20 balanceOf uses eth_call, not ETH gas or a wallet signature."""
+    from privi_anchor.chain import JsonRpcChain, RpcError
+    c = JsonRpcChain.__new__(JsonRpcChain)
+    c.address = WALLET
+    calls = []
+
+    def rpc(method, params):
+        calls.append((method, params))
+        assert method == "eth_call"
+        assert params[0]["to"].lower() == "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
+        assert params[0]["data"].startswith("0x70a08231")
+        assert params[1] == "latest"
+        return hex(123456)
+
+    c._rpc = rpc
+    assert c.erc20_balance_of("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913") == 123456
+    assert len(calls) == 1
+    with pytest.raises(RpcError):
+        c.erc20_balance_of("wrong-token")
+    assert len(calls) == 1
+
+
+def test_paused_base_status_reports_usdc_separately(store, monkeypatch):
+    from starlette.testclient import TestClient
+    monkeypatch.setenv("ANCHOR_BASE_TX_ENABLED", "0")
+    chain = FakeChain()
+    chain.erc20_balance_of = lambda token: 2500000
+    s = build_server(Settings(), chain, store)
+    with TestClient(s.streamable_http_app(host="0.0.0.0", stateless_http=True, json_response=True)) as http:
+        response = http.get("/status")
+        assert response.status_code == 200
+        info = response.json()
+        assert info["base_usdc_balance"] == "2.500000"
+        assert info["base_usdc_balance_atomic"] == "2500000"
+        assert info["usdc_paymaster_funding_possible"] is True
+        assert info["anchoring_enabled"] is False
+        assert info["paymaster_transaction_enabled"] is False
+        assert info["sponsor_approval_verified"] is False
+        readiness = http.get("/ready")
+        assert readiness.status_code == 503
+        assert "external_anchor_paused_awaiting_paymaster" in readiness.json()["blockers"]
+
+
+def test_genesis_anchor_never_spends_while_paused(store, monkeypatch):
+    from privi_anchor.server import startup_check
+    monkeypatch.setenv("ANCHOR_BASE_TX_ENABLED", "0")
+    monkeypatch.setenv("ANCHOR_GENESIS", "1")
+    chain = FakeChain()
+    chain.remote_chain_id = lambda: 8453
+    startup_check(Settings(), chain, store)
+    assert not chain.txs
+    assert store.confirmed_on_current_chain() == 0
+
