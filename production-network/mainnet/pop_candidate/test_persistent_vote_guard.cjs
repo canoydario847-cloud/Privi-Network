@@ -176,3 +176,37 @@ test("research-only network and false committee are refused",()=>{
     assert.throws(()=>reservePosition(dir,another,p.height,v.id,p.blockHash),/Native Privi research/);
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+for (const failedKind of ["file", "directory"]) {
+  test(`retry after ${failedKind} fsync failure cannot release a signature until durable`,()=>{
+    const f=fixture(),dir=tempRoot(),p=f.proposal();
+    const voter=f.committee.validators[0];
+    const input={lockDirectory:dir,committee:f.committee,proposal:p,
+      privateKey:f.keysById.get(voter.id)};
+    const realSync=fs.fsyncSync;
+    const calls=[];
+    let failing=true;
+    fs.fsyncSync=(fd)=>{
+      const kind=fs.fstatSync(fd).isDirectory()?"directory":"file";
+      calls.push(kind);
+      if(failing && kind===failedKind) throw new Error("injected fsync failure");
+      return realSync(fd);
+    };
+    try {
+      assert.throws(()=>signCommitWithResearchLock(input),/injected fsync failure/);
+      assert.equal(fs.readdirSync(dir).length,1,"failed write retains lock");
+      calls.length=0;
+      assert.throws(()=>signCommitWithResearchLock(input),/injected fsync failure/,
+        "existing readable record must not bypass durability failure");
+      failing=false;
+      calls.length=0;
+      assert.ok(signCommitWithResearchLock(input).signature);
+      assert.deepEqual(calls,["file","directory"]);
+      assert.throws(()=>signCommitWithResearchLock({...input,
+        proposal:f.proposal(p.height,1,"0x"+"d".repeat(64))}),/equivocation/);
+    } finally {
+      fs.fsyncSync=realSync;
+      fs.rmSync(dir,{recursive:true,force:true});
+    }
+  });
+}
