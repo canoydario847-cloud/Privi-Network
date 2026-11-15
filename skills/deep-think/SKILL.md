@@ -7,7 +7,7 @@ description: Plan, test and review coding changes carefully on the first attempt
 
 **Owner:** Privi World Corp. **Purpose:** reduce avoidable code defects through a requirements-first, test-first workflow. No tool guarantees zero mistakes or has access to a model's private reasoning.
 
-**Pricing design:** First plan and first code snapshot review are free. A new, changed snapshot of the same task is a redo: the Privi MCP tool quotes **$0.01 USDC on Base via x402**. **Never sign or spend without explicit authorization from the human or account owner.** This is opt-in; it cannot compel unaffiliated Codex, Claude or Grok users to pay. Billing is not live until the service is deployed, CDP facilitator credentials and recipient are configured, subscription entitlements are reconciled, and a real settlement is verified.
+**Pricing design:** First plan and first code snapshot review are free. A new, changed snapshot of the same task is a redo: the Privi MCP tool quotes **$0.01 USDC on Base via x402**. **Never sign or spend without explicit authorization from the human or account owner.** This is opt-in; it cannot compel unaffiliated Codex, Claude or Grok users to pay. Billing is disabled by default with `DEEP_THINK_PAID_REDOS_ENABLED=0`. Only enable it after deployment, CDP facilitator credentials and recipient are verified, unlimited-plan entitlements are reconciled, and a real authorized staging settlement is verified.
 
 ## When to use
 
