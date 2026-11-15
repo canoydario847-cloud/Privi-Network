@@ -31,6 +31,7 @@ from .store import AnchorStore
 __version__ = "0.5.0"
 SOURCE = "https://github.com/canoydario847-cloud/Privi-Network/tree/main/anchor-server"
 MAX_HASHES = 100
+BASE_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 
 INSTRUCTIONS = """\
 Privi Anchor puts a permanent, timestamped proof that some data existed on chain:
@@ -149,6 +150,13 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
                 info["wallet_balance"] = str(await anyio.to_thread.run_sync(chain.balance_wei))
             except RpcError as e:
                 info["chain_error"] = str(e)
+            if settings.chain_id == 8453 and callable(getattr(chain, "erc20_balance_of", None)):
+                try:
+                    bal = await anyio.to_thread.run_sync(chain.erc20_balance_of, BASE_USDC)
+                    info["base_usdc_balance_atomic"] = str(bal)
+                    info["base_usdc_balance"] = f"{bal // 1_000_000}.{bal % 1_000_000:06d}"
+                except (RpcError, ValueError) as e:
+                    info["base_usdc_error"] = str(e)[:160]
         return info
 
     @mcp.tool(title="Hash text", annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False))
@@ -320,6 +328,8 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
             store.stats()
         except Exception:
             blockers.append("database_unavailable")
+        if os.getenv("ANCHOR_BASE_TX_ENABLED", "1") != "1":
+            blockers.append("external_anchor_paused_awaiting_paymaster")
         if chain is None:
             blockers.append("anchor_signer_not_configured")
         else:
@@ -356,6 +366,16 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
                     info["chain_reachable"] = True
                 except RpcError as e:
                     info.update(chain_reachable=False, chain_error=str(e)[:200])
+                if settings.chain_id == 8453 and callable(getattr(chain, "erc20_balance_of", None)):
+                    try:
+                        usdc = await anyio.to_thread.run_sync(chain.erc20_balance_of, BASE_USDC)
+                        info["base_usdc_balance_atomic"] = str(usdc)
+                        info["base_usdc_balance"] = f"{usdc // 1_000_000}.{usdc % 1_000_000:06d}"
+                        info["usdc_paymaster_funding_possible"] = usdc > 0
+                    except (RpcError, ValueError) as e:
+                        info["base_usdc_error"] = str(e)[:160]
+                info["paymaster_transaction_enabled"] = False
+                info["sponsor_approval_verified"] = False
             info["checked_at"] = int(now)
             status_cache.clear()
             status_cache.update(at=now, info=info)
@@ -421,12 +441,18 @@ def startup_check(settings: Settings, chain: JsonRpcChain, store: AnchorStore) -
     except Exception as e:
         log(f"startup check error: {e}")
         return
+    if os.getenv("ANCHOR_BASE_TX_ENABLED", "1") != "1":
+        log("ETH-only genesis anchor disabled while external Base transactions are paused")
+        return
     if os.getenv("ANCHOR_GENESIS") == "1" and not store.confirmed_on_current_chain():
         import threading
         threading.Thread(target=_genesis, args=(settings, chain, store, log), daemon=True).start()
 
 
 def _genesis(settings: Settings, chain: JsonRpcChain, store: AnchorStore, log) -> None:
+    if os.getenv("ANCHOR_BASE_TX_ENABLED", "1") != "1":
+        log("genesis anchor skipped: ETH-funded broadcasts disabled")
+        return
     for _ in range(60):  # up to ~20 minutes for gas to arrive
         try:
             if chain.balance_wei() > 0:
