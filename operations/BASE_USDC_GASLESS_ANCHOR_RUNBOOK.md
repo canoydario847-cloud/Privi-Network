@@ -61,6 +61,21 @@ The first EIP-7702 authorization *persists as smart-account delegation*. It is s
 
 If the service signer has neither ETH nor USDC, an **approved sponsor paymaster policy** can cover gas from a provider's account or promotional credits. This still requires provider setup and bounded sponsorship, not magically free perpetual chain access. In the script this is `--mode sponsored`, requiring `PIMLICO_SPONSORSHIP_POLICY_ID`, with transaction target and daily budget limited in the provider dashboard. Coinbase CDP offers a separate sponsorship product; do not assume an x402 facilitator key automatically creates a Paymaster account.
 
+## Read-only independent UserOperation proof checker
+
+New `anchor-server/usdc-paymaster/verify.mjs` checks an already-mined, Base EntryPoint 0.8 `handleOps` transaction **without** API keys, signatures or transfers. It verifies chain ID 8453, canonical transaction/block/receipt, two confirmations by default, EIP-7702 delegation to the pinned Simple7702Account implementation, successful `UserOperationEvent` matched by the entrypoint-computed operation hash, and exact `PRVA` Merkle root passed to the approved zero-value destination. A batched Base-USDC paymaster approval must have the paymaster address as spender and no more than 0.05 USDC allowance; arbitrary extra calls are rejected.
+
+```sh
+cd anchor-server/usdc-paymaster
+npm install --ignore-scripts
+npm test
+node verify.mjs --root <64_HEX_DIGEST> --tx <BASE_TX_HASH> --userop <USER_OPERATION_HASH> --sender <PUBLIC_ADDRESS>
+```
+
+On success it outputs `verified: true` with an onchain proof; it **does not assert that gas was actually paid in USDC**, that a sponsor paid, or that a customer made a payment. The verifier has no wallet access and cannot cause spending. For now it is a separate CLI and **is not wired into legacy anchor_verify**; do not treat old self-transaction proof and new UserOperation proofs as interchangeable.
+
+No transaction is known to have been submitted through this new paymaster path yet, so this is tested verification logic, not proof of a completed production anchor.
+
 ## Production launch gates before re-enabling onchain settlement
 
 1. Verify sponsor or USDC paymaster availability and a cost limit per checkpoint. Check the **Anchor signer address**, not the personal sales wallet; public Base balance may be zero.
