@@ -16,11 +16,15 @@ function check(m) {
     if (typeof m[k] !== 'string' || !HEX64.test(m[k])) errors.push('invalid ' + k);
   }
   const signoffs = m.validator_signoffs;
-  if (!Array.isArray(signoffs) || signoffs.length < 4 ||
-      signoffs.some(s => !s || typeof s !== 'object' || Array.isArray(s) ||
-        typeof s.validator_id !== 'string' || !s.validator_id.trim() ||
-        typeof s.signature_reference !== 'string' || !s.signature_reference.trim()) ||
-      (Array.isArray(signoffs) && new Set(signoffs.map(s => s && s.validator_id)).size !== signoffs.length)) {
+  const validSignoffs = Array.isArray(signoffs) && signoffs.length >= 4 &&
+      signoffs.every(s => s && typeof s === 'object' && !Array.isArray(s) &&
+        typeof s.validator_id === 'string' && s.validator_id.trim() &&
+        s.validator_id === s.validator_id.trim() &&
+        typeof s.signature_reference === 'string' && s.signature_reference.trim() &&
+        s.signature_reference === s.signature_reference.trim());
+  if (!validSignoffs ||
+      new Set(signoffs.map(s => s.validator_id)).size !== signoffs.length ||
+      new Set(signoffs.map(s => s.signature_reference)).size !== signoffs.length) {
     errors.push('need four distinct nonblank validator signoff references');
   }
   for (const k of ['audit_approval','rehearsal_report','rollback_plan']) {
