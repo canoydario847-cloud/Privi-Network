@@ -70,8 +70,7 @@ test("reject changed root, forged event, wrong delegation and outer failed tx",a
     ({proof})=>{proof.root="cd".repeat(32);},
     ({client})=>{client.readContract=async()=> "0x"+"44".repeat(32);},
     ({client})=>{client.getBytecode=async()=> "0xef0100"+"00".repeat(20);},
-    ({client})=>{client.getTransactionReceipt=async()=>({...mock().client.getTransactionReceipt && {}});},
-  ].slice(0,3)) {
+  ]) {
     const v=mock();mutate(v);await assert.rejects(verifyPriviUserOp(v.proof,v.client));
   }
   const bad=mock({receipt:{status:"reverted"}});
