@@ -2022,7 +2022,10 @@ def main() -> None:
     bootstrap(ledger)
     mcp = build_server(settings, ledger)
     key = os.getenv("LEDGER_ANCHOR_KEY", "")
-    if key:
+    # Zero-ETH / Master Ledger mode: keep signed local proofs and pending checkpoints,
+    # but do not broadcast Base transactions until a sponsored or USDC-paymaster route is verified.
+    external_anchors_enabled = os.getenv("LEDGER_EXTERNAL_ANCHORS", "1") == "1"
+    if key and external_anchors_enabled:
         client = HttpAnchorClient(os.getenv("LEDGER_ANCHOR_URL", DEFAULT_ANCHOR_URL), key, headers=_settlement_headers())
         cps = Checkpoints(ledger._db, ledger._lock)
         fort = mcp.privi_fortress
@@ -2046,7 +2049,7 @@ def main() -> None:
         start_loop(lambda: cps.run_once(ledger.heads(), client, "privi-ledger"),
                    float(os.getenv("LEDGER_ANCHOR_INTERVAL", "300")), "privi-ledger")
     qlg = mcp.privi_qledger
-    qclient = client if key else None
+    qclient = client if key and external_anchors_enabled else None
 
     def seal_and_settle() -> int:
         rec = qlg.seal(force=qlg.height() < 0)
