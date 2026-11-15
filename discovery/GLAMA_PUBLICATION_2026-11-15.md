@@ -44,6 +44,25 @@ Use these texts with **Add Server → Hosted endpoint** or when editing the **ex
 - **Commercial buyer offers:** Existing separate Stripe links advertise three human-delivered reviews at **$19.99 one time each** and **Privi Pro Unlimited at $35 one time**. These are **not** a working automated MCP-credit purchase. See [official Privi sales page](https://privi-services.onrender.com/); buyers must coordinate activation/fulfillment.
 - **Native Privi financial mainnet:** Not launched. Do not describe Privi's own chain as an active financial mainnet.
 
+## Glama quality and search-visibility gate (publisher dashboard)
+
+Glama's published [indexing methodology](https://glama.ai/mcp/methodology) says approved GitHub MCP servers are built in an isolated environment and must pass reproducible build + MCP introspection checks before being distributed in search. Its [release instructions](https://glama.ai/blog/2026-03-15-how-to-make-a-release) require a separate Glama build/release, **not merely a GitHub tag/release**.
+
+1. Open [Privi Network → Dockerfile](https://glama.ai/mcp/servers/canoydario847-cloud/Privi-Network/admin/dockerfile) while logged in as the authorized Glama publisher. The repo is a **monorepo**, not a single Python application; Glama must select a runnable subfolder explicitly.
+2. A simple buildable representative choice is the public **Privi Verify** application in `mcp-server/`, which already provides an installable `pyproject.toml` and a `--stdio` CLI. Suggested builder inputs (not an independently tested Glama deployment):
+   - Python: **3.13**
+   - Install/build step from repository root: `python -m pip install --no-cache-dir ./mcp-server`
+   - Command / CMD (stdio mode): `privi-verify-mcp --stdio`
+   - Temporary database: `PRIVI_DB_PATH=/tmp/privi-glama-inspect.db`
+   - Never supply production private keys, Stripe credentials, or signing secrets to a public build.
+   - **Important:** Privi Verify's `Settings.validate()` requires a valid `PRIVI_PAY_TO` address if payments are enabled. Do not set `PRIVI_PAYMENTS_ENABLED=0` to make a public release pass: that would risk free execution of paid tools. Production-ready payment settings and a fail-closed inspection profile must be confirmed before publishing a deployable release. This example alone is *not a ready-to-publish production configuration*.
+3. Click **Deploy** in the Glama dashboard to run the builder/inspection. Inspect the build logs and verify `initialize`, `tools/list`, plus any resources/prompts discovery. Address failures without bypassing paid execution/authentication.
+4. After passing the check, use **Make Release → Create & Publish Release** on Glama, if the intended deployed service and its public listing description agree. Running only Verify does **not** expose the other five Privi endpoints automatically. Avoid implying a Verify-only image is a full Privi Network execution gateway.
+5. Recheck [Discovery score](https://glama.ai/mcp/servers/canoydario847-cloud/Privi-Network/admin/score), published search visibility, tool definitions, and category metadata. Do not claim the score improved until Glama reports a new result.
+6. For *hosted connectors*, use the existing connector **Admin → Test Profile → Test Connection**, then confirm healthy `initialize`/tool discovery. A passing source build does not automatically repair a stale **remote connector URL**.
+
+Publisher note: GitHub's `glama.json` currently has the documented schema + maintainer identity; it does **not** configure the separate Glama build/release dashboard. Do not submit duplicate server records in an attempt to raise a score.
+
 ## Publisher action checklist
 
 1. Sign into [Glama's connectors directory](https://glama.ai/mcp/connectors) and locate the **existing** Privi entry for each product (links above).
