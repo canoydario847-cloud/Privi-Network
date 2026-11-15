@@ -3,8 +3,8 @@
   "name": "io.github.canoydario847-cloud/privi-ledger",
   "title": "Privi Ledger — Recovery Evaluation",
   "description": "Evaluation-only ledger MCP. Temporary storage; not durable audit evidence. Payments disabled.",
-  "version": "0.14.1",
-  "websiteUrl": "https://privi-ledger-mcp-recovery.onrender.com",
+  "version": "0.14.2",
+  "websiteUrl": "https://privi-ledger-aqe5.onrender.com",
   "repository": {
     "url": "https://github.com/canoydario847-cloud/Privi-Network",
     "source": "github",
@@ -13,7 +13,7 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://privi-ledger-mcp-recovery.onrender.com/mcp"
+      "url": "https://privi-ledger-aqe5.onrender.com/mcp"
     }
   ]
 }
