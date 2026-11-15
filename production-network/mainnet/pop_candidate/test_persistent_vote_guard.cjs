@@ -12,6 +12,8 @@ const {
 const {
   recordFor,lockedFileName,reservePosition,signCommitWithResearchLock
 }=require("./persistent_vote_guard.cjs");
+const {researchBlockHash,verifyResearchBlockProposal,signCommitWithResearchBlock}
+  =require("./block_payload.cjs");
 
 const makeKey=()=>{
   const pair=crypto.generateKeyPairSync("ed25519");
@@ -53,6 +55,72 @@ function tempRoot(){
   fs.chmodSync(dir,0o700);
   return dir;
 }
+
+function payload(){
+  return {height:5,previousBlockHash:"0x"+"b".repeat(64),
+    transactions:[Buffer.from("first transaction").toString("base64"),
+      Buffer.from("second transaction").toString("base64")]};
+}
+
+test("payload commitment binds transaction order and all block context",()=>{
+  const f=fixture(),block=payload(),expected=researchBlockHash(f.committee,block);
+  assert.equal(expected,researchBlockHash(f.committee,structuredClone(block)));
+  for(const changed of [{...block,height:6},
+    {...block,previousBlockHash:"0x"+"d".repeat(64)},
+    {...block,transactions:[...block.transactions].reverse()},
+    {...block,transactions:block.transactions.slice(1)}]){
+    assert.notEqual(expected,researchBlockHash(f.committee,changed));
+  }
+  for(const changed of [{...f.committee,epoch:2},
+    {...f.committee,genesisHash:"0x"+"e".repeat(64)},
+    {...f.committee,chainId:"privi-pop-research-other"}]){
+    assert.notEqual(expected,researchBlockHash(changed,block));
+  }
+});
+
+test("payload signer rejects missing or altered body before reserving a vote",()=>{
+  const f=fixture(),dir=tempRoot(),block=payload();
+  const p=f.proposal(5,0,researchBlockHash(f.committee,block));
+  const input={lockDirectory:dir,committee:f.committee,proposal:p,
+    privateKey:f.keysById.get(f.committee.validators[0].id)};
+  try {
+    assert.throws(()=>signCommitWithResearchBlock(input),/Research block must contain/);
+    assert.throws(()=>signCommitWithResearchBlock({...input,
+      block:{...block,transactions:[]}}),/does not match/);
+    assert.equal(fs.readdirSync(dir).length,0);
+    const checked=verifyResearchBlockProposal(f.committee,p,block);
+    assert.equal(checked.executionVerified,false);
+    assert.equal(checked.productionConsensus,false);
+    const vote=signCommitWithResearchBlock({...input,block});
+    assert.ok(vote.signature);
+    assert.equal(fs.readdirSync(dir).length,1);
+    assert.deepEqual(signCommitWithResearchBlock({...input,block}),vote);
+  } finally {fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test("payload parser enforces canonical bytes, exact schema and bounded work",()=>{
+  const f=fixture(),block=payload();
+  for(const transactions of [[""],["YQ"],["YR=="],["Y Q=="],new Array(1),
+    Array(1025).fill("YQ=="),[Buffer.alloc(65537).toString("base64")],
+    Array(17).fill(Buffer.alloc(65536).toString("base64"))]){
+    assert.throws(()=>researchBlockHash(f.committee,{...block,transactions}));
+  }
+  assert.throws(()=>researchBlockHash(f.committee,{...block,extra:true}),/exactly/);
+  assert.throws(()=>researchBlockHash({...f.committee,mode:"mainnet"},block),/research committee/);
+  assert.throws(()=>researchBlockHash(f.committee,{...block,height:1.5}),/height/);
+  assert.ok(researchBlockHash(f.committee,{...block,transactions:[]}));
+  assert.ok(researchBlockHash(f.committee,{...block,
+    transactions:Array(16).fill(Buffer.alloc(65536).toString("base64"))}));
+});
+
+test("payload verification still requires authentic proposal and matching header",()=>{
+  const f=fixture(),block=payload(),digest=researchBlockHash(f.committee,block);
+  const p=f.proposal(5,0,digest);
+  assert.throws(()=>verifyResearchBlockProposal(f.committee,
+    {...p,signature:Buffer.alloc(64).toString("base64")},block),/forged/);
+  assert.throws(()=>verifyResearchBlockProposal(f.committee,f.proposal(6,0,digest),block),/does not match/);
+  assert.equal(verifyResearchBlockProposal(f.committee,f.proposal(5,1,digest),block).blockHash,digest);
+});
 
 test("3-of-4 genuine votes are reserved on disk before signature release",()=>{
   const f=fixture(),p=f.proposal(),dirs=[],votes=[];

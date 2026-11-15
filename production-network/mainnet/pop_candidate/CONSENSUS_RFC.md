@@ -157,3 +157,31 @@ Test only on disposable paths:
 
 Passing that test is *not* evidence that native Privi mainnet
 has implemented Point of Position validator finality.
+
+## Available block payload commitment experiment
+
+`block_payload.cjs` adds an opt-in `signCommitWithResearchBlock` entrypoint.
+It verifies the authenticated proposal and recomputes its block hash from the
+supplied body before calling the durable signing guard. The original low-level
+`signCommitWithResearchLock` remains a hash-only research primitive; callers
+requiring body checks must use the new entrypoint. Neither is a live validator.
+
+The exact body schema is `{height, previousBlockHash, transactions}`.
+Transactions are ordered, nonempty canonical base64 strings containing opaque
+bytes. Empty blocks are allowed. Limits are 1,024 transactions, 65,536 decoded
+bytes per transaction and 1,048,576 total decoded transaction bytes. Unknown
+body fields are rejected. Network readers still need their own request-size
+limits before JSON parsing; this API accepts already parsed in-process objects.
+
+The hash is SHA-256 over the existing domain-separated `signedMessage` with
+tag `block-payload-v1` and the ordered array `[chainId, genesisHash, epoch,
+height, previousBlockHash, transactions]`. Round and proposer remain bound
+by the proposal signature; the same block body can be proposed in another
+round. Chain, genesis, epoch, parent, height, bytes and transaction order are
+all bound by the payload hash. This is a new research format, not a conversion
+or verification of historical hash-only certificates.
+
+Successful verification explicitly returns `executionVerified: false` and
+`productionConsensus: false`. No transaction decoder, authorization, nonce,
+balance, state-root execution, network availability, fork choice or financial
+issuance is inferred from matching opaque bytes. Those remain separate work.
