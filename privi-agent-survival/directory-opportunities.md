@@ -9,7 +9,7 @@
 **Agent Hub:** https://privi-ai-21-gateway.onrender.com/agent-hub
 **Buyer landing page:** https://privi-services.onrender.com/mcp-server-owners/
 **Immediate independent self-check (free, no signup):** https://privi-services.onrender.com/try/
-**Revenue offers:** $99 human-delivered security review; $149 human-delivered evidence review; $19.99 integration consultation. These **do not include** automated API-credit purchase or issued API keys.
+**Revenue offers:** $19.99 human-delivered security review; $19.99 human-delivered evidence review; $19.99 integration consultation. These **do not include** automated API-credit purchase or issued API keys.
 
 ## Verified or high-priority directory channels
 
@@ -56,7 +56,7 @@
 
 1. Publish or claim only verified directory profiles; link each profile to the **MCP-maintainer specific sales page**.
 2. Track inquiries with separate source tags where your privacy policy and analytics permit; tool discovery alone is not a sale.
-3. Offer one clear service before broader platform claims — $99 tool/security review is a lower-friction starting point.
+3. Offer one clear service before broader platform claims — $19.99 tool/security review is a lower-friction starting point.
 4. Follow up only with someone who asked for details, or on an appropriate permission-based channel.
 5. Verify Stripe payment status independently before claiming a customer.
 
@@ -71,4 +71,4 @@
 © 2026 Privi World Corp. All rights reserved.
 
 
-**Current pricing note (November 14, 2026):** Three separately scoped human services are $19.99 one-time each, and a distinct $35 one-time Privi Pro Unlimited Stripe offer exists. Confirm Pro covered services, activation and fair-use restrictions before any purchase. Automated API-credit/key fulfillment is not operational; old $99/$149/$249 service prices and links are retired.
+**Current pricing note (November 14, 2026):** Three separately scoped human services are $19.99 one-time each, and a distinct $35 one-time Privi Pro Unlimited Stripe offer exists. Unlimited covers all Privi services; incomplete technical features still require activation. Automated API-credit/key fulfillment is not operational; old $19.99/$19.99/$249 service prices and links are retired.
