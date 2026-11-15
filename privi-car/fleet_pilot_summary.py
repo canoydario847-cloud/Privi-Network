@@ -30,12 +30,17 @@ def summarize(export):
         except (ValueError, TypeError, KeyError):
             ok = False
         valid += bool(ok)
+    # Pilot triage is advisory only: a clean local export is not proof of genuine telemetry.
+    failed = len(receipts) - valid
+    needs_review = failed > 0 or len(rejected) > 0
     return {
         "mode": "LOCAL_DEMO_NOT_ON_CHAIN",
         "submitted": len(receipts) + len(rejected),
         "consented_receipts": len(receipts),
         "verified_receipts": valid,
-        "failed_verification": len(receipts) - valid,
+        "failed_verification": failed,
+        "requires_operator_review": needs_review,
+        "review_reasons": ([ "receipt_integrity_failure" ] if failed else []) + ([ "rejected_input_rows" ] if rejected else []),
         "rejected_rows": len(rejected),
         "production_ready": False,
     }
