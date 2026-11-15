@@ -42,7 +42,7 @@ SETTLEMENT_HEADER = b"x-privi-ledger-settlement"
 MUTATING = ("POST", "PUT", "PATCH", "DELETE")
 MAX_CAPTURE = 1_000_000            # request bytes kept for hashing/parsing; larger bodies are reported unhashed
 MAX_RESPONSE_PEEK = 262_144
-MAX_OUTBOX = 50_000                # oldest events are dropped beyond this (the Ledger has been down for a long time)
+MAX_OUTBOX = 50_000                # retain oldest unacknowledged events; flag overflow rather than silently deleting
 BATCH = 100
 MAX_PER_MIN = int(os.getenv("PRIVI_LEDGER_REPORT_MAX_PER_MIN", "120"))
 _ID_SEG = re.compile(r"^(0x[0-9a-fA-F]{8,}|[0-9a-fA-F]{16,}|[0-9]{4,}|(?=[^/]*[0-9])[A-Za-z0-9_.:-]{12,})$")
@@ -77,8 +77,10 @@ class LedgerReporter:
         self._last_beat = 0.0
         self._window, self._in_window, self._throttled = 0, 0, 0
         self._thread: threading.Thread | None = None
-        self.sent = self.failed = 0
+        self.sent = self.failed = self.overflow = 0
         self.last_error: str | None = None
+        self._outbox_path = outbox_path
+        self._last_compaction = 0.0
         try:
             self._db = sqlite3.connect(outbox_path or ":memory:", check_same_thread=False)
             self._db.executescript(SCHEMA)
@@ -116,9 +118,14 @@ class LedgerReporter:
                     self._throttled += 1
                 else:
                     evs.append(self._event(kind, name, outcome, request_hash, meta))
+                queued = self._db.execute("SELECT COUNT(*) FROM outbox").fetchone()[0]
                 for ev in evs:
+                    if queued >= MAX_OUTBOX:
+                        self.overflow += 1
+                        self.last_error = "outbox full: new event not recorded; unacknowledged master-ledger evidence retained"
+                        break
                     self._db.execute("INSERT INTO outbox (event) VALUES (?)", (json.dumps(ev),))
-                self._db.execute("DELETE FROM outbox WHERE n <= (SELECT MAX(n) FROM outbox) - ?", (MAX_OUTBOX,))
+                    queued += 1
                 self._db.commit()
         except Exception as e:
             self.last_error = f"queue: {e}"[:200]
@@ -135,8 +142,30 @@ class LedgerReporter:
         with self._lock:
             return self._db.execute("SELECT COUNT(*) FROM outbox").fetchone()[0]
 
+    def compact_if_idle(self, min_bytes: int = 8 * 1024 * 1024) -> bool:
+        """Reclaim SQLite outbox freelist space ONLY when all rows were acknowledged.
+
+        This does not remove source databases, receipts, wallet state or unreported events.
+        """
+        if not self._outbox_path or self._outbox_path == ":memory:":
+            return False
+        with self._lock:
+            if self._db.execute("SELECT COUNT(*) FROM outbox").fetchone()[0]:
+                return False
+            size = self._db.execute("PRAGMA page_count").fetchone()[0]
+            free = self._db.execute("PRAGMA freelist_count").fetchone()[0]
+            page_bytes = self._db.execute("PRAGMA page_size").fetchone()[0]
+            if size * page_bytes < min_bytes or free < max(1, size // 2):
+                return False
+            self._db.execute("VACUUM")
+            self._last_compaction = time.time()
+            return True
+
     def flush(self) -> int:
-        """Send waiting events (and a heartbeat when one is due). Returns events the Ledger accepted."""
+        """Release local events only after validating per-event receipts from the master ledger.
+
+        HTTP success, an aggregate count, or a partial rejection are not sufficient evidence.
+        """
         if not self.enabled:
             return 0
         done = 0
@@ -146,22 +175,46 @@ class LedgerReporter:
             beat_due = time.time() - self._last_beat >= self.heartbeat
             if not rows and not beat_due:
                 return done
+            events = [json.loads(r[1]) for r in rows]
             try:
-                self._post(self.url, self.key, {"service": self.service, "version": self.version,
-                                                "events": [json.loads(r[1]) for r in rows]})
-            except Exception as e:      # Ledger unreachable: keep everything and try again next round
+                response = self._post(self.url, self.key, {"service": self.service, "version": self.version,
+                                                          "events": events})
+                if not isinstance(response, dict) or not isinstance(response.get("receipts"), list):
+                    raise ValueError("master ledger returned no verifiable receipts")
+                by_id = {event["id"]: row[0] for row, event in zip(rows, events)}
+                acked = []
+                for receipt in response["receipts"]:
+                    if not isinstance(receipt, dict):
+                        continue
+                    eid, entry_hash = receipt.get("id"), receipt.get("entry_hash")
+                    if eid in by_id and isinstance(entry_hash, str) and re.fullmatch(r"[0-9a-f]{64}", entry_hash):
+                        acked.append(by_id[eid])
+                acked = sorted(set(acked))
+                if rows and not acked:
+                    raise ValueError("master ledger did not acknowledge any event; keeping outbox")
+            except Exception as e:
                 self.failed += 1
                 self.last_error = f"{type(e).__name__}: {e}"[:200]
                 return done
-            self._last_beat, self.last_error = time.time(), None
-            if rows:
-                # Accepted, duplicate or rejected as malformed: either way the Ledger has answered for these.
+            self._last_beat = time.time()
+            if acked:
                 with self._lock:
-                    self._db.execute("DELETE FROM outbox WHERE n <= ?", (rows[-1][0],))
+                    marks = ",".join("?" for _ in acked)
+                    self._db.execute(f"DELETE FROM outbox WHERE n IN ({marks})", acked)
                     self._db.commit()
-                done += len(rows)
-                self.sent += len(rows)
+                done += len(acked)
+                self.sent += len(acked)
+            if len(acked) != len(rows):
+                self.failed += 1
+                self.last_error = f"master ledger acknowledged {len(acked)}/{len(rows)} events; others retained"
+                return done
+            self.last_error = None
             if len(rows) < BATCH:
+                if time.time() - self._last_compaction >= 3600:
+                    try:
+                        self.compact_if_idle()
+                    except sqlite3.Error as e:
+                        self.last_error = f"outbox compact failed: {e}"[:200]
                 return done
 
     def start(self) -> None:
@@ -188,7 +241,7 @@ class LedgerReporter:
 
     def status(self) -> dict[str, Any]:
         return {"linked": self.enabled, "ledger": self.url, "pending": self.pending() if self.enabled else 0,
-                "sent": self.sent, "last_error": self.last_error}
+                "acknowledged": self.sent, "overflow": self.overflow, "last_error": self.last_error}
 
 
 class ReportMiddleware:
