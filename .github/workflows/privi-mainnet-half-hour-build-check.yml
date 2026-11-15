@@ -1,0 +1,103 @@
+name: Privi mainnet half-hour build and readiness check (NO-GO)
+
+# CI-only research build and offline gate checks. NEVER deploy financial
+# mainnet, create production keys, issue tokens or infer launch approval.
+# GitHub schedule runs are best-effort and can be delayed/skipped by GitHub.
+on:
+  schedule:
+    # Every 30 minutes, offset from minute 0 to reduce GitHub queue congestion.
+    - cron: '17,47 * * * *'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/privi-mainnet-half-hour-build-check.yml'
+      - 'mainnet/**'
+      - 'production-network/mainnet/capmodel/**'
+      - 'production-network/mainnet/pop_candidate/**'
+      - 'production-network/mainnet/pop_mainnet_guard.py'
+      - 'production-network/mainnet/test_pop_mainnet_guard.py'
+      - 'production-network/ops/mainnet_gate.py'
+      - 'production-network/ops/verify_mainnet_evidence.py'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/privi-mainnet-half-hour-build-check.yml'
+      - 'mainnet/**'
+      - 'production-network/mainnet/capmodel/**'
+      - 'production-network/mainnet/pop_candidate/**'
+      - 'production-network/mainnet/pop_mainnet_guard.py'
+      - 'production-network/mainnet/test_pop_mainnet_guard.py'
+      - 'production-network/ops/mainnet_gate.py'
+      - 'production-network/ops/verify_mainnet_evidence.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: privi-mainnet-half-hour-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline-build-check:
+    name: Native cap model build + PoP research and NO-GO regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out immutable source revision
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Set up Go (cap reference model only)
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.23.x'
+          cache: false
+      - name: Build and test native PRVI reference cap model (not production SDK)
+        working-directory: production-network/mainnet/capmodel
+        run: |
+          set -euo pipefail
+          go test -count=1 ./...
+      - name: Test advisory manifest and artifact checks
+        run: |
+          set -euo pipefail
+          node --check mainnet/readiness.cjs
+          node --test \
+            mainnet/readiness.test.cjs \
+            mainnet/readiness.cli.test.cjs \
+            mainnet/test_readiness.cjs \
+            mainnet/test_verify_artifacts.cjs
+      - name: Test PoP research signing and replay safety (not native consensus)
+        run: |
+          set -euo pipefail
+          node --test production-network/mainnet/pop_candidate/test_*.cjs
+          python3 -m unittest -v production-network/mainnet/test_pop_mainnet_guard.py
+      - name: Test native mainnet evidence guards
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s production-network/ops -p 'test_mainnet_gate.py' -v
+          python3 -m unittest discover -s production-network/ops -p 'test_verify_mainnet_evidence.py' -v
+      - name: Require offline evidence gate to refuse financial launch
+        run: |
+          set +e
+          python3 production-network/ops/mainnet_gate.py \
+            production-network/ops/mainnet_evidence.example.json > /tmp/mainnet-gate.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/mainnet-gate.log
+          if [ "$status" -ne 1 ] || ! grep -q 'NO-GO' /tmp/mainnet-gate.log; then
+            echo "Unexpected mainnet gate result (expected explicit NO-GO refusal)" >&2
+            exit 1
+          fi
+      - name: Disclose boundaries
+        if: always()
+        run: |
+          {
+            echo "### Privi PRVI mainnet: NO-GO / NOT LIVE"
+            echo "This is a half-hourly **offline** research/reference-model build and safety check."
+            echo "It is NOT a compiled audited Cosmos EVM production binary, production PoP consensus proof,"
+            echo "four-host validator signing demonstration, signed genesis approval, or financial launch authorization."
+            echo "No funds, private keys, validators, live financial transactions, or PRVI issuance are handled."
+            echo "The full financial mainnet remains blocked pending independent review and live production evidence."
+          } >> "$GITHUB_STEP_SUMMARY"
