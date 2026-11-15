@@ -137,7 +137,8 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
         """Which chain anchors go to, the service wallet that signs them, its gas balance, and totals."""
         info: dict[str, Any] = {
             "network": settings.network_name, "chain_id": settings.chain_id, "rpc_url": settings.rpc_url,
-            "anchor_wallet": chain.address if chain else None, "anchoring_enabled": chain is not None,
+            "anchor_wallet": chain.address if chain else None, "anchoring_enabled": chain is not None and os.getenv("ANCHOR_BASE_TX_ENABLED", "1") == "1",
+            "submission_mode": "legacy_eth" if os.getenv("ANCHOR_BASE_TX_ENABLED", "1") == "1" else "paused_awaiting_usdc_paymaster",
             "max_hashes_per_call": MAX_HASHES, "max_tx_per_day": settings.max_tx_per_day,
             "until": "Privi anchors on Base until the Privi chain mainnet launches", "calldata_format": "0x50525641 ('PRVA') + 0x01 + 32-byte Merkle root",
             "merkle": "sha256(min(a,b)||max(a,b)); single leaf is its own root", **store.stats(),
@@ -344,7 +345,8 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
         if not status_cache or now - status_cache["at"] > 60:
             info: dict[str, Any] = {"service": "privi-anchor", "version": __version__, "network": settings.network_name,
                                     "chain_id": settings.chain_id, "anchor_wallet": chain.address if chain else None,
-                                    "anchoring_enabled": chain is not None, **store.stats()}
+                                    "anchoring_enabled": chain is not None and os.getenv("ANCHOR_BASE_TX_ENABLED", "1") == "1",
+            "submission_mode": "legacy_eth" if os.getenv("ANCHOR_BASE_TX_ENABLED", "1") == "1" else "paused_awaiting_usdc_paymaster", **store.stats()}
             if chain:
                 try:
                     info["latest_block"] = await anyio.to_thread.run_sync(chain.latest_block)
