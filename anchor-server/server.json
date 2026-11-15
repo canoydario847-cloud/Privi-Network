@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.canoydario847-cloud/privi-anchor",
   "title": "Privi Anchor",
-  "description": "Hash anchoring and proof-of-existence on chain for AI agents and apps. Paid API key required (no free tier).",
+  "description": "Hash anchoring and proof-of-existence on chain for AI agents and apps. Paid API key required.",
   "version": "0.5.1",
   "websiteUrl": "https://privi-discovery-6lue.onrender.com",
   "repository": {
