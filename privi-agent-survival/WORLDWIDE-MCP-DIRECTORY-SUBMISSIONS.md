@@ -14,7 +14,7 @@ Updated: 2026-11-13. Maintainer: Privi World Corp.
 - **Discoverability:** public initialize/tools-list; authenticated API key required to execute tools.
 - **Count described by maintainer docs:** 32 standard utilities and 51 premium analyzers; do not interpret count as independently runtime-tested.
 - **Billing clarification:** Automated prepaid API credits/Stripe/Base USDC checkout are not yet operational. Do not promise self-serve instant access.
-- **Available separately:** human-delivered Guard Security Review ($19.99), Agent Evidence Review ($19.99), Enterprise Integration Consultation ($19.99), plus the separately scoped $35 one-time Privi Pro Unlimited offer (activation/coverage unverified) at https://privi-services.onrender.com/.
+- **Available separately:** human-delivered Guard Security Review ($19.99), Agent Evidence Review ($19.99), Enterprise Integration Consultation ($19.99), plus the $35 one-time Privi Unlimited offer covering all Privi services (automatic API activation not yet operational) at https://privi-services.onrender.com/.
 
 ## Suggested directory description
 

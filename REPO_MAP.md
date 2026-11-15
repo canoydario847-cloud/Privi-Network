@@ -47,4 +47,4 @@ Nothing is moved on purpose: `render.yaml`, ~45 GitHub workflows and the MCP Reg
 `Network.jsx`, `privi-network-5000.js`, `LICENSE-MIT-PRIOR`: legacy; left in place because they may be referenced.
 
 
-**Current pricing note (November 14, 2026):** Three separately scoped human services are $19.99 one-time each, and a distinct $35 one-time Privi Pro Unlimited Stripe offer exists. Confirm Pro covered services, activation and fair-use restrictions before any purchase. Automated API-credit/key fulfillment is not operational; old $99/$149/$249 service prices and links are retired.
+**Current pricing note (November 14, 2026):** Three separately scoped human services are $19.99 one-time each, and a distinct $35 one-time Privi Pro Unlimited Stripe offer exists. Unlimited covers all Privi services; automated access to unfinished features is not yet operational. Automated API-credit/key fulfillment is not operational; old $99/$149/$249 service prices and links are retired.
