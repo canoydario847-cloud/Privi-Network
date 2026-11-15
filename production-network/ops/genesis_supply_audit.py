@@ -16,8 +16,12 @@ CAP_BASE = CAP_COINS * 10 ** DECIMALS
 DENOM_PATTERN = re.compile(r"^[a-z][a-z0-9/]{2,63}$")
 
 def parse_amount(raw, where):
-    if not isinstance(raw, str) or not raw.isascii() or not raw.isdecimal():
-        raise ValueError(where + ": amount must be a nonnegative base-10 integer string")
+    # Strict canonical ASCII amounts avoid Unicode digits, ambiguous leading zeros,
+    # and extremely large values that can exhaust parsing resources.
+    if (not isinstance(raw, str) or not raw or len(raw) > len(str(CAP_BASE))
+            or not raw.isascii() or not raw.isdecimal()
+            or (len(raw) > 1 and raw[0] == "0")):
+        raise ValueError(where + ": amount must be a nonnegative canonical base-10 integer string within cap precision")
     return int(raw)
 
 def audit(genesis, denom, chain_id):
@@ -92,6 +96,30 @@ def audit(genesis, denom, chain_id):
         "warning": "A one-time genesis bank check does not prove immutable cap enforcement, emissions, vesting, migration rights, or launch readiness"
     }
 
+def no_duplicate_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate genesis JSON key: " + key)
+        result[key] = value
+    return result
+
+
+def reject_nonfinite_json_constant(value):
+    # Python's default JSON decoder accepts NaN and Infinity even though
+    # these are not valid JSON and must not enter deterministic genesis review.
+    raise ValueError("invalid genesis JSON numeric constant: " + value)
+
+
+def load_candidate_genesis(path):
+    """Read bounded, strictly parsed candidate data; never trust a genesis path blindly."""
+    if path.stat().st_size > 64 * 1024 * 1024:
+        raise ValueError("genesis exceeds 64 MiB offline audit limit")
+    return json.loads(path.read_text(encoding="utf-8"),
+                      object_pairs_hook=no_duplicate_keys,
+                      parse_constant=reject_nonfinite_json_constant)
+
+
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--genesis",required=True,type=Path)
@@ -99,7 +127,7 @@ def main():
     ap.add_argument("--chain-id",required=True)
     args=ap.parse_args()
     try:
-        result=audit(json.loads(args.genesis.read_text(encoding="utf-8")),args.denom,args.chain_id)
+        result=audit(load_candidate_genesis(args.genesis),args.denom,args.chain_id)
     except (OSError, UnicodeError, ValueError, AttributeError) as e:
         print(json.dumps({"ok": False, "error": str(e)}))
         return 1
