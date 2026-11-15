@@ -19,7 +19,8 @@ COPIES = ["mcp-server/src/privi_verify", "anchor-server/src/privi_anchor", "quan
 def _reporter(sent, key=KEY):
     def post(url, k, body):
         sent.append(body)
-        return {"accepted": len(body["events"])}
+        return {"accepted": len(body["events"]),
+                "receipts": [{"id": ev["id"], "entry_hash": "ab" * 32} for ev in body["events"]]}
     return LedgerReporter("privi-verify", "https://ledger.example", key, "0.4.0", post=post)
 
 
