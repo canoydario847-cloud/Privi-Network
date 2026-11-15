@@ -23,7 +23,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Parse anchor script
-        run: node --check anchor-server/usdc-paymaster/anchor.mjs
-      - name: Run no-funds/no-key guard tests
-        run: node --test anchor-server/usdc-paymaster/test_anchor.mjs
+      - name: Install pinned verifier dependencies
+        working-directory: anchor-server/usdc-paymaster
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Check anchor and verifier syntax
+        working-directory: anchor-server/usdc-paymaster
+        run: npm run check
+      - name: Run read-only proof and no-funds guardrails
+        working-directory: anchor-server/usdc-paymaster
+        run: npm test
