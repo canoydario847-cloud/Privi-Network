@@ -3,7 +3,7 @@ const test=require("node:test");
 const assert=require("node:assert/strict");
 const crypto=require("node:crypto");
 const {
-  hash,signedMessage,parseRegistry,positionStamp,proposer,
+  hash,publicKey,signedMessage,parseRegistry,positionStamp,proposer,
   proposalFields,voteFields,verifyCertificate,ResearchVoteLock,TRUSTED_MODE
 }=require("./engine.cjs");
 
@@ -52,6 +52,43 @@ function fixture(count=4){
   }
   return {gov,keys,registry,committee,bundle};
 }
+
+test("public key identity rejects trailing DER bytes and nonminimal lengths",()=>{
+  const key=makeKey();
+  const der=Buffer.from(key.publicKeyB64,"base64");
+  assert.equal(publicKey(key.publicKeyB64).id,key.id);
+  const aliases=[
+    Buffer.concat([der,Buffer.from([0])]),
+    Buffer.concat([der,der]),
+    Buffer.concat([Buffer.from([0x30,0x81,der[1]]),der.subarray(2)]),
+  ];
+  for(const alias of aliases){
+    assert.throws(()=>publicKey(alias.toString("base64")),/canonical Ed25519 SPKI/);
+  }
+});
+
+test("one private key cannot fill an admitted committee using encoding aliases",()=>{
+  const f=fixture();
+  const k=f.keys[0];
+  const der=Buffer.from(k.publicKeyB64,"base64");
+  for(let i=0;i<f.registry.validators.length;i++){
+    const v=f.registry.validators[i];
+    const alias=i===0 ? der : Buffer.concat([der,Buffer.from([i])]);
+    v.id=hash(alias);
+    v.keySpkiBase64=alias.toString("base64");
+    v.admissionSignature=sign(f.gov,"admit",[
+      f.registry.chainId,f.registry.genesisHash,f.registry.epoch,
+      v.operatorId,v.faultDomain,v.companyId,v.positionSequence,v.id,v.anchorBlockHash
+    ]);
+  }
+  assert.throws(()=>parseRegistry(f.registry,f.gov.publicKeyB64),/canonical Ed25519 SPKI/);
+});
+
+test("governance trust key also requires canonical DER identity",()=>{
+  const f=fixture();
+  const alias=Buffer.concat([Buffer.from(f.gov.publicKeyB64,"base64"),Buffer.from([0])]);
+  assert.throws(()=>parseRegistry(f.registry,alias.toString("base64")),/canonical Ed25519 SPKI/);
+});
 
 test("four unique PoP position admissions yield exact three-of-four quorum",()=>{
   const f=fixture();
