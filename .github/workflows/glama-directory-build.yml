@@ -1,0 +1,30 @@
+name: Glama directory MCP build
+on:
+  pull_request:
+    paths:
+      - Dockerfile
+      - glama-directory/**
+      - .github/workflows/glama-directory-build.yml
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - glama-directory/**
+      - .github/workflows/glama-directory-build.yml
+permissions:
+  contents: read
+jobs:
+  build-and-protocol-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test MCP protocol offline
+        run: python3 -m unittest discover -s glama-directory -p 'test_*.py' -v
+      - name: Build minimal non-root Docker image
+        run: docker build -t privi-glama-directory:ci .
+      - name: Smoke-check Docker MCP tool discovery
+        run: |
+          echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' |
+            docker run --rm -i privi-glama-directory:ci |
+            python3 -c 'import sys,json; d=json.loads(sys.stdin.read()); names={t["name"] for t in d["result"]["tools"]}; assert names=={"privi_network_service_directory","privi_network_access_information"}, names'
