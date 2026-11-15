@@ -241,7 +241,7 @@ class LedgerReporter:
 
     def status(self) -> dict[str, Any]:
         return {"linked": self.enabled, "ledger": self.url, "pending": self.pending() if self.enabled else 0,
-                "acknowledged": self.sent, "overflow": self.overflow, "last_error": self.last_error}
+                "sent": self.sent, "acknowledged": self.sent, "overflow": self.overflow, "last_error": self.last_error}
 
 
 class ReportMiddleware:
