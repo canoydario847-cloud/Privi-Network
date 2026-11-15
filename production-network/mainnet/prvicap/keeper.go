@@ -72,7 +72,9 @@ func New(store corestore.KVStoreService) (Keeper, error) {
 }
 
 func parseCanonical(raw string) (*big.Int,error) {
-    if len(raw)==0 || raw[0]=='0' { return nil,ErrInvalidGenesis }
+    // The native cap is 10^27 base units: reject oversized storage values
+    // before big.Int parsing, including malformed consensus KV corruption.
+    if len(raw)==0 || len(raw)>len(MaxBase) || raw[0]=='0' { return nil,ErrInvalidGenesis }
     for _,char:=range []byte(raw) {
         if char<'0'||char>'9' { return nil,ErrInvalidGenesis }
     }
