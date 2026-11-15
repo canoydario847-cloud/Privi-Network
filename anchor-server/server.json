@@ -3,8 +3,8 @@
   "name": "io.github.canoydario847-cloud/privi-anchor",
   "title": "Privi Anchor",
   "description": "Hash anchoring and proof-of-existence on chain for AI agents and apps. Paid API key required (no free tier).",
-  "version": "0.5.0",
-  "websiteUrl": "https://privi-discovery.onrender.com",
+  "version": "0.5.1",
+  "websiteUrl": "https://privi-discovery-6lue.onrender.com",
   "repository": {
     "url": "https://github.com/canoydario847-cloud/Privi-Network",
     "source": "github",
@@ -13,7 +13,7 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://privi-anchor.onrender.com/mcp"
+      "url": "https://privi-anchor-zsbk.onrender.com/mcp"
     }
   ]
 }

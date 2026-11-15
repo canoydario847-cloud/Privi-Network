@@ -3,8 +3,8 @@
   "name": "io.github.canoydario847-cloud/privi-call",
   "title": "Privi Call",
   "description": "One number per AI agent: route MCP calls to any agent, every call sealed in an on-chain log.",
-  "version": "0.3.0",
-  "websiteUrl": "https://privi-call.onrender.com",
+  "version": "0.3.1",
+  "websiteUrl": "https://privi-call-e3rb.onrender.com",
   "repository": {
     "url": "https://github.com/canoydario847-cloud/Privi-Network",
     "source": "github",
@@ -13,7 +13,7 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://privi-call.onrender.com/mcp"
+      "url": "https://privi-call-e3rb.onrender.com/mcp"
     }
   ]
 }
