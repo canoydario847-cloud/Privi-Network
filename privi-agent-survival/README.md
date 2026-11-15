@@ -14,7 +14,7 @@ This is the **public metadata and directory-submission page** for Privi's remote
 
 - **Free first step:** [12-point MCP security checklist](https://privi-services.onrender.com/mcp-security-checklist/) (public self-check, not an audit).
 - **Optional human services:** [Guard Security Review — $19.99](https://privi-services.onrender.com/ai-agent-security-review/), [Agent Evidence Review — $19.99](https://privi-services.onrender.com/agent-audit-evidence-review/), or [Enterprise MCP Integration Consultation — $19.99](https://privi-services.onrender.com/enterprise-mcp-consultation/).
-- **Privi Pro:** [Unlimited offer — $35 one-time](https://privi-services.onrender.com/) is separately priced. Confirm eligible services, fair-use scope and activation with the contact before paying; automated MCP Pro access is not yet enabled.
+- **Privi Pro:** [Unlimited offer — $35 one-time](https://privi-services.onrender.com/) is separately priced. Unlimited includes every Privi service without category exclusions; automated MCP access is not yet enabled and requires later activation.
 - **Before payment:** Confirm the review scope, delivery expectation, and exact-price Stripe checkout with **canoydario847@gmail.com**. These are one-time human services, not automated tool credits. There is no direct wallet checkout and no automatic API-key delivery.
 
 [Detailed buyer instructions and scope template](FIRST-CUSTOMER-START-HERE.md). Public page links are for orientation; live HTTP availability and checkout fulfillment require separate verification.
@@ -23,7 +23,7 @@ This is the **public metadata and directory-submission page** for Privi's remote
 
 The live Stripe account has **$19.99 one-time** offers for [Guard](https://buy.stripe.com/eVqaEWdATbFcc7bfoe6J204), [Evidence](https://buy.stripe.com/fZubJ07cv6kS6MR2Bs6J205) and [Enterprise Integration](https://buy.stripe.com/3cI6oG54nbFcb37b7Y6J206) human services, and a **$35 one-time** [Privi Pro Unlimited offer](https://buy.stripe.com/8x2eVc9kDgZwc7b0tk6J207). See the [seller's public one-pager](../privi-business-services/README.md).
 
-Each $19.99 payment buys one separately scoped service engagement. The $35 Pro offer requires confirmation of eligible services, fair-use conditions and access activation before payment. **Neither option automatically unlocks MCP tools or issues API credentials.** Do not promise unlimited human labor or live lifetime tool access. Confirm service terms by email at **canoydario847@gmail.com**.
+Each $19.99 payment buys one separately scoped service engagement. The $35 Unlimited offer covers all Privi services. **Payment does not yet automatically unlock MCP tools or issue API credentials.** Unfinished features require activation and human service fulfillment is coordinated through Privi. Confirm service terms by email at **canoydario847@gmail.com**.
 
 ## What agents can find
 
