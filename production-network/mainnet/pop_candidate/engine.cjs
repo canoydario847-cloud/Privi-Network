@@ -36,6 +36,10 @@ function publicKey(derB64) {
         "Invalid Ed25519 public key encoding");
   const key = crypto.createPublicKey({key:buf,format:"der",type:"spki"});
   check(key.asymmetricKeyType === "ed25519", "PoP requires Ed25519 position signers");
+  // OpenSSL accepts trailing bytes and some nonminimal ASN.1 encodings.
+  // Hashing those inputs would give one signing key multiple validator IDs.
+  const canonical = key.export({format:"der",type:"spki"});
+  check(buf.equals(canonical), "Noncanonical Ed25519 SPKI key encoding");
   return {key, id: hash(buf), der:buf};
 }
 function signature(signatureB64) {

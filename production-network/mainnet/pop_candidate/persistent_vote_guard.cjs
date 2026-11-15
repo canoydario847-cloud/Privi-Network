@@ -61,6 +61,10 @@ function lockedFileName(record) {
   const key = [record.chainId,record.genesisHash,record.height,record.validatorId];
   return hash(Buffer.from(JSON.stringify(key),"utf8")).slice(2) + ".json";
 }
+function syncDirectory(location) {
+  const fd=fs.openSync(location,fs.constants.O_RDONLY|fs.constants.O_DIRECTORY);
+  try {fs.fsyncSync(fd);} finally {fs.closeSync(fd);}
+}
 function reservePosition(dir, committee, height, validatorId, blockHash) {
   const location = strictLocalDirectory(dir);
   const record = recordFor(committee,height,validatorId,blockHash);
@@ -74,20 +78,28 @@ function reservePosition(dir, committee, height, validatorId, blockHash) {
     if (e.code !== "EEXIST") throw e;
     // Existing lock is ALWAYS immutable: corrupt/unparseable locks block
     // further signing. Signing service must never clean up or overwrite.
-    const stat=fs.lstatSync(file);
-    must(stat.isFile() && !stat.isSymbolicLink() &&
-         stat.size > 0 && stat.size <= 2048 && (stat.mode & 0o077)===0,
-         "PoP height lock corrupt or insecure; refuse to sign");
-    let old;
-    try { old=JSON.parse(fs.readFileSync(file,"utf8")); }
-    catch (_) {throw Error("PoP height lock corrupt; refuse to sign");}
-    for (const field of Object.keys(record)) {
-      must(old[field]===record[field],
-           field==="blockHash" ? "PoP equivocation: conflicting block at locked height" :
-           "PoP existing height lock corrupt or inconsistent");
-    }
-    must(Object.keys(old).length===Object.keys(record).length,
-         "PoP height lock unexpected data");
+    const existingFd=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW);
+    try {
+      const stat=fs.fstatSync(existingFd);
+      must(stat.isFile() && !stat.isSymbolicLink() &&
+           stat.size > 0 && stat.size <= 2048 && (stat.mode & 0o077)===0,
+           "PoP height lock corrupt or insecure; refuse to sign");
+      let old;
+      try { old=JSON.parse(fs.readFileSync(existingFd,"utf8")); }
+      catch (_) {throw Error("PoP height lock corrupt; refuse to sign");}
+      for (const field of Object.keys(record)) {
+        must(old[field]===record[field],
+             field==="blockHash" ? "PoP equivocation: conflicting block at locked height" :
+             "PoP existing height lock corrupt or inconsistent");
+      }
+      must(Object.keys(old).length===Object.keys(record).length,
+           "PoP height lock unexpected data");
+      // A complete visible record is not necessarily durable: its creator may
+      // have crashed before fsync, or a prior fsync may have failed. Every retry
+      // must persist both the validated inode and directory before signing.
+      fs.fsyncSync(existingFd);
+    } finally {fs.closeSync(existingFd);}
+    syncDirectory(location);
     return Object.freeze({alreadyReserved:true,blockHash});
   }
   let completed=false;
@@ -108,8 +120,7 @@ function reservePosition(dir, committee, height, validatorId, blockHash) {
   // On I/O errors we *retain* the broken file and fail closed. The
   // operator must recover from backed-up signing-state under a new audit.
   must(completed,"PoP lock was not durable");
-  const rootFd=fs.openSync(location,fs.constants.O_RDONLY|fs.constants.O_DIRECTORY);
-  try {fs.fsyncSync(rootFd);} finally {fs.closeSync(rootFd);}
+  syncDirectory(location);
   return Object.freeze({alreadyReserved:false,blockHash});
 }
 
