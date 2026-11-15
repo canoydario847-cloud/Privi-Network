@@ -532,11 +532,15 @@ def build_server(settings: Settings | None = None, store: Store | None = None, r
     # REST + OpenAPI, voice-agent kits and webhook, and the console for human call agents.
     register_gateway(mcp, s, store, router, paywall, limiter, __version__)
 
+    # Deep Think: free preflight / first code hash, x402 fee only on an approved revision.
+    from . import deep_think_tools as _deep_think_tools
+    _deep_think_tools.register(mcp, s, paywall)
+
     mcp._privi = {"store": store, "anchor": anchor_client, "settings": s, "router": router}
 
     # ---- No free tools: every call pays per call via x402 unless the call uses a prepaid call key (call_credits_buy). Tools with their own price keep it.
     _all_paid = os.getenv("CALL_ALL_TOOLS_PAID", "1").strip().lower() not in ("0", "false", "no", "off")
-    _self_gated = {"call_credits_buy"}
+    _self_gated = {"call_credits_buy", "deep_think_plan", "deep_think_review", "deep_think_redo"}
     _raw_call_tool = mcp.call_tool
 
     async def _gated_call_tool(name, arguments, context=None):
