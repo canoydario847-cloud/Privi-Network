@@ -35,3 +35,19 @@ test('rejects missing evidence and never accepts a list as manifest',()=>{
  assert.ok(check(m).some(e=>e.includes('rollback_plan')));
  assert.ok(check([]).length>0);
 });
+
+test('rejects reused signatures across ostensibly distinct validators',()=>{
+  const m=good();
+  m.validator_signoffs[1].signature_reference=m.validator_signoffs[0].signature_reference;
+  assert.ok(check(m).some(e=>e.includes('signoff')));
+});
+test('rejects validator ids differentiated only by surrounding whitespace',()=>{
+  const m=good();
+  m.validator_signoffs[1].validator_id=' '+m.validator_signoffs[0].validator_id+' ';
+  assert.ok(check(m).some(e=>e.includes('signoff')));
+});
+test('rejects noncanonical whitespace around attestation references',()=>{
+  const m=good();
+  m.validator_signoffs[2].signature_reference+=' ';
+  assert.ok(check(m).some(e=>e.includes('signoff')));
+});
