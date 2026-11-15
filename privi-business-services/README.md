@@ -3,16 +3,16 @@
 **Public sales contact:** canoydario847@gmail.com
 **Website:** https://privi-services.onrender.com/
 
-Privi offers individually scoped, human-delivered reviews and consultations, plus a separately priced Privi Pro Unlimited offer. Prices below were verified against the connected live Stripe account on November 14, 2026. An active checkout link does not prove completed payment or successful delivery.
+Privi offers individually scoped, human-delivered reviews and consultations, plus Privi Unlimited covering all Privi services for one $35 purchase. Prices below were verified against the connected live Stripe account on November 14, 2026. An active checkout link does not prove completed payment or successful delivery.
 
 | Offer | One-time price | Service scope | Active Stripe-hosted checkout |
 | --- | ---: | --- | --- |
 | Privi Guard Security Review | **$19.99** | One security permissions/prompt-risk review engagement | [Checkout](https://buy.stripe.com/eVqaEWdATbFcc7bfoe6J204) |
 | Privi Agent Evidence Review | **$19.99** | One scoped evidence-record/approval review engagement | [Checkout](https://buy.stripe.com/fZubJ07cv6kS6MR2Bs6J205) |
 | Privi Enterprise Integration Consultation | **$19.99** | One MCP/API architecture consultation; not implementation | [Checkout](https://buy.stripe.com/3cI6oG54nbFcb37b7Y6J206) |
-| Privi Pro Unlimited | **$35** | Pro offer; eligible services, fair-use boundaries and activation require written confirmation before payment | [View offer](https://buy.stripe.com/8x2eVc9kDgZwc7b0tk6J207) |
+| Privi Pro Unlimited | **$35** | Includes all Privi services; unfinished tool access requires technical activation | [View offer](https://buy.stripe.com/8x2eVc9kDgZwc7b0tk6J207) |
 
-**Scope and Pro caveat:** The three $19.99 products are single service engagements, not ongoing subscriptions, certified audits or automated scans. The $35 Pro price is a one-time charge, not a verified monthly subscription. Stripe's existing Pro product names it a lifetime/unlimited offer, but automated MCP API access and key delivery remain unavailable; do not promise immediate lifetime usage or unlimited human consulting. Resolve the exact eligibility and activation terms with the buyer in writing before accepting their payment.
+**Coverage and activation:** Each $19.99 purchase covers one Privi service. The $35 one-time Unlimited purchase includes all Privi services, including the listed human reviews, consultations and Privi tools; do not exclude individual service categories. Automatic API key creation and unfinished features are not operational and need technical activation or manual fulfillment. A successful Stripe payment is not by itself a functioning API credential or proof that work was delivered.
 
 ### How to request a service
 
