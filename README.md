@@ -4,14 +4,16 @@
 
 [![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/canoydario847-cloud/privi-network)
 
-## Status at a glance (Nov 14, 2026)
+## Status at a glance (Nov 15, 2026)
 
-| Service | Status |
-|---|---|
-| Privi Ledger (MCP) | **Live, evaluation only**: `https://privi-ledger-mcp-recovery.onrender.com/mcp` (temporary storage; not for durable audit evidence) |
-| Agent Survival & Premium gateway | **Live**: `https://privi-ai-21-gateway.onrender.com/mcp` |
-| Human-delivered reviews ($19.99) + Pro Unlimited ($35) | **Live**: [privi-services.onrender.com](https://privi-services.onrender.com/) |
-| Verify, Anchor, Quantum, Call, Hub, Wallet | **Being redeployed** to the current Render workspace; the `*.onrender.com` links further down may not respond yet |
+| Service | Status | MCP endpoint |
+|---|---|---|
+| Privi Ledger | **Live** | `https://privi-ledger-aqe5.onrender.com/mcp` |
+| Privi Verify | **Live** | `https://privi-verify-s4jb.onrender.com/mcp` |
+| Privi Anchor | **Live** (on-chain submissions paused until the anchor wallet has gas) | `https://privi-anchor-zsbk.onrender.com/mcp` |
+| Privi Quantum | **Live** | `https://privi-quantum-vvmj.onrender.com/mcp` |
+| Privi Call | **Live** | `https://privi-call-e3rb.onrender.com/mcp` |
+| Agent Survival & Premium gateway | **Live** | `https://privi-ai-21-gateway.onrender.com/mcp` |
 
 Every Privi tool is paid (x402 USDC on Base, or a paid API key). There are no free tiers. Folder index: [REPO_MAP.md](REPO_MAP.md).
 
@@ -41,7 +43,7 @@ After checkout, email **canoydario847@gmail.com** with your checkout email and a
 - [Public MCP directory metadata and listing guide](privi-agent-survival/README.md).
 - [32 Agent Skills](https://privi-ai-21-gateway.onrender.com/skills/index.json) · [Live 51-premium website](https://privi-premium-tools.onrender.com).
 
-**Infrastructure caution:** Some legacy Privi MCP URLs listed below belong to an older Render workspace affected by billing suspension. In particular, `privi-ledger.onrender.com` is **not** the validated Ledger recovery endpoint. The replacement `privi-ledger-mcp-recovery.onrender.com` is evaluation-only with temporary storage and must not be used for durable audit evidence. Use the verified Agent Survival link above for its separate hosted gateway.
+**Infrastructure note:** Privi MCP servers moved to a new Render workspace on Nov 14, 2026. The older `privi-<name>.onrender.com` addresses (no suffix) are retired; use the endpoints in the status table above.
 
 **Commercial status:** The three $19.99 human-delivered services and separate $35 Pro offer above use existing active Stripe-hosted payment links. The separate automated API-credit checkout is not accepting payments while durable storage, Stripe webhook credentials/tax configuration, Base confirmation and fulfillment tests remain unverified. Do not transfer funds without a verified order. The commercial gateway is separate from Privi Ledger's existing plans.
 
@@ -50,17 +52,17 @@ Built by **Dario Canoy**, Privi World Corp. Legacy product URLs below may be una
 
 ```json
 { "mcpServers": {
-    "privi-ledger": { "url": "https://privi-ledger-mcp-recovery.onrender.com/mcp" },
-    "privi-verify": { "url": "https://privi-verify.onrender.com/mcp" },
-    "privi-anchor": { "url": "https://privi-anchor.onrender.com/mcp" },
-    "privi-quantum": { "url": "https://privi-quantum.onrender.com/mcp" },
-    "privi-call": { "url": "https://privi-call.onrender.com/mcp" } } }
+    "privi-ledger": { "url": "https://privi-ledger-aqe5.onrender.com/mcp" },
+    "privi-verify": { "url": "https://privi-verify-s4jb.onrender.com/mcp" },
+    "privi-anchor": { "url": "https://privi-anchor-zsbk.onrender.com/mcp" },
+    "privi-quantum": { "url": "https://privi-quantum-vvmj.onrender.com/mcp" },
+    "privi-call": { "url": "https://privi-call-e3rb.onrender.com/mcp" } } }
 ```
 
 | Product | What it does | Start with |
 |---|---|---|
 | **Privi Guard** | Checks what an agent reads for prompt injection and what it sends for leaked keys, card numbers and personal data. Returns allow / warn / block with a signed receipt anchored on-chain. 1 cent per check (1,000 a month included with Ledger Pro). [Try it](https://privi-guard-814f.onrender.com) | `guard_check`, [`pip install privi-guard`](guard-sdk/python), [`npm i privi-guard`](guard-sdk/js), [Claude Code hook](guard-sdk/hooks/claude-code) |
-| **Privi Scan** | Safety grades and tamper-evident tool history for every public MCP server in the official registry. Catches tool poisoning and rug pulls. [Directory](https://privi-ledger.onrender.com/scan) | `mcp_server_check` (paid, 1 cent) |
+| **Privi Scan** | Safety grades and tamper-evident tool history for every public MCP server in the official registry. Catches tool poisoning and rug pulls. [Directory](https://privi-ledger-aqe5.onrender.com/scan) | `mcp_server_check` (paid, 1 cent) |
 | **Privi Ledger** | Tamper-evident audit logs for agent actions: a Merkle transparency log, post-quantum co-signatures and on-chain checkpoints | `ledger_signup`, `ledger_record_action` |
 | **Passport / KYA / Mandates** | Verifiable trust scores for agents, wallet-to-agent binding, and human-signed spending limits | `passport_gate`, `kya_check`, `mandate_check` (paid per call) |
 | **Privi Live** | Kill switch, wallet-signed approvals, trust feed over WebSocket, a metered MCP gateway (optionally Guard-screened) and paid agent-to-agent rooms | `live_info`, `live_kill`, `gateway_create` |
@@ -69,11 +71,11 @@ Built by **Dario Canoy**, Privi World Corp. Legacy product URLs below may be una
 
 | Folder | Service | MCP endpoint | MCP Registry |
 |---|---|---|---|
-| `ledger-server/` | Ledger, Guard, Scan, Passport, KYA, Mandates, Live, Fortress, Gov | `https://privi-ledger.onrender.com/mcp` | `io.github.canoydario847-cloud/privi-ledger` |
-| `mcp-server/` | Privi Verify | `https://privi-verify.onrender.com/mcp` | `io.github.canoydario847-cloud/privi-verify` |
-| `anchor-server/` | Privi Anchor | `https://privi-anchor.onrender.com/mcp` | `io.github.canoydario847-cloud/privi-anchor` |
-| `quantum-server/` | Privi Quantum (research optimization tools) | `https://privi-quantum.onrender.com/mcp` | `io.github.canoydario847-cloud/privi-quantum` (verify registry status) |
-| `call-server/` | Privi Call (agent-call routing) | `https://privi-call.onrender.com/mcp` | `io.github.canoydario847-cloud/privi-call` (verify registry status) |
+| `ledger-server/` | Ledger, Guard, Scan, Passport, KYA, Mandates, Live, Fortress, Gov | `https://privi-ledger-aqe5.onrender.com/mcp` | `io.github.canoydario847-cloud/privi-ledger` |
+| `mcp-server/` | Privi Verify | `https://privi-verify-s4jb.onrender.com/mcp` | `io.github.canoydario847-cloud/privi-verify` |
+| `anchor-server/` | Privi Anchor | `https://privi-anchor-zsbk.onrender.com/mcp` | `io.github.canoydario847-cloud/privi-anchor` |
+| `quantum-server/` | Privi Quantum (research optimization tools) | `https://privi-quantum-vvmj.onrender.com/mcp` | `io.github.canoydario847-cloud/privi-quantum` (verify registry status) |
+| `call-server/` | Privi Call (agent-call routing) | `https://privi-call-e3rb.onrender.com/mcp` | `io.github.canoydario847-cloud/privi-call` (verify registry status) |
 | `guard-sdk/` | Privi Guard clients (Python, JS) and Claude Code hook | — | PyPI / npm `privi-guard` |
 | `discovery/` | Agent discovery: A2A card, MCP manifest, llms.txt | `https://privi-discovery.onrender.com` | — |
 | `sites/` | Product websites and the Privi Hub | — | — |

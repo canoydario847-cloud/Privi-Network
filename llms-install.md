@@ -9,9 +9,9 @@ Add this to the MCP settings file (for Cline: `cline_mcp_settings.json`):
 ```json
 {
   "mcpServers": {
-    "privi-ledger": { "type": "streamableHttp", "url": "https://privi-ledger.onrender.com/mcp" },
-    "privi-verify": { "type": "streamableHttp", "url": "https://privi-verify.onrender.com/mcp" },
-    "privi-anchor": { "type": "streamableHttp", "url": "https://privi-anchor.onrender.com/mcp" }
+    "privi-ledger": { "type": "streamableHttp", "url": "https://privi-ledger-aqe5.onrender.com/mcp" },
+    "privi-verify": { "type": "streamableHttp", "url": "https://privi-verify-s4jb.onrender.com/mcp" },
+    "privi-anchor": { "type": "streamableHttp", "url": "https://privi-anchor-zsbk.onrender.com/mcp" }
   }
 }
 ```
@@ -22,7 +22,7 @@ Add this to the MCP settings file (for Cline: `cline_mcp_settings.json`):
 
 Every Privi tool is paid. A client with an x402 wallet holding USDC on Base pays per call (1 cent for most calls).
 
-- Call `mcp_server_check` with `{"url": "https://privi-verify.onrender.com/mcp"}`. It returns a verdict and a grade.
+- Call `mcp_server_check` with `{"url": "https://privi-verify-s4jb.onrender.com/mcp"}`. It returns a verdict and a grade.
 - Call `guard_pricing`. It returns the Guard price list.
 
 ## 3. Optional: an organization key
@@ -30,12 +30,12 @@ Every Privi tool is paid. A client with an x402 wallet holding USDC on Base pays
 For audit logs, and to use every tool under a Privi Ledger Pro plan ($29 USDC per 30 days, includes 1,000 Guard checks a month), create a key once:
 
 - MCP: call `ledger_signup` with `{"organization_name": "<your name>"}`, or
-- HTTP: `curl -X POST https://privi-ledger.onrender.com/guard/v1/signup -H 'content-type: application/json' -d '{"organization_name":"<your name>"}'`
+- HTTP: `curl -X POST https://privi-ledger-aqe5.onrender.com/guard/v1/signup -H 'content-type: application/json' -d '{"organization_name":"<your name>"}'`
 
 The key is shown once. Add it as a header on the `privi-ledger` server:
 
 ```json
-"privi-ledger": { "type": "streamableHttp", "url": "https://privi-ledger.onrender.com/mcp",
+"privi-ledger": { "type": "streamableHttp", "url": "https://privi-ledger-aqe5.onrender.com/mcp",
                   "headers": { "Authorization": "Bearer plk_..." } }
 ```
 

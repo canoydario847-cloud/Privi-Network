@@ -15,10 +15,10 @@ Everything below is pre-written. Each one takes 2–5 minutes and needs your own
 
 **Short (≤160):** Call any AI agent by number with one MCP tool call. No Call fee to Privi agents; $0.001 per call to others. Public call log anchored on Base.
 
-**Endpoint:** `https://privi-call.onrender.com/mcp` · live log `https://privi-call.onrender.com` · tags `agent-network` `a2a` `routing` `call-log` `x402` `directory`
+**Endpoint:** `https://privi-call-e3rb.onrender.com/mcp` · live log `https://privi-call-e3rb.onrender.com` · tags `agent-network` `a2a` `routing` `call-log` `x402` `directory`
 
 Extra places that fit Privi Call specifically: the A2A agent directories (a2aregistry.org, a2a.directory) using
-`https://privi-call.onrender.com/.well-known/agent-card.json`, and the MCP "aggregators/gateways" category on PulseMCP and Glama.
+`https://privi-call-e3rb.onrender.com/.well-known/agent-card.json`, and the MCP "aggregators/gateways" category on PulseMCP and Glama.
 
 ## 0. x402 Bazaar (Coinbase's discovery index for paying agents) — highest leverage
 
@@ -28,10 +28,10 @@ first settled payment (up to 15 minutes). Trigger each once with a throwaway wal
 
     cd mcp-server && pip install eth-account
     python scripts/test_payment.py --new-wallet        # prints an address; send it ~0.25 USDC on Base
-    python scripts/test_payment.py --allow-mainnet --url https://privi-verify.onrender.com/mcp --tool privi_verify_lot
-    python scripts/test_payment.py --allow-mainnet --url https://privi-verify.onrender.com/mcp --tool privi_chain_of_custody
+    python scripts/test_payment.py --allow-mainnet --url https://privi-verify-s4jb.onrender.com/mcp --tool privi_verify_lot
+    python scripts/test_payment.py --allow-mainnet --url https://privi-verify-s4jb.onrender.com/mcp --tool privi_chain_of_custody
 
-Usage is public at https://privi-ledger.onrender.com/stats and https://privi-verify.onrender.com/stats.
+Usage is public at https://privi-ledger-aqe5.onrender.com/stats and https://privi-verify-s4jb.onrender.com/stats.
 
 ## Shared copy
 
@@ -46,11 +46,11 @@ Tamper-evident audit logs, sealed compliance reports, and paid lot verification 
 Privi gives AI agents the trust layer they need to do real work for companies and governments. Privi Ledger records every agent action in a hash-linked stream, issues sealed PDF compliance reports, produces OMB M-25-21 AI use-case inventories and EO 14409 post-quantum migration plans, and lets two companies seal a shared record with Privi Handshake. Privi Verify checks manufacturing lot provenance and chain of custody, paid per call with x402. Privi Anchor timestamps any hash on the Privi chain so proofs don't depend on trusting us. Everything is callable over MCP; every tool is paid: per call in USDC on Base via x402 (1 cent for most Ledger and Verify calls), or included with Privi Ledger Pro ($29 USDC per 30 days). Built by Dario Canoy, Privi World Co, Port Huron, Michigan.
 
 **Endpoints:**
-- Ledger `https://privi-ledger.onrender.com/mcp` (streamable-http)
-- Verify `https://privi-verify.onrender.com/mcp`
-- Anchor `https://privi-anchor.onrender.com/mcp`
-- Quantum `https://privi-quantum.onrender.com/mcp`
-- Call `https://privi-call.onrender.com/mcp`
+- Ledger `https://privi-ledger-aqe5.onrender.com/mcp` (streamable-http)
+- Verify `https://privi-verify-s4jb.onrender.com/mcp`
+- Anchor `https://privi-anchor-zsbk.onrender.com/mcp`
+- Quantum `https://privi-quantum-vvmj.onrender.com/mcp`
+- Call `https://privi-call-e3rb.onrender.com/mcp`
 - Hub / docs `https://privi-discovery.onrender.com`
 - Repo `https://github.com/canoydario847-cloud/Privi-Network`
 
