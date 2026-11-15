@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import json
 import sqlite3
 from typing import Any
@@ -54,6 +55,9 @@ def register(mcp: Any, settings: Any, paywall: Any) -> None:
         """
         if approve_usdc_charge is not True:
             return failure("operator approval required for a $0.01 USDC redo")
+        # Production billing is explicitly opt-in until plan entitlements and settlement are verified.
+        if os.getenv("DEEP_THINK_PAID_REDOS_ENABLED", "0") != "1":
+            return failure("paid redos are disabled pending production billing verification")
         if not (settings.payments_ready and settings.network_key == "base"):
             return failure("production Base USDC settlement is unavailable; no payment attempted")
         async with payment_gate:
