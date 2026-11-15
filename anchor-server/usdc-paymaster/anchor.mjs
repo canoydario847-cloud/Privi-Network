@@ -52,7 +52,7 @@ async function submit(opts, env) {
     { to7702SimpleSmartAccount },
     { createPimlicoClient },
     { prepareUserOperationForErc20Paymaster },
-    { createPublicClient, http, erc20Abi },
+    { createPublicClient, http, erc20Abi, parseUnits, formatUnits },
     { entryPoint08Address },
     { privateKeyToAccount },
     { base },
@@ -110,6 +110,23 @@ async function submit(opts, env) {
   const context = opts.mode === "usdc"
     ? { token: BASE_USDC }
     : { sponsorshipPolicyId: env.PIMLICO_SPONSORSHIP_POLICY_ID };
+  if (opts.mode === "usdc") {
+    // Quote maximum fee BEFORE submitting. The provider prepares a narrowly scoped
+    // approval for this UserOperation, not a blanket allowance for user funds.
+    const draft = await client.prepareUserOperation({
+      calls: [{ to: DATA_SINK, value: 0n, data: opts.calldata }],
+      paymasterContext: context,
+      authorization,
+    });
+    const quote = await pimlicoClient.estimateErc20PaymasterCost({
+      userOperation: draft, token: BASE_USDC,
+    });
+    const feeMax = parseUnits(env.PRIVI_MAX_USDC_ANCHOR_FEE || "0.05", 6);
+    const buffered = (quote.costInToken * 110n + 99n) / 100n;
+    if (feeMax <= 0n || buffered > feeMax || balance < buffered) {
+      throw new Error(`Refusing USDC spend: quoted maximum ${formatUnits(buffered, 6)} USDC including 10% buffer; allowed ${formatUnits(feeMax, 6)}, balance ${formatUnits(balance, 6)}; no transaction sent`);
+    }
+  }
   const hash = await client.sendUserOperation({
     calls: [{ to: DATA_SINK, value: 0n, data: opts.calldata }],
     paymasterContext: context,
