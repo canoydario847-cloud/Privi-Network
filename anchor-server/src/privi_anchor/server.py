@@ -250,6 +250,11 @@ def build_server(settings: Settings | None = None, chain: Chain | None = None,
         except ValueError as e:
             return _result({"error": str(e)}, is_error=True)
 
+        if os.getenv("ANCHOR_BASE_TX_ENABLED", "1") != "1":
+            return _result({"error": "external Base anchoring paused: master ledger recording remains available; "
+                                     "ETH-only signing disabled pending verified USDC-paymaster or gas sponsorship",
+                            "status": "external_checkpoint_pending", "chain_id": settings.chain_id,
+                            "gas_fee": "no transaction attempted", "can_resume": True}, is_error=True)
         bid = store.new_batch(root, proofs, label[:200], who)
         try:
             tx_hash = await anyio.to_thread.run_sync(chain.send_data, merkle.calldata(root))
