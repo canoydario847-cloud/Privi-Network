@@ -386,7 +386,7 @@ def main() -> None:
         seed_demo(store)
     mcp = build_server(settings, store)
     key = os.getenv("PRIVI_ANCHOR_KEY", "")
-    if key:
+    if key and os.getenv("PRIVI_EXTERNAL_ANCHORS", "1") == "1":
         client = HttpAnchorClient(os.getenv("PRIVI_ANCHOR_URL", DEFAULT_ANCHOR_URL), key)
         cps = Checkpoints(store._db, store._lock)
         start_loop(lambda: cps.run_once(store.heads(), client, "privi-verify"),

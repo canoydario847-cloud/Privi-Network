@@ -591,7 +591,7 @@ def main() -> None:
     args = ap.parse_args()
     mcp = build_server()
     st = mcp._privi
-    if st["anchor"] is not None:
+    if st["anchor"] is not None and os.getenv("CALL_EXTERNAL_ANCHORS", "1") == "1":
         threading.Thread(target=_anchor_loop, args=(st["store"], st["anchor"], st["settings"].anchor_interval),
                          daemon=True).start()
     if args.stdio:

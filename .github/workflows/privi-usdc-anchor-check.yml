@@ -1,0 +1,29 @@
+name: USDC Anchor guardrail tests
+
+on:
+  pull_request:
+    paths:
+      - 'anchor-server/usdc-paymaster/**'
+      - '.github/workflows/privi-usdc-anchor-check.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'anchor-server/usdc-paymaster/**'
+      - '.github/workflows/privi-usdc-anchor-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-guardrails:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Parse anchor script
+        run: node --check anchor-server/usdc-paymaster/anchor.mjs
+      - name: Run no-funds/no-key guard tests
+        run: node --test anchor-server/usdc-paymaster/test_anchor.mjs

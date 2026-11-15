@@ -2410,7 +2410,7 @@ def main() -> None:
     args = p.parse_args()
     settings = Settings.from_env()
     mcp = build_server(settings)
-    if mcp._privi_anchor is not None:
+    if mcp._privi_anchor is not None and os.getenv("QUANTUM_EXTERNAL_ANCHORS", "1") == "1":
         threading.Thread(target=_anchor_loop, args=(mcp._privi_attestor, mcp._privi_anchor, settings.anchor_interval),
                          daemon=True).start()
     if mcp._patrol_minutes > 0:

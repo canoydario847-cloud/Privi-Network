@@ -305,3 +305,27 @@ def test_explorer_feed_and_public_verify(store, monkeypatch):
         assert v["verified"] is True and v["by_privi_anchor_service"] is True
         assert http.get(f"/anchors/verify/{h('never anchored')}").json()["verified"] is False
         assert http.get("/anchors/verify/not-a-hash").status_code == 400
+
+def test_base_eth_submission_paused_without_disabling_receipts(store, monkeypatch):
+    """When gas is unavailable, reject new Base broadcasts but preserve existing proofs."""
+    monkeypatch.setenv("ANCHOR_ALLOW_LOCAL", "1")
+    monkeypatch.setenv("ANCHOR_BASE_TX_ENABLED", "0")
+    chain = FakeChain()
+
+    async def go():
+        async with Client(build_server(Settings(), chain, store, receipt_timeout=1)) as client:
+            status = (await client.call_tool("anchor_status", {})).structured_content
+            assert status["submission_mode"] == "paused_awaiting_usdc_paymaster"
+            assert not status["anchoring_enabled"]
+            result = await client.call_tool("anchor_hashes", {"hashes": [h("zero-eth")]})
+            assert result.is_error
+            assert result.structured_content["status"] == "external_checkpoint_pending"
+            assert result.structured_content["gas_fee"] == "no transaction attempted"
+            assert not chain.txs
+            # The no-cost hash utility still works in this mode.
+            local = await client.call_tool("anchor_hash_text", {"text": "zero-eth"})
+            assert local.structured_content["sha256"] == h("zero-eth")
+
+    anyio.run(go)
+
+

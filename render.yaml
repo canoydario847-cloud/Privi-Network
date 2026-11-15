@@ -60,6 +60,8 @@ services:
       mountPath: /data
       sizeGB: 1
     envVars:
+      - key: ANCHOR_BASE_TX_ENABLED  # stop ETH-only broadcasts until a USDC paymaster is configured
+        value: "0"
       - key: ANCHOR_DB_PATH
         value: /data/anchor.db
       - key: PRIVI_LEDGER_URL         # one ledger: this service reports its activity to the Privi Quantum Ledger
@@ -109,6 +111,8 @@ services:
       - key: PRIVI_PAYMENTS          # paid tools also accept the PRIVI token (price from the Privi swap desk)
         value: "1"
       - fromGroup: privi-coinbase-cdp
+      - key: LEDGER_EXTERNAL_ANCHORS # keep internal signed blocks, no ETH-gas retries
+        value: "0"
       - key: LEDGER_DB_PATH
         value: /data/ledger.db
       - key: LEDGER_PUBLIC_URL
@@ -165,6 +169,8 @@ services:
       - key: PRIVI_PAYMENTS          # paid tools also accept the PRIVI token (price from the Privi swap desk)
         value: "1"
       - fromGroup: privi-coinbase-cdp
+      - key: PRIVI_EXTERNAL_ANCHORS # Master Ledger holds canonical service reports
+        value: "0"
       - key: PRIVI_DB_PATH
         value: /data/privi.db
       - key: PRIVI_LEDGER_URL         # one ledger: this service reports its activity to the Privi Quantum Ledger
@@ -213,6 +219,8 @@ services:
       mountPath: /data
       sizeGB: 1
     envVars:
+      - key: QUANTUM_EXTERNAL_ANCHORS # avoid redundant independent Base checkpoints
+        value: "0"
       - key: QUANTUM_DB_PATH
         value: /data/quantum.db
       - key: PRIVI_LEDGER_URL         # one ledger: this service reports its activity to the Privi Quantum Ledger
@@ -280,6 +288,8 @@ services:
       - key: PRIVI_PAYMENTS          # paid tools also accept the PRIVI token (price from the Privi swap desk)
         value: "1"
       - fromGroup: privi-coinbase-cdp
+      - key: CALL_EXTERNAL_ANCHORS  # one master audit history; no paid gas on local Call log
+        value: "0"
       - key: CALL_DB_PATH
         value: /data/call.db
       - key: PRIVI_LEDGER_URL         # one ledger: this service reports its activity to the Privi Quantum Ledger

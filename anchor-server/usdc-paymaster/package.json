@@ -1,0 +1,17 @@
+{
+  "name": "privi-usdc-gas-anchor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Guarded Base USDC paymaster anchor pilot (EIP-7702 ERC-4337)",
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "permissionless": "0.5.2",
+    "viem": "2.57.19"
+  },
+  "scripts": {
+    "check": "node --check ./anchor.mjs",
+    "test": "node --test ./test_anchor.mjs",
+    "dry-run": "node ./anchor.mjs --dry-run"
+  }
+}
