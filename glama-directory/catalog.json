@@ -1,0 +1,64 @@
+{
+  "publisher": "Privi World Corp",
+  "source": "https://github.com/canoydario847-cloud/Privi-Network",
+  "glama_listing": "https://glama.ai/mcp/servers/canoydario847-cloud/Privi-Network",
+  "support_email": "canoydario847@gmail.com",
+  "disclaimer": "This server is a directory of Privi endpoints, not an execution proxy. It never issues API keys, collects payments, forwards private credentials, or executes paid services. Access must be arranged through each provider's endpoint under its own terms.",
+  "services": [
+    {
+      "id": "ledger",
+      "name": "Privi Ledger",
+      "endpoint": "https://privi-ledger-aqe5.onrender.com/mcp",
+      "summary": "AI-agent audit and security evaluation; current recovery storage should not be treated as durable audit proof",
+      "availability": "Evaluation mode; payment and durable-evidence readiness must be verified",
+      "glama": "https://glama.ai/mcp/connectors/io.github.canoydario847-cloud/privi-ledger"
+    },
+    {
+      "id": "verify",
+      "name": "Privi Verify",
+      "endpoint": "https://privi-verify-s4jb.onrender.com/mcp",
+      "summary": "Manufacturing lot and chain-of-custody verification",
+      "availability": "Payment/fulfillment and production dataset availability require verification",
+      "glama": "https://glama.ai/mcp/connectors/io.github.canoydario847-cloud/privi-verify"
+    },
+    {
+      "id": "anchor",
+      "name": "Privi Anchor",
+      "endpoint": "https://privi-anchor-zsbk.onrender.com/mcp",
+      "summary": "Hash proof-of-existence and verification; on-chain Base submissions currently paused",
+      "availability": "On-chain submissions paused pending gas readiness",
+      "glama": "https://glama.ai/mcp/connectors/io.github.canoydario847-cloud/privi-anchor"
+    },
+    {
+      "id": "quantum",
+      "name": "Privi Quantum",
+      "endpoint": "https://privi-quantum-vvmj.onrender.com/mcp",
+      "summary": "Quantum-related optimization and security-readiness research tools",
+      "availability": "Research tools; confirm provider availability and paid execution before commercial use",
+      "glama": "https://glama.ai/mcp/connectors/io.github.canoydario847-cloud/privi-quantum"
+    },
+    {
+      "id": "call",
+      "name": "Privi Call",
+      "endpoint": "https://privi-call-e3rb.onrender.com/mcp",
+      "summary": "AI-agent directory, tool discovery, and call routing",
+      "availability": "Paid call service; confirm enabled payment settlement and authorization",
+      "glama": "https://glama.ai/mcp/connectors/io.github.canoydario847-cloud/privi-call"
+    },
+    {
+      "id": "agent-survival",
+      "name": "Privi Agent Survival & Premium",
+      "endpoint": "https://privi-ai-21-gateway.onrender.com/mcp",
+      "summary": "32 standard agent utilities and 51 premium analyzers discoverable over MCP",
+      "availability": "Automatic API-credit checkout/key issuance not yet verified operational",
+      "glama": "https://glama.ai/mcp/connectors/io.github.canoydario847-cloud/privi-agent-survival"
+    }
+  ],
+  "human_service_offers": {
+    "security_review_usd": "19.99 one time, human-coordinated",
+    "evidence_review_usd": "19.99 one time, human-coordinated",
+    "integration_consultation_usd": "19.99 one time, human-coordinated",
+    "pro_unlimited_usd": "35.00 one time; technical activation not guaranteed at checkout",
+    "details": "https://privi-services.onrender.com/"
+  }
+}
