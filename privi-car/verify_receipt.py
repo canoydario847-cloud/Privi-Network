@@ -6,6 +6,9 @@ Checks canonical SHA-256 integrity and minimal schema constraints.
 A matching hash is NOT an authenticated signature or proof of actual mileage.
 """
 import argparse
+import datetime
+import hmac
+import re
 import hashlib
 import json
 import sys
@@ -37,13 +40,20 @@ def verify_receipt(receipt):
     pseudonym = event["vehicle_pseudonym"]
     if not isinstance(pseudonym, str) or len(pseudonym) != 64 or any(c not in "0123456789abcdef" for c in pseudonym):
         return False, "Invalid pseudonym"
-    if not isinstance(event["recorded_at"], str) or not event["recorded_at"]:
-        return False, "Missing timestamp"
-    if not isinstance(digest, str) or len(digest) != 64:
-        return False, "Invalid hash"
+    timestamp = event["recorded_at"]
+    if not isinstance(timestamp, str) or len(timestamp) > 40:
+        return False, "Invalid timestamp"
+    try:
+        parsed = datetime.datetime.fromisoformat(timestamp)
+    except ValueError:
+        return False, "Invalid timestamp"
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return False, "Timestamp must have an explicit UTC offset"
+    if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+        return False, "Invalid lowercase SHA-256 digest"
     canonical = json.dumps(event, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     expected = hashlib.sha256(canonical.encode()).hexdigest()
-    if not __import__("hmac").compare_digest(expected, digest):
+    if not hmac.compare_digest(expected, digest):
         return False, "Receipt contents do not match SHA-256"
     return True, "Integrity verified (local demo only; not proof of vehicle origin)"
 

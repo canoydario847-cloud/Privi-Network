@@ -18,6 +18,12 @@ class ConsentReceiptTests(unittest.TestCase):
         self.assertNotIn("demo-1", str(result))
         self.assertEqual(len(result["sha256"]), 64)
 
+    def test_boolean_odometer_is_not_a_valid_measurement(self):
+        for odometer in (True, False):
+            with self.subTest(odometer=odometer):
+                with self.assertRaises(ValueError):
+                    module.make_receipt("demo-1", odometer, True)
+
     def test_invalid_odometer(self):
         with self.assertRaises(ValueError):
             module.make_receipt("demo-1", -1, True)

@@ -15,7 +15,7 @@ def make_receipt(vehicle_id, odometer_km, consent):
         raise PermissionError("Explicit consent required before processing telemetry")
     if not isinstance(vehicle_id, str) or not (1 <= len(vehicle_id) <= 80):
         raise ValueError("vehicle-id must be 1..80 characters")
-    if not isinstance(odometer_km, int) or not (0 <= odometer_km <= 3000000):
+    if type(odometer_km) is not int or not (0 <= odometer_km <= 3000000):
         raise ValueError("odometer-km must be an integer from 0 to 3000000")
     # Do not put VIN, location, driver identity, or raw telemetry in the receipt.
     pseudonym = hashlib.sha256(("privi-car-demo-v1:" + vehicle_id).encode()).hexdigest()
