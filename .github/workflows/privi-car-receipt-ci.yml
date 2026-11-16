@@ -1,0 +1,25 @@
+name: Privi Car offline receipt regression tests
+
+on:
+  pull_request:
+    paths:
+      - 'privi-car/**'
+      - '.github/workflows/privi-car-receipt-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'privi-car/**'
+      - '.github/workflows/privi-car-receipt-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-receipts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test local Privi Car consent receipts and fleet prototypes
+        run: python3 -m unittest discover -s privi-car -p 'test_*.py' -v
