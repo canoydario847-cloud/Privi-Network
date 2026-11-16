@@ -212,6 +212,12 @@ const server = http.createServer(async (req, res) => {
         });
         if (!response.ok) {
           console.error('Jose AI provider status', response.status);
+          if (response.status === 401 || response.status === 403) {
+            return sendJson(res, 503, { error: 'Jose AI authentication failed. The operator must replace JOSE_AI_API_KEY with a valid OpenAI API key on Render.' });
+          }
+          if (response.status === 429) {
+            return sendJson(res, 503, { error: 'Jose AI provider is rate-limited or out of API quota. Contact the operator.' });
+          }
           return sendJson(res, 502, { error: 'Jose could not get an AI response. Please try again later.' });
         }
         const data = await response.json();
