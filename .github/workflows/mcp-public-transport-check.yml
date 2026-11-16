@@ -1,0 +1,38 @@
+name: MCP public transport verification
+on:
+  pull_request:
+    paths:
+      - discovery/check_remote_mcp_health.py
+      - discovery/test_remote_mcp_health.py
+      - glama-directory/catalog.json
+      - .github/workflows/mcp-public-transport-check.yml
+  push:
+    branches: [main]
+    paths:
+      - discovery/check_remote_mcp_health.py
+      - discovery/test_remote_mcp_health.py
+      - glama-directory/catalog.json
+      - .github/workflows/mcp-public-transport-check.yml
+  workflow_dispatch:
+  schedule:
+    - cron: "17 11 * * *"
+permissions:
+  contents: read
+jobs:
+  offline-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test protocol parser without external calls
+        run: python3 -m unittest discover -s discovery -p 'test_remote_mcp_health.py' -v
+      - name: Compile probe
+        run: python3 -m py_compile discovery/check_remote_mcp_health.py
+  remote-readonly-handshake:
+    needs: offline-safety
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: MCP initialize and tools/list on all six endpoints
+        run: python3 discovery/check_remote_mcp_health.py --timeout 75
