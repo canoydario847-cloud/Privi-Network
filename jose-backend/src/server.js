@@ -23,6 +23,7 @@ const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 // back to the user who started the connect flow and we can reject replay /
 // CSRF attempts. In-memory is fine: a connect flow finishes in minutes.
 const pendingOAuth = new Map();
+const chatRate = new Map();
 
 function sendJson(res, status, obj) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -167,6 +168,60 @@ const server = http.createServer(async (req, res) => {
         ...credited, proofId: quote.proofId, eligibility: 'ISSUER_SIGNED_WORK_ONLY',
         financialPrviAmount: 0, nativePrviMinted: false,
       });
+    }
+
+    // ---- Jose text chat (opt-in configured AI provider, authenticated, bounded) ----
+    if (req.method === 'GET' && url.pathname === '/api/chat/status') {
+      const user = getCurrentUser(req);
+      if (!user) return sendJson(res, 401, { error: 'Sign in to chat with Jose.' });
+      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), model: process.env.JOSE_AI_MODEL || 'gpt-4o-mini' });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/chat') {
+      const user = getCurrentUser(req);
+      if (!user) return sendJson(res, 401, { error: 'Sign in to chat with Jose.' });
+      // Require same-origin browser requests: cookie sessions must not be callable cross-site.
+      const origin = req.headers.origin;
+      if (origin && origin !== new URL(BASE_URL).origin) return sendJson(res, 403, { error: 'Invalid request origin.' });
+      const apiKey = process.env.JOSE_AI_API_KEY;
+      if (!apiKey) return sendJson(res, 503, { error: 'Jose AI chat is not configured yet. The operator must set JOSE_AI_API_KEY on the Jose backend.' });
+      const now = Date.now();
+      const bucket = chatRate.get(user.id) || [];
+      const recent = bucket.filter(t => now - t < 60_000);
+      if (recent.length >= 5) return sendJson(res, 429, { error: 'Please wait a minute before asking more questions.' });
+      recent.push(now);
+      chatRate.set(user.id, recent);
+      let body;
+      try { body = await readBody(req); }
+      catch { return sendJson(res, 400, { error: 'Invalid JSON body.' }); }
+      const message = typeof body.message === 'string' ? body.message.trim() : '';
+      if (!message || message.length > 2000) return sendJson(res, 400, { error: 'Enter a question of up to 2,000 characters.' });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 20000);
+      try {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST', signal: controller.signal,
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({
+            model: process.env.JOSE_AI_MODEL || 'gpt-4o-mini',
+            max_tokens: 500,
+            messages: [
+              { role: 'system', content: 'You are Hey Jose, a helpful Privi assistant. Respond in the same language as the user (English, Spanish, Portuguese or Chinese). Be accurate, concise, and admit uncertainty. Do not claim you took actions or accessed private accounts.' },
+              { role: 'user', content: message },
+            ],
+          }),
+        });
+        if (!response.ok) {
+          console.error('Jose AI provider status', response.status);
+          return sendJson(res, 502, { error: 'Jose could not get an AI response. Please try again later.' });
+        }
+        const data = await response.json();
+        const answer = data?.choices?.[0]?.message?.content;
+        if (typeof answer !== 'string' || !answer.trim()) return sendJson(res, 502, { error: 'The AI provider returned no answer.' });
+        return sendJson(res, 200, { answer: answer.trim() });
+      } catch (error) {
+        console.error('Jose AI request failed', error?.name);
+        return sendJson(res, 504, { error: 'Jose timed out while answering. Try again.' });
+      } finally { clearTimeout(timeout); }
     }
 
     // ---- auth ----
