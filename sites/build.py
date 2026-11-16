@@ -199,13 +199,14 @@ MCP_SNIPPET = f"""<pre>{{
 SITES = {}
 
 SITES["home"] = page(
-    "home", "Privi: proof for everything your AI agents do",
-    "Privi gives AI agents a tamper-evident record, a trust credential, wallet checks and spending mandates, all verifiable on chain.",
-    "Proof for everything your AI agents do",
-    "Privi records what agents do in a log nobody can quietly rewrite, then turns that history into credentials other companies can check in one call. Every proof is signed twice, once with a post-quantum algorithm, and anchored on the Privi chain.",
-    [("Start free", f"{URLS['developers']}/start/"), ("Talk to the founder", f"mailto:{EMAIL}")],
+    "home", "Privi CallProof: Trust Every AI Agent Call",
+    "Privi CallProof governs agent tool permissions, policy budgets, independent approval, retry-safe reservations and signed executor-reported receipts. Part of $35 one-time Privi Pro.",
+    "Trust every AI agent call with Privi CallProof",
+    "Privi CallProof is the flagship agent-call trust plane. Scope tools, set policy budgets, require independent write approval, prevent duplicate intent authorizations, and sign executor-reported outcomes. The financial Privi mainnet is not launched. Pro runtime activation requires separately verified access.",
+    [("Explore CallProof", "https://privi-ai-21-gateway.onrender.com/callproof"), ("Try the public demo", "https://privi-ai-21-gateway.onrender.com/callproof/demo"), ("Talk to Privi", "mailto:canoydario847@gmail.com")],
     STH_WIDGET,
-    sec("What Privi does", defs([
+    sec("The main Privi feature", "<p>CallProof combines delegated tool scopes, budget policy, separate write approval, retry-safe intent reservations and Ed25519-signed executor-reported receipts. It does not perform external actions or independently prove them. <a href='https://privi-ai-21-gateway.onrender.com/callproof'>See CallProof + video</a>. Verified $35 one-time Pro access is required for the active service; the public demo is synthetic.</p>")
+    + sec("What Privi does", defs([
         ("Ledger", "An append-only, hash-linked log of every agent action. Edits, deletions and reordering are detectable. Sealed compliance reports export as PDF."),
         ("Fortress", f"Defense-grade controls: ML-DSA-87 post-quantum signatures, an RFC 9162 transparency log, two-person approval for sensitive actions and evidence you can verify offline. <a href='{URLS['fortress']}'>About Fortress</a>"),
         ("Passport", f"A signed trust score for an agent, 0 to 1000, computed from its verified history and re-checked live every time someone looks. <a href='{URLS['passport']}'>About Passport</a>"),
@@ -608,13 +609,14 @@ $("#print").onclick=()=>window.print();
 </script></body></html>""")
 
 SITES["developers"] = page(
-    "developers", "Privi for developers: MCP servers for agent trust",
-    "Connect AI agents to Privi Ledger, Verify and Anchor over MCP. Free tier, x402 payments in USDC, every proof verifiable.",
-    "Connect your agent in one config block",
-    "Privi runs as three MCP servers. Point your agent at them, sign up for a free organization from inside the agent, and start recording actions. Upgrades and paid checks settle in USDC on Base through x402.",
-    [("Paid pilot", f"{URLS['developers']}/pilot/"), ("Start free", f"{URLS['developers']}/start/"), ("Add the servers", "#connect")],
+    "developers", "Privi CallProof for developers: Pro-only AI agent trust plane",
+    "Connect agents to Privi CallProof for scoped tool permissions, budgets, independent approvals and Ed25519-signed executor reports. Pro-only runtime with public demo.",
+    "Build safer AI tool calls with Privi CallProof",
+    "CallProof is the flagship Pro-only agent trust plane with two discoverable MCP tools alongside six hosted Privi endpoints. It provides scoped authorization, retry-safe policy reservations and signed executor reports. It does not execute external tools or prove blockchain finality. Checkout does not automatically grant an API key.",
+    [("CallProof flagship + video", "https://privi-ai-21-gateway.onrender.com/callproof"), ("CallProof agent skill", "https://privi-ai-21-gateway.onrender.com/callproof/SKILL.md"), ("Add MCP servers", "#connect")],
     STH_WIDGET,
-    f'<section id="connect"><h2>Add the servers</h2>{MCP_SNIPPET}<p class="note">All three are also listed in the official MCP Registry as io.github.canoydario847-cloud/privi-ledger, privi-verify and privi-anchor.</p></section>'
+    sec("Privi CallProof flagship", "<p>Give each agent a scoped tool grant, policy budget and retry-safe reservation; require Pro-owner approval before sensitive writes. Produce signed executor-reported receipts without claiming third-party execution proof. <a href='https://privi-ai-21-gateway.onrender.com/callproof/demo'>Interactive browser-only demo</a>; $35 one-time Privi Pro covers all services but technical activation is separate.</p>")
+    + f'<section id="connect"><h2>Add the servers</h2>{MCP_SNIPPET}<p class="note">All three are also listed in the official MCP Registry as io.github.canoydario847-cloud/privi-ledger, privi-verify and privi-anchor.</p></section>'
     + sec("First five minutes", steps([
         ("Sign up from the agent", "<p>Call <code>ledger_signup</code> with your company name. The response contains your organization key, shown once.</p>"),
         ("Send the key", "<p>Every request carries <code>Authorization: Bearer &lt;key&gt;</code>. The free plan includes 500 entries a month.</p>"),
