@@ -79,7 +79,10 @@ def main(argv=None):
                 raise ValueError("report destination must end in .txt")
             if destination.resolve() == path.resolve():
                 raise ValueError("cannot overwrite source export")
-            destination.write_text(report, encoding="utf-8")
+            # Exclusive creation: never overwrite an existing customer report,
+            # source export, or symlink target. Operators must choose a new name.
+            with destination.open("x", encoding="utf-8") as handle:
+                handle.write(report)
         else:
             print(report, end="")
         return 0
