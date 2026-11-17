@@ -16,3 +16,8 @@ To verify the implementation:
     python3 -m unittest discover -s privi-car -p 'test_*.py' -v
 
 **Pilot offer:** Ask a consenting independent repair shop or small fleet for a locally exported, synthetic or permissioned mileage-history sample. Provide the offline aggregate report and gather feedback on usefulness and willingness to pay. Keep raw data local, obtain explicit consent, and do not claim live integrations, automated payments, or authenticated telemetry. Fuel pump prepay and reservations remain future concepts.
+
+
+## Non-destructive pilot report output
+
+When you specify `--output`, the report now creates a **new** text file exclusively. If the filename already exists (including a symlink or an earlier customer report), it fails rather than overwriting it. Use a new filename for every pilot run. This protects previous customer evidence and locally retained records without adding any hosting costs. This is a local-file safety control, not encryption or authenticated vehicle telemetry.
