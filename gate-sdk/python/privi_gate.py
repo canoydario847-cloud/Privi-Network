@@ -168,8 +168,15 @@ class PriviGate:
         self.checker = checker or PassportChecker(min_score=min_score, min_grade=min_grade, **checker_kw)
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] not in ("http", "websocket") or scope.get("path", "").startswith(self.exempt) \
-                or scope.get("method") == "OPTIONS":
+        if scope["type"] not in ("http", "websocket"):
+            return await self.app(scope, receive, send)
+        path = scope.get("path", "")
+        # A prefix match on "/health" used to exempt "/health/admin" and
+        # "/health-secret". Only explicit slash-suffixed directory exemptions
+        # may match descendants; other exemptions are exact routes.
+        exempt = any(path.startswith(route) if route.endswith("/")
+                     else path == route for route in self.exempt)
+        if exempt or (scope.get("type") == "http" and scope.get("method") == "OPTIONS"):
             return await self.app(scope, receive, send)
         headers = {k.decode("latin-1"): v.decode("latin-1") for k, v in scope.get("headers", [])}
         pid = passport_from_headers(headers)
