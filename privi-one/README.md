@@ -72,3 +72,22 @@ Sandbox requests sent to `POST /api/simulate-secure` now use an **atomic SQLite 
 **Security limits:** Render free services have ephemeral filesystems. This journal is not a durable PostgreSQL authorization ledger, is not a Privi Ledger or on-chain entry, and its hash chain is **not a digital signature**. An attacker with write access to the database could rewrite the chain or truncate its tail; the chain head must be checkpointed externally with independent trusted signing to detect that. The server also generates volatile HMAC keys at startup, so receipts from an earlier instance may fail verification after restart. It stores only simulated outcomes; no users or paid access are granted. For enterprise use, migrate records to durable backed-up Postgres, bind receipts to verified identities, use a key-management-backed Ed25519 signer and publicly pinned verification keys, implement checkpoint anchoring, and test independent executor acknowledgments.
 
 Run the offline suite via `python -m unittest discover -s privi-one -p 'test_*.py' -v`. No PRVI token, Stripe, live tool execution, or production CallProof settings are changed by these commits.
+
+## Independent Ed25519 signature experiment (November 18, 2026)
+
+The optional `signed_receipt.py` module uses the maintained Python `cryptography` implementation to sign a **synthetic Privi ONE receipt** with Ed25519. Verification accepts only an independently supplied `trusted_keys` dictionary mapping a pinned key ID to public-key bytes. Keys embedded in receipts are never accepted as trust anchors. Tampering with receipt fields or substituting another signature fails verification.
+
+Run the dedicated offline test suite with:
+
+```bash
+python -m pip install 'cryptography>=43,<47'
+python -m unittest discover -s privi-one -p 'test_signed_receipt.py' -v
+```
+
+The separate GitHub Actions workflow `.github/workflows/privi-one-signing.yml` installs the crypto dependency and executes signature tests. **This is not yet wired into the Render server.** Its existing `/api/verify` continues to check *local, short-lived HMACs* only. Render's build command does not yet install `cryptography`, so the optional signing test is skipped by the general stdlib-only Render test runner. Do not imply the live demo returns independently signed receipts.
+
+A production migration must require: (1) pinned public keys via an independently authenticated channel, (2) non-exportable or protected private keys managed outside GitHub, (3) stable key IDs and a rotation/revocation policy, (4) a separately signed executor acknowledgment, (5) authenticated customer/agent identity and distinct approver, (6) durable DB/transactional idempotency, and (7) external journal head checkpoints to make truncation/rewrite detectable. A valid signature **does not** prove a third-party tool executed, nor PRVI chain finality.
+
+### Render storage assessment
+
+The connected Render Privi workspace currently contains a **free billing-staging PostgreSQL instance** (listed as expiring December 13, 2026) and a separate production billing database. Privi ONE does **not** reuse or modify either database, because billing data must remain isolated and an expiring free instance is unsuitable as the trust system's durable audit store. No new paid resources were provisioned.
