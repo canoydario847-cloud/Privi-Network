@@ -65,6 +65,22 @@ class SignedReceiptTests(unittest.TestCase):
         self.assertFalse(self.signer.verify_receipt(
             signed, trusted_keys={self.kid: b"0" * 32}))
 
+    def test_offline_generate_and_verify(self):
+        import tempfile
+        demo_path = Path(__file__).with_name("signing_demo.py")
+        spec = importlib.util.spec_from_file_location("privi_one_offline_signing_example", demo_path)
+        example = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(example)
+        with tempfile.TemporaryDirectory() as folder:
+            artifact = Path(folder) / "signed.json"
+            pinned = Path(folder) / "trusted.json"
+            example.generate(artifact, pinned)
+            self.assertTrue(example.verify(artifact, pinned))
+            signed = __import__("json").loads(artifact.read_text())
+            signed["signed"]["receipt"]["decision"] = "PRODUCTION_SUCCESS"
+            artifact.write_text(__import__("json").dumps(signed))
+            self.assertFalse(example.verify(artifact, pinned))
+
     def test_malformed_signature_fails_closed(self):
         signed = self.signer.sign_receipt(self.receipt, private_key_bytes=self.private)
         signed["signature_b64url"] = "invalid"
