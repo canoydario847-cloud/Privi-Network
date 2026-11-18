@@ -82,3 +82,34 @@ def test_middleware_enforce_monitor_exempt():
     mon = pg.PriviGate(None, mode="monitor", checker=chk)
     status, _, called = asyncio.run(_call(mon))
     assert status == 200 and called[0]["allow"] is False
+
+
+def test_passport_identity_binding():
+    checker = pg.PassportChecker(fetch=fake({"pp_good": (200, GOOD)}))
+    gate = pg.PriviGate(None, checker=checker, require_subject_binding=True)
+    async def attempt(identity):
+        events = []
+        async def app(scope, receive, send):
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            await send({"type": "http.response.body", "body": b"ok"})
+        gate.app = app
+        async def receive():
+            return {"type": "http.request", "body": b""}
+        async def send(msg):
+            events.append(msg)
+        state = {} if identity is None else {"privi_authenticated_subject": identity}
+        scope = {"type": "http", "path": "/mcp", "method": "POST",
+                 "headers": [(b"x-privi-passport", b"pp_good")], "state": state}
+        await gate(scope, receive, send)
+        return events[0]["status"]
+
+    # A public passport ID must not authorize an unrelated or anonymous caller.
+    assert asyncio.run(attempt(None)) == 401
+    assert asyncio.run(attempt("org_other")) == 401
+    assert asyncio.run(attempt("org_1")) == 200
+    try:
+        pg.PriviGate(None, checker=checker, require_subject_binding=True, mode="monitor")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Binding must not permit monitor-mode bypass")
