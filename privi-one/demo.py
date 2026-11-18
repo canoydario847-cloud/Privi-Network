@@ -159,6 +159,31 @@ def evaluate(task, *, tool, allowed_tools, budget_cents, approved,
                      "mac": hmac.new(secret, canonical(receipt), hashlib.sha256).hexdigest()}}
 
 
+def audit_sandbox_invariants(receipt):
+    """Enforce sandbox safety invariants even for locally authenticated receipts.
+
+    Authentication proves only that a local key signed bytes. This additional
+    check prevents mislabeling an execution or a charge as a sandbox receipt.
+    """
+    if not isinstance(receipt, dict):
+        return False
+    return (
+        receipt.get("schema") == SCHEMA
+        and receipt.get("mode") == "PRELAUNCH_SIMULATION_NO_EXTERNAL_EXECUTION"
+        and receipt.get("execution") == "NOT_ATTEMPTED"
+        and type(receipt.get("actual_charge_cents")) is int
+        and receipt["actual_charge_cents"] == 0
+        and receipt.get("ledger") == "NOT_SUBMITTED"
+        and receipt.get("token") == "NOT_USED"
+        and receipt.get("decision") in ("SIMULATED_APPROVAL", "DENIED")
+        and isinstance(receipt.get("denial_reasons"), list)
+        and (receipt["decision"] == "DENIED") == bool(receipt["denial_reasons"])
+        and isinstance(receipt.get("routing"), dict)
+        and (receipt["decision"] != "DENIED"
+             or receipt["routing"].get("estimated_savings_cents") is None)
+    )
+
+
 def verify(envelope, secret):
     """Fail closed on malformed or tampered sandbox receipts.
 
@@ -168,7 +193,7 @@ def verify(envelope, secret):
         return False
     if not isinstance(envelope, dict) or not isinstance(envelope.get("receipt"), dict):
         return False
-    if envelope["receipt"].get("schema") != SCHEMA:
+    if not audit_sandbox_invariants(envelope["receipt"]):
         return False
     auth = envelope.get("auth")
     if not isinstance(auth, dict) or auth.get("algorithm") != "HMAC-SHA256-DEMO-ONLY":
