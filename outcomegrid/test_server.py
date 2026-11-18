@@ -40,6 +40,14 @@ class WebTests(unittest.TestCase):
         self.assertEqual(status, 200)
         return json.loads(body)
 
+    def test_cosmic_ui_brand_and_navigation(self):
+        status, headers, body = self.call("GET", "/")
+        self.assertEqual(status, 200)
+        self.assertIn(b"hero-visual", body)
+        self.assertIn(b"MISSION CONTROL", body)
+        self.assertIn(b"privi-one-demo.onrender.com", body)
+        self.assertIn(b"SYNTHETIC", body)
+
     def test_page_and_health(self):
         status, headers, body = self.call("GET", "/")
         self.assertEqual(status, 200)
