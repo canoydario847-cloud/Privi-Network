@@ -99,6 +99,8 @@ footer{margin-top:36px;padding-top:24px;border-top:1px solid var(--edge);color:v
 footer a{color:#90e7f3}
 @media(max-width:780px){.hero{grid-template-columns:1fr;padding:46px 0 22px}.hero-visual{height:230px;max-width:400px;width:100%;margin:0 auto}.planet{width:128px;height:128px}.cols,.grid{grid-template-columns:1fr 1fr}nav{padding:12px 0}.links{gap:2px}main{padding:0 16px 55px}}
 @media(max-width:520px){.cols,.grid{grid-template-columns:1fr}.hero{padding-top:32px}h1{font-size:42px}.hero-visual{height:200px}.panel{padding:19px}.status{font-size:10px}.links a{padding:5px 8px}}
+.guided{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0}.guided button{width:100%;margin:0;text-align:left;min-height:72px;padding:14px 15px;background:rgba(23,48,91,.65);color:#e4f4ff;border:1px solid var(--edge);text-transform:none;letter-spacing:0;font-size:13px}.guided button span{display:block;color:var(--muted);font-size:11px;margin-top:3px}.helper{font-size:13px;color:#c1d6f1;margin:8px 0 12px}.disclosure{border-left:3px solid var(--gold);background:rgba(249,200,135,.075);border-radius:0 12px 12px 0;padding:14px 17px;margin:16px 0 26px;font-size:13px;color:#e9dcc9}.status-line{padding:10px 13px;border:1px solid var(--edge);border-radius:10px;color:#d7eafa;background:rgba(6,17,36,.62);margin:12px 0}.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.actions button{margin:0}.actions button:disabled{opacity:.55;cursor:wait;transform:none}.quicklinks{display:flex;gap:12px;flex-wrap:wrap}.quicklinks a{color:var(--cyan);font-size:13px}
+@media(max-width:720px){.guided{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}button:hover{transform:none}}
 
 </style></head><body><main><nav><a class="brand" href="/"><span class="brand-mark">✦</span> PRIVI <span style="color:var(--cyan)">ONE</span></a><div class="links"><a href="https://privi-outcomegrid-demo.onrender.com">OUTCOMEGRID</a><a href="#route">SMARTROUTE</a><a href="#console">MISSION CONTROL</a></div><span class="status">PRELAUNCH · SYNTHETIC SIMULATION</span></nav>
@@ -107,17 +109,33 @@ footer a{color:#90e7f3}
 <div class="cols"><div class="item"><b>Budget model</b>3¢ · quality 78/100 · reliability 96%</div>
 <div class="item"><b>Balanced model</b>8¢ · quality 91/100 · reliability 99%</div>
 <div class="item"><b>Premium baseline</b>19¢ · quality 96/100 · reliability 99%</div></div><small>Prices and scores are illustrative, not live quotes or measured performance.</small></section>
-<section id="console" class="panel"><span class="eyebrow">02 / MISSION CONTROL</span><h2>Run an offline policy simulation</h2>
+<section id="console" class="panel"><span class="eyebrow">02 / MISSION CONTROL</span><h2>Run a guided simulation</h2><p class="helper">1. Choose an example. 2. Set your synthetic budget. 3. Run the demo, then verify its local receipt. Nothing is sent to an external AI model.</p>
+<div class="guided" role="group" aria-label="Choose a sample simulation"><button type="button" data-example="balanced">Balanced route<span>10¢ budget · simulated approval</span></button><button type="button" data-example="low-budget">Budget too low<span>1¢ budget · expected denial</span></button><button type="button" data-example="no-approval">Approval missing<span>10¢ budget · expected denial</span></button></div>
 <label for="task">Synthetic task (no confidential data)</label>
 <textarea id="task" maxlength="10000" rows="3">Summarize a synthetic non-sensitive report</textarea>
 <label for="budget">Maximum estimated cost in cents</label><input id="budget" type="number" value="10" min="0" max="100000">
 <label><input id="approve" type="checkbox" style="width:auto" checked> Simulated approval (not verified human authorization)</label>
-<button id="go">Compare &amp; generate simulated receipt</button> <button id="verify" class="secondary" type="button">Verify receipt in this session</button>
-<h3 id="resultHeading" aria-live="polite">No simulation run yet</h3>
+<div class="disclosure"><strong>Sandbox only.</strong> These numbers are made-up comparisons, the approval checkbox is not identity verification, and receipts are not blockchain transactions or independent Ledger records. Do not enter secrets or customer information.</div>
+<div class="actions"><button id="go" type="button">Compare routes &amp; create demo receipt</button><button id="verify" class="secondary" type="button" disabled>Verify demo receipt</button></div>
+<p id="simStatus" class="status-line" role="status" aria-live="polite">Ready. Choose an example or edit the synthetic task.</p>
+<h3 id="resultHeading">No simulation run yet</h3>
 <pre id="result" class="output" aria-live="polite"></pre></section>
 <footer>© 2026 Privi World Corp. Original proprietary Privi materials reserved, subject to existing licenses and third-party rights. This demo is not a live CallProof, payment, or PRVI mainnet service.</footer>
 </main><script>
 let lastReceipt=null, sandboxToken=null;
+const simulateButton=document.querySelector('#go');
+const verifyButton=document.querySelector('#verify');
+const statusLine=document.querySelector('#simStatus');
+for(const button of document.querySelectorAll('[data-example]')){
+ button.addEventListener('click',()=>{
+  const preset=button.dataset.example;
+  document.querySelector('#task').value='Summarize a synthetic non-sensitive report';
+  document.querySelector('#budget').value=preset==='low-budget'?'1':'10';
+  document.querySelector('#approve').checked=preset!=='no-approval';
+  statusLine.textContent='Example selected: '+button.textContent.trim()+'. Run the sandbox when ready.';
+  document.querySelector('#task').focus();
+ });
+}
 async function getSandboxToken(){
  if(sandboxToken)return sandboxToken;
  const response=await fetch("/api/session",{method:"POST",headers:{"content-type":"application/json"},body:"{}"});
@@ -126,25 +144,40 @@ async function getSandboxToken(){
 }
 document.querySelector('#go').addEventListener('click',async()=>{
  const output=document.querySelector('#result'), head=document.querySelector('#resultHeading');
+ const budgetText=document.querySelector('#budget').value;
+ const budget=Number(budgetText);
+ const task=document.querySelector('#task').value.trim();
+ if(!task||task.length>10000||budgetText.trim()===''||!Number.isSafeInteger(budget)||budget<0||budget>100000){
+  statusLine.textContent='Enter a nonempty synthetic task and a whole-cent budget from 0 to 100,000.';
+  head.textContent='Check your inputs';return;
+ }
+ simulateButton.disabled=true;verifyButton.disabled=true;lastReceipt=null;
+ statusLine.textContent='Running synthetic safety and cost checks…';
  head.textContent='Simulating...';output.textContent='';
  try{
   const token=await getSandboxToken();
   const response=await fetch('/api/simulate-secure',{method:'POST',headers:{'content-type':'application/json','authorization':'Bearer '+token},
-   body:JSON.stringify({task:document.querySelector('#task').value,budget_cents:Number(document.querySelector('#budget').value),
+   body:JSON.stringify({task:task,budget_cents:budget,
     approved:document.querySelector('#approve').checked, request_id:crypto.randomUUID()})});
   const body=await response.json();head.textContent=response.ok?(body.receipt?.decision||'Done'):'Error';
   lastReceipt=response.ok?body:null;
+  verifyButton.disabled=!lastReceipt;
+  statusLine.textContent=response.ok?'Demo completed. Inspect the result, then verify its same-session receipt.':'Simulation denied or unavailable. No action was executed.';
   output.textContent=JSON.stringify(body,null,2);
- }catch{head.textContent='Unavailable';output.textContent='The demo could not be reached.';}
+ }catch{head.textContent='Unavailable';statusLine.textContent='The demo could not be reached. No external action was executed.';output.textContent='The demo could not be reached.';}
+ finally{simulateButton.disabled=false;}
 });
 document.querySelector('#verify').addEventListener('click',async()=>{
  const output=document.querySelector('#result'),head=document.querySelector('#resultHeading');
  if(!lastReceipt){head.textContent='Generate a receipt first';return;}
+ verifyButton.disabled=true;statusLine.textContent='Checking the receipt against this server session…';
  try{
  const resp=await fetch('/api/verify',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(lastReceipt)});
  const body=await resp.json();head.textContent=body.verified?'Receipt verified in this server session':'Verification failed';
+ statusLine.textContent=body.verified?'Receipt matches the current sandbox session; this is not on-chain verification.':'Receipt did not verify in this session; it grants no access.';
  output.textContent=JSON.stringify(body,null,2)+'\\n\\n'+JSON.stringify(lastReceipt,null,2);
- }catch{head.textContent='Verification unavailable';}
+ }catch{head.textContent='Verification unavailable';statusLine.textContent='The local receipt could not be verified.';}
+ finally{verifyButton.disabled=!lastReceipt;}
 });
 </script></body></html>"""
 
