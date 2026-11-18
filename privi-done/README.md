@@ -77,3 +77,29 @@ pinned check-app identities, a stable snapshot policy across retries, and
 read-only Render deployment/health evidence.
 
 This command never triggers a GitHub workflow, deploys code or writes to GitHub.
+
+## Render deploy metadata: read-only operational integration
+
+Use a least-privilege Render API key that can read an approved service. Never
+paste credentials into chat, command arguments, source files or CI logs. The
+Render account connector also requires explicit workspace selection before
+reading the owner's account; this prototype does not choose one.
+
+```bash
+export RENDER_API_KEY="set-securely-outside-the-repository"
+python privi-done/cli.py render-deploy \
+  --service-id srv-YOUR_PINNED_SERVICE_ID \
+  --repository OWNER/REPO \
+  --commit FULL_40_CHARACTER_SHA
+```
+
+This command performs *only* Render API GET requests (service metadata and
+recent deploys). It rejects redirects, unpinned repository/service identities,
+stale or ambiguous live commit matches, and incomplete responses. It does not
+perform arbitrary HTTP health probes, release a deployment, or retrieve costs.
+Render's `live` status and correct commit mean **reported deployment metadata
+only**, not that the application is healthy, safe, available to customers,
+or that a real purchase was delivered. Compare this result with GitHub checks
+and separately approved acceptance probes before offering a verified outcome.
+
+The example tests use injected JSON fixtures, not customer deployments.
