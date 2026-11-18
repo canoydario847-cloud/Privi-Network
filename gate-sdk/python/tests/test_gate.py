@@ -74,6 +74,11 @@ def test_middleware_enforce_monitor_exempt():
     assert body["error"] == "privi_passport_required" and body["how_to_get_one"]["steps"]
     assert any(k == b"www-authenticate" for k, _ in sent[0]["headers"])
     assert asyncio.run(_call(gate, path="/health"))[0] == 200
+    # Security regression: only the exact health route is exempt.
+    assert asyncio.run(_call(gate, path="/health-admin"))[0] == 401
+    assert asyncio.run(_call(gate, path="/health/private"))[0] == 401
+    # A trailing slash in the configured exemption intentionally covers its subtree.
+    assert asyncio.run(_call(gate, path="/.well-known/metadata"))[0] == 200
     mon = pg.PriviGate(None, mode="monitor", checker=chk)
     status, _, called = asyncio.run(_call(mon))
     assert status == 200 and called[0]["allow"] is False
