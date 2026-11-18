@@ -36,6 +36,14 @@ class ServerTests(unittest.TestCase):
         finally:
             conn.close()
 
+    def test_cosmic_ui_brand_and_navigation(self):
+        status, headers, body = self.call("GET", "/")
+        self.assertEqual(status, 200)
+        self.assertIn(b"hero-visual", body)
+        self.assertIn(b"MISSION CONTROL", body)
+        self.assertIn(b"privi-outcomegrid-demo.onrender.com", body)
+        self.assertIn(b"PRELAUNCH", body)
+
     def test_health_and_page(self):
         status, headers, body = self.call("GET", "/health")
         self.assertEqual(status, 200)
