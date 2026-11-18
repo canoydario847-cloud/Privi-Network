@@ -4,11 +4,13 @@ on:
   push:
     paths:
       - 'privi-one/signed_receipt.py'
+      - 'privi-one/signing_demo.py'
       - 'privi-one/test_signed_receipt.py'
       - '.github/workflows/privi-one-signing.yml'
   pull_request:
     paths:
       - 'privi-one/signed_receipt.py'
+      - 'privi-one/signing_demo.py'
       - 'privi-one/test_signed_receipt.py'
       - '.github/workflows/privi-one-signing.yml'
   workflow_dispatch:
