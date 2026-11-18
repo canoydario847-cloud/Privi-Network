@@ -48,3 +48,32 @@ not "verified complete". Caller-provided JSON can be fabricated.
 - No on-chain Ledger receipt; the SHA-256 report digest is only a checksum.
 - HMAC fixtures are for tests, not nonrepudiation or real signing-key custody.
 - Privi ONE, Guard, CallProof, Ledger integration is a later gated step.
+
+## Actual GitHub CI reporting (read-only)
+
+The new `github-checks` command retrieves check runs directly from GitHub's
+REST API over HTTPS, pinned to a full commit and explicit required check names:
+
+```bash
+# For public repositories, GitHub may allow anonymous reads at lower rate limits.
+# For private repositories, provide a least-privilege read-only fine-grained token
+# in GITHUB_TOKEN. Never paste the token into shell command arguments.
+python privi-done/cli.py github-checks \
+  --repository canoydario847-cloud/Privi-Network \
+  --commit FULL_40_CHARACTER_SHA \
+  --required "test-done"
+```
+
+This is **real source reporting**, but not an outcome certification. It validates
+the GitHub API response for exact commit association, complete pagination,
+duplicate check names, missing/pending/failed statuses and malformed payloads,
+and rejects redirects rather than forwarding a credential. The report's
+`REPORTED_CHECKS_SUCCESS_DEPLOYMENT_UNVERIFIED` result means that GitHub
+reported the specified checks as successful. It does **not** prove a Render
+deployment is accessible, that the required workflow belongs to a specific
+trusted GitHub App, that cost claims were independently measured, or that
+external actions occurred. A production verifier still needs independently
+pinned check-app identities, a stable snapshot policy across retries, and
+read-only Render deployment/health evidence.
+
+This command never triggers a GitHub workflow, deploys code or writes to GitHub.
