@@ -50,6 +50,13 @@ def render_report(summary):
         raise ValueError("conflict count exceeds valid receipts")
     if summary["odometer_decrease_count"] > valid:
         raise ValueError("decrease count exceeds valid receipts")
+    expected_review = any(summary[key] > 0 for key in (
+        "invalid_receipt_count", "odometer_decrease_count",
+        "same_timestamp_conflict_count", "duplicate_receipt_count",
+        "rejected_input_row_count",
+    ))
+    if summary["requires_operator_review"] != expected_review:
+        raise ValueError("operator review flag contradicts audit findings")
     lines = [
         "PRIVI CAR | OFFLINE MILEAGE RECORD REVIEW",
         "Advisory pilot report — not verified vehicle telemetry",
