@@ -39,3 +39,23 @@ Added `github_evidence.py` as a **pure, offline validation stage** for GitHub ch
 **Important provenance boundary:** this code does **not fetch GitHub API responses** and cannot establish that caller-supplied JSON actually came from GitHub. The snapshot must be fetched via an authenticated, trusted server integration from GitHub over TLS, against the job's previously pinned repository and commit, with complete pagination and app identity checks. A user-provided snapshot is untrusted and must never grant an accepted outcome. Independent, authenticated human/customer verification and policy review remain necessary before any real reputation credit.
 
 No real GitHub execution, autonomous action, paid service, or token operation is performed by this prototype.
+
+## Read-only authenticated GitHub collector (November 18, 2026)
+
+The optional `github_collector.py` can fetch GitHub check runs for an **explicitly allowlisted repository** and a **pinned full commit SHA** using a **read-only GitHub token** held only in the calling environment. It requests the GitHub REST API over validated HTTPS, refuses redirects, constructs URLs locally, reads a bounded number of pages, and fails closed for incomplete/changed pagination. The result passes through `github_evidence.py` and produces only `checks_passed_awaiting_independent_review`, never a final agent reputation award.
+
+Run locally with a fine-grained GitHub credential granting only the necessary metadata/check-run read permissions (do not use a production write token):
+
+```bash
+export OUTCOMEGRID_ALLOWED_GITHUB_REPO="canoydario847-cloud/Privi-Network"
+export OUTCOMEGRID_GITHUB_READ_TOKEN="<privately supplied read-only token>"
+python outcomegrid/github_collector.py --repo canoydario847-cloud/Privi-Network --sha <full-existing-commit-sha> --required-check "actual-required-GitHub-check-name"
+```
+
+The script never logs or persists the token. Tests mock API responses and require **no token**, network access, paid infrastructure, or external API calls:
+
+```bash
+python -m unittest discover -s outcomegrid -p 'test_*.py' -v
+```
+
+The browser demo still uses synthetic fixtures and does **not** expose the collector as a public endpoint. The code cannot by itself prove that an independent reviewer is authorized or that a check was unforgeable/valid under a particular CI configuration. Real acceptance requires trusted identity, GitHub App installation/permissions, complete evidence provenance, a pinned evaluation policy, and independent review. No Stripe, PRVI, Privi ONE live service, or external action is changed.
