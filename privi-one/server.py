@@ -32,10 +32,15 @@ if id_spec is None or id_spec.loader is None:
     raise RuntimeError('Sandbox identity unavailable')
 sandbox_identity = importlib.util.module_from_spec(id_spec)
 id_spec.loader.exec_module(sandbox_identity)
+journal_spec = importlib.util.spec_from_file_location('privi_one_receipt_journal', DEMO_FILE.with_name('receipt_journal.py'))
+if journal_spec is None or journal_spec.loader is None:
+    raise RuntimeError('Sandbox receipt journal unavailable')
+receipt_journal = importlib.util.module_from_spec(journal_spec)
+journal_spec.loader.exec_module(receipt_journal)
 SECRET = secrets.token_bytes(32)
 QUOTE_SECRET = secrets.token_bytes(32)
 SESSIONS = sandbox_identity.SandboxIdentity(secrets.token_bytes(32))
-RETRIES = sandbox_identity.RetryStore()
+JOURNAL = receipt_journal.Journal(os.environ.get('PRIVI_ONE_SANDBOX_DB', '/tmp/privi-one-sandbox-receipts.sqlite3'))
 MAX_BODY = 16_384
 HOST = "0.0.0.0"
 HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -127,6 +132,12 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/health":
             return self.reply(200, {"ok": True, "service": "privi-one-demo", "mode": "PRELAUNCH_SIMULATION"})
+        if path == "/api/audit":
+            # Sandbox-only aggregate result; never expose sessions or raw receipts.
+            try:
+                return self.reply(200, JOURNAL.audit())
+            except Exception:
+                return self.reply(503, {"error": "journal_unavailable"})
         if path != "/":
             return self.reply(404, {"error": "not_found"})
         raw = HTML.encode()
@@ -208,7 +219,7 @@ class Handler(BaseHTTPRequestHandler):
             if secure:
                 payload = {"task_sha256": hashlib.sha256(task.encode()).hexdigest(),
                            "budget_cents": budget, "approved": approved}
-                result, replayed = RETRIES.run_once(sid, data["request_id"], payload, build_receipt)
+                result, replayed = JOURNAL.run_once(sid, data["request_id"], payload, build_receipt)
                 # Replay metadata is outside the signed receipt; no mutation of cached result.
                 return self.reply(200, dict(result, idempotent_replay=replayed))
             return self.reply(200, build_receipt())
