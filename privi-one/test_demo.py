@@ -1,5 +1,7 @@
 """Offline Privi ONE tests; no paid services, network calls or PRVI operations."""
 import importlib.util
+import hashlib
+import hmac
 import json
 import os
 from pathlib import Path
@@ -148,6 +150,34 @@ class DemoTests(unittest.TestCase):
         denied = run(approved=False)
         self.assertTrue(demo.verify(approved, SECRET))
         self.assertTrue(demo.verify(denied, SECRET))
+
+    def test_local_signature_is_not_permission_to_claim_execution_or_billing(self):
+        # Even if the local sandbox key signs a structurally altered receipt,
+        # the verifier must reject claims of actual execution or money movement.
+        for field, fake in (
+            ("mode", "FINANCIAL_MAINNET"),
+            ("execution", "EXECUTED"),
+            ("actual_charge_cents", 1),
+            ("ledger", "SUBMITTED"),
+            ("token", "USED"),
+        ):
+            with self.subTest(field=field):
+                out = run()
+                out["receipt"][field] = fake
+                out["digest_sha256"] = demo.digest(out["receipt"])
+                out["auth"]["mac"] = hmac.new(
+                    SECRET, demo.canonical(out["receipt"]), hashlib.sha256
+                ).hexdigest()
+                self.assertFalse(demo.verify(out, SECRET))
+
+    def test_locally_signed_denied_receipt_cannot_claim_savings(self):
+        out = run(approved=False)
+        out["receipt"]["routing"]["estimated_savings_cents"] = 999
+        out["digest_sha256"] = demo.digest(out["receipt"])
+        out["auth"]["mac"] = hmac.new(
+            SECRET, demo.canonical(out["receipt"]), hashlib.sha256
+        ).hexdigest()
+        self.assertFalse(demo.verify(out, SECRET))
 
     def test_wrong_key_detected(self):
         self.assertFalse(demo.verify(run(), b"another-32-byte-test-secret-value-000000"))
