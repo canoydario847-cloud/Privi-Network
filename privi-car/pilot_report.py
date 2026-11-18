@@ -57,12 +57,14 @@ def render_report(summary):
     ))
     if summary["requires_operator_review"] != expected_review:
         raise ValueError("operator review flag contradicts audit findings")
+    insufficient_data = valid == 0
     lines = [
         "PRIVI CAR | OFFLINE MILEAGE RECORD REVIEW",
         "Advisory pilot report — not verified vehicle telemetry",
         "",
         "Result: " + (
-            "HUMAN REVIEW RECOMMENDED" if summary["requires_operator_review"]
+            "INSUFFICIENT CONSENTED RECORDS TO REVIEW" if insufficient_data
+            else "HUMAN REVIEW RECOMMENDED" if summary["requires_operator_review"]
             else "NO ANOMALIES FOUND IN SUBMITTED RECORDS"
         ),
         "",
@@ -71,6 +73,8 @@ def render_report(summary):
     lines.extend([
         "",
         "Suggested next step: " + (
+            "Request at least one consented, integrity-valid mileage receipt "
+            "before drawing any conclusions." if insufficient_data else
             "Ask the consenting owner or fleet operator to check original "
             "maintenance logs and correct or explain flagged records."
             if summary["requires_operator_review"] else
