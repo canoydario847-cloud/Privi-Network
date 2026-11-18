@@ -1,0 +1,10 @@
+{
+  "repository": "example/hello",
+  "commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "required_checks": [
+    "build",
+    "security"
+  ],
+  "expected_version": "v1",
+  "max_cost_cents": 2000
+}
