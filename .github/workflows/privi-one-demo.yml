@@ -1,0 +1,29 @@
+name: Privi ONE prelaunch demo tests
+
+on:
+  push:
+    paths:
+      - 'privi-one/**'
+      - 'ledger-server/src/privi_ledger/guard_engine.py'
+      - '.github/workflows/privi-one-demo.yml'
+  pull_request:
+    paths:
+      - 'privi-one/**'
+      - 'ledger-server/src/privi_ledger/guard_engine.py'
+      - '.github/workflows/privi-one-demo.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test offline optimizer and security receipts
+        run: python -m unittest discover -s privi-one -p 'test_*.py' -v
