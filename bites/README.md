@@ -1,7 +1,6 @@
 # Privi Bites
 
-Shared consent/profile and salted hash receipt foundation. Private working preview:
-https://privi-bites-control.navytoast131.chatgpt.site
+Shared consent/profile and salted hash receipt foundation. The former hosted preview is being moved to Privi-controlled branding; no replacement public URL is verified yet.
 
 The hosted app uses a durable D1 database, platform sign-in, identity-scoped reads/writes, same-origin mutation checks, opt-in profile storage, export and deletion. Profiles and private salts remain off-ledger. The receipt table durably records external delivery status. Profile and receipt inserts are atomic.
 
@@ -9,6 +8,6 @@ The hosted app uses a durable D1 database, platform sign-in, identity-scoped rea
 
 Configure BITES_LEDGER_URL, BITES_LEDGER_API_KEY and BITES_LEDGER_DURABLE=true in hosted runtime secrets only after verifying a durable Ledger deployment. The recovery Ledger is temporary storage and is not configured as a production audit sink. Until then receipts remain pending_configuration. No native blockchain anchoring is claimed.
 
-All generated product websites receive a Bites profile navigation entry. This is NOT a claim that every deployed backend is integrated: cross-service profile access still requires the shared OAuth identity-provider rollout, explicit scopes/consent, per-service authorization, deployment and verification. Site identity is site-scoped and must not be equated with an external issuer/subject or user email. Existing logins remain intact.
+The public Bites navigation entry is temporarily removed until a verified Privi-branded address is available. This is NOT a claim that every deployed backend is integrated: cross-service profile access still requires the shared OAuth identity-provider rollout, explicit scopes/consent, per-service authorization, deployment and verification. Site identity is site-scoped and must not be equated with an external issuer/subject or user email. Existing logins remain intact.
 
 Bites does not replace browser security cookies, OAuth or authentication. No third-party cookies, fingerprinting or advertising trackers are introduced. Service preferences do not grant service access or trigger data sharing.
