@@ -42,8 +42,17 @@ def main(argv=None):
     github.add_argument("--commit", required=True, help="exact 40-character commit SHA")
     github.add_argument("--required", action="append", required=True,
                         help="required GitHub check name; repeat for multiple checks")
+    render = sub.add_parser("render-deploy", help="Read Render deploy metadata (not health or completion proof)")
+    render.add_argument("--service-id", required=True, help="Pinned Render service ID")
+    render.add_argument("--repository", required=True, help="Expected GitHub owner/repo")
+    render.add_argument("--commit", required=True, help="Expected full 40-character SHA")
     args = parser.parse_args(argv)
     try:
+        if args.command == "render-deploy":
+            report = load("render_deploy").inspect_deployment(
+                args.service_id, args.repository, args.commit)
+            print(json.dumps(report, indent=2, sort_keys=True))
+            return 0 if report["reported_live_commit_matches"] else 2
         if args.command == "github-checks":
             report = load("github_checks").collect_checks(
                 args.repository, args.commit, args.required)
