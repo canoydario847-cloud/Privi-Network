@@ -73,6 +73,33 @@ class JournalTests(unittest.TestCase):
                        (json.dumps({"receipt": {"i": 500}}),))
         self.assertFalse(self.store.audit()["valid"])
 
+    def test_externally_pinned_checkpoint_detects_truncation(self):
+        for i in range(3):
+            self.store.run_once("sandbox", f"checkpoint-{i:04d}", {"i": i},
+                                lambda i=i: {"value": i})
+        saved = journal.checkpoint(self.store)
+        self.assertTrue(journal.check_pinned_checkpoint(self.store, saved)["valid"])
+        with sqlite3.connect(self.path) as db:
+            db.execute("DELETE FROM receipts WHERE seq=3")
+        result = journal.check_pinned_checkpoint(self.store, saved)
+        self.assertEqual(result["reason"], "journal_truncated")
+
+    def test_externally_pinned_checkpoint_allows_append_only(self):
+        self.store.run_once("sandbox", "checkpoint-0000", {"i": 0}, lambda: {"value": 0})
+        saved = journal.checkpoint(self.store)
+        self.store.run_once("sandbox", "checkpoint-0001", {"i": 1}, lambda: {"value": 1})
+        self.assertTrue(journal.check_pinned_checkpoint(self.store, saved)["valid"])
+        saved["head"] = "f" * 64
+        self.assertEqual(journal.check_pinned_checkpoint(self.store, saved)["reason"], "checkpoint_mismatch")
+
+    def test_sequence_gap_detected(self):
+        for i in range(3):
+            self.store.run_once("sandbox", f"checkpoint-{i:04d}", {"i": i},
+                                lambda i=i: {"value": i})
+        with sqlite3.connect(self.path) as db:
+            db.execute("DELETE FROM receipts WHERE seq=2")
+        self.assertEqual(self.store.audit()["reason"], "missing_or_renumbered_entries")
+
     def test_integrity_failure_rolls_back(self):
         with self.assertRaises(RuntimeError):
             self.store.run_once("s", "request-fail-004", {"i": 0},
