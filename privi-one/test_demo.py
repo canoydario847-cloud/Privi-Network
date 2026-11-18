@@ -124,6 +124,31 @@ class DemoTests(unittest.TestCase):
         out["receipt"]["routing"]["estimated_savings_cents"] = 500000
         self.assertFalse(demo.verify(out, SECRET))
 
+    def test_malformed_receipts_fail_closed_without_exceptions(self):
+        invalid = (
+            {"receipt": {"schema": demo.SCHEMA, "routing": {1: "bad"}},
+             "auth": {"algorithm": "HMAC-SHA256-DEMO-ONLY", "mac": "x"},
+             "digest_sha256": "x"},
+            {"receipt": {"schema": demo.SCHEMA, "routing": {"number": float("nan")}},
+             "auth": {"algorithm": "HMAC-SHA256-DEMO-ONLY", "mac": "x"},
+             "digest_sha256": "x"},
+            {"receipt": {"schema": demo.SCHEMA},
+             "auth": {"algorithm": "HMAC-SHA256-DEMO-ONLY", "mac": None},
+             "digest_sha256": "x"},
+            {"receipt": {"schema": demo.SCHEMA},
+             "auth": {"algorithm": "HMAC-SHA256-DEMO-ONLY", "mac": "x"},
+             "digest_sha256": None},
+        )
+        for value in invalid:
+            with self.subTest(value=str(value)[:100]):
+                self.assertFalse(demo.verify(value, SECRET))
+
+    def test_valid_receipt_still_verifies_after_hardening(self):
+        approved = run()
+        denied = run(approved=False)
+        self.assertTrue(demo.verify(approved, SECRET))
+        self.assertTrue(demo.verify(denied, SECRET))
+
     def test_wrong_key_detected(self):
         self.assertFalse(demo.verify(run(), b"another-32-byte-test-secret-value-000000"))
 
