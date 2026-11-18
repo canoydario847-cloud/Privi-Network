@@ -56,3 +56,11 @@ Run **Compare & generate simulated receipt**, then **Verify receipt in this sess
 This is **not an external provider quote, real savings guarantee, independently verifiable cryptographic signature, blockchain entry, or production authorization**. Render restarts rotate the ephemeral secrets, invalidating previous session receipts. A real service must obtain authenticated provider prices, independently measured quality metrics, and durable cryptographic signing with key pinning/rotation. The checkbox is still a synthetic approval input, never a substitute for CallProof's separate authenticated approval.
 
 New tests: `test_quote_integrity.py` and additional `test_server.py` cases. Render runs the full `privi-one/test_*.py` suite as part of its build, but production checks must be independently verified before enabling live execution.
+
+## Anonymous sandbox sessions and retry safety (November 18, 2026)
+
+The public demo now uses an isolated `POST /api/session` endpoint to issue a short-lived HMAC-authenticated **anonymous sandbox identifier** (15 minutes). The browser sends this token in `Authorization: Bearer ...` when using `POST /api/simulate-secure`. A fresh `request_id` binds repeat requests to the same synthetic receipt; conflicting reuse of that ID is rejected. Concurrent retries are serialized inside the single running process, and no live services are called.
+
+These are not real identities, Pro entitlements, account login, or CallProof owner approvals. **Anyone may obtain a sandbox token.** The legacy `/api/simulate` endpoint remains public and simulation-only for compatibility, so the new route does **not** protect payable operations. The idempotency store is bounded, volatile, and process-local, **not** adequate for money movement, multiple replicas, or actual tool execution. After an instance restart, previous sessions, receipts and retries may no longer be verifiable. For production use authenticated identities plus PostgreSQL atomic durable reservations and external executor idempotency.
+
+The browser continues to show synthetic data. The test suite checks session expiry, token tampering, concurrent duplicate requests, conflicting retries, and secure endpoint requirements. The live Stripe, PRVI network, production CallProof and Privi Ledger remain unchanged.
