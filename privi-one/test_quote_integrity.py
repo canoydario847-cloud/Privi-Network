@@ -24,6 +24,47 @@ class QuoteTests(unittest.TestCase):
         bundle["body"]["options"][0]["cost_cents"] = 0
         self.assertFalse(q.verify(bundle, TASK, key=KEY, now=1050))
 
+    def test_reject_malformed_options_at_issue_time(self):
+        bad_cases = (
+            [{"id": "bad", "cost_cents": -1, "quality": 90,
+              "reliability": 99, "latency_ms": 800}],
+            [{"id": "bad", "cost_cents": True, "quality": 90,
+              "reliability": 99, "latency_ms": 800}],
+            [{"id": "bad", "cost_cents": 5, "quality": 101,
+              "reliability": 99, "latency_ms": 800}],
+            [OPTIONS[0].copy(), OPTIONS[0].copy()],
+            [{"id": "bad", "cost_cents": 5, "quality": 90,
+              "reliability": 99, "latency_ms": 800,
+              "name": {"unsafe": "type"}}],
+        )
+        for options in bad_cases:
+            with self.subTest(options=options):
+                with self.assertRaisesRegex(ValueError, "Invalid synthetic quote"):
+                    q.issue(options, TASK, key=KEY, now=1000)
+
+    def test_reject_locally_authenticated_malformed_options(self):
+        # A local key can authenticate bad data; the verifier must still
+        # independently reject malformed or duplicated synthetic quotes.
+        import hmac
+        for invalid in (
+            [{**OPTIONS[0], "quality": 101}],
+            [OPTIONS[0].copy(), OPTIONS[0].copy()],
+            [{**OPTIONS[0], "cost_cents": -1}],
+        ):
+            with self.subTest(invalid=invalid):
+                bundle = q.issue(OPTIONS, TASK, key=KEY, now=1000)
+                bundle["body"]["options"] = invalid
+                bundle["auth"]["mac"] = hmac.new(
+                    KEY, q.canonical(bundle["body"]), hashlib.sha256
+                ).hexdigest()
+                self.assertFalse(q.verify(bundle, TASK, key=KEY, now=1050))
+
+    def test_fingerprint_must_be_lowercase_sha256(self):
+        with self.assertRaisesRegex(ValueError, "task fingerprint"):
+            q.issue(OPTIONS, "Z" * 64, key=KEY, now=1000)
+        valid = q.issue(OPTIONS, TASK, key=KEY, now=1000)
+        self.assertFalse(q.verify(valid, "Z" * 64, key=KEY, now=1050))
+
     def test_wrong_task_or_secret(self):
         bundle = q.issue(OPTIONS, TASK, key=KEY, now=1000)
         self.assertFalse(q.verify(bundle, "0"*64, key=KEY, now=1050))
