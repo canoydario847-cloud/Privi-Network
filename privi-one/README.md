@@ -91,3 +91,16 @@ A production migration must require: (1) pinned public keys via an independently
 ### Render storage assessment
 
 The connected Render Privi workspace currently contains a **free billing-staging PostgreSQL instance** (listed as expiring December 13, 2026) and a separate production billing database. Privi ONE does **not** reuse or modify either database, because billing data must remain isolated and an expiring free instance is unsuitable as the trust system's durable audit store. No new paid resources were provisioned.
+
+## Run an offline independently verified signature demo
+
+Install the optional maintained crypto dependency (`cryptography>=43,<47`) and then run:
+
+```bash
+python privi-one/signing_demo.py --artifact /tmp/privi-one-signed.json --trusted-key /tmp/privi-one-public.json
+python privi-one/signing_demo.py --verify --artifact /tmp/privi-one-signed.json --trusted-key /tmp/privi-one-public.json
+```
+
+The first command generates an **ephemeral disposable test keypair**, signs a synthetic receipt, writes the signed envelope and a **separate public-key file**, then discards the private key. The second independently verifies using only the signed envelope and public key. Tampering invalidates the signature. The test public key is not an independently authenticated production trust anchor: for real users, distribute and pin production public keys over a separately trusted channel, provide revocation/rotation evidence, and use secure private-key custody.
+
+This optional CLI is separate from the Render web service; the public `/api/verify` endpoint still performs local HMAC verification and no live receipt signing or ledger anchoring was enabled.
