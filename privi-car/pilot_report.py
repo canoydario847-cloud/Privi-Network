@@ -33,6 +33,30 @@ def render_report(summary):
             raise ValueError("invalid aggregate audit count")
     if type(summary.get("requires_operator_review")) is not bool:
         raise ValueError("invalid audit review flag")
+    # Fail closed if an aggregate is internally impossible. These checks
+    # protect customer-facing reports against malformed or stale audit data.
+    total = summary["receipt_count"]
+    valid = summary["verified_receipt_count"]
+    invalid = summary["invalid_receipt_count"]
+    if valid + invalid != total:
+        raise ValueError("audit receipt totals do not reconcile")
+    if summary["vehicle_pseudonym_count"] > valid:
+        raise ValueError("more vehicle pseudonyms than valid receipts")
+    if summary["vehicle_pseudonyms_flagged_count"] > summary["vehicle_pseudonym_count"]:
+        raise ValueError("more flagged pseudonyms than audited pseudonyms")
+    if summary["duplicate_receipt_count"] > valid:
+        raise ValueError("duplicate count exceeds valid receipts")
+    if summary["same_timestamp_conflict_count"] > valid:
+        raise ValueError("conflict count exceeds valid receipts")
+    if summary["odometer_decrease_count"] > valid:
+        raise ValueError("decrease count exceeds valid receipts")
+    expected_review = any(summary[key] > 0 for key in (
+        "invalid_receipt_count", "odometer_decrease_count",
+        "same_timestamp_conflict_count", "duplicate_receipt_count",
+        "rejected_input_row_count",
+    ))
+    if summary["requires_operator_review"] != expected_review:
+        raise ValueError("operator review flag contradicts audit findings")
     lines = [
         "PRIVI CAR | OFFLINE MILEAGE RECORD REVIEW",
         "Advisory pilot report — not verified vehicle telemetry",
