@@ -46,3 +46,13 @@ With minimum quality 85, minimum reliability 98, max latency 2000 ms and budget 
 6. Verify chain-of-custody and receipt signatures using trusted pinned keys, test refunds/revocation, and guard sensitive content. Keep PRVI token and live payment systems unchanged until separately approved and verified.
 
 Copyright © 2026 Privi World Corp, for its original material, subject to third-party licenses and previous public grants. Do not upload customer secrets or production signing keys to this public repository.
+
+## Render sandbox quote integrity and receipt verification
+
+The standalone Render service at https://privi-one-demo.onrender.com now includes a dedicated **local quote-integrity simulation**. Each comparison receives a time-limited HMAC-authenticated quote bundle containing the task digest, issuance/expiry timestamps, and the same *synthetic* test quotes used by the router. The bundle is checked before route selection, and its digest is bound into the locally authenticated result receipt.
+
+Run **Compare & generate simulated receipt**, then **Verify receipt in this session** to check the receipt and quote bundle through `POST /api/verify`. The endpoint returns `verified: true` only when the receipt matches the server's in-memory signing secret and the quote bundle is valid and unexpired. Tampering, mismatched task digests, wrong signing keys, and expired bundles are rejected.
+
+This is **not an external provider quote, real savings guarantee, independently verifiable cryptographic signature, blockchain entry, or production authorization**. Render restarts rotate the ephemeral secrets, invalidating previous session receipts. A real service must obtain authenticated provider prices, independently measured quality metrics, and durable cryptographic signing with key pinning/rotation. The checkbox is still a synthetic approval input, never a substitute for CallProof's separate authenticated approval.
+
+New tests: `test_quote_integrity.py` and additional `test_server.py` cases. Render runs the full `privi-one/test_*.py` suite as part of its build, but production checks must be independently verified before enabling live execution.
