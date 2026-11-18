@@ -103,7 +103,17 @@ def evaluate(task, *, tool, allowed_tools, budget_cents, approved,
     elif selected["cost_cents"] > budget_cents:
         reasons.append("budget_exceeded")
     permitted = not reasons
-    saved = max(0, baseline["cost_cents"] - selected["cost_cents"]) if (baseline and selected) else None
+    # Estimated savings are meaningful only for an approved simulated route
+    # against a baseline meeting the SAME quality/reliability/latency gates.
+    # Do not market a denied request or an unqualified baseline as savings.
+    baseline_eligible = (
+        baseline is not None
+        and baseline["quality"] >= quality_min
+        and baseline["reliability"] >= reliability_min
+        and baseline["latency_ms"] <= latency_max_ms
+    )
+    comparable = permitted and baseline_eligible and selected is not None
+    saved = max(0, baseline["cost_cents"] - selected["cost_cents"]) if comparable else None
     receipt = {
         "schema": SCHEMA,
         "mode": "PRELAUNCH_SIMULATION_NO_EXTERNAL_EXECUTION",
