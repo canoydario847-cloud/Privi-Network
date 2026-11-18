@@ -1,0 +1,28 @@
+name: Privi DONE offline deployment and code origin tests
+on:
+  push:
+    paths:
+      - 'privi-done/**'
+      - '.github/workflows/privi-done.yml'
+  pull_request:
+    paths:
+      - 'privi-done/**'
+      - '.github/workflows/privi-done.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test-done:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate outcome and code provenance
+        run: python -m unittest discover -s privi-done -p 'test_*.py' -v
+      - name: Exercise runnable offline commands
+        run: |
+          python privi-done/cli.py origin --source privi-done/cli.py
+          python privi-done/cli.py deployment --intent privi-done/examples/intent.json --evidence privi-done/examples/evidence.json
