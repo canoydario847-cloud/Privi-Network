@@ -138,6 +138,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200, JOURNAL.audit())
             except Exception:
                 return self.reply(503, {"error": "journal_unavailable"})
+        if path == "/api/checkpoint":
+            # User must independently preserve this unsigned checkpoint;
+            # serving it does NOT provide an external trust anchor.
+            try:
+                return self.reply(200, receipt_journal.checkpoint(JOURNAL))
+            except Exception:
+                return self.reply(503, {"error": "checkpoint_unavailable"})
         if path != "/":
             return self.reply(404, {"error": "not_found"})
         raw = HTML.encode()
