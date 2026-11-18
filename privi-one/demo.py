@@ -159,6 +159,82 @@ def evaluate(task, *, tool, allowed_tools, budget_cents, approved,
                      "mac": hmac.new(secret, canonical(receipt), hashlib.sha256).hexdigest()}}
 
 
+def audit_route_consistency(receipt):
+    """Independently recompute routing, policy decision and hypothetical savings.
+
+    A local HMAC does not make the signed claims true. Fail closed if fields in
+    that locally authenticated receipt disagree with the deterministic rules.
+    """
+    try:
+        routing = receipt["routing"]
+        policy = receipt["policy"]
+        guard = receipt["guard"]
+        quotes = routing["quotes"]
+        quality_min = routing["quality_min"]
+        reliability_min = routing["reliability_min"]
+        latency_max_ms = routing["latency_max_ms"]
+        budget = policy["budget_cents"]
+        if (type(budget) is not int or budget < 0
+                or type(policy["approval_supplied"]) is not bool
+                or type(policy["tool_allowed"]) is not bool
+                or not isinstance(guard["verdict"], str)):
+            return False
+        selected = choose(quotes, quality_min=quality_min,
+                          reliability_min=reliability_min,
+                          latency_max_ms=latency_max_ms)
+        baseline_id = routing["baseline_id"]
+        if not isinstance(baseline_id, str):
+            return False
+        baseline = next((option for option in quotes if option["id"] == baseline_id), None)
+        if routing["selected_id"] != (selected["id"] if selected else None):
+            return False
+        reasons = []
+        if guard["verdict"] != "allow":
+            reasons.append("guard_" + guard["verdict"])
+        if not policy["tool_allowed"]:
+            reasons.append("tool_not_authorized")
+        if not policy["approval_supplied"]:
+            reasons.append("human_approval_missing")
+        if selected is None:
+            reasons.append("no_quality_qualified_route")
+        elif selected["cost_cents"] > budget:
+            reasons.append("budget_exceeded")
+        if receipt["denial_reasons"] != reasons:
+            return False
+        if receipt["decision"] != ("DENIED" if reasons else "SIMULATED_APPROVAL"):
+            return False
+        explanations = []
+        for option in quotes:
+            failures = []
+            if option["quality"] < quality_min:
+                failures.append("quality_below_minimum")
+            if option["reliability"] < reliability_min:
+                failures.append("reliability_below_minimum")
+            if option["latency_ms"] > latency_max_ms:
+                failures.append("latency_above_maximum")
+            if option["cost_cents"] > budget:
+                failures.append("price_above_budget")
+            explanations.append({
+                "id": option["id"],
+                "quality_qualified": not any(r != "price_above_budget" for r in failures),
+                "within_budget": option["cost_cents"] <= budget,
+                "reasons": failures,
+            })
+        if routing["route_explanations"] != explanations:
+            return False
+        baseline_eligible = (
+            baseline is not None
+            and baseline["quality"] >= quality_min
+            and baseline["reliability"] >= reliability_min
+            and baseline["latency_ms"] <= latency_max_ms
+        )
+        comparable = not reasons and baseline_eligible and selected is not None
+        savings = max(0, baseline["cost_cents"] - selected["cost_cents"]) if comparable else None
+        return routing["estimated_savings_cents"] == savings
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return False
+
+
 def audit_sandbox_invariants(receipt):
     """Enforce sandbox safety invariants even for locally authenticated receipts.
 
@@ -179,6 +255,7 @@ def audit_sandbox_invariants(receipt):
         and isinstance(receipt.get("denial_reasons"), list)
         and (receipt["decision"] == "DENIED") == bool(receipt["denial_reasons"])
         and isinstance(receipt.get("routing"), dict)
+        and audit_route_consistency(receipt)
         and (receipt["decision"] != "DENIED"
              or receipt["routing"].get("estimated_savings_cents") is None)
     )
