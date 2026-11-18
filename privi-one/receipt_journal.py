@@ -112,9 +112,13 @@ class Journal:
             finally:
                 db.close()
         previous = ZERO
+        expected_seq = 1
         for row in rows:
             seq, session_id, request_id, request_hash, receipt_json, receipt_hash, prev_hash, entry_hash, created_at = row
             try:
+                if seq != expected_seq:
+                    return {"valid": False, "entries_checked": expected_seq - 1,
+                            "reason": "missing_or_renumbered_entries"}
                 result = json.loads(receipt_json)
                 computed_receipt = digest(result)
                 entry = {
@@ -130,5 +134,58 @@ class Journal:
             if not valid:
                 return {"valid": False, "entries_checked": seq, "reason": "hash_chain_mismatch"}
             previous = entry_hash
+            expected_seq += 1
         return {"valid": True, "entries_checked": len(rows), "head": previous,
                 "scope": "LOCAL_SQLITE_TAMPER_EVIDENCE_NOT_EXTERNAL_PROOF"}
+
+
+
+def checkpoint(journal):
+    """Return a snapshot for users to pin OUTSIDE the service."""
+    result = journal.audit()
+    if not result.get("valid"):
+        raise RuntimeError("Journal integrity check failed")
+    return {
+        "schema": "privi-one-external-checkpoint-v1",
+        "sequence": result["entries_checked"],
+        "head": result["head"],
+        "mode": "LOCAL_SANDBOX_UNSIGNED_CHECKPOINT",
+    }
+
+
+def check_pinned_checkpoint(journal, pinned):
+    """Verify a previously saved external checkpoint against current history.
+
+    The external checkpoint is *not* trusted just because it is downloaded
+    from this server: callers must store/pin it independently BEFORE a
+    later suspected tampering event. This detects truncation/rewrite *only*
+    relative to a trusted checkpoint. No signature or external anchoring.
+    """
+    if not isinstance(pinned, dict) or set(pinned) != {
+            "schema", "sequence", "head", "mode"}:
+        return {"valid": False, "reason": "invalid_checkpoint"}
+    seq = pinned["sequence"]
+    if (pinned["schema"] != "privi-one-external-checkpoint-v1"
+            or pinned["mode"] != "LOCAL_SANDBOX_UNSIGNED_CHECKPOINT"
+            or type(seq) is not int or seq < 0
+            or not isinstance(pinned["head"], str)
+            or len(pinned["head"]) != 64):
+        return {"valid": False, "reason": "invalid_checkpoint"}
+    audit = journal.audit()
+    if not audit.get("valid"):
+        return {"valid": False, "reason": "journal_integrity_failure"}
+    if seq > audit["entries_checked"]:
+        return {"valid": False, "reason": "journal_truncated"}
+    with journal._lock:
+        db = journal._db()
+        try:
+            row = db.execute(
+                "SELECT entry_hash FROM receipts WHERE seq=?", (seq,)
+            ).fetchone() if seq else (ZERO,)
+        finally:
+            db.close()
+    if row is None or not hmac.compare_digest(row[0], pinned["head"]):
+        return {"valid": False, "reason": "checkpoint_mismatch"}
+    return {"valid": True, "sequence": seq,
+            "current_entries": audit["entries_checked"],
+            "mode": "EXTERNALLY_PINNED_CHECKPOINT_REQUIRED"}
