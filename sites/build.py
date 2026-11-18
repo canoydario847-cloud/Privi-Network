@@ -172,7 +172,7 @@ def page(key, title, desc, h1, lede, ctas, aside, body, extra_head=""):
 {body}
 </div></main>
 <footer><div class="wrap cols"><div><strong>Privi World Co</strong><br>Port Huron, Michigan<br><a href="mailto:{EMAIL}">{EMAIL}</a></div>
-<div>Built by Dario Canoy<br><a href="{REPO}">Source on GitHub</a><br><a href="{HUB}/llms.txt">For AI agents: llms.txt</a></div>
+<div>Made by Dario Canoy<br><a href="{REPO}">Source on GitHub</a><br><a href="{HUB}/llms.txt">For AI agents: llms.txt</a></div>
 <div>MCP servers<br><a href="{LEDGER}">Ledger</a>, <a href="{VERIFY}">Verify</a>, <a href="{ANCHOR}">Anchor</a></div></div><div class="wrap privi-ip-mark">© 2026 Privi World Corp · Privi™ · Original proprietary materials reserved. Publicly licensed materials retain their existing licenses.</div></footer>
 </body></html>"""
 
