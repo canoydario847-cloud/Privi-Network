@@ -155,7 +155,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlsplit(self.path).path
-        if path not in ("/api/simulate", "/api/simulate-secure", "/api/session", "/api/verify"):
+        if path not in ("/api/simulate", "/api/simulate-secure", "/api/session", "/api/verify", "/api/checkpoint/verify"):
             return self.reply(404, {"error": "not_found"})
         if self.headers.get_content_type() != "application/json":
             return self.reply(415, {"error": "json_only"})
@@ -173,6 +173,14 @@ class Handler(BaseHTTPRequestHandler):
                 if data:
                     return self.reply(400, {"error": "invalid_session_request"})
                 return self.reply(200, SESSIONS.issue())
+            if path == "/api/checkpoint/verify":
+                if set(data) != {"checkpoint"}:
+                    return self.reply(400, {"error": "checkpoint_required"})
+                try:
+                    return self.reply(200, receipt_journal.check_pinned_checkpoint(
+                        JOURNAL, data["checkpoint"]))
+                except Exception:
+                    return self.reply(503, {"error": "journal_unavailable"})
             secure = path == "/api/simulate-secure"
             if secure:
                 auth = self.headers.get("Authorization", "")
