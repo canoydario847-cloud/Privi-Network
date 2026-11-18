@@ -67,8 +67,14 @@ class Journal:
                 if existing:
                     if not hmac.compare_digest(existing[0], request_hash):
                         raise ValueError("Conflicting request ID replay")
+                    stored = db.execute(
+                        "SELECT receipt_hash FROM receipts WHERE session_id=? AND request_id=?",
+                        (session_id, request_id)).fetchone()
+                    parsed = json.loads(existing[1])
+                    if not hmac.compare_digest(digest(parsed), stored[0]):
+                        raise RuntimeError("Stored receipt integrity failure")
                     db.commit()
-                    return json.loads(existing[1]), True
+                    return parsed, True
                 previous = db.execute(
                     "SELECT entry_hash FROM receipts ORDER BY seq DESC LIMIT 1").fetchone()
                 prev_hash = previous[0] if previous else ZERO
