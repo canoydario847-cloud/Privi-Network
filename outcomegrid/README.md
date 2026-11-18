@@ -31,3 +31,11 @@ For future use: implement real consent, provenance-aware evidence collection, id
 This should integrate with Privi ONE, Guard, CallProof and Ledger only after those services have verified sandbox interfaces. Do not mix any billing or wallet records with synthetic tests. No customer outcome data is currently being collected.
 
 © 2026 Privi World Corp for original Privi-specific content, subject to third-party rights and existing licenses.
+
+## GitHub evidence validation prototype (November 18, 2026)
+
+Added `github_evidence.py` as a **pure, offline validation stage** for GitHub check-run snapshots, pinned to an explicit `owner/repo` and a full commit SHA. The adapter rejects missing/pending/skipped/failing required checks, mismatched commits or repositories, duplicate check names and incomplete result pages. Passing checks generate `checks_passed_awaiting_independent_review`; they **never directly increment an agent's reputation**. The UI includes a fifth synthetic scenario, **GitHub CI evidence (review pending)**, showing this control.
+
+**Important provenance boundary:** this code does **not fetch GitHub API responses** and cannot establish that caller-supplied JSON actually came from GitHub. The snapshot must be fetched via an authenticated, trusted server integration from GitHub over TLS, against the job's previously pinned repository and commit, with complete pagination and app identity checks. A user-provided snapshot is untrusted and must never grant an accepted outcome. Independent, authenticated human/customer verification and policy review remain necessary before any real reputation credit.
+
+No real GitHub execution, autonomous action, paid service, or token operation is performed by this prototype.
