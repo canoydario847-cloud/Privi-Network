@@ -11,7 +11,7 @@ import os
 import re
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
-from urllib.request import Request, urlopen
+from urllib.request import Request, build_opener, HTTPRedirectHandler
 
 REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 SHA = re.compile(r"^[a-f0-9]{40}$")
@@ -22,6 +22,12 @@ PAGE_SIZE = 100
 
 class EvidenceUnavailable(ValueError):
     pass
+
+
+class NoRedirect(HTTPRedirectHandler):
+    """Never forward an authorization token to a redirected origin."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
 
 
 def _request(path, *, token=None):
@@ -38,7 +44,7 @@ def _request(path, *, token=None):
     req = Request(API + path, headers=headers, method="GET")
     try:
         # urllib may follow redirects; none are expected from GitHub checks.
-        with urlopen(req, timeout=12) as response:
+        with build_opener(NoRedirect()).open(req, timeout=12) as response:
             if response.geturl() != API + path:
                 raise EvidenceUnavailable("unexpected API redirect")
             raw = response.read(2_000_001)
