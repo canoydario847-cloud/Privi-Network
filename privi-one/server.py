@@ -1,0 +1,144 @@
+"""Render-hosted Privi ONE synthetic sandbox. Public demo only.
+
+Stdlib-only HTTP app. Never calls payment, token, mainnet, model or external APIs.
+Per-process HMAC key is ephemeral: receipts are locally authenticated within
+this process only, and are NOT durable Ledger entries or public signatures.
+"""
+from __future__ import annotations
+
+import html
+import json
+import os
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+import secrets
+from urllib.parse import urlsplit
+import importlib.util
+
+DEMO_FILE = Path(__file__).with_name("demo.py")
+spec = importlib.util.spec_from_file_location("privi_one_demo", DEMO_FILE)
+if spec is None or spec.loader is None:
+    raise RuntimeError("Privi ONE demo is unavailable")
+demo = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(demo)
+SECRET = secrets.token_bytes(32)
+MAX_BODY = 16_384
+HOST = "0.0.0.0"
+HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privi ONE — Prelaunch Sandbox</title><style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{font:16px/1.55 system-ui,sans-serif;background:#0c1425;color:#e8f0ff;margin:0}
+main{max-width:980px;margin:auto;padding:38px 20px 72px}.badge{color:#ffdb91;font-size:13px;font-weight:700;letter-spacing:.09em}
+h1{font-size:clamp(30px,5vw,48px);line-height:1.1;margin:12px 0}.sub{color:#b5c7e3;max-width:58rem}
+.panel{background:#172740;border:1px solid #2b4569;border-radius:14px;padding:23px;margin:20px 0}
+label{display:block;margin:14px 0 5px;font-weight:650}textarea,input{width:100%;background:#0d1b30;color:#fff;border:1px solid #496287;border-radius:8px;padding:11px;font:inherit}
+button{background:#59a7ff;color:#081523;border:0;padding:12px 18px;border-radius:8px;font:700 15px system-ui;cursor:pointer;margin-top:15px}
+button:focus-visible,textarea:focus-visible,input:focus-visible{outline:3px solid #ffcf74}
+.output{white-space:pre-wrap;overflow-wrap:anywhere;background:#091426;padding:16px;border-radius:8px;font:13px/1.65 ui-monospace,monospace;max-height:480px;overflow:auto}
+small{color:#aec2df}a{color:#89c6ff}.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.item{border:1px solid #476181;border-radius:10px;padding:14px}.item b{display:block}
+</style></head><body><main><div class="badge">PRIVI ONE · PRELAUNCH · SYNTHETIC DEMONSTRATION</div>
+<h1>Spend smarter. Verify every AI action.</h1><p class="sub">A safe demonstration of SmartRoute, the existing Privi Guard inspection engine, CallProof-style policy checks and a tamper-checkable local receipt. No models or tools are called, no payments are made, no ledger is updated, and no tokens are moved.</p>
+<section class="panel"><h2>Compare simulated model routes</h2>
+<div class="cols"><div class="item"><b>Budget model</b>3¢ · quality 78/100 · reliability 96%</div>
+<div class="item"><b>Balanced model</b>8¢ · quality 91/100 · reliability 99%</div>
+<div class="item"><b>Premium baseline</b>19¢ · quality 96/100 · reliability 99%</div></div><small>Prices and scores are illustrative, not live quotes or measured performance.</small></section>
+<section class="panel"><h2>Run an offline policy simulation</h2>
+<label for="task">Synthetic task (no confidential data)</label>
+<textarea id="task" maxlength="10000" rows="3">Summarize a synthetic non-sensitive report</textarea>
+<label for="budget">Maximum estimated cost in cents</label><input id="budget" type="number" value="10" min="0" max="100000">
+<label><input id="approve" type="checkbox" style="width:auto" checked> Simulated approval (not verified human authorization)</label>
+<button id="go">Compare &amp; generate simulated receipt</button>
+<h3 id="resultHeading" aria-live="polite">No simulation run yet</h3>
+<pre id="result" class="output" aria-live="polite"></pre></section>
+<p><small>© 2026 Privi World Corp. Original proprietary Privi materials reserved, subject to existing licenses and third-party rights. This demo is not a live CallProof, payment, or PRVI mainnet service.</small></p>
+</main><script>
+document.querySelector('#go').addEventListener('click',async()=>{
+ const output=document.querySelector('#result'), head=document.querySelector('#resultHeading');
+ head.textContent='Simulating...';output.textContent='';
+ try{
+  const response=await fetch('/api/simulate',{method:'POST',headers:{'content-type':'application/json'},
+   body:JSON.stringify({task:document.querySelector('#task').value,budget_cents:Number(document.querySelector('#budget').value),
+    approved:document.querySelector('#approve').checked})});
+  const body=await response.json();head.textContent=response.ok?(body.receipt?.decision||'Done'):'Error';
+  output.textContent=JSON.stringify(body,null,2);
+ }catch{head.textContent='Unavailable';output.textContent='The demo could not be reached.';}
+});
+</script></body></html>"""
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = "PriviOnePrelaunch/1"
+    sys_version = ""
+
+    def log_message(self, format, *args):
+        # Never log visitor task text or request bodies.
+        pass
+
+    def headers_common(self, content_type, length):
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(length))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
+        self.send_header("Access-Control-Allow-Origin", "null")
+
+    def reply(self, code, obj):
+        raw = json.dumps(obj, separators=(",", ":"), allow_nan=False).encode()
+        self.send_response(code)
+        self.headers_common("application/json; charset=utf-8", len(raw))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def do_GET(self):
+        path = urlsplit(self.path).path
+        if path == "/health":
+            return self.reply(200, {"ok": True, "service": "privi-one-demo", "mode": "PRELAUNCH_SIMULATION"})
+        if path != "/":
+            return self.reply(404, {"error": "not_found"})
+        raw = HTML.encode()
+        self.send_response(200)
+        self.headers_common("text/html; charset=utf-8", len(raw))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def do_POST(self):
+        if urlsplit(self.path).path != "/api/simulate":
+            return self.reply(404, {"error": "not_found"})
+        if self.headers.get_content_type() != "application/json":
+            return self.reply(415, {"error": "json_only"})
+        try:
+            length = int(self.headers.get("Content-Length", "-1"))
+        except ValueError:
+            return self.reply(400, {"error": "invalid_content_length"})
+        if not 1 <= length <= MAX_BODY:
+            return self.reply(413, {"error": "body_size_invalid"})
+        try:
+            data = json.loads(self.rfile.read(length))
+            if not isinstance(data, dict) or set(data) - {"task", "budget_cents", "approved"}:
+                return self.reply(400, {"error": "invalid_payload"})
+            task = data.get("task")
+            budget = data.get("budget_cents")
+            approved = data.get("approved", False)
+            if not isinstance(task, str) or type(budget) is not int or type(approved) is not bool:
+                return self.reply(400, {"error": "invalid_fields"})
+            result = demo.evaluate(
+                task, tool="report_summary", allowed_tools=["report_summary"],
+                budget_cents=budget, approved=approved, secret=SECRET,
+            )
+            return self.reply(200, result)
+        except (ValueError, UnicodeError, json.JSONDecodeError):
+            return self.reply(400, {"error": "invalid_request"})
+        except Exception:
+            return self.reply(503, {"error": "simulation_unavailable"})
+
+
+def main():
+    port = int(os.environ.get("PORT", "10000"))
+    server = ThreadingHTTPServer((HOST, port), Handler)
+    server.serve_forever()
+
+
+if __name__ == "__main__":
+    main()
