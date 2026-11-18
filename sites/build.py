@@ -87,6 +87,7 @@ form.check button{padding:11px 18px;border:0;border-radius:8px;background:var(--
 #out{font-size:15px;max-width:44em}
 footer{border-top:1px solid var(--rule);padding:36px 0 48px;color:var(--steel);font-size:15px}
 footer .cols{display:flex;gap:40px;flex-wrap:wrap;justify-content:space-between}
+.privi-ip-mark{font-size:12px;letter-spacing:.025em;margin-top:22px;opacity:.8;line-height:1.5}
 @media (max-width:820px){.hero{grid-template-columns:1fr;padding-top:44px}dl.defs{grid-template-columns:1fr;gap:6px}dl.defs dd{margin-bottom:14px}}
 @media (prefers-reduced-motion:no-preference){.root.fresh span{animation:in .5s ease both}@keyframes in{from{opacity:0}to{opacity:1}}}
 """
@@ -172,7 +173,7 @@ def page(key, title, desc, h1, lede, ctas, aside, body, extra_head=""):
 </div></main>
 <footer><div class="wrap cols"><div><strong>Privi World Co</strong><br>Port Huron, Michigan<br><a href="mailto:{EMAIL}">{EMAIL}</a></div>
 <div>Built by Dario Canoy<br><a href="{REPO}">Source on GitHub</a><br><a href="{HUB}/llms.txt">For AI agents: llms.txt</a></div>
-<div>MCP servers<br><a href="{LEDGER}">Ledger</a>, <a href="{VERIFY}">Verify</a>, <a href="{ANCHOR}">Anchor</a></div></div></footer>
+<div>MCP servers<br><a href="{LEDGER}">Ledger</a>, <a href="{VERIFY}">Verify</a>, <a href="{ANCHOR}">Anchor</a></div></div><div class="wrap privi-ip-mark">© 2026 Privi World Corp · Privi™ · Original proprietary materials reserved. Publicly licensed materials retain their existing licenses.</div></footer>
 </body></html>"""
 
 
