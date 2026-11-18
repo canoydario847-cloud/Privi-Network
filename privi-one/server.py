@@ -156,7 +156,8 @@ class Handler(BaseHTTPRequestHandler):
             task = data.get("task")
             budget = data.get("budget_cents")
             approved = data.get("approved", False)
-            if not isinstance(task, str) or type(budget) is not int or type(approved) is not bool:
+            if (not isinstance(task, str) or not task.strip() or len(task) > 10000
+                    or type(budget) is not int or type(approved) is not bool):
                 return self.reply(400, {"error": "invalid_fields"})
             task_hash = hashlib.sha256(task.encode("utf-8")).hexdigest()
             bundle = quote_integrity.issue(demo.DEMO_OPTIONS, task_hash, key=QUOTE_SECRET)
