@@ -1,0 +1,23 @@
+{
+  "repository": "example/hello",
+  "commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "checks": [
+    {
+      "name": "build",
+      "conclusion": "success"
+    },
+    {
+      "name": "security",
+      "conclusion": "success"
+    }
+  ],
+  "observed_version": "v1",
+  "probes": [
+    {
+      "name": "GET /health",
+      "passed": true
+    }
+  ],
+  "cost_cents": 1500,
+  "complete": true
+}
