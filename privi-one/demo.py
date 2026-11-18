@@ -112,6 +112,25 @@ def evaluate(task, *, tool, allowed_tools, budget_cents, approved,
         and baseline["reliability"] >= reliability_min
         and baseline["latency_ms"] <= latency_max_ms
     )
+    # Explain every synthetic route with stable, machine-readable reason codes.
+    # This is comparative metadata, not measured quality or a provider quote.
+    route_explanations = []
+    for option in quotes:
+        failures = []
+        if option["quality"] < quality_min:
+            failures.append("quality_below_minimum")
+        if option["reliability"] < reliability_min:
+            failures.append("reliability_below_minimum")
+        if option["latency_ms"] > latency_max_ms:
+            failures.append("latency_above_maximum")
+        if option["cost_cents"] > budget_cents:
+            failures.append("price_above_budget")
+        route_explanations.append({
+            "id": option["id"],
+            "quality_qualified": not any(reason != "price_above_budget" for reason in failures),
+            "within_budget": option["cost_cents"] <= budget_cents,
+            "reasons": failures,
+        })
     comparable = permitted and baseline_eligible and selected is not None
     saved = max(0, baseline["cost_cents"] - selected["cost_cents"]) if comparable else None
     receipt = {
@@ -125,6 +144,7 @@ def evaluate(task, *, tool, allowed_tools, budget_cents, approved,
                    "approval_supplied": approved, "budget_cents": budget_cents},
         "routing": {"quotes": quotes, "selected_id": selected["id"] if selected else None,
                     "baseline_id": baseline_id, "estimated_savings_cents": saved,
+                    "route_explanations": route_explanations,
                     "quality_min": quality_min, "reliability_min": reliability_min,
                     "latency_max_ms": latency_max_ms},
         "decision": "SIMULATED_APPROVAL" if permitted else "DENIED",
