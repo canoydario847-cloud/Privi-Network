@@ -21,8 +21,13 @@ if spec is None or spec.loader is None:
     raise RuntimeError("OutcomeGrid core missing")
 core = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(core)
+evidence_spec = importlib.util.spec_from_file_location("outcomegrid_github_evidence", HERE / "github_evidence.py")
+if evidence_spec is None or evidence_spec.loader is None:
+    raise RuntimeError("OutcomeGrid evidence adapter missing")
+github_evidence = importlib.util.module_from_spec(evidence_spec)
+evidence_spec.loader.exec_module(github_evidence)
 
-SCENARIOS = frozenset({"accepted", "rejected", "self_attestation_blocked", "duplicate_blocked"})
+SCENARIOS = frozenset({"accepted", "rejected", "self_attestation_blocked", "duplicate_blocked", "github_checks_pending_review"})
 MAX_BYTES = 256
 
 
@@ -38,6 +43,20 @@ def run_fixture(scenario):
                       "expected": "all sandbox tests passing"}, now=1000)
         evidence = hashlib.sha256(b"synthetic-ci-result-not-real").hexdigest()
         denial = None
+        if scenario == "github_checks_pending_review":
+            repo = "synthetic-org/synthetic-repo"
+            sha = "a" * 40
+            checks = {"repository": repo, "head_sha": sha, "total_count": 1,
+                      "check_runs": [{"id": 101, "name": "ci/test", "head_sha": sha,
+                                      "status": "completed", "conclusion": "success",
+                                      "app": {"slug": "github-actions"}}]}
+            verdict = github_evidence.verify_check_runs(checks, repo=repo, head_sha=sha,
+                                                        required_checks=["ci/test"])
+            return {"mode": "SYNTHETIC_PRELAUNCH_NO_REAL_AGENTS",
+                    "scenario": scenario, "task": task,
+                    "github_check_evidence": verdict, "outcome": grid.job_status("synthetic-task-001"),
+                    "reputation": grid.scoreboard(), "review_required": True,
+                    "payment": "NOT_USED", "PRVI": "NOT_USED", "ledger": "NOT_USED"}
         if scenario == "self_attestation_blocked":
             try:
                 grid.attest(job_id="synthetic-task-001", actor="synthetic-agent",
@@ -72,7 +91,7 @@ button:focus-visible{outline:3px solid #ffdb88}pre{overflow:auto;max-height:540p
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}.step{background:#101d31;padding:14px;border-radius:9px}
 </style></head><body><main><div class="banner">PRIVI OUTCOMEGRID · PRELAUNCH SYNTHETIC PROTOTYPE</div>
 <h1>AI agents earn trust through verified outcomes.</h1>
-<p class="muted">A demonstration of task acceptance rules, separate reviewers, duplicate prevention and agent outcome history. This simulation makes no real AI calls or claims about any real agent's reliability.</p>
+<p class="muted">A demonstration of task acceptance rules, separate reviewers, duplicate prevention, pinned GitHub check-run evidence and agent outcome history. This simulation makes no real AI calls or claims about any real agent's reliability.</p>
 <section class="panel"><h2>Outcome verification flow</h2><div class="grid">
 <div class="step"><b>1. Set measurable criteria</b><p>CI checks and independent PR review</p></div>
 <div class="step"><b>2. Assign agent and reviewer</b><p>Different synthetic entities</p></div>
@@ -80,7 +99,7 @@ button:focus-visible{outline:3px solid #ffdb88}pre{overflow:auto;max-height:540p
 <div class="step"><b>4. Update outcome history</b><p>Count only reviewed outcomes</p></div></div></section>
 <section class="panel"><h2>Run a scenario</h2><p class="muted">Choose a fixture to see accepted work, failed work, blocked self-verification or blocked duplicates.</p>
 <button data-scenario="accepted">Accepted outcome</button><button data-scenario="rejected">Rejected outcome</button>
-<button data-scenario="self_attestation_blocked">Block self-attestation</button><button data-scenario="duplicate_blocked">Block duplicate</button>
+<button data-scenario="self_attestation_blocked">Block self-attestation</button><button data-scenario="duplicate_blocked">Block duplicate</button><button data-scenario="github_checks_pending_review">GitHub CI evidence (review pending)</button>
 <h3 id="status" aria-live="polite">Choose a scenario</h3><pre id="result" aria-live="polite">No simulation executed.</pre></section>
 <p class="muted">© 2026 Privi World Corp. Sandbox only. No authenticated real-world verifier, real client data, independent execution evidence, live payment, escrow, ledger transaction, or PRVI network.</p></main>
 <script>
