@@ -37,8 +37,18 @@ def main(argv=None):
     origin_parser.add_argument("--manifest")
     origin_parser.add_argument("--trusted-fixture-keys",
                                help="TEST ONLY: JSON signer ID to 32+ byte hex key")
+    github = sub.add_parser("github-checks", help="Read actual GitHub check-run reports; DOES NOT verify deployment")
+    github.add_argument("--repository", required=True, help="owner/repo")
+    github.add_argument("--commit", required=True, help="exact 40-character commit SHA")
+    github.add_argument("--required", action="append", required=True,
+                        help="required GitHub check name; repeat for multiple checks")
     args = parser.parse_args(argv)
     try:
+        if args.command == "github-checks":
+            report = load("github_checks").collect_checks(
+                args.repository, args.commit, args.required)
+            print(json.dumps(report, indent=2, sort_keys=True))
+            return 0 if report["result"] == "REPORTED_CHECKS_SUCCESS_DEPLOYMENT_UNVERIFIED" else 2
         if args.command == "deployment":
             report = load("deployment_verifier").assess_deployment(
                 read_json(args.intent), read_json(args.evidence))
