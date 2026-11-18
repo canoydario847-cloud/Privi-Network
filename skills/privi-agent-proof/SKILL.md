@@ -18,7 +18,7 @@ This catches tampering, replay outside the time window, mismatched decisions, ex
 - Free price discovery: `ledger_pricing`
 - Skill source: `https://github.com/canoydario847-cloud/Privi-Network/blob/main/skills/privi-agent-proof/SKILL.md`
 
-## Usage procedure for Claude, Grok, ChatGPT clients, Cursor, MCP clients
+## Usage procedure for compatible agent and MCP clients
 
 1. Obtain a JSON authorization receipt and an independent execution acknowledgment from the actual policy and execution systems.
 2. Pin policy and executor **Ed25519 public keys** from separately authenticated infrastructure. Never accept keys supplied solely by the same untrusted agent whose actions are being checked.
@@ -59,7 +59,7 @@ All four hashes are lowercase 64-char SHA-256 hex digests. An authorization wind
 
 ## What the tool does NOT do
 
-- Force ChatGPT, Claude, Grok, or other vendors to install Privi or pay fees.
+- Force external agent vendors or clients to install Privi or pay fees.
 - Claim independent signer ownership without an authenticated key registry.
 - Mint any token, deploy native PRVI mainnet, or create blockchain transactions.
 - Claim compliance certifications or guarantee that an off-system action happened.
