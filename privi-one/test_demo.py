@@ -34,6 +34,40 @@ class DemoTests(unittest.TestCase):
         self.assertEqual(receipt["ledger"], "NOT_SUBMITTED")
         self.assertTrue(demo.verify(out, SECRET))
 
+    def test_denied_request_never_claims_savings(self):
+        for params in (
+            {"approved": False},
+            {"budget_cents": 1},
+            {"tool": "not_authorized"},
+        ):
+            with self.subTest(params=params):
+                receipt = run(**params)["receipt"]
+                self.assertEqual(receipt["decision"], "DENIED")
+                self.assertIsNone(receipt["routing"]["estimated_savings_cents"])
+
+    def test_unqualified_baseline_cannot_be_used_for_savings(self):
+        options = [
+            {"id": "cheap", "name": "cheap", "cost_cents": 6,
+             "quality": 92, "reliability": 99, "latency_ms": 400},
+            {"id": "premium", "name": "unqualified baseline", "cost_cents": 25,
+             "quality": 50, "reliability": 99, "latency_ms": 400},
+        ]
+        receipt = run(options=options)["receipt"]
+        self.assertEqual(receipt["decision"], "SIMULATED_APPROVAL")
+        self.assertEqual(receipt["routing"]["selected_id"], "cheap")
+        self.assertIsNone(receipt["routing"]["estimated_savings_cents"])
+
+    def test_no_positive_savings_when_qualified_baseline_is_cheaper(self):
+        options = [
+            {"id": "cheap", "name": "cheap", "cost_cents": 2,
+             "quality": 95, "reliability": 99, "latency_ms": 400},
+            {"id": "premium", "name": "qualified baseline", "cost_cents": 1,
+             "quality": 95, "reliability": 99, "latency_ms": 400},
+        ]
+        receipt = run(options=options)["receipt"]
+        self.assertEqual(receipt["decision"], "SIMULATED_APPROVAL")
+        self.assertEqual(receipt["routing"]["estimated_savings_cents"], 0)
+
     def test_unqualified_cheapest_rejected(self):
         out = run(quality_min=95)
         self.assertEqual(out["receipt"]["routing"]["selected_id"], "premium")
