@@ -2,11 +2,11 @@
 
 An MCP server that lets AI agents check **where a manufactured lot came from** and **whether its records were changed after the fact**, paid per call in USDC on Base using [x402](https://github.com/x402-foundation/x402).
 
-Works with any MCP client: Claude, ChatGPT, Cursor, VS Code, and custom agents.
+Works with compatible MCP clients, including desktop development tools and custom agents.
 
 **Live (testnet):** `https://privi-verify.onrender.com/mcp` · demo lots `DEMO-STEEL-0001`, `DEMO-FOOD-0001`
 
-Built by [Privi World Co](https://github.com/canoydario847-cloud) (Port Huron, Michigan) as the agent-facing side of **Privi ChainFlow**.
+Made by Dario Canoy · [Privi World Co](https://github.com/canoydario847-cloud) (Michigan) as the agent-facing side of **Privi ChainFlow**.
 
 ## Tools
 
