@@ -110,3 +110,18 @@ This optional CLI is separate from the Render web service; the public `/api/veri
 The SQLite journal now checks monotonically contiguous sequence numbers. A new `GET /api/checkpoint` endpoint exports a compact, **unsigned** checkpoint (sequence count and hash-chain head). To test truncation/rewrite detection, save this checkpoint **outside Privi's Render service** (for example, keep an immutable copy), then later send the unchanged JSON in `{"checkpoint": <saved checkpoint>}` to `POST /api/checkpoint/verify`. The service verifies its current chain, confirms it has at least the saved sequence, and checks the saved hash at that sequence. Appending newer entries is allowed; deleting past entries or altering historical hashes is detected relative to your saved record.
 
 This is a **sandbox integrity exercise only**, not a security guarantee. The checkpoint is not digitally signed and is not independently anchored; an attacker able to modify the service can lie about verification results. Render's free filesystem may be cleared between deployments, and such resets will fail comparison to any earlier nonempty checkpoint. Use an independently retained signed checkpoint and a separately operated verifier before relying on audit history in enterprise production. `/api/audit`, `/api/checkpoint`, and `/api/checkpoint/verify` expose no raw receipt or customer information. Existing optional Ed25519 signing tests remain separate from the hosted HTTP demo.
+
+## Independently signed checkpoint verification (experimental, offline only)
+
+A separately operated auditor can now sign a saved `GET /api/checkpoint` JSON export **offline**, using an ephemeral Ed25519 key. The trusted public key is written to a separate JSON file so another process can verify the signed envelope without the private key. This signing code is deliberately **not** installed in the public Render sandbox and creates no production keys.
+
+Example after downloading the checkpoint to a trusted local file `checkpoint.json`:
+
+```bash
+python -m pip install 'cryptography>=43,<47'
+python privi-one/checkpoint_cli.py --checkpoint checkpoint.json --envelope signed-checkpoint.json --pinned-key audit-public-key.json
+python privi-one/checkpoint_cli.py --verify --envelope signed-checkpoint.json --pinned-key audit-public-key.json
+python -m unittest discover -s privi-one -p 'test_signed_checkpoint.py' -v
+```
+
+**Important:** The generated public key must be independently preserved/pinned at creation; copying both a substituted envelope and an attacker-supplied public key proves nothing about the original auditor. Signatures validate the statement the auditor signed, not whether the server's database was complete or actions happened. Reliable production needs trusted key custody, key revocation, independent checkpoint publication, durably retained original snapshots, separate executor attestations, and audit history backed up outside Render. This prototype is not an irreversible or proprietary security guarantee. No billing, PRVI, blockchain, or customer actions are taken.
