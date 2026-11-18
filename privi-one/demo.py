@@ -160,6 +160,10 @@ def evaluate(task, *, tool, allowed_tools, budget_cents, approved,
 
 
 def verify(envelope, secret):
+    """Fail closed on malformed or tampered sandbox receipts.
+
+    Local HMAC only; not independent third-party signature verification.
+    """
     if not isinstance(secret, (bytes, bytearray)) or len(secret) < 32:
         return False
     if not isinstance(envelope, dict) or not isinstance(envelope.get("receipt"), dict):
@@ -169,9 +173,17 @@ def verify(envelope, secret):
     auth = envelope.get("auth")
     if not isinstance(auth, dict) or auth.get("algorithm") != "HMAC-SHA256-DEMO-ONLY":
         return False
-    mac = hmac.new(secret, canonical(envelope["receipt"]), hashlib.sha256).hexdigest()
-    return hmac.compare_digest(mac, str(auth.get("mac", ""))) and hmac.compare_digest(
-        digest(envelope["receipt"]), str(envelope.get("digest_sha256", "")))
+    if not isinstance(auth.get("mac"), str) or not isinstance(envelope.get("digest_sha256"), str):
+        return False
+    try:
+        mac = hmac.new(secret, canonical(envelope["receipt"]), hashlib.sha256).hexdigest()
+        calculated_digest = digest(envelope["receipt"])
+        return (hmac.compare_digest(mac, auth["mac"])
+                and hmac.compare_digest(calculated_digest, envelope["digest_sha256"]))
+    except (TypeError, ValueError, OverflowError, RecursionError):
+        # A malformed untrusted JSON receipt must never cause a verifier crash
+        # or be interpreted as an authenticated approval.
+        return False
 
 
 def main():
