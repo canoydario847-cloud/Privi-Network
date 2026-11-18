@@ -58,6 +58,14 @@ class WebTests(unittest.TestCase):
         self.assertEqual(rejected["reputation"]["agents"][0]["accepted"], 0)
         self.assertEqual(accepted["payment"], "NOT_USED")
 
+    def test_github_evidence_still_requires_review(self):
+        fixture = self.scenario("github_checks_pending_review")
+        self.assertTrue(fixture["github_check_evidence"]["valid"])
+        self.assertTrue(fixture["review_required"])
+        self.assertFalse(fixture["github_check_evidence"]["scoreboard_eligible"])
+        self.assertIsNone(fixture["outcome"]["decision"])
+        self.assertEqual(fixture["reputation"]["agents"], [])
+
     def test_self_attestation_and_duplicate_blocking(self):
         a = self.scenario("self_attestation_blocked")
         self.assertEqual(a["blocked_reason"], "executor_cannot_verify_self")
