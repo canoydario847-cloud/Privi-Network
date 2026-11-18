@@ -6,7 +6,8 @@ this process only, and are NOT durable Ledger entries or public signatures.
 """
 from __future__ import annotations
 
-import html
+import hashlib
+import hmac
 import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -21,7 +22,13 @@ if spec is None or spec.loader is None:
     raise RuntimeError("Privi ONE demo is unavailable")
 demo = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(demo)
+quote_spec = importlib.util.spec_from_file_location('privi_one_quote_integrity', DEMO_FILE.with_name('quote_integrity.py'))
+if quote_spec is None or quote_spec.loader is None:
+    raise RuntimeError('Quote integrity module unavailable')
+quote_integrity = importlib.util.module_from_spec(quote_spec)
+quote_spec.loader.exec_module(quote_integrity)
 SECRET = secrets.token_bytes(32)
+QUOTE_SECRET = secrets.token_bytes(32)
 MAX_BODY = 16_384
 HOST = "0.0.0.0"
 HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -47,11 +54,12 @@ small{color:#aec2df}a{color:#89c6ff}.cols{display:grid;grid-template-columns:rep
 <textarea id="task" maxlength="10000" rows="3">Summarize a synthetic non-sensitive report</textarea>
 <label for="budget">Maximum estimated cost in cents</label><input id="budget" type="number" value="10" min="0" max="100000">
 <label><input id="approve" type="checkbox" style="width:auto" checked> Simulated approval (not verified human authorization)</label>
-<button id="go">Compare &amp; generate simulated receipt</button>
+<button id="go">Compare &amp; generate simulated receipt</button> <button id="verify" type="button">Verify receipt in this session</button>
 <h3 id="resultHeading" aria-live="polite">No simulation run yet</h3>
 <pre id="result" class="output" aria-live="polite"></pre></section>
 <p><small>© 2026 Privi World Corp. Original proprietary Privi materials reserved, subject to existing licenses and third-party rights. This demo is not a live CallProof, payment, or PRVI mainnet service.</small></p>
 </main><script>
+let lastReceipt=null;
 document.querySelector('#go').addEventListener('click',async()=>{
  const output=document.querySelector('#result'), head=document.querySelector('#resultHeading');
  head.textContent='Simulating...';output.textContent='';
@@ -60,8 +68,18 @@ document.querySelector('#go').addEventListener('click',async()=>{
    body:JSON.stringify({task:document.querySelector('#task').value,budget_cents:Number(document.querySelector('#budget').value),
     approved:document.querySelector('#approve').checked})});
   const body=await response.json();head.textContent=response.ok?(body.receipt?.decision||'Done'):'Error';
+  lastReceipt=response.ok?body:null;
   output.textContent=JSON.stringify(body,null,2);
  }catch{head.textContent='Unavailable';output.textContent='The demo could not be reached.';}
+});
+document.querySelector('#verify').addEventListener('click',async()=>{
+ const output=document.querySelector('#result'),head=document.querySelector('#resultHeading');
+ if(!lastReceipt){head.textContent='Generate a receipt first';return;}
+ try{
+ const resp=await fetch('/api/verify',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(lastReceipt)});
+ const body=await resp.json();head.textContent=body.verified?'Receipt verified in this server session':'Verification failed';
+ output.textContent=JSON.stringify(body,null,2)+'\\n\\n'+JSON.stringify(lastReceipt,null,2);
+ }catch{head.textContent='Verification unavailable';}
 });
 </script></body></html>"""
 
@@ -104,7 +122,8 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(raw)
 
     def do_POST(self):
-        if urlsplit(self.path).path != "/api/simulate":
+        path = urlsplit(self.path).path
+        if path not in ("/api/simulate", "/api/verify"):
             return self.reply(404, {"error": "not_found"})
         if self.headers.get_content_type() != "application/json":
             return self.reply(415, {"error": "json_only"})
@@ -116,17 +135,42 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(413, {"error": "body_size_invalid"})
         try:
             data = json.loads(self.rfile.read(length))
-            if not isinstance(data, dict) or set(data) - {"task", "budget_cents", "approved"}:
+            if not isinstance(data, dict):
+                return self.reply(400, {"error": "invalid_payload"})
+            if path == "/api/verify":
+                envelope = {k: data.get(k) for k in ("receipt", "digest_sha256", "auth")}
+                bundle = data.get("quote_attestation")
+                verified_receipt = demo.verify(envelope, SECRET)
+                if not isinstance(bundle, dict) or not isinstance(envelope["receipt"], dict):
+                    return self.reply(200, {"verified": False, "scope": "CURRENT_SERVER_SESSION_ONLY"})
+                receipt = envelope["receipt"]
+                binding = receipt.get("routing", {}).get("quote_bundle_sha256")
+                valid_bundle = quote_integrity.verify(bundle, receipt.get("task_sha256"), key=QUOTE_SECRET)
+                bound = (isinstance(binding, str) and
+                         hmac.compare_digest(binding, demo.digest(bundle.get("body"))))
+                return self.reply(200, {"verified": bool(verified_receipt and valid_bundle and bound),
+                                        "scope": "CURRENT_SERVER_SESSION_ONLY",
+                                        "ledger": "NOT_SUBMITTED", "signature": "HMAC_LOCAL_NOT_PUBLIC_KEY"})
+            if set(data) - {"task", "budget_cents", "approved"}:
                 return self.reply(400, {"error": "invalid_payload"})
             task = data.get("task")
             budget = data.get("budget_cents")
             approved = data.get("approved", False)
             if not isinstance(task, str) or type(budget) is not int or type(approved) is not bool:
                 return self.reply(400, {"error": "invalid_fields"})
+            task_hash = hashlib.sha256(task.encode("utf-8")).hexdigest()
+            bundle = quote_integrity.issue(demo.DEMO_OPTIONS, task_hash, key=QUOTE_SECRET)
+            if not quote_integrity.verify(bundle, task_hash, key=QUOTE_SECRET):
+                return self.reply(503, {"error": "quote_integrity_failed"})
             result = demo.evaluate(
                 task, tool="report_summary", allowed_tools=["report_summary"],
                 budget_cents=budget, approved=approved, secret=SECRET,
+                options=bundle["body"]["options"],
             )
+            result["receipt"]["routing"]["quote_bundle_sha256"] = demo.digest(bundle["body"])
+            result["digest_sha256"] = demo.digest(result["receipt"])
+            result["auth"]["mac"] = hmac.new(SECRET, demo.canonical(result["receipt"]), hashlib.sha256).hexdigest()
+            result["quote_attestation"] = bundle
             return self.reply(200, result)
         except (ValueError, UnicodeError, json.JSONDecodeError):
             return self.reply(400, {"error": "invalid_request"})
