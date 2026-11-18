@@ -179,6 +179,36 @@ class DemoTests(unittest.TestCase):
         ).hexdigest()
         self.assertFalse(demo.verify(out, SECRET))
 
+    def test_resigned_receipt_cannot_invent_cheaper_route_or_savings(self):
+        # Simulate a compromised LOCAL demo signing key: the verifier should
+        # reject deterministically false claims despite a valid new HMAC.
+        changes = (
+            lambda receipt: receipt["routing"].update(selected_id="budget"),
+            lambda receipt: receipt["routing"].update(estimated_savings_cents=999),
+            lambda receipt: receipt["routing"]["route_explanations"][0].update(reasons=[]),
+            lambda receipt: receipt.update(decision="DENIED", denial_reasons=["budget_exceeded"]),
+            lambda receipt: receipt["policy"].update(budget_cents=1),
+        )
+        for mutate in changes:
+            with self.subTest(mutate=str(mutate)):
+                out = run()
+                mutate(out["receipt"])
+                out["digest_sha256"] = demo.digest(out["receipt"])
+                out["auth"]["mac"] = hmac.new(
+                    SECRET, demo.canonical(out["receipt"]), hashlib.sha256
+                ).hexdigest()
+                self.assertFalse(demo.verify(out, SECRET))
+
+    def test_consistent_sandbox_approvals_and_denials_still_verify(self):
+        for options in (
+            {},
+            {"approved": False},
+            {"budget_cents": 1},
+            {"quality_min": 100},
+        ):
+            with self.subTest(options=options):
+                self.assertTrue(demo.verify(run(**options), SECRET))
+
     def test_wrong_key_detected(self):
         self.assertFalse(demo.verify(run(), b"another-32-byte-test-secret-value-000000"))
 
