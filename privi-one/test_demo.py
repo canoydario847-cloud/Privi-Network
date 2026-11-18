@@ -68,6 +68,33 @@ class DemoTests(unittest.TestCase):
         self.assertEqual(receipt["decision"], "SIMULATED_APPROVAL")
         self.assertEqual(receipt["routing"]["estimated_savings_cents"], 0)
 
+    def test_route_explanations_show_quality_and_price_failures(self):
+        result = run()
+        explanations = {
+            item["id"]: item for item in
+            result["receipt"]["routing"]["route_explanations"]
+        }
+        self.assertEqual(explanations["budget"]["reasons"],
+                         ["quality_below_minimum", "reliability_below_minimum"])
+        self.assertEqual(explanations["balanced"]["reasons"], [])
+        self.assertTrue(explanations["balanced"]["within_budget"])
+        self.assertEqual(explanations["premium"]["reasons"], ["price_above_budget"])
+        self.assertTrue(explanations["premium"]["quality_qualified"])
+        self.assertTrue(demo.verify(result, SECRET))
+
+    def test_route_explanation_tampering_invalidates_receipt(self):
+        result = run()
+        result["receipt"]["routing"]["route_explanations"][0]["reasons"] = []
+        self.assertFalse(demo.verify(result, SECRET))
+
+    def test_denied_simulation_keeps_diagnostic_without_claiming_savings(self):
+        result = run(approved=False)
+        receipt = result["receipt"]
+        self.assertEqual(receipt["decision"], "DENIED")
+        self.assertIsNone(receipt["routing"]["estimated_savings_cents"])
+        self.assertEqual(len(receipt["routing"]["route_explanations"]), 3)
+        self.assertTrue(demo.verify(result, SECRET))
+
     def test_unqualified_cheapest_rejected(self):
         out = run(quality_min=95)
         self.assertEqual(out["receipt"]["routing"]["selected_id"], "premium")
