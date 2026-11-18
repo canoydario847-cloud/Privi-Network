@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import hmac
 import re
 import threading
 import time
@@ -161,10 +162,20 @@ class PriviGate:
     def __init__(self, app, min_score: int = 550, min_grade: str | None = None, mode: str = "enforce",
                  exempt: tuple[str, ...] = ("/health", "/healthz", "/.well-known/", "/robots.txt"),
                  on_decision: Callable[[Decision, dict], None] | None = None, checker: PassportChecker | None = None,
+                 require_subject_binding: bool = False,
+                 subject_claim: str = "org_id",
+                 trusted_state_key: str = "privi_authenticated_subject",
                  **checker_kw):
         if mode not in ("enforce", "monitor"):
             raise ValueError("mode must be 'enforce' or 'monitor'")
+        if require_subject_binding and mode != "enforce":
+            raise ValueError("Subject binding requires enforce mode")
+        if not subject_claim or not trusted_state_key:
+            raise ValueError("Subject binding field names must not be empty")
         self.app, self.mode, self.exempt, self.on_decision = app, mode, tuple(exempt), on_decision
+        self.require_subject_binding = require_subject_binding
+        self.subject_claim = subject_claim
+        self.trusted_state_key = trusted_state_key
         self.checker = checker or PassportChecker(min_score=min_score, min_grade=min_grade, **checker_kw)
 
     async def __call__(self, scope, receive, send):
@@ -182,6 +193,18 @@ class PriviGate:
         pid = passport_from_headers(headers)
 
         d = await asyncio.get_running_loop().run_in_executor(None, self.checker.check, pid)
+        if d.allow and self.require_subject_binding:
+            # A passport identifier is public, not a secret or proof of caller
+            # possession. Upstream authentication MUST securely populate this
+            # state; never copy it from an unverified user header or request.
+            state = scope.get("state")
+            identity = state.get(self.trusted_state_key) if isinstance(state, dict) else None
+            subject = d.subject.get(self.subject_claim) if isinstance(d.subject, dict) else None
+            if (not isinstance(identity, str) or not identity
+                    or not isinstance(subject, str) or not subject
+                    or not hmac.compare_digest(identity, subject)):
+                d = Decision(False, pid, ["passport does not match authenticated caller"],
+                             score=d.score, grade=d.grade, subject=d.subject)
         if self.on_decision:
             try:
                 self.on_decision(d, scope)
