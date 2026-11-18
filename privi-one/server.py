@@ -27,8 +27,15 @@ if quote_spec is None or quote_spec.loader is None:
     raise RuntimeError('Quote integrity module unavailable')
 quote_integrity = importlib.util.module_from_spec(quote_spec)
 quote_spec.loader.exec_module(quote_integrity)
+id_spec = importlib.util.spec_from_file_location('privi_one_sandbox_identity', DEMO_FILE.with_name('sandbox_identity.py'))
+if id_spec is None or id_spec.loader is None:
+    raise RuntimeError('Sandbox identity unavailable')
+sandbox_identity = importlib.util.module_from_spec(id_spec)
+id_spec.loader.exec_module(sandbox_identity)
 SECRET = secrets.token_bytes(32)
 QUOTE_SECRET = secrets.token_bytes(32)
+SESSIONS = sandbox_identity.SandboxIdentity(secrets.token_bytes(32))
+RETRIES = sandbox_identity.RetryStore()
 MAX_BODY = 16_384
 HOST = "0.0.0.0"
 HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -59,14 +66,21 @@ small{color:#aec2df}a{color:#89c6ff}.cols{display:grid;grid-template-columns:rep
 <pre id="result" class="output" aria-live="polite"></pre></section>
 <p><small>© 2026 Privi World Corp. Original proprietary Privi materials reserved, subject to existing licenses and third-party rights. This demo is not a live CallProof, payment, or PRVI mainnet service.</small></p>
 </main><script>
-let lastReceipt=null;
+let lastReceipt=null, sandboxToken=null;
+async function getSandboxToken(){
+ if(sandboxToken)return sandboxToken;
+ const response=await fetch("/api/session",{method:"POST",headers:{"content-type":"application/json"},body:"{}"});
+ if(!response.ok)throw Error("Sandbox session unavailable");
+ sandboxToken=(await response.json()).token;return sandboxToken;
+}
 document.querySelector('#go').addEventListener('click',async()=>{
  const output=document.querySelector('#result'), head=document.querySelector('#resultHeading');
  head.textContent='Simulating...';output.textContent='';
  try{
-  const response=await fetch('/api/simulate',{method:'POST',headers:{'content-type':'application/json'},
+  const token=await getSandboxToken();
+  const response=await fetch('/api/simulate-secure',{method:'POST',headers:{'content-type':'application/json','authorization':'Bearer '+token},
    body:JSON.stringify({task:document.querySelector('#task').value,budget_cents:Number(document.querySelector('#budget').value),
-    approved:document.querySelector('#approve').checked})});
+    approved:document.querySelector('#approve').checked, request_id:crypto.randomUUID()})});
   const body=await response.json();head.textContent=response.ok?(body.receipt?.decision||'Done'):'Error';
   lastReceipt=response.ok?body:null;
   output.textContent=JSON.stringify(body,null,2);
@@ -123,7 +137,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlsplit(self.path).path
-        if path not in ("/api/simulate", "/api/verify"):
+        if path not in ("/api/simulate", "/api/simulate-secure", "/api/session", "/api/verify"):
             return self.reply(404, {"error": "not_found"})
         if self.headers.get_content_type() != "application/json":
             return self.reply(415, {"error": "json_only"})
@@ -137,6 +151,16 @@ class Handler(BaseHTTPRequestHandler):
             data = json.loads(self.rfile.read(length))
             if not isinstance(data, dict):
                 return self.reply(400, {"error": "invalid_payload"})
+            if path == "/api/session":
+                if data:
+                    return self.reply(400, {"error": "invalid_session_request"})
+                return self.reply(200, SESSIONS.issue())
+            secure = path == "/api/simulate-secure"
+            if secure:
+                auth = self.headers.get("Authorization", "")
+                sid = SESSIONS.verify(auth[7:] if auth.startswith("Bearer ") else None)
+                if sid is None:
+                    return self.reply(401, {"error": "sandbox_session_required"})
             if path == "/api/verify":
                 envelope = {k: data.get(k) for k in ("receipt", "digest_sha256", "auth")}
                 bundle = data.get("quote_attestation")
@@ -151,7 +175,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200, {"verified": bool(verified_receipt and valid_bundle and bound),
                                         "scope": "CURRENT_SERVER_SESSION_ONLY",
                                         "ledger": "NOT_SUBMITTED", "signature": "HMAC_LOCAL_NOT_PUBLIC_KEY"})
-            if set(data) - {"task", "budget_cents", "approved"}:
+            allowed_keys = {"task", "budget_cents", "approved", "request_id"} if secure else {"task", "budget_cents", "approved"}
+            if set(data) - allowed_keys:
                 return self.reply(400, {"error": "invalid_payload"})
             task = data.get("task")
             budget = data.get("budget_cents")
@@ -159,20 +184,34 @@ class Handler(BaseHTTPRequestHandler):
             if (not isinstance(task, str) or not task.strip() or len(task) > 10000
                     or type(budget) is not int or type(approved) is not bool):
                 return self.reply(400, {"error": "invalid_fields"})
-            task_hash = hashlib.sha256(task.encode("utf-8")).hexdigest()
-            bundle = quote_integrity.issue(demo.DEMO_OPTIONS, task_hash, key=QUOTE_SECRET)
-            if not quote_integrity.verify(bundle, task_hash, key=QUOTE_SECRET):
-                return self.reply(503, {"error": "quote_integrity_failed"})
-            result = demo.evaluate(
+            if secure and not isinstance(data.get("request_id"), str):
+                return self.reply(400, {"error": "request_id_required"})
+            def build_receipt():
+                task_hash = hashlib.sha256(task.encode("utf-8")).hexdigest()
+                bundle = quote_integrity.issue(demo.DEMO_OPTIONS, task_hash, key=QUOTE_SECRET)
+                if not quote_integrity.verify(bundle, task_hash, key=QUOTE_SECRET):
+                    raise RuntimeError("Quote integrity failed")
+                result = demo.evaluate(
                 task, tool="report_summary", allowed_tools=["report_summary"],
                 budget_cents=budget, approved=approved, secret=SECRET,
                 options=bundle["body"]["options"],
             )
-            result["receipt"]["routing"]["quote_bundle_sha256"] = demo.digest(bundle["body"])
-            result["digest_sha256"] = demo.digest(result["receipt"])
-            result["auth"]["mac"] = hmac.new(SECRET, demo.canonical(result["receipt"]), hashlib.sha256).hexdigest()
-            result["quote_attestation"] = bundle
-            return self.reply(200, result)
+                result["receipt"]["routing"]["quote_bundle_sha256"] = demo.digest(bundle["body"])
+                if secure:
+                    result["receipt"]["sandbox_identity"] = {"mode": "ANONYMOUS_SANDBOX_NOT_REAL_AUTH",
+                                                             "session_sha256": hashlib.sha256(sid.encode()).hexdigest(),
+                                                             "request_id": data["request_id"]}
+                result["digest_sha256"] = demo.digest(result["receipt"])
+                result["auth"]["mac"] = hmac.new(SECRET, demo.canonical(result["receipt"]), hashlib.sha256).hexdigest()
+                result["quote_attestation"] = bundle
+                return result
+            if secure:
+                payload = {"task_sha256": hashlib.sha256(task.encode()).hexdigest(),
+                           "budget_cents": budget, "approved": approved}
+                result, replayed = RETRIES.run_once(sid, data["request_id"], payload, build_receipt)
+                # Replay metadata is outside the signed receipt; no mutation of cached result.
+                return self.reply(200, dict(result, idempotent_replay=replayed))
+            return self.reply(200, build_receipt())
         except (ValueError, UnicodeError, json.JSONDecodeError):
             return self.reply(400, {"error": "invalid_request"})
         except Exception:
