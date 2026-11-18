@@ -66,6 +66,25 @@ class SignedCheckpointTests(unittest.TestCase):
         self.assertEqual(self.j.check_pinned_checkpoint(
             self.store, signed["body"]["checkpoint"])["reason"], "journal_truncated")
 
+    def test_offline_auditor_cli_roundtrip(self):
+        import json
+        cli_path = Path(__file__).with_name("checkpoint_cli.py")
+        spec = importlib.util.spec_from_file_location("privi_one_checkpoint_cli_test", cli_path)
+        cli = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cli)
+        checkpoint = self.fixture()
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "checkpoint.json"
+            signed = Path(folder) / "signed.json"
+            pinned = Path(folder) / "pinned.json"
+            source.write_text(json.dumps(checkpoint))
+            cli.sign_saved(str(source), str(signed), str(pinned))
+            self.assertTrue(cli.verify_saved(str(signed), str(pinned)))
+            modified = json.loads(signed.read_text())
+            modified["body"]["checkpoint"]["head"] = "f" * 64
+            signed.write_text(json.dumps(modified))
+            self.assertFalse(cli.verify_saved(str(signed), str(pinned)))
+
     def test_malformed_and_non_sandbox_rejected(self):
         with self.assertRaises(ValueError):
             self.s.sign({"sequence": 1, "head": "0"*64}, private_key=self.key)
