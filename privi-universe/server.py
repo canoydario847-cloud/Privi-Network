@@ -7,8 +7,18 @@ authorize payments, execute tools, or claim that production services are live.
 from __future__ import annotations
 import json
 import os
+import importlib.util
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
+
+_spec = importlib.util.spec_from_file_location(
+    "privi_universe_status_monitor", Path(__file__).with_name("status_monitor.py"))
+if _spec is None or _spec.loader is None:
+    raise RuntimeError("Privi Universe status monitor unavailable")
+_status_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_status_mod)
+MONITOR = _status_mod.StatusMonitor()
 
 PRODUCTS = [
     {"id":"one","number":"01","name":"Privi ONE","tag":"AGENT INTELLIGENCE","summary":"Cost-aware routes, Guard inspection and synthetic action receipts.","status":"INTERACTIVE DEMO","mode":"demo","href":"https://privi-one-demo.onrender.com/","symbol":"✦"},
@@ -76,6 +86,20 @@ h1{font-size:clamp(45px,7vw,84px);line-height:1.025;letter-spacing:-.065em;font-
 .go:hover{text-decoration:underline}.go:focus-visible,.primary:focus-visible,a:focus-visible{outline:2px solid var(--cyan);outline-offset:4px}
 .info{margin-top:27px;border:1px solid rgba(130,168,227,.19);border-radius:14px;background:rgba(12,22,48,.72);padding:23px}.info h2{margin:0 0 9px;font-size:19px}.info p{margin:0;color:var(--muted)}
 footer{border-top:1px solid var(--line);margin-top:65px;padding-top:24px;color:var(--muted);font-size:12px;display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}footer a{color:#91f4f0}
+
+.status-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:17px 0}
+.status-card{background:rgba(14,29,59,.72);border:1px solid var(--line);border-radius:13px;padding:19px}
+.status-card h3{margin:0 0 8px;font-size:17px}
+.status-indicator{display:inline-flex;align-items:center;gap:7px;color:#c7d4ea;font:700 12px ui-monospace,monospace}
+.status-indicator:before{content:"";height:8px;width:8px;border-radius:50%;background:#e9c17c;box-shadow:0 0 8px rgba(233,193,124,.33)}
+.status-indicator.responding{color:#7cf1e8}.status-indicator.responding:before{background:#7cf1e8;box-shadow:0 0 11px rgba(124,241,232,.6)}
+.meta-label{color:var(--muted);font-size:12px}
+.access-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px;margin:15px 0}
+.access-cell{padding:16px;border:1px solid var(--line);border-radius:10px;background:rgba(14,29,59,.55)}
+.access-cell b{display:block;margin-bottom:5px;color:#c7f5ff}
+.access-cell span{font-size:12px;color:var(--muted)}
+@media(max-width:650px){.status-grid,.access-row{grid-template-columns:1fr}}
+
 @media(max-width:850px){.hero{grid-template-columns:1fr;min-height:unset;padding:44px 0 20px}.hero-art{height:260px;max-width:430px;width:100%;margin:auto}.world{height:145px;width:145px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:540px){.shell{padding:0 16px 55px}header{padding:14px 0}.links{gap:12px}.grid{grid-template-columns:1fr}.hero-art{height:220px}h1{font-size:53px}.meta{gap:20px}.module{min-height:265px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.module:hover,.primary:hover{transform:none}}
@@ -83,7 +107,7 @@ footer{border-top:1px solid var(--line);margin-top:65px;padding-top:24px;color:v
 
 HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Privi Universe: explore prelaunch AI agent demos and verified source references from Privi World Corp."><title>Privi Universe — Mission Control</title><style>""" + CSS + """</style></head><body>
 <div class="shell"><header><a href="/" class="logo"><span>✦</span> PRIVI UNIVERSE</a>
-<nav class="links" aria-label="Main navigation"><a href="#missions">EXPLORE TOOLS</a><a href="#about">THE NETWORK</a><a href="https://github.com/canoydario847-cloud/Privi-Network" target="_blank" rel="noopener noreferrer">SOURCE ↗</a></nav>
+<nav class="links" aria-label="Main navigation"><a href="#missions">EXPLORE TOOLS</a><a href="#status">STATUS</a><a href="#access">ACCOUNT</a><a href="#about">THE NETWORK</a><a href="https://github.com/canoydario847-cloud/Privi-Network" target="_blank" rel="noopener noreferrer">SOURCE ↗</a></nav>
 <div class="mode">PRELAUNCH · DEMO PORTAL</div></header>
 <main><section class="hero"><div><div class="overline">PRIVI WORLD CORP / DIGITAL FRONTIER</div><h1>One universe.<br><span class="grad">Infinite potential.</span></h1>
 <p class="lead">The command center for Privi's agent intelligence, verifiable outcomes, and emerging trust infrastructure. Explore working sandbox demonstrations and inspect the research behind the network.</p>
@@ -93,8 +117,58 @@ HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name=
 <section id="missions"><div class="section-top"><div><div class="overline">THE PRivi ECOSYSTEM / NAVIGATION</div><h2>Choose your mission.</h2></div>
 <p>Live links are labeled as demos. Other modules link to source material rather than claiming public production availability.</p></div>
 <div class="grid">""" + "\n".join(render_card(p) for p in PRODUCTS) + """</div></section>
+
+<section id="status" class="info" aria-labelledby="status-heading">
+  <div class="overline">OPERATIONS / READ-ONLY HEALTH OBSERVATION</div>
+  <h2 id="status-heading">Mission status.</h2>
+  <p>Checks whether two prelaunch demo health endpoints respond. This is not proof of uptime, production readiness, payment processing, or PRVI mainnet health.</p>
+  <div class="status-grid">
+    <div class="status-card"><h3>Privi ONE</h3><span class="status-indicator" id="status-one">Not yet checked</span><div class="meta-label">Sandbox health endpoint</div></div>
+    <div class="status-card"><h3>OutcomeGrid</h3><span class="status-indicator" id="status-outcome">Not yet checked</span><div class="meta-label">Sandbox health endpoint</div></div>
+  </div>
+  <p class="meta-label" id="status-updated" aria-live="polite">Status updates are cached for 90 seconds. CallProof, Guard and Ledger are source references, not monitored production services.</p>
+</section>
+<section id="access" class="info" aria-labelledby="access-heading">
+  <div class="overline">PRIVI PASSPORT / ACCESS ROADMAP</div>
+  <h2 id="access-heading">One future account. No imaginary privileges.</h2>
+  <p>Unified login and paid account entitlements are not connected to this portal. No passwords, session tokens or payments are collected here. Sandbox demos remain public.</p>
+  <div class="access-row">
+    <div class="access-cell"><b>Guest</b><span>Access public demo experiences and source references</span></div>
+    <div class="access-cell"><b>Account holder</b><span>Not enabled — requires a verified identity provider</span></div>
+    <div class="access-cell"><b>Privi Pro</b><span>Not enabled — requires trusted server-side entitlement verification</span></div>
+  </div>
+  <p class="meta-label">Future controls must verify identity, payment entitlements, revocation, and cross-product access on the server. This page cannot authorize protected services.</p>
+</section>
+
 <section class="info" id="about"><h2>Built for accountable intelligence.</h2><p>Privi Universe is a navigation portal—not an exchange, wallet, production blockchain explorer, or login system. Privi ONE and OutcomeGrid are synthetic demonstrations. The other links are reference material and pilot documentation. No payment, model call, customer information, or PRVI operation occurs on this portal.</p></section>
 </main><footer><span>© 2026 Privi World Corp · Made by Dario Canoy</span><span>PRELAUNCH / PROTOTYPE PORTAL · No live financial transactions</span></footer></div>
+
+<script>
+(async()=>{
+ const labels={one:document.getElementById('status-one'),outcome:document.getElementById('status-outcome')};
+ const stamp=document.getElementById('status-updated');
+ try{
+   const controller=new AbortController();
+   const timer=setTimeout(()=>controller.abort(),12000);
+   let response;
+   try{response=await fetch('/api/status',{cache:'no-store',signal:controller.signal});}
+   finally{clearTimeout(timer);}
+   if(!response.ok)throw Error('Health snapshot unavailable');
+   const data=await response.json();
+   for(const key of Object.keys(labels)){
+     const value=data.services?.[key]?.state;
+     const good=value==='health_responding';
+     labels[key].classList.toggle('responding',good);
+     labels[key].textContent=good?'HEALTH ENDPOINT RESPONDING':'UNREACHABLE / UNVERIFIED';
+   }
+   stamp.textContent='Checked '+new Date(data.checked_at_unix*1000).toLocaleString()+
+     ' · Cached 90 seconds · Demo health only; no live payment or mainnet verification.';
+ }catch{
+   Object.values(labels).forEach(element=>element.textContent='STATUS UNAVAILABLE');
+   stamp.textContent='Unable to retrieve current sandbox health observations.';
+ }
+})();
+</script>
 </body></html>"""
 
 class Handler(BaseHTTPRequestHandler):
@@ -112,13 +186,15 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options","nosniff")
         self.send_header("Referrer-Policy","no-referrer")
         self.send_header("X-Frame-Options","DENY")
-        self.send_header("Content-Security-Policy","default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+        self.send_header("Content-Security-Policy","default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
         self.end_headers()
         self.wfile.write(data)
     def do_GET(self):
         path=urlsplit(self.path).path
         if path=="/health":
             return self.respond(200,json.dumps({"ok":True,"service":"privi-universe","mode":"PRELAUNCH_PORTAL"}),"application/json; charset=utf-8")
+        if path=="/api/status":
+            return self.respond(200,json.dumps(MONITOR.snapshot()),"application/json; charset=utf-8")
         if path=="/":
             return self.respond(200,HTML,"text/html; charset=utf-8")
         return self.respond(404,'{"error":"not_found"}',"application/json; charset=utf-8")
