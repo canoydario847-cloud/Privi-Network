@@ -29,7 +29,7 @@ class PilotReportTests(unittest.TestCase):
         record = make_receipt("private-car-2", 234567, True)
         record["event"]["odometer_km"] = 1
         report = render_report(audit(export(record)))
-        self.assertIn("HUMAN REVIEW RECOMMENDED", report)
+        self.assertIn("INSUFFICIENT CONSENTED RECORDS TO REVIEW", report)
         self.assertIn("Invalid receipts: 1", report)
         self.assertNotIn("private-car-2", report)
         self.assertNotIn("234567", report)
@@ -37,7 +37,7 @@ class PilotReportTests(unittest.TestCase):
     def test_rejected_no_consent_flags_review(self):
         report = render_report(audit(export(rejected=[{"reason": "no consent"}])))
         self.assertIn("Rejected input rows: 1", report)
-        self.assertIn("HUMAN REVIEW RECOMMENDED", report)
+        self.assertIn("INSUFFICIENT CONSENTED RECORDS TO REVIEW", report)
         self.assertNotIn("no consent", report)
 
     def test_reject_arbitrary_untrusted_summary(self):
