@@ -96,8 +96,6 @@ class PortalTests(unittest.TestCase):
         self.assertIn("prefers-reduced-motion",app.CSS)
         self.assertNotIn("google-analytics.com",app.HTML)
         self.assertIn("fetch('/api/status'",app.HTML)
-        self.assertIn("connect-src 'self'",app.Handler.respond.__code__.co_consts[-1] if False else
-                      "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'")
         self.assertNotIn('type="password"',app.HTML.lower())
         self.assertNotIn("google-analytics.com",app.HTML)
 
