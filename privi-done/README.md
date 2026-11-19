@@ -172,3 +172,27 @@ seconds each. Persistent failures remain `HEALTH_UNAVAILABLE`. No deployment
 settings, paid plans, mainnet, wallet, or billing code are changed. Avoid using
 this extended timeout for latency SLOs: separate uptime measurements must
 record both slow cold starts and failed probes.
+
+## Running application commit self-report (prelaunch only)
+
+The Privi ONE sandbox adds `GET /api/version` which returns its full
+`RENDER_GIT_COMMIT` only when the variable is present and a valid 40-character
+lowercase SHA, plus `independently_attested: false`. Otherwise it reports
+`self_reported_commit: null`; it does **not** fabricate a version from a
+repository branch, local HEAD, or the most recent Render deploy.
+
+Privi DONE can compare the fixed sandbox endpoint's self-report to an explicit
+pinned commit (no user-selected URL):
+
+```bash
+python privi-done/cli.py privi-one-version \
+  --commit 064b3fdc6c0310b0d55b9d7ec501ec4f5bbc78f2
+```
+
+**Important:** The version endpoint has not been deployed to Render in this
+draft PR. The existing live service is configured on `main` with auto-deploy
+disabled. A 404 or unavailable observation is expected until the endpoint is
+reviewed, merged and deployed deliberately. A future match is still a server
+self-report, **not independently signed execution attestation**. Never use it
+alone to certify a customer outcome, authorize billing, or launch financial
+mainnet.
