@@ -184,8 +184,8 @@ HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name=
     const response=await fetch('/api/access/config',{cache:'no-store'});
     if(!response.ok)throw Error('Unavailable');
     const config=await response.json();
-    const identity=config.identity_provider==='configured'?'Configured — login not yet enabled':'Not configured';
-    const billing=config.billing_proof==='configured'?'Configured — payment proof still requires testing':'Not configured';
+    const identity=config.identity_provider==='settings_present_unverified'?'Settings present, provider unverified — login disabled':'Not configured';
+    const billing=config.billing_proof==='settings_present_unverified'?'Settings present, entitlements unverified — access disabled':'Not configured';
     status.textContent='Identity provider: '+identity+' · Privi Pro entitlement verifier: '+billing+
        ' · Registration and login remain disabled.';
   }catch{status.textContent='Identity and entitlement readiness cannot be verified. Access remains disabled.';}
@@ -217,8 +217,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(200,json.dumps({"ok":True,"service":"privi-universe","mode":"PRELAUNCH_PORTAL"}),"application/json; charset=utf-8")
         if path=="/api/access/config":
             settings=account_access.config_from_env()
-            payload={"identity_provider":"configured" if account_access.configured(settings) else "not_configured",
-                     "billing_proof":"configured" if account_access.billing_configured(settings) else "not_configured",
+            payload={"identity_provider":"settings_present_unverified" if account_access.configured(settings) else "not_configured",
+                     "billing_proof":"settings_present_unverified" if account_access.billing_configured(settings) else "not_configured",
                      "browser_login":"NOT_IMPLEMENTED",
                      "registration":"NOT_IMPLEMENTED",
                      "privileges":"DENIED_UNTIL_VERIFIED"}
