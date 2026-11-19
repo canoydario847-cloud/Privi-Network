@@ -2,6 +2,8 @@
 import http.client
 import importlib.util
 import json
+import os
+from unittest.mock import patch
 import threading
 import unittest
 from http.server import ThreadingHTTPServer
@@ -52,6 +54,27 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn(b"PRELAUNCH", body)
         self.assertIn(b"no-store", headers["Cache-Control"].encode())
+
+    def test_version_endpoint_never_fabricates_unavailable_commit(self):
+        with patch.dict(os.environ, {}, clear=True):
+            status, _, raw = self.call("GET", "/api/version")
+        self.assertEqual(status, 200)
+        body = json.loads(raw)
+        self.assertIsNone(body["self_reported_commit"])
+        self.assertEqual(body["version_source"], "UNAVAILABLE")
+        self.assertFalse(body["independently_attested"])
+        self.assertEqual(body["mode"], "PRELAUNCH_SIMULATION")
+
+    def test_version_endpoint_self_reports_only_full_lowercase_sha(self):
+        for candidate in ("a" * 40, "main", "b" * 39, "c" * 41, "A" * 40):
+            with self.subTest(candidate=candidate):
+                with patch.dict(os.environ, {"RENDER_GIT_COMMIT": candidate}):
+                    status, _, raw = self.call("GET", "/api/version")
+                self.assertEqual(status, 200)
+                payload = json.loads(raw)
+                self.assertEqual(payload["self_reported_commit"],
+                                 candidate if candidate == "a" * 40 else None)
+                self.assertFalse(payload["independently_attested"])
 
     def test_no_premium_or_payment_routes(self):
         status, _, _ = self.call("GET", "/mcp")
