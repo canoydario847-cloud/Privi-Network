@@ -55,3 +55,11 @@ PRIVI_UNIVERSE_BILLING_JWKS
 ```
 
 Do not configure billing issuer using unverified, user-controlled payment claims. A future production design must use short-lived, independently signed billing attestations, real subscription/one-time purchase reconciliation, revocation/replay controls, caching/rate limits, protected signing keys, and tests against authentic provider responses. No billing database or wallet was touched by this prototype.
+
+## OAuth PKCE transaction protection and account readiness (November 19, 2026)
+
+The portal's Account Access section now displays server-reported identity-provider and billing-verifier readiness by reading `GET /api/access/config`; it never displays a sign-in option that cannot work. Both account registration and browser login remain **disabled**.
+
+`login_protocol.py` adds an isolated OAuth 2.1 authorization-code PKCE S256 transaction helper for the later verified login rollout. It generates cryptographically random one-time state, PKCE verifier/challenge, and nonce, binds the transaction to a specific HTTPS issuer and registered HTTPS redirect URI, refuses replay, expires state after five minutes, and enforces a cap of 128 pending requests. Tests cover expiration, state mismatch/replay, concurrent consumption, and resource limits.
+
+**Security/rollout boundary:** This library is not wired to public login routes. It does not contact any identity provider, exchange OAuth codes, create browser sessions, set cookies, or authenticate customers. Its state storage is in-memory and unsuitable for distributed production without durable shared state and production rate limits. A real login must configure a verified IdP, registered exact redirect URI, issuer-specific endpoints, HTTPS server-side code exchange, state and nonce validation, secure HttpOnly/SameSite session cookies, CSRF controls and logout/revocation. A browser display is never proof of paid Privi Pro entitlement. All production entitlements remain off.
