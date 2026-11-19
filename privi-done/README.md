@@ -156,3 +156,19 @@ acceptance and independently verified outcome remain pending.
 Use company-approved allowlisted endpoints for any later expansion, with DNS
 pinning/SSRF protections, restricted protocols and private-network denial.
 Do not replace the fixed endpoint with unconstrained user-supplied URLs.
+
+## Render free-tier cold-start investigation (November 19, 2026)
+
+Authorized Render inspection of `privi-one-demo` showed its latest deployment
+`dep-dbv1lgu7bikc73f9vm3g` marked `live`, commit
+`064b3fdc6c0310b0d55b9d7ec501ec4f5bbc78f2`.
+The first two external `/health` probes received HTTP 502 (~9.9s) and HTTP
+503 (~10.0s); Render's Python startup log appeared immediately afterward.
+A free-instance cold start is a plausible explanation, **not yet proven**.
+This is not sufficient to infer a code defect or certify availability.
+
+The fixed-endpoint observer now allows two bounded attempts of up to 45
+seconds each. Persistent failures remain `HEALTH_UNAVAILABLE`. No deployment
+settings, paid plans, mainnet, wallet, or billing code are changed. Avoid using
+this extended timeout for latency SLOs: separate uptime measurements must
+record both slow cold starts and failed probes.
