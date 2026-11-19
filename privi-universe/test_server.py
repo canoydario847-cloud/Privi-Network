@@ -137,7 +137,7 @@ class PortalTests(unittest.TestCase):
             self.assertNotIn("production",p["status"].lower())
             self.assertIn(p["href"].encode(),app.HTML.encode())
     def test_public_oauth_callback_and_login_stay_disabled(self):
-        for path in ("/oauth/start","/oauth/callback","/login","/logout","/api/oauth/exchange","/api/session/create","/api/session/logout"):
+        for path in ("/oauth/start","/oauth/callback","/login","/logout","/api/oauth/exchange","/api/session/create","/api/session/logout","/api/login/complete","/api/login/start"):
             code,_,_=self.call("GET",path)
             self.assertEqual(code,404)
         self.assertIn("Registration and login remain disabled",app.HTML)
