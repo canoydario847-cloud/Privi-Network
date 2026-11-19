@@ -44,6 +44,42 @@ class PortalTests(unittest.TestCase):
         status,_,body=self.call("GET","/health")
         self.assertEqual(status,200)
         self.assertEqual(json.loads(body)["mode"],"PRELAUNCH_PORTAL")
+    def test_account_and_pro_access_fail_closed_without_idp(self):
+        original=app.account_access.config_from_env
+        try:
+            app.account_access.config_from_env=lambda: {}
+            code,_,body=self.call("GET","/api/account/me")
+            self.assertEqual(code,503)
+            self.assertEqual(json.loads(body)["error"],"identity_provider_not_configured")
+            code,_,body=self.call("GET","/api/pro/verify")
+            self.assertEqual(code,503)
+            code,_,body=self.call("GET","/api/access/config")
+            self.assertEqual(code,200)
+            obj=json.loads(body)
+            self.assertEqual(obj["identity_provider"],"not_configured")
+            self.assertEqual(obj["billing_proof"],"not_configured")
+            self.assertEqual(obj["browser_login"],"NOT_IMPLEMENTED")
+        finally:
+            app.account_access.config_from_env=original
+
+    def test_account_route_rejects_missing_token_even_if_configured(self):
+        original_config=app.account_access.config_from_env
+        original_verify=app.account_access.verify_account_token
+        cfg={"PRIVI_UNIVERSE_OAUTH_ISSUER":"https://id.example.test/",
+             "PRIVI_UNIVERSE_OAUTH_AUDIENCE":"universe",
+             "PRIVI_UNIVERSE_OAUTH_JWKS":"https://id.example.test/keys"}
+        try:
+            app.account_access.config_from_env=lambda: cfg
+            def no_verify(*args,**kwargs):
+                raise app.account_access.AccessDenied("Missing token")
+            app.account_access.verify_account_token=no_verify
+            code,_,body=self.call("GET","/api/account/me")
+            self.assertEqual(code,401)
+            self.assertEqual(json.loads(body)["error"],"valid_account_access_token_required")
+        finally:
+            app.account_access.config_from_env=original_config
+            app.account_access.verify_account_token=original_verify
+
     def test_status_endpoint_and_access_disclaimers(self):
         original=app.MONITOR
         try:
