@@ -44,6 +44,27 @@ class PortalTests(unittest.TestCase):
         status,_,body=self.call("GET","/health")
         self.assertEqual(status,200)
         self.assertEqual(json.loads(body)["mode"],"PRELAUNCH_PORTAL")
+    def test_present_oauth_settings_are_not_called_verified(self):
+        original=app.account_access.config_from_env
+        try:
+            app.account_access.config_from_env=lambda: {
+                "PRIVI_UNIVERSE_OAUTH_ISSUER":"https://id.example.test/",
+                "PRIVI_UNIVERSE_OAUTH_AUDIENCE":"privi-universe",
+                "PRIVI_UNIVERSE_OAUTH_JWKS":"https://id.example.test/keys",
+                "PRIVI_UNIVERSE_BILLING_ISSUER":"https://billing.example.test/",
+                "PRIVI_UNIVERSE_BILLING_AUDIENCE":"privi-pro",
+                "PRIVI_UNIVERSE_BILLING_JWKS":"https://billing.example.test/keys",
+            }
+            code,_,body=self.call("GET","/api/access/config")
+            self.assertEqual(code,200)
+            data=json.loads(body)
+            self.assertEqual(data["identity_provider"],"settings_present_unverified")
+            self.assertEqual(data["billing_proof"],"settings_present_unverified")
+            self.assertEqual(data["browser_login"],"NOT_IMPLEMENTED")
+            self.assertEqual(data["privileges"],"DENIED_UNTIL_VERIFIED")
+        finally:
+            app.account_access.config_from_env=original
+
     def test_account_and_pro_access_fail_closed_without_idp(self):
         original=app.account_access.config_from_env
         try:
