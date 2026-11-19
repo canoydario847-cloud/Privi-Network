@@ -18,7 +18,7 @@ def _canon(value):
 
 
 def assess_provider_reports(repository, commit_sha, service_id, required_checks,
-                            github_report, render_report):
+                            github_report, render_report, *, health_report=None):
     """Correlate exact identities, explicit results and conservative claims.
 
     Provider reports should come from trusted collector code, never from
@@ -62,6 +62,17 @@ def assess_provider_reports(repository, commit_sha, service_id, required_checks,
         issues.append("github-required-checks-not-verified")
     if not rd:
         issues.append("render-deploy-not-verified")
+    health = None
+    if health_report is not None:
+        health = (isinstance(health_report, dict)
+                  and health_report.get("schema") == "privi-done-public-health-v1"
+                  and health_report.get("endpoint") == "https://privi-one-demo.onrender.com/health"
+                  and health_report.get("result") == "PRIVI_ONE_SANDBOX_HEALTH_REPORTED"
+                  and health_report.get("http_health_reported") is True
+                  and health_report.get("expected_commit_verified") is False
+                  and health_report.get("customer_outcome_certified") is False)
+    # A service-specific anonymous health endpoint does not authenticate a
+    # deployed commit, prove application behavior, or satisfy a customer's tests.
     # Even if both upstream reports match, actual endpoint/version, budget,
     # permissions and customer acceptance remain unverified.
     issues.extend(["independent-service-health-unverified",
@@ -74,6 +85,7 @@ def assess_provider_reports(repository, commit_sha, service_id, required_checks,
         "render_service_id": service_id,
         "github_checks_reported_success": bool(gh),
         "render_live_commit_reported": bool(rd),
+        "privi_one_sandbox_health_reported": health,
         "status": "PROVIDER_REPORTS_MATCH_OUTCOME_PENDING"
             if gh and rd else "PROVIDER_EVIDENCE_FAILED",
         "issues": issues,
@@ -108,6 +120,10 @@ def render_customer_markdown(report):
         "**Render service:** \`" + report["render_service_id"] + "\`",
         "**GitHub checks reported success:** " + ("Yes" if report["github_checks_reported_success"] else "No"),
         "**Render reports matching live commit:** " + ("Yes" if report["render_live_commit_reported"] else "No"),
+        "**Privi ONE public sandbox health:** " + (
+            "Not checked" if report.get("privi_one_sandbox_health_reported") is None else
+            "Observed (not commit-specific)" if report["privi_one_sandbox_health_reported"] else
+            "Not verified"),
         "",
         "**Not certified as completed. No independently checked endpoint health, customer acceptance or cost.**",
         "",
