@@ -26,3 +26,35 @@ jobs:
         run: |
           python privi-done/cli.py origin --source privi-done/cli.py
           python privi-done/cli.py deployment --intent privi-done/examples/intent.json --evidence privi-done/examples/evidence.json
+
+  observe-public-sandbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Observe fixed public Privi ONE health endpoint (noncertifying)
+        run: |
+          python - <<'PY'
+          import importlib.util
+          import json
+          import os
+          from pathlib import Path
+          path = Path("privi-done/public_health.py")
+          spec = importlib.util.spec_from_file_location("privi_done_public_health", path)
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          result = module.inspect_privi_one_health()
+          print(json.dumps(result, sort_keys=True))
+          # A completed job never implies health succeeded: expose the actual observation.
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
+              f.write("## Privi ONE public endpoint observation\\n")
+              f.write("Endpoint: \`https://privi-one-demo.onrender.com/health\`\\n\\n")
+              f.write("Reported result: \`" + result["result"] + "\`\\n\\n")
+              f.write("**Not** a deployed-commit check, paid-entitlement check, "
+                      "customer-acceptance report, or mainnet validation.\\n")
+          PY
