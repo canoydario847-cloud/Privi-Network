@@ -52,8 +52,14 @@ def main(argv=None):
     combined.add_argument("--commit", required=True)
     combined.add_argument("--required", action="append", required=True)
     combined.add_argument("--output", help="Optional local Markdown report path")
+    sub.add_parser("privi-one-health",
+                   help="Read the fixed Privi ONE sandbox /health endpoint (not commit proof)")
     args = parser.parse_args(argv)
     try:
+        if args.command == "privi-one-health":
+            result = load("public_health").inspect_privi_one_health()
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return 0 if result["http_health_reported"] else 2
         if args.command == "provider-report":
             github = load("github_checks").collect_checks(
                 args.repository, args.commit, args.required)
