@@ -29,7 +29,7 @@ def _live_read():
         "User-Agent": "Privi-DONE-sandbox-observer/0.1",
     })
     try:
-        with build_opener(NoRedirect()).open(request, timeout=10) as response:
+        with build_opener(NoRedirect()).open(request, timeout=45) as response:
             if response.status != 200 or response.geturl() != HEALTH_URL:
                 raise HealthUnavailable("unexpected health response")
             raw = response.read(4097)
@@ -43,10 +43,18 @@ def _live_read():
 
 def inspect_privi_one_health(*, read=None):
     """Report only exactly observed sandbox health; no onchain/version claim."""
-    try:
-        response = _live_read() if read is None else read()
-    except (HealthUnavailable, TimeoutError, OSError, ValueError):
-        return {
+    # Render free instances may need a cold start. Give the fixed endpoint
+    # two bounded opportunities, without switching hosts or authorizing actions.
+    # Both failed observations still fail closed. Test readers remain injectable.
+    response = None
+    for attempt in range(2):
+        try:
+            response = _live_read() if read is None else read()
+            break
+        except (HealthUnavailable, TimeoutError, OSError, ValueError):
+            if attempt == 0:
+                continue
+            return {
             "schema": "privi-done-public-health-v1",
             "endpoint": HEALTH_URL,
             "result": "HEALTH_UNAVAILABLE",
