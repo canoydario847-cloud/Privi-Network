@@ -56,8 +56,15 @@ def main(argv=None):
                           help="Only check fixed public Privi ONE sandbox; never proves commit")
     sub.add_parser("privi-one-health",
                    help="Read the fixed Privi ONE sandbox /health endpoint (not commit proof)")
+    version = sub.add_parser("privi-one-version",
+                             help="Read fixed sandbox's self-reported version; not execution proof")
+    version.add_argument("--commit", required=True, help="Expected exact 40-character Git commit")
     args = parser.parse_args(argv)
     try:
+        if args.command == "privi-one-version":
+            result = load("version_observer").inspect_version(args.commit)
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return 0 if result["server_self_report_matches"] else 2
         if args.command == "privi-one-health":
             result = load("public_health").inspect_privi_one_health()
             print(json.dumps(result, indent=2, sort_keys=True))
