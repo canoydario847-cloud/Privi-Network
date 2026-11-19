@@ -134,3 +134,25 @@ probe, then have the customer confirm agreed acceptance criteria. Do not add
 a generic user-supplied health URL to a server-side fetcher (SSRF risk).
 Render connector access currently requires a workspace selected by the owner;
 no workspace, key, or account service has been selected by this PR.
+
+## Fixed public sandbox health observation
+
+A separate read-only command checks ONLY the Privi ONE sandbox's fixed
+`https://privi-one-demo.onrender.com/health` endpoint:
+
+```bash
+python privi-done/cli.py privi-one-health
+```
+
+In the combined customer report, add `--with-privi-one-health` to include
+this optional observation. It cannot access arbitrary customer URLs and never
+follows redirects. The observer checks the documented
+`ok: true`, `service: privi-one-demo`, `mode: PRELAUNCH_SIMULATION`
+response; timeouts, unexpected bodies, redirect attempts and errors fail
+closed. A successful observation **does not authenticate a specific Git
+commit**, demonstrate the customer's app, or verify pricing. Customer
+acceptance and independently verified outcome remain pending.
+
+Use company-approved allowlisted endpoints for any later expansion, with DNS
+pinning/SSRF protections, restricted protocols and private-network denial.
+Do not replace the fixed endpoint with unconstrained user-supplied URLs.
