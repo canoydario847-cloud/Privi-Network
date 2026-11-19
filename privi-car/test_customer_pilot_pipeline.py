@@ -63,7 +63,7 @@ class CustomerPilotPipelineTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Receipts reviewed: 0", result.stdout)
         self.assertIn("Rejected input rows: 1", result.stdout)
-        self.assertIn("HUMAN REVIEW RECOMMENDED", result.stdout)
+        self.assertIn("INSUFFICIENT CONSENTED RECORDS TO REVIEW", result.stdout)
         self.assertNotIn("demo-van-sensitive", result.stdout)
 
     def test_tampered_export_is_reported_not_accepted_as_valid(self):
@@ -78,7 +78,7 @@ class CustomerPilotPipelineTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Invalid receipts: 1", result.stdout)
         self.assertIn("Receipts with valid integrity hashes: 0", result.stdout)
-        self.assertIn("HUMAN REVIEW RECOMMENDED", result.stdout)
+        self.assertIn("INSUFFICIENT CONSENTED RECORDS TO REVIEW", result.stdout)
         self.assertNotIn("999999", result.stdout)
 
     def test_second_customer_report_cannot_overwrite_first(self):
