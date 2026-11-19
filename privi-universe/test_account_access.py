@@ -6,8 +6,12 @@ from pathlib import Path
 import time
 import unittest
 
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import rsa,padding
+try:
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import rsa,padding
+    HAS_CRYPTO=True
+except ImportError:
+    HAS_CRYPTO=False
 
 p=Path(__file__).with_name("account_access.py")
 sp=importlib.util.spec_from_file_location("universe_auth_tests",p)
@@ -29,6 +33,7 @@ def public_jwks(private,kid="test-key"):
                      "n":enc(pn.n.to_bytes((pn.n.bit_length()+7)//8,"big")),
                      "e":enc(pn.e.to_bytes((pn.e.bit_length()+7)//8,"big"))}]}
 
+@unittest.skipUnless(HAS_CRYPTO, "install cryptography>=43,<47 for signing tests")
 class AccountTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
