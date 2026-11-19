@@ -103,3 +103,34 @@ or that a real purchase was delivered. Compare this result with GitHub checks
 and separately approved acceptance probes before offering a verified outcome.
 
 The example tests use injected JSON fixtures, not customer deployments.
+
+## One-command customer-readable provider report
+
+Once you have an **authorized** Render service ID, exact GitHub repository and
+commit, and read-only API credentials, generate a local Markdown report:
+
+```bash
+python privi-done/cli.py provider-report \
+  --repository OWNER/REPO \
+  --commit FULL_40_CHARACTER_SHA \
+  --service-id srv-YOUR_PINNED_SERVICE_ID \
+  --required "build" \
+  --required "security" \
+  --output privi-done-report.md
+```
+
+The output explicitly marks GitHub-check and Render-deployment match status,
+then lists **three outstanding requirements**: independent service health,
+verified cost and customer acceptance. Even matching provider reports must
+**never** authorize a customer charge or a completed-work certificate.
+The digest is a checksum, **not a signed Ledger receipt**.
+
+### Next live pilot gate
+
+Use a consenting deployment owner and the correct Render workspace to perform
+the first read-only end-to-end run. Before handing a report to a customer,
+verify the expected version and health from a separately authorized, controlled
+probe, then have the customer confirm agreed acceptance criteria. Do not add
+a generic user-supplied health URL to a server-side fetcher (SSRF risk).
+Render connector access currently requires a workspace selected by the owner;
+no workspace, key, or account service has been selected by this PR.
