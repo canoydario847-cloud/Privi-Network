@@ -19,6 +19,12 @@ if _spec is None or _spec.loader is None:
 _status_mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_status_mod)
 MONITOR = _status_mod.StatusMonitor()
+_auth_spec = importlib.util.spec_from_file_location(
+    "privi_universe_account_access", Path(__file__).with_name("account_access.py"))
+if _auth_spec is None or _auth_spec.loader is None:
+    raise RuntimeError("Privi account verifier unavailable")
+account_access = importlib.util.module_from_spec(_auth_spec)
+_auth_spec.loader.exec_module(account_access)
 
 PRODUCTS = [
     {"id":"one","number":"01","name":"Privi ONE","tag":"AGENT INTELLIGENCE","summary":"Cost-aware routes, Guard inspection and synthetic action receipts.","status":"INTERACTIVE DEMO","mode":"demo","href":"https://privi-one-demo.onrender.com/","symbol":"✦"},
@@ -193,6 +199,39 @@ class Handler(BaseHTTPRequestHandler):
         path=urlsplit(self.path).path
         if path=="/health":
             return self.respond(200,json.dumps({"ok":True,"service":"privi-universe","mode":"PRELAUNCH_PORTAL"}),"application/json; charset=utf-8")
+        if path=="/api/access/config":
+            settings=account_access.config_from_env()
+            payload={"identity_provider":"configured" if account_access.configured(settings) else "not_configured",
+                     "billing_proof":"configured" if account_access.billing_configured(settings) else "not_configured",
+                     "browser_login":"NOT_IMPLEMENTED",
+                     "registration":"NOT_IMPLEMENTED",
+                     "privileges":"DENIED_UNTIL_VERIFIED"}
+            return self.respond(200,json.dumps(payload),"application/json; charset=utf-8")
+        if path in ("/api/account/me","/api/pro/verify"):
+            settings=account_access.config_from_env()
+            if not account_access.configured(settings):
+                return self.respond(503,'{"error":"identity_provider_not_configured"}',
+                                    "application/json; charset=utf-8")
+            try:
+                account=account_access.verify_account_token(
+                    account_access.bearer(self.headers.get("Authorization")),settings)
+            except account_access.AccessDenied:
+                return self.respond(401,'{"error":"valid_account_access_token_required"}',
+                                    "application/json; charset=utf-8")
+            if path=="/api/account/me":
+                result={"subject":account["sub"],"authenticated":True,
+                        "pro_status":"NOT_CHECKED","scope":"READ_ONLY_ACCOUNT"}
+                return self.respond(200,json.dumps(result),"application/json; charset=utf-8")
+            if not account_access.billing_configured(settings):
+                return self.respond(503,'{"error":"billing_entitlement_verifier_not_configured"}',
+                                    "application/json; charset=utf-8")
+            try:
+                entitlement=account_access.verify_pro_entitlement(
+                    account, account_access.bearer(self.headers.get("X-Privi-Entitlement")), settings)
+                return self.respond(200,json.dumps(entitlement),"application/json; charset=utf-8")
+            except account_access.AccessDenied:
+                return self.respond(403,'{"error":"trusted_paid_entitlement_required"}',
+                                    "application/json; charset=utf-8")
         if path=="/api/status":
             return self.respond(200,json.dumps(MONITOR.snapshot()),"application/json; charset=utf-8")
         if path=="/":
