@@ -13,6 +13,7 @@ import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import secrets
+import re
 from urllib.parse import urlsplit
 import importlib.util
 
@@ -41,6 +42,9 @@ SECRET = secrets.token_bytes(32)
 QUOTE_SECRET = secrets.token_bytes(32)
 SESSIONS = sandbox_identity.SandboxIdentity(secrets.token_bytes(32))
 JOURNAL = receipt_journal.Journal(os.environ.get('PRIVI_ONE_SANDBOX_DB', '/tmp/privi-one-sandbox-receipts.sqlite3'))
+# A deployment process self-reports this Render-injected Git commit; it is not
+# cryptographic execution attestation. Unknown is safer than inferred identity.
+GIT_SHA = re.compile(r"^[a-f0-9]{40}$")
 MAX_BODY = 16_384
 HOST = "0.0.0.0"
 HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -178,6 +182,16 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/health":
             return self.reply(200, {"ok": True, "service": "privi-one-demo", "mode": "PRELAUNCH_SIMULATION"})
+        if path == "/api/version":
+            configured = os.environ.get("RENDER_GIT_COMMIT", "")
+            sha = configured if GIT_SHA.fullmatch(configured) else None
+            return self.reply(200, {
+                "service": "privi-one-demo",
+                "mode": "PRELAUNCH_SIMULATION",
+                "version_source": "RENDER_GIT_COMMIT_ENV" if sha else "UNAVAILABLE",
+                "self_reported_commit": sha,
+                "independently_attested": False,
+            })
         if path == "/api/audit":
             # Sandbox-only aggregate result; never expose sessions or raw receipts.
             try:
