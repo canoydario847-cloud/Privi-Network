@@ -4,6 +4,9 @@ on:
     paths:
       - 'privi-universe/account_access.py'
       - 'privi-universe/test_account_access.py'
+      - 'privi-universe/oauth_flow.py'
+      - 'privi-universe/test_oauth_flow.py'
+      - 'privi-universe/login_protocol.py'
       - '.github/workflows/privi-universe-auth.yml'
   pull_request:
     paths:
@@ -25,4 +28,6 @@ jobs:
       - name: Install maintained signature verification dependency
         run: python -m pip install 'cryptography>=43,<47'
       - name: Test signed accounts, misconfiguration and paid entitlement rejection
-        run: python -m unittest discover -s privi-universe -p 'test_account_access.py' -v
+        run: |
+          python -m unittest discover -s privi-universe -p 'test_account_access.py' -v
+          python -m unittest discover -s privi-universe -p 'test_oauth_flow.py' -v
