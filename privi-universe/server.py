@@ -144,6 +144,7 @@ HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name=
     <div class="access-cell"><b>Privi Pro</b><span>Not enabled — requires trusted server-side entitlement verification</span></div>
   </div>
   <p class="meta-label">Future controls must verify identity, payment entitlements, revocation, and cross-product access on the server. This page cannot authorize protected services.</p>
+  <p class="meta-label" id="auth-readiness" aria-live="polite">Checking identity and entitlement readiness…</p>
 </section>
 
 <section class="info" id="about"><h2>Built for accountable intelligence.</h2><p>Privi Universe is a navigation portal—not an exchange, wallet, production blockchain explorer, or login system. Privi ONE and OutcomeGrid are synthetic demonstrations. The other links are reference material and pilot documentation. No payment, model call, customer information, or PRVI operation occurs on this portal.</p></section>
@@ -173,6 +174,21 @@ HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name=
    Object.values(labels).forEach(element=>element.textContent='STATUS UNAVAILABLE');
    stamp.textContent='Unable to retrieve current sandbox health observations.';
  }
+})();
+</script>
+
+<script>
+(async()=>{
+  const status=document.getElementById('auth-readiness');
+  try{
+    const response=await fetch('/api/access/config',{cache:'no-store'});
+    if(!response.ok)throw Error('Unavailable');
+    const config=await response.json();
+    const identity=config.identity_provider==='configured'?'Configured — login not yet enabled':'Not configured';
+    const billing=config.billing_proof==='configured'?'Configured — payment proof still requires testing':'Not configured';
+    status.textContent='Identity provider: '+identity+' · Privi Pro entitlement verifier: '+billing+
+       ' · Registration and login remain disabled.';
+  }catch{status.textContent='Identity and entitlement readiness cannot be verified. Access remains disabled.';}
 })();
 </script>
 </body></html>"""
