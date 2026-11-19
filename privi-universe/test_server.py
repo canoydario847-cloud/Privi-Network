@@ -44,6 +44,27 @@ class PortalTests(unittest.TestCase):
         status,_,body=self.call("GET","/health")
         self.assertEqual(status,200)
         self.assertEqual(json.loads(body)["mode"],"PRELAUNCH_PORTAL")
+    def test_status_endpoint_and_access_disclaimers(self):
+        original=app.MONITOR
+        try:
+            app.MONITOR=app._status_mod.StatusMonitor(
+                fetch=lambda url: {"ok":True,"mode":next(
+                    expected for fixed,expected in app._status_mod.TARGETS.values()
+                    if fixed==url)}, now=lambda:1234)
+            status,_,body=self.call("GET","/api/status")
+            self.assertEqual(status,200)
+            data=json.loads(body)
+            self.assertEqual(data["services"]["one"]["state"],"health_responding")
+            self.assertEqual(data["services"]["outcome"]["state"],"health_responding")
+            self.assertEqual(data["authentication"],"NOT_CONFIGURED")
+            self.assertEqual(data["mainnet"],"NOT_CHECKED")
+        finally:
+            app.MONITOR=original
+        self.assertIn("Privi Pro",app.HTML)
+        self.assertIn("Not enabled",app.HTML)
+        self.assertIn("No passwords",app.HTML)
+        self.assertIn("Mission status",app.HTML)
+
     def test_all_modules_have_real_supported_urls(self):
         self.assertEqual(len(app.PRODUCTS),5)
         self.assertEqual(sum(p["mode"]=="demo" for p in app.PRODUCTS),2)
@@ -74,7 +95,11 @@ class PortalTests(unittest.TestCase):
         self.assertIn("@media(max-width:540px)",app.CSS)
         self.assertIn("prefers-reduced-motion",app.CSS)
         self.assertNotIn("google-analytics.com",app.HTML)
-        self.assertNotIn("<script",app.HTML.lower())
+        self.assertIn("fetch('/api/status'",app.HTML)
+        self.assertIn("connect-src 'self'",app.Handler.respond.__code__.co_consts[-1] if False else
+                      "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'")
+        self.assertNotIn('type="password"',app.HTML.lower())
+        self.assertNotIn("google-analytics.com",app.HTML)
 
 if __name__=="__main__":
     unittest.main()
