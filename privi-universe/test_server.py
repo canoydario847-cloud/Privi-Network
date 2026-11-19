@@ -99,6 +99,9 @@ class PortalTests(unittest.TestCase):
         self.assertIn("Privi Pro",app.HTML)
         self.assertIn("Not enabled",app.HTML)
         self.assertIn("No passwords",app.HTML)
+        self.assertIn("auth-readiness",app.HTML)
+        self.assertIn("fetch(\'/api/access/config\'",app.HTML)
+        self.assertNotIn('type="password"',app.HTML)
         self.assertIn("Mission status",app.HTML)
 
     def test_all_modules_have_real_supported_urls(self):
