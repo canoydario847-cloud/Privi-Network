@@ -7,6 +7,8 @@ on:
       - 'privi-universe/oauth_flow.py'
       - 'privi-universe/test_oauth_flow.py'
       - 'privi-universe/login_protocol.py'
+      - 'privi-universe/oidc_identity.py'
+      - 'privi-universe/test_oidc_identity.py'
       - '.github/workflows/privi-universe-auth.yml'
   pull_request:
     paths:
@@ -31,3 +33,4 @@ jobs:
         run: |
           python -m unittest discover -s privi-universe -p 'test_account_access.py' -v
           python -m unittest discover -s privi-universe -p 'test_oauth_flow.py' -v
+          python -m unittest discover -s privi-universe -p 'test_oidc_identity.py' -v
