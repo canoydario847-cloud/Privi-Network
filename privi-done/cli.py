@@ -52,6 +52,8 @@ def main(argv=None):
     combined.add_argument("--commit", required=True)
     combined.add_argument("--required", action="append", required=True)
     combined.add_argument("--output", help="Optional local Markdown report path")
+    combined.add_argument("--with-privi-one-health", action="store_true",
+                          help="Only check fixed public Privi ONE sandbox; never proves commit")
     sub.add_parser("privi-one-health",
                    help="Read the fixed Privi ONE sandbox /health endpoint (not commit proof)")
     args = parser.parse_args(argv)
@@ -68,7 +70,9 @@ def main(argv=None):
             report_module = load("provider_report")
             result = report_module.assess_provider_reports(
                 args.repository, args.commit, args.service_id, args.required,
-                github, render)
+                github, render,
+                health_report=(load("public_health").inspect_privi_one_health()
+                               if args.with_privi_one_health else None))
             markdown = report_module.render_customer_markdown(result)
             if args.output:
                 Path(args.output).write_text(markdown, encoding="utf-8")
