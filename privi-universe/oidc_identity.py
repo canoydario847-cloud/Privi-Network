@@ -89,8 +89,9 @@ def verify_id_token(token, *, issuer, client_id, expected_nonce, access_token, j
         raise IdentityRejected("Invalid OIDC verifier configuration")
     if not isinstance(expected_nonce, str) or len(expected_nonce) < 20:
         raise IdentityRejected("Missing original login nonce")
-    if not isinstance(access_token, str) or not access_token or len(access_token) > 12288:
-        raise IdentityRejected("Missing access token for OIDC binding")
+    if (not isinstance(access_token, str) or not access_token or len(access_token) > 12288
+            or not access_token.isascii()):
+        raise IdentityRejected("Missing or invalid access token for OIDC binding")
     if not isinstance(token, str) or len(token) > 12288 or token.count(".") != 2:
         raise IdentityRejected("Invalid ID token")
     p0, p1, p2 = token.split(".")
@@ -124,8 +125,8 @@ def verify_id_token(token, *, issuer, client_id, expected_nonce, access_token, j
     if type(timestamp) is not int:
         raise IdentityRejected("Invalid time")
     if (type(claims.get("exp")) is not int or claims["exp"] <= timestamp
-            or type(claims.get("iat")) is not int
-            or claims["iat"] > timestamp + 45):
+            or type(claims.get("iat")) is not int or claims["iat"] > timestamp + 45
+            or claims["exp"] - claims["iat"] > 3600):
         raise IdentityRejected("Expired or future ID token")
     if (claims.get("nbf") is not None
             and (type(claims["nbf"]) is not int or claims["nbf"] > timestamp + 45)):
