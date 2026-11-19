@@ -46,8 +46,28 @@ def main(argv=None):
     render.add_argument("--service-id", required=True, help="Pinned Render service ID")
     render.add_argument("--repository", required=True, help="Expected GitHub owner/repo")
     render.add_argument("--commit", required=True, help="Expected full 40-character SHA")
+    combined = sub.add_parser("provider-report", help="Correlate GitHub and Render metadata; still NOT an outcome certificate")
+    combined.add_argument("--service-id", required=True)
+    combined.add_argument("--repository", required=True)
+    combined.add_argument("--commit", required=True)
+    combined.add_argument("--required", action="append", required=True)
+    combined.add_argument("--output", help="Optional local Markdown report path")
     args = parser.parse_args(argv)
     try:
+        if args.command == "provider-report":
+            github = load("github_checks").collect_checks(
+                args.repository, args.commit, args.required)
+            render = load("render_deploy").inspect_deployment(
+                args.service_id, args.repository, args.commit)
+            report_module = load("provider_report")
+            result = report_module.assess_provider_reports(
+                args.repository, args.commit, args.service_id, args.required,
+                github, render)
+            markdown = report_module.render_customer_markdown(result)
+            if args.output:
+                Path(args.output).write_text(markdown, encoding="utf-8")
+            print(markdown)
+            return 0 if result["status"] == "PROVIDER_REPORTS_MATCH_OUTCOME_PENDING" else 2
         if args.command == "render-deploy":
             report = load("render_deploy").inspect_deployment(
                 args.service_id, args.repository, args.commit)
