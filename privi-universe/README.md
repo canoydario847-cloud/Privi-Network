@@ -34,3 +34,24 @@ The portal now has a read-only **Mission Status** section that calls `GET /api/s
 **Account Access** shows a transparent roadmap: Guests can open public demos, but real unified customer logins and Privi Pro entitlements are **not configured**. This is not an SSO implementation, and the website never collects passwords or grants paid privileges. Protected access must be enforced server-side after connecting a trusted OIDC provider and payment entitlement service, including verified revocation and tenant scope.
 
 Tests mock health endpoints rather than relying on the internet and check that statuses never imply live production services. No paid infrastructure, production database connections, customer data storage, new accounts, Stripe actions, or PRVI operations were added.
+
+## Server-side OAuth resource gate and separate paid entitlement (November 19, 2026)
+
+The portal now includes a **fail-closed account authorization foundation** in `account_access.py`. The public `GET /api/access/config` exposes only configuration readiness booleans, never environment values or secrets. `GET /api/account/me` requires a valid signed, issuer- and audience-bound OAuth access token with `privi:account` scope. `GET /api/pro/verify` additionally requires a separately signed, same-subject *paid, unrevoked* entitlement JWT from the configured billing issuer. A customer OAuth token that claims `pro` on its own will never grant access.
+
+**Current status: not enabled.** No identity provider, JWKS addresses, callback URLs, approved browser login flow, or trusted billing proof issuer has been configured for Privi Universe; missing settings return a closed error. This is a *read-only resource-server foundation*, **not** browser sign-in, account registration, or Stripe entitlement integration. Do not imply any customer has activated Privi Pro on this portal. Protected endpoints do not themselves grant access to other Privi services. Each protected downstream service must independently validate tokens and entitlements.
+
+The optional Python `cryptography` package is necessary to verify RS256 access tokens; if absent verification fails closed. The existing Render build installs standard-library dependencies only and therefore does **not** enable real account access. A separate GitHub Actions workflow `.github/workflows/privi-universe-auth.yml` installs `cryptography>=43,<47` and executes generated-key signature, wrong issuer/audience, expiry, scope, forged token, billing subject, unpaid, and revoked entitlement tests. Confirm that CI passes before configuring a trusted IdP.
+
+Required environment variables, when a verified provider is selected:
+
+```text
+PRIVI_UNIVERSE_OAUTH_ISSUER
+PRIVI_UNIVERSE_OAUTH_AUDIENCE
+PRIVI_UNIVERSE_OAUTH_JWKS
+PRIVI_UNIVERSE_BILLING_ISSUER
+PRIVI_UNIVERSE_BILLING_AUDIENCE
+PRIVI_UNIVERSE_BILLING_JWKS
+```
+
+Do not configure billing issuer using unverified, user-controlled payment claims. A future production design must use short-lived, independently signed billing attestations, real subscription/one-time purchase reconciliation, revocation/replay controls, caching/rate limits, protected signing keys, and tests against authentic provider responses. No billing database or wallet was touched by this prototype.
