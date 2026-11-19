@@ -36,6 +36,28 @@ class PublicHealthTests(unittest.TestCase):
         self.assertEqual(r["result"], "HEALTH_UNAVAILABLE")
         self.assertFalse(r["http_health_reported"])
 
+    def test_transient_cold_start_recovers_on_second_attempt(self):
+        attempts = []
+        def read():
+            attempts.append("attempt")
+            if len(attempts) == 1:
+                raise mod.HealthUnavailable("cold start 503")
+            return {"ok": True, "service": "privi-one-demo",
+                    "mode": "PRELAUNCH_SIMULATION"}
+        result = mod.inspect_privi_one_health(read=read)
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual(result["result"], "PRIVI_ONE_SANDBOX_HEALTH_REPORTED")
+        self.assertFalse(result["expected_commit_verified"])
+
+    def test_persistent_outage_stops_after_two_attempts(self):
+        attempts = []
+        def read():
+            attempts.append("attempt")
+            raise mod.HealthUnavailable("persistent outage")
+        result = mod.inspect_privi_one_health(read=read)
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual(result["result"], "HEALTH_UNAVAILABLE")
+
     def test_observer_never_accepts_arbitrary_urls(self):
         with self.assertRaises(TypeError):
             mod.inspect_privi_one_health(url="http://127.0.0.1/metadata")
