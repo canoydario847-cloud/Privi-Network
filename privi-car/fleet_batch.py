@@ -51,7 +51,10 @@ def main():
             if reader.fieldnames is None or len(reader.fieldnames) != 3 or set(reader.fieldnames) != expected:
                 raise ValueError("CSV header must contain exactly one each of vehicle_id,odometer_km,consent")
             result = process_rows(reader)
-        dest.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+        # Never overwrite an earlier pilot export (or follow a symlink).
+        # Exclusive creation avoids a check-then-write race.
+        with dest.open("x", encoding="utf-8") as handle:
+            handle.write(json.dumps(result, indent=2) + "\n")
     except (OSError, ValueError, csv.Error) as exc:
         print(str(exc), file=sys.stderr)
         return 2
