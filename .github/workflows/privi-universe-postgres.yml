@@ -29,7 +29,7 @@ jobs:
           POSTGRES_PASSWORD: privi_ci_only_test_password
           POSTGRES_DB: privi_universe_ci_sessions
         ports:
-          - 127.0.0.1:5432:5432
+          - 5432:5432
         options: >-
           --health-cmd "pg_isready -U privi_ci -d privi_universe_ci_sessions"
           --health-interval 5s
