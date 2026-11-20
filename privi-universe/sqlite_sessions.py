@@ -17,6 +17,7 @@ import secrets
 import sqlite3
 import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 from browser_sessions import (
@@ -59,12 +60,16 @@ class SqliteSessionStore:
         with self._connect() as db:
             db.executescript(SCHEMA)
 
+    @contextmanager
     def _connect(self):
         db = sqlite3.connect(self.path, timeout=5, isolation_level=None)
-        db.execute("PRAGMA busy_timeout=5000")
-        db.execute("PRAGMA journal_mode=WAL")
-        db.execute("PRAGMA synchronous=FULL")
-        return db
+        try:
+            db.execute("PRAGMA busy_timeout=5000")
+            db.execute("PRAGMA journal_mode=WAL")
+            db.execute("PRAGMA synchronous=FULL")
+            yield db
+        finally:
+            db.close()
 
     def issue(self, *, subject, issuer, auth_time):
         if not isinstance(subject, str) or not 1 <= len(subject) <= 256:
