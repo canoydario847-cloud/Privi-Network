@@ -56,3 +56,13 @@ GitHub Actions workflow: .github/workflows/privi-quantum-evidence.yml.
 Let IBM select a three-to-ten-qubit QUBO and independent Qiskit circuit. Have IBM and Privi rerun the same inputs, compare the distributions, verify the report's content hash and deliberately tamper with the QASM to confirm the verifier fails. Then discuss a vendor-neutral evidence format for binding compiled ISA circuits to observed Sampler counts.
 
 The technical review is a proposal, not a claimed IBM collaboration, sponsorship or procurement decision.
+
+## v1 hardware-evidence extension — compiled circuits and confidence bounds
+
+The new `hardware_evidence.py` and read-only MCP tool `quantum_hardware_evidence` bridge a critical accountability gap between an ideal, exported QAOA circuit and a supposedly executed backend circuit. The tool binds the original QASM, compiled QASM, reported backend/job ID, submission/completion timestamps, shot count and bitstring results to one canonical SHA-256 receipt. It rejects non-equivalent compiled circuits, malformed counts, inconsistent shot totals and unbounded metadata.
+
+For the fraction of shots attaining the *classically proven optimum*, the receipt includes a **Wilson 95% binomial interval** with an explicit independence assumption. It never treats the finite-shot distribution as an exact simulation, and it never upgrades reported provider metadata into proof. Every receipt sets `provider_provenance_verified=false`, `physical_qpu_execution_verified=false` and `quantum_advantage_claimed=false`.
+
+**This is not an IBM hardware validation.** The current verifier accepts only small OpenQASM programs in the Privi h/rx/rz/cx basis; it cannot verify arbitrary physical native-gate ISA circuits or establish that a provider ran a job. Future authenticated provenance requires a provider-signed job artifact or a trustworthy provider API read with independent job ownership verification and a compiled-circuit digest. The code does not spend on IBM or external QPU hardware.
+
+For reviewers: `tests/test_hardware_evidence.py` checks the canonical receipt, tampering, strict job IDs, expected shot sums, count distributions, confidence bounds and no QPU claims. The Docker build also fails if the synthetic two-qubit hardware receipt cannot be generated. This is a software-quality gate, not scientific or provider accreditation.
