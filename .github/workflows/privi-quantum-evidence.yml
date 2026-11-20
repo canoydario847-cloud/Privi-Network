@@ -5,6 +5,8 @@ on:
       - 'quantum-server/src/privi_quantum/evidence_lab.py'
       - 'quantum-server/tests/test_evidence_lab.py'
       - 'quantum-server/tests/test_evidence_qiskit.py'
+      - 'quantum-server/src/privi_quantum/hardware_evidence.py'
+      - 'quantum-server/tests/test_hardware_evidence.py'
       - 'quantum-server/src/privi_quantum/qaoa.py'
       - 'quantum-server/src/privi_quantum/hardware.py'
       - '.github/workflows/privi-quantum-evidence.yml'
@@ -29,4 +31,4 @@ jobs:
       - name: Run exact distribution equivalence and Qiskit oracle
         env:
           PYTHONPATH: quantum-server/src
-        run: python -m pytest quantum-server/tests/test_evidence_lab.py quantum-server/tests/test_evidence_qiskit.py -v
+        run: python -m pytest quantum-server/tests/test_evidence_lab.py quantum-server/tests/test_evidence_qiskit.py quantum-server/tests/test_hardware_evidence.py -v
