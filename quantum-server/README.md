@@ -13,7 +13,7 @@ Endpoint (MCP, streamable HTTP): `https://privi-quantum.onrender.com/mcp`. Most 
 
 **Built by Dario Canoy.** The [Evidence Lab evaluation package](EVIDENCE-LAB.md) lets an engineer independently check whether a trained QAOA algorithm, its exported OpenQASM circuit, and its classical-optimum benchmark actually describe the same computation. It produces deterministic SHA-256 report identifiers, exact distribution agreement by total variation distance, optional measurement-count diagnostics, and a separate Qiskit Statevector reference suite. Run the [offline 3-qubit sample](examples/evidence-demo.json) with no IBM credentials or QPU expenses.
 
-The Evidence Lab is **library/CLI code with an automated test workflow**, not yet a production MCP endpoint or an IBM-verified product. It does not demonstrate quantum advantage, physical quantum processing, or a vendor partnership. See [.github/workflows/privi-quantum-evidence.yml](../.github/workflows/privi-quantum-evidence.yml) for the independent reference tests. The GitHub Actions result must be checked separately.
+The Evidence Lab includes **library, CLI and a new read-only, rate-limited MCP tool** (`quantum_evidence_lab`) with an automated test workflow. Live tool discovery and independent Qiskit CI success still require verification; IBM has not validated or endorsed the service. It does not demonstrate quantum advantage, physical quantum processing, or a vendor partnership. See [.github/workflows/privi-quantum-evidence.yml](../.github/workflows/privi-quantum-evidence.yml) for the independent reference tests. The GitHub Actions result must be checked separately.
 
 ## What it does
 
