@@ -50,3 +50,14 @@ Proposed $19.99 one-time human-reviewed report **only after demonstrably fulfill
 ## Pilot status
 
 **Ready to invite a consenting design partner; not yet ready for general paid self-service.** A verified provider-response report is not the same as a verified customer outcome.
+
+## Request a free pilot (public information only)
+
+Prospective design partners can [open a Privi DONE pilot-interest issue](https://github.com/canoydario847-cloud/Privi-Network/issues/new?template=privi-done-free-pilot.yml) after the pilot intake template is merged to the repository's default branch. GitHub generally loads issue forms from the default branch, so **the template is not publicly usable while it exists only in draft PR #318**.
+
+The issue asks only for a public organization/project name, non-production
+environment, desired review goal and non-sensitive acceptance criteria.
+It explicitly prohibits posting secrets, private customer data or credentials.
+Do not perform work or contact deployment systems until the owner agrees to a
+limited written scope. Never infer customer acceptance or purchase from
+submitting an issue.
