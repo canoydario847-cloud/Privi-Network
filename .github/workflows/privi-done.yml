@@ -113,3 +113,38 @@ jobs:
               print("Preview unavailable / unverified: " + str(e))
               raise SystemExit(1)
           PY
+
+  observe-readonly-functional-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Independently observe fixed preview functional GET behavior
+        env:
+          EXPECTED_DEPLOY_COMMIT: 7d4299ab717e7cbd13344b1950127f574836d3dc
+        run: |
+          python - <<'PY'
+          import importlib.util
+          import json
+          import os
+          from pathlib import Path
+          file = Path("privi-done/functional_acceptance.py")
+          spec = importlib.util.spec_from_file_location("privi_done_functional", file)
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          report = module.observe(os.environ["EXPECTED_DEPLOY_COMMIT"])
+          print(json.dumps(report, sort_keys=True))
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
+              out.write("## Privi DONE external read-only functional observation\\n\\n")
+              out.write("Result: \`" + report["result"] + "\`\\n\\n")
+              for name, passed in report["observations"].items():
+                  out.write("- " + name + ": " + ("observed" if passed else "unverified") + "\\n")
+              out.write("\\n**Never customer-certified or invoiceable from this test.**\\n")
+          if report["result"] != "SANDBOX_READONLY_BEHAVIOR_OBSERVED_UNCERTIFIED":
+              raise SystemExit(1)
+          PY
