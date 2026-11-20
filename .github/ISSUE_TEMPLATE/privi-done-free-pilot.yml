@@ -1,0 +1,63 @@
+name: "Privi DONE — free pilot interest"
+description: "Request a no-cost, read-only, non-production deployment evidence review"
+title: "[Privi DONE pilot] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Prelaunch — free design-partner pilot, not paid self-service.**
+        This issue is PUBLIC. Do not submit credentials, private repositories,
+        customer data, server logs, URLs with tokens, payment information,
+        personal phone numbers or other confidential material.
+        Privi World Corp must agree to the scope and obtain deployment-owner
+        permission before any tests. Opening this issue does not grant access
+        to your systems or authorize any work, charge or token transfer.
+  - type: input
+    id: org
+    attributes:
+      label: Organization or project name (public)
+      description: "Use a public business/project name; no private customer details."
+      placeholder: "Example Software Team"
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Non-production environment
+      options:
+        - "Public sandbox / demo"
+        - "Staging or test deployment"
+        - "Other (discuss privately first)"
+    validations:
+      required: true
+  - type: dropdown
+    id: concern
+    attributes:
+      label: What should a deployment evidence review help answer?
+      options:
+        - "Did the expected release reach the intended deployment?"
+        - "Were the specified CI checks completed?"
+        - "Did the approved read-only functional checks return expected results?"
+        - "Other / needs scope discussion"
+    validations:
+      required: true
+  - type: textarea
+    id: criteria
+    attributes:
+      label: Public, non-sensitive acceptance criteria
+      description: "Describe the intended result, not internal infrastructure."
+      placeholder: "Example: Verify a staging release reports the agreed version and responds on a public health endpoint."
+    validations:
+      required: true
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Pilot boundaries
+      options:
+        - label: "I understand that a Privi representative must agree to scope and the deployment owner must authorize checks before testing."
+          required: true
+        - label: "I understand that this public issue is not customer acceptance, a service guarantee, or a payment agreement."
+          required: true
+        - label: "I have not shared secrets, private customer information or access tokens."
+          required: true
