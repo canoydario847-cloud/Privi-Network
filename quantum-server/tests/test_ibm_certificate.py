@@ -41,7 +41,7 @@ def test_signs_limited_readback_and_verifies_both_signatures(signer):
     assert certificate["body"]["scope"]["ibm_provider_signed_attestation"] is False
     assert certificate["body"]["scope"]["blockchain_anchor_created"] is False
     assert certificate["body"]["source_receipt_sha256"]==receipt["content_sha256"]
-    assert service.calls==["synthetic-123","synthetic-123"]
+    assert service.calls==["synthetic-123"]
 
 
 def test_body_tamper_invalidates_certificate(signer):
