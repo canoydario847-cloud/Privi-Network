@@ -54,8 +54,12 @@ def wilson_interval(successes: int, shots: int, z: float = 1.959963984540054) ->
     d = 1 + z*z/shots
     center = (p + z*z/(2*shots))/d
     half = z*math.sqrt(p*(1-p)/shots + z*z/(4*shots*shots))/d
+    # Floating-point cancellation at p=0 or p=1 can leave a tiny
+    # nonzero endpoint; Wilson score interval analytically hits 0 or 1.
+    lower = 0.0 if successes == 0 else max(0.0, center-half)
+    upper = 1.0 if successes == shots else min(1.0, center+half)
     return {"method":"wilson_score_95_percent",
-            "lower":max(0.0,center-half), "upper":min(1.0,center+half),
+            "lower":lower, "upper":upper,
             "independence_assumption":"shots_are_independent",
             "caveat":"Drift and correlated hardware errors can invalidate this interval"}
 
