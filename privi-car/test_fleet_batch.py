@@ -33,7 +33,7 @@ class FleetBatchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             src = pathlib.Path(folder) / "consented.csv"
             dest = pathlib.Path(folder) / "existing.json"
-            src.write_text("vehicle_id,odometer_km,consent\\ndemo-van-1,1234,yes\\n", encoding="utf-8")
+            src.write_text("vehicle_id,odometer_km,consent\ndemo-van-1,1234,yes\n", encoding="utf-8")
             dest.write_text("PREVIOUS CUSTOMER EXPORT", encoding="utf-8")
             with patch("sys.argv", ["fleet_batch.py", str(src), str(dest)]):
                 with contextlib.redirect_stderr(io.StringIO()):
@@ -44,7 +44,7 @@ class FleetBatchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             src = pathlib.Path(folder) / "consented.csv"
             dest = pathlib.Path(folder) / "new.json"
-            src.write_text("vehicle_id,odometer_km,consent\\ndemo-van-1,1234,yes\\n", encoding="utf-8")
+            src.write_text("vehicle_id,odometer_km,consent\ndemo-van-1,1234,yes\n", encoding="utf-8")
             with patch("sys.argv", ["fleet_batch.py", str(src), str(dest)]):
                 with contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(main(), 0)
