@@ -72,7 +72,7 @@ def register(mcp, cars: Car, attestor, public_url: str, cpu=None, anchoring: boo
         return {"service": "Privi Car (part of Privi Quantum)", "page": f"{public_url}/car", "boundaries": BOUNDARIES,
                 "tools": {"identity": ["car_vin_check", "car_register"], "records": ["car_record_add", "car_verify", "car_history"],
                           "digital_keys": ["car_key_issue", "car_key_check", "car_key_revoke"],
-                          "planning": ["car_route", "car_fleet_assign", "car_charge_plan"], "edge": ["car_edge_job"]},
+                          "planning": ["car_route", "car_fleet_assign", "car_charge_plan"], "edge": ["car_edge_job"], "smartcar": ["car_smartcar_sync"]},
                 "record_types": RECORD_TYPES, "key_scopes": KEY_SCOPES,
                 "limits": {"route_stops": carlib.MAX_STOPS, "fleet_jobs": carlib.MAX_FLEET_JOBS,
                            "charging_slots": carlib.MAX_QUBITS, "simulator_qubits": carlib.MAX_QUBITS},
@@ -221,6 +221,17 @@ def register(mcp, cars: Car, attestor, public_url: str, cpu=None, anchoring: boo
         and a short expiry; replays are rejected. Returns a digest receipt with zero credits. No job runs on any
         vehicle and no rewards are paid."""
         return guard(carlib.verify_edge_job, job, policy, cars)
+
+    @mcp.tool(title="Privi Car: import Smartcar mileage (pilot)", annotations=WRITE)
+    async def car_smartcar_sync(
+        vehicle: Annotated[str, VEHICLE], owner_key: Annotated[str, OWNER_KEY],
+        consent: Annotated[bool, Field(description="Explicit consent for this one-time Smartcar mileage import")] = False,
+    ) -> CallToolResult:
+        """Read mileage from the server-enrolled Smartcar vehicle. Requires the passport owner key,
+        matching VIN and current Smartcar consent. Simulated data never writes real vehicle history.
+        No location or vehicle commands. No recurring polling."""
+        from .smartcar_pilot import sync
+        return await anyio.to_thread.run_sync(lambda: guard(sync, cars, vehicle, owner_key, consent))
 
     # ---------------- public pages ----------------
 
