@@ -59,8 +59,22 @@ def main(argv=None):
     version = sub.add_parser("privi-one-version",
                              help="Read fixed sandbox's self-reported version; not execution proof")
     version.add_argument("--commit", required=True, help="Expected exact 40-character Git commit")
+    pilot = sub.add_parser("pilot-review", help="Run fixed-endpoint internal pilot criteria; NEVER auto-accept or bill")
+    pilot.add_argument("--scope", required=True, help="Preagreed, pinned pilot scope JSON")
+    pilot.add_argument("--output", help="Optional local Markdown review report")
     args = parser.parse_args(argv)
     try:
+        if args.command == "pilot-review":
+            scope = read_json(args.scope)
+            # Only fixed, read-only HTTP observations; no arbitrary customer URLs.
+            observed = load("functional_acceptance").observe(scope["expected_commit"])
+            module = load("pilot_review")
+            report = module.assess_pilot_scope(scope, observed)
+            markdown = module.to_markdown(report)
+            if args.output:
+                Path(args.output).write_text(markdown, encoding="utf-8")
+            print(markdown)
+            return 0 if report["criteria_observed"] else 2
         if args.command == "privi-one-version":
             result = load("version_observer").inspect_version(args.commit)
             print(json.dumps(result, indent=2, sort_keys=True))
