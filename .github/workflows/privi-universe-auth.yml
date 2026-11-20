@@ -8,6 +8,10 @@ on:
       - 'privi-universe/test_oauth_flow.py'
       - 'privi-universe/login_protocol.py'
       - 'privi-universe/oidc_identity.py'
+      - 'privi-universe/login_pipeline.py'
+      - 'privi-universe/test_login_pipeline.py'
+      - 'privi-universe/browser_sessions.py'
+      - 'privi-universe/test_signed_login_pipeline.py'
       - 'privi-universe/test_oidc_identity.py'
       - '.github/workflows/privi-universe-auth.yml'
   pull_request:
@@ -34,3 +38,4 @@ jobs:
           python -m unittest discover -s privi-universe -p 'test_account_access.py' -v
           python -m unittest discover -s privi-universe -p 'test_oauth_flow.py' -v
           python -m unittest discover -s privi-universe -p 'test_oidc_identity.py' -v
+          python -m unittest discover -s privi-universe -p 'test_signed_login_pipeline.py' -v
