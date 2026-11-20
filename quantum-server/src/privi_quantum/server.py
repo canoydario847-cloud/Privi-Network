@@ -27,7 +27,7 @@ from pydantic import Field
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 
-from . import advantage, circuits, govpqc, leaderboard as board, govreport, inventory, pqctls, qaoa, scanner, vault
+from . import advantage, circuits, evidence_lab, govpqc, leaderboard as board, govreport, inventory, pqctls, qaoa, scanner, vault
 from .hardware import HardwareError, HardwareRouter, backends_from_env
 from .dream import BENCHMARK, MODES, DreamError, DreamScape, DreamWeaver, Privilege
 from .accelerator import LEVEL_LABEL, STEPS, Accelerator, AcceleratorError, badge_svg
@@ -385,6 +385,31 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
                     {"name": "shaft-C", "minutes": 33}, {"name": "gear-D", "minutes": 25},
                     {"name": "plate-E", "minutes": 61}, {"name": "pin-F", "minutes": 12}]}},
                 "limit": f"up to {qaoa.MAX_QUBITS} decision variables (qubits)"}
+
+    @mcp.tool(title="Quantum Evidence Lab", annotations=READ_ONLY)
+    async def quantum_evidence_lab(
+        Q: Annotated[list[list[float]], Field(description="QUBO matrix Q; maximum 10x10. Minimize x^T Q x + offset.")],
+        gammas: Annotated[list[float], Field(description="Trained QAOA cost angles, one per layer (1-4).")],
+        betas: Annotated[list[float], Field(description="Trained QAOA mixer angles, one per layer (1-4).")],
+        ctx: Context,
+        offset: Annotated[float, Field(description="QUBO additive constant.")] = 0.0,
+        qasm: Annotated[str | None, Field(description="Optional OpenQASM 2 circuit to audit; otherwise verify the exporter itself.")] = None,
+        counts: Annotated[dict[str, int] | None, Field(description="Optional user-supplied bitstring counts, marked unverified.")] = None,
+    ) -> dict[str, Any]:
+        """Independent simulator evidence for QAOA vs QASM. Reproducible SHA-256 receipt,
+        exact classical optimum and optional sampling diagnostics. This free
+        scientific preview does NOT run an IBM QPU or prove quantum advantage."""
+        if not limiter.allow(_who(ctx)):
+            return {"verified": False, "error": "rate limit reached"}
+        try:
+            return await anyio.to_thread.run_sync(
+                lambda: evidence_lab.evaluate(qaoa.Qubo(Q, offset), gammas, betas,
+                                              qasm=qasm, counts=counts),
+                limiter=cpu,
+            )
+        except (qaoa.ProblemError, ValueError, TypeError) as exc:
+            return {"verified": False, "error": str(exc)[:200],
+                    "physical_qpu": False, "quantum_advantage_claimed": False}
 
     @mcp.tool(title="Quantum optimize", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
                                                                      idempotentHint=False, openWorldHint=True))
