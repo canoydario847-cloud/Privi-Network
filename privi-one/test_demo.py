@@ -1,5 +1,7 @@
 """Offline Privi ONE tests; no paid services, network calls or PRVI operations."""
 import importlib.util
+import hashlib
+import hmac
 import json
 import os
 from pathlib import Path
@@ -34,6 +36,67 @@ class DemoTests(unittest.TestCase):
         self.assertEqual(receipt["ledger"], "NOT_SUBMITTED")
         self.assertTrue(demo.verify(out, SECRET))
 
+    def test_denied_request_never_claims_savings(self):
+        for params in (
+            {"approved": False},
+            {"budget_cents": 1},
+            {"tool": "not_authorized"},
+        ):
+            with self.subTest(params=params):
+                receipt = run(**params)["receipt"]
+                self.assertEqual(receipt["decision"], "DENIED")
+                self.assertIsNone(receipt["routing"]["estimated_savings_cents"])
+
+    def test_unqualified_baseline_cannot_be_used_for_savings(self):
+        options = [
+            {"id": "cheap", "name": "cheap", "cost_cents": 6,
+             "quality": 92, "reliability": 99, "latency_ms": 400},
+            {"id": "premium", "name": "unqualified baseline", "cost_cents": 25,
+             "quality": 50, "reliability": 99, "latency_ms": 400},
+        ]
+        receipt = run(options=options)["receipt"]
+        self.assertEqual(receipt["decision"], "SIMULATED_APPROVAL")
+        self.assertEqual(receipt["routing"]["selected_id"], "cheap")
+        self.assertIsNone(receipt["routing"]["estimated_savings_cents"])
+
+    def test_no_positive_savings_when_qualified_baseline_is_cheaper(self):
+        options = [
+            {"id": "cheap", "name": "cheap", "cost_cents": 2,
+             "quality": 95, "reliability": 99, "latency_ms": 400},
+            {"id": "premium", "name": "qualified baseline", "cost_cents": 1,
+             "quality": 95, "reliability": 99, "latency_ms": 400},
+        ]
+        receipt = run(options=options)["receipt"]
+        self.assertEqual(receipt["decision"], "SIMULATED_APPROVAL")
+        self.assertEqual(receipt["routing"]["estimated_savings_cents"], 0)
+
+    def test_route_explanations_show_quality_and_price_failures(self):
+        result = run()
+        explanations = {
+            item["id"]: item for item in
+            result["receipt"]["routing"]["route_explanations"]
+        }
+        self.assertEqual(explanations["budget"]["reasons"],
+                         ["quality_below_minimum", "reliability_below_minimum"])
+        self.assertEqual(explanations["balanced"]["reasons"], [])
+        self.assertTrue(explanations["balanced"]["within_budget"])
+        self.assertEqual(explanations["premium"]["reasons"], ["price_above_budget"])
+        self.assertTrue(explanations["premium"]["quality_qualified"])
+        self.assertTrue(demo.verify(result, SECRET))
+
+    def test_route_explanation_tampering_invalidates_receipt(self):
+        result = run()
+        result["receipt"]["routing"]["route_explanations"][0]["reasons"] = []
+        self.assertFalse(demo.verify(result, SECRET))
+
+    def test_denied_simulation_keeps_diagnostic_without_claiming_savings(self):
+        result = run(approved=False)
+        receipt = result["receipt"]
+        self.assertEqual(receipt["decision"], "DENIED")
+        self.assertIsNone(receipt["routing"]["estimated_savings_cents"])
+        self.assertEqual(len(receipt["routing"]["route_explanations"]), 3)
+        self.assertTrue(demo.verify(result, SECRET))
+
     def test_unqualified_cheapest_rejected(self):
         out = run(quality_min=95)
         self.assertEqual(out["receipt"]["routing"]["selected_id"], "premium")
@@ -62,6 +125,89 @@ class DemoTests(unittest.TestCase):
         out = run()
         out["receipt"]["routing"]["estimated_savings_cents"] = 500000
         self.assertFalse(demo.verify(out, SECRET))
+
+    def test_malformed_receipts_fail_closed_without_exceptions(self):
+        invalid = (
+            {"receipt": {"schema": demo.SCHEMA, "routing": {1: "bad"}},
+             "auth": {"algorithm": "HMAC-SHA256-DEMO-ONLY", "mac": "x"},
+             "digest_sha256": "x"},
+            {"receipt": {"schema": demo.SCHEMA, "routing": {"number": float("nan")}},
+             "auth": {"algorithm": "HMAC-SHA256-DEMO-ONLY", "mac": "x"},
+             "digest_sha256": "x"},
+            {"receipt": {"schema": demo.SCHEMA},
+             "auth": {"algorithm": "HMAC-SHA256-DEMO-ONLY", "mac": None},
+             "digest_sha256": "x"},
+            {"receipt": {"schema": demo.SCHEMA},
+             "auth": {"algorithm": "HMAC-SHA256-DEMO-ONLY", "mac": "x"},
+             "digest_sha256": None},
+        )
+        for value in invalid:
+            with self.subTest(value=str(value)[:100]):
+                self.assertFalse(demo.verify(value, SECRET))
+
+    def test_valid_receipt_still_verifies_after_hardening(self):
+        approved = run()
+        denied = run(approved=False)
+        self.assertTrue(demo.verify(approved, SECRET))
+        self.assertTrue(demo.verify(denied, SECRET))
+
+    def test_local_signature_is_not_permission_to_claim_execution_or_billing(self):
+        # Even if the local sandbox key signs a structurally altered receipt,
+        # the verifier must reject claims of actual execution or money movement.
+        for field, fake in (
+            ("mode", "FINANCIAL_MAINNET"),
+            ("execution", "EXECUTED"),
+            ("actual_charge_cents", 1),
+            ("ledger", "SUBMITTED"),
+            ("token", "USED"),
+        ):
+            with self.subTest(field=field):
+                out = run()
+                out["receipt"][field] = fake
+                out["digest_sha256"] = demo.digest(out["receipt"])
+                out["auth"]["mac"] = hmac.new(
+                    SECRET, demo.canonical(out["receipt"]), hashlib.sha256
+                ).hexdigest()
+                self.assertFalse(demo.verify(out, SECRET))
+
+    def test_locally_signed_denied_receipt_cannot_claim_savings(self):
+        out = run(approved=False)
+        out["receipt"]["routing"]["estimated_savings_cents"] = 999
+        out["digest_sha256"] = demo.digest(out["receipt"])
+        out["auth"]["mac"] = hmac.new(
+            SECRET, demo.canonical(out["receipt"]), hashlib.sha256
+        ).hexdigest()
+        self.assertFalse(demo.verify(out, SECRET))
+
+    def test_resigned_receipt_cannot_invent_cheaper_route_or_savings(self):
+        # Simulate a compromised LOCAL demo signing key: the verifier should
+        # reject deterministically false claims despite a valid new HMAC.
+        changes = (
+            lambda receipt: receipt["routing"].update(selected_id="budget"),
+            lambda receipt: receipt["routing"].update(estimated_savings_cents=999),
+            lambda receipt: receipt["routing"]["route_explanations"][0].update(reasons=[]),
+            lambda receipt: receipt.update(decision="DENIED", denial_reasons=["budget_exceeded"]),
+            lambda receipt: receipt["policy"].update(budget_cents=1),
+        )
+        for mutate in changes:
+            with self.subTest(mutate=str(mutate)):
+                out = run()
+                mutate(out["receipt"])
+                out["digest_sha256"] = demo.digest(out["receipt"])
+                out["auth"]["mac"] = hmac.new(
+                    SECRET, demo.canonical(out["receipt"]), hashlib.sha256
+                ).hexdigest()
+                self.assertFalse(demo.verify(out, SECRET))
+
+    def test_consistent_sandbox_approvals_and_denials_still_verify(self):
+        for options in (
+            {},
+            {"approved": False},
+            {"budget_cents": 1},
+            {"quality_min": 100},
+        ):
+            with self.subTest(options=options):
+                self.assertTrue(demo.verify(run(**options), SECRET))
 
     def test_wrong_key_detected(self):
         self.assertFalse(demo.verify(run(), b"another-32-byte-test-secret-value-000000"))

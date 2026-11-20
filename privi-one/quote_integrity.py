@@ -20,14 +20,50 @@ def canonical(value):
                       ensure_ascii=False, allow_nan=False).encode("utf-8")
 
 
+
+def valid_options(options):
+    """Minimal bounded schema for synthetic quotes; NOT provider authentication."""
+    if not isinstance(options, list) or not 1 <= len(options) <= 32:
+        return False
+    seen = set()
+    for item in options:
+        if not isinstance(item, dict):
+            return False
+        required = {"id", "cost_cents", "quality", "reliability", "latency_ms"}
+        if not required <= set(item) or set(item) - required - {"name"}:
+            # Disallow forged extra provenance (e.g. provider_verified=True).
+            return False
+        ident = item["id"]
+        if (not isinstance(ident, str) or not 1 <= len(ident) <= 80
+                or ident in seen):
+            return False
+        seen.add(ident)
+        if "name" in item and (not isinstance(item["name"], str) or len(item["name"]) > 200):
+            return False
+        if any(type(item[k]) is not int for k in
+               ("cost_cents", "quality", "reliability", "latency_ms")):
+            return False
+        if not (0 <= item["cost_cents"] <= 100_000_000
+                and 0 <= item["quality"] <= 100
+                and 0 <= item["reliability"] <= 100
+                and 0 <= item["latency_ms"] <= 3_600_000):
+            return False
+    return True
+
+
 def issue(options, task_sha256, *, key, now=None, ttl_seconds=120):
     if not isinstance(key, bytes) or len(key) < 32:
         raise ValueError("Server quote authentication key missing")
-    if not isinstance(task_sha256, str) or len(task_sha256) != 64:
+    if (not isinstance(task_sha256, str) or len(task_sha256) != 64
+            or any(x not in "0123456789abcdef" for x in task_sha256)):
         raise ValueError("Invalid task fingerprint")
-    if not isinstance(ttl_seconds, int) or not 1 <= ttl_seconds <= 600:
+    if not valid_options(options):
+        raise ValueError("Invalid synthetic quote options")
+    if type(ttl_seconds) is not int or not 1 <= ttl_seconds <= 600:
         raise ValueError("Invalid quote lifetime")
     now = int(time.time()) if now is None else now
+    if type(now) is not int or now < 0:
+        raise ValueError("Invalid quote timestamp")
     body = {"schema": SCHEMA, "issuer": "PRIVI_ONE_LOCAL_SIMULATION",
             "task_sha256": task_sha256, "issued_at": now,
             "expires_at": now + ttl_seconds, "options": options}
@@ -41,6 +77,10 @@ def verify(bundle, task_sha256, *, key, now=None):
     body, auth = bundle.get("body"), bundle.get("auth")
     if not isinstance(body, dict) or not isinstance(auth, dict):
         return False
+    if (set(bundle) != {"body", "auth"}
+            or set(body) != {"schema", "issuer", "task_sha256", "issued_at", "expires_at", "options"}
+            or set(auth) != {"algorithm", "mac"}):
+        return False
     if body.get("schema") != SCHEMA or body.get("issuer") != "PRIVI_ONE_LOCAL_SIMULATION":
         return False
     if body.get("task_sha256") != task_sha256 or not isinstance(task_sha256, str):
@@ -49,14 +89,19 @@ def verify(bundle, task_sha256, *, key, now=None):
     now = int(time.time()) if now is None else now
     if any(type(v) is not int for v in (issued, expires, now)):
         return False
-    if issued > now or expires < now or expires - issued > 600 or expires <= issued:
+    if issued < 0 or issued > now or expires < now or expires - issued > 600 or expires <= issued:
         return False
     if auth.get("algorithm") != "HMAC-SHA256-LOCAL-ONLY":
         return False
-    if not isinstance(body.get("options"), list) or not body["options"]:
+    if (not valid_options(body.get("options"))
+            or not isinstance(task_sha256, str) or len(task_sha256) != 64
+            or any(x not in "0123456789abcdef" for x in task_sha256)):
         return False
     try:
         expected = hmac.new(key, canonical(body), hashlib.sha256).hexdigest()
     except (ValueError, TypeError, OverflowError):
         return False
-    return hmac.compare_digest(expected, str(auth.get("mac", "")))
+    mac = auth.get("mac")
+    return (isinstance(mac, str) and len(mac) == 64
+            and all(ch in "0123456789abcdef" for ch in mac)
+            and hmac.compare_digest(expected, mac))
