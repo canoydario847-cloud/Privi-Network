@@ -148,3 +148,20 @@ jobs:
           if report["result"] != "SANDBOX_READONLY_BEHAVIOR_OBSERVED_UNCERTIFIED":
               raise SystemExit(1)
           PY
+
+  review-internal-pilot-scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Review pinned internal pilot scope against live GET observations
+        run: |
+          python privi-done/cli.py pilot-review \
+            --scope privi-done/examples/internal-pilot-scope.json \
+            --output /tmp/privi-internal-pilot-review.md
+          cat /tmp/privi-internal-pilot-review.md >> "$GITHUB_STEP_SUMMARY"
