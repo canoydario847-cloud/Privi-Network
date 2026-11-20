@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir ".[hardware]" || echo "hardware extra not install
 # Reproducible evidence verification gate: actual Qiskit independent-statevector tests.
 # No IBM account or physical QPU is contacted; no paid work is submitted.
 COPY tests ./tests
-RUN pip install --no-cache-dir "pytest>=8" "qiskit>=1.3,<3" && python -m pytest -q tests/test_evidence_lab.py tests/test_evidence_qiskit.py tests/test_hardware_evidence.py tests/test_ibm_readback.py tests/test_ibm_input_binding.py tests/test_ibm_certificate.py
+RUN pip install --no-cache-dir "pytest>=8" "qiskit>=1.3,<3" && python -m pytest -q tests/test_evidence_lab.py tests/test_evidence_qiskit.py tests/test_hardware_evidence.py tests/test_ibm_readback.py tests/test_ibm_input_binding.py tests/test_ibm_certificate.py tests/test_offline_audit.py
 
 ENV PORT=8000 QUANTUM_DB_PATH=/data/quantum.db
 RUN mkdir -p /data
