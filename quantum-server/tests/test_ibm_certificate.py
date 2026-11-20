@@ -90,3 +90,18 @@ def test_no_provider_signature_claim_even_with_own_valid_signatures(signer):
         receipt,compiled_qasm=qasm,service=service,attestor=signer)
     assert bundle["certificate"]["body"]["evidence_class"]=="account_authenticated_client_readback_only"
     assert not verify_readback_certificate(bundle)["issuer_key_independently_trusted"]
+
+def test_independently_pinned_issuer_keys_required_for_trusted_verdict(signer):
+    receipt,qasm,service=good()
+    bundle=issue_readback_certificate(
+        receipt,compiled_qasm=qasm,service=service,attestor=signer)
+    public=signer.public_keys()
+    verified=verify_readback_certificate(bundle,pinned_issuer_keys=public)
+    assert verified["cryptographically_valid"]
+    assert verified["issuer_key_independently_trusted"]
+    assert verified["physical_qpu_execution_verified"] is False
+    incorrect=dict(public,ed25519="different")
+    assert not verify_readback_certificate(
+        bundle,pinned_issuer_keys=incorrect)["issuer_key_independently_trusted"]
+    assert not verify_readback_certificate(
+        bundle)["issuer_key_independently_trusted"]
