@@ -24,7 +24,6 @@ OWNER_WALLET = "0x1990589FD200E043b8C6FD9ec5956c61b3071048"
 
 # Public URL of each site (custom domains on Render; each also answers at privi-<name>.onrender.com).
 URLS = {
-    "bites": "https://privi-bites-control.navytoast131.chatgpt.site",
     "home": "https://privi-world-ywf5.onrender.com",
     "fortress": "https://privi-fortress-2tta.onrender.com",
     "passport": "https://privi-passport-uvfm.onrender.com",
@@ -39,7 +38,7 @@ URLS = {
     "guard": "https://privi-guard-u6ok.onrender.com",
     "call": CALL,
 }
-NAV = [("bites", "Bites profile"), ("home", "Privi"), ("fortress", "Fortress"), ("passport", "Passport"), ("kya", "KYA"),
+NAV = [("home", "Privi"), ("fortress", "Fortress"), ("passport", "Passport"), ("kya", "KYA"),
        ("mandates", "Mandates"), ("gov", "Government"), ("guard", "Guard"), ("live", "Live"), ("call", "Call"), ("scan", "Scan"), ("hub", "Hub"), ("chainflow", "ChainFlow"), ("developers", "Developers")]
 
 e = html.escape
@@ -172,7 +171,7 @@ def page(key, title, desc, h1, lede, ctas, aside, body, extra_head=""):
 {body}
 </div></main>
 <footer><div class="wrap cols"><div><strong>Privi World Co</strong><br>Port Huron, Michigan<br><a href="mailto:{EMAIL}">{EMAIL}</a></div>
-<div>Built by Dario Canoy<br><a href="{REPO}">Source on GitHub</a><br><a href="{HUB}/llms.txt">For AI agents: llms.txt</a></div>
+<div>Made by Dario Canoy<br><a href="{REPO}">Source on GitHub</a><br><a href="{HUB}/llms.txt">For AI agents: llms.txt</a></div>
 <div>MCP servers<br><a href="{LEDGER}">Ledger</a>, <a href="{VERIFY}">Verify</a>, <a href="{ANCHOR}">Anchor</a></div></div><div class="wrap privi-ip-mark">© 2026 Privi World Corp · Privi™ · Original proprietary materials reserved. Publicly licensed materials retain their existing licenses.</div></footer>
 </body></html>"""
 

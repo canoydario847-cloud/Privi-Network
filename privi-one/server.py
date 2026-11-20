@@ -115,7 +115,7 @@ footer a{color:#90e7f3}
 <button id="go">Compare &amp; generate simulated receipt</button> <button id="verify" class="secondary" type="button">Verify receipt in this session</button>
 <h3 id="resultHeading" aria-live="polite">No simulation run yet</h3>
 <pre id="result" class="output" aria-live="polite"></pre></section>
-<footer>© 2026 Privi World Corp. Original proprietary Privi materials reserved, subject to existing licenses and third-party rights. This demo is not a live CallProof, payment, or PRVI mainnet service.</footer>
+<footer>Made by Dario Canoy · © 2026 Privi World Corp. Original proprietary Privi materials reserved, subject to existing licenses and third-party rights. This demo is not a live CallProof, payment, or PRVI mainnet service.</footer>
 </main><script>
 let lastReceipt=null, sandboxToken=null;
 async function getSandboxToken(){
