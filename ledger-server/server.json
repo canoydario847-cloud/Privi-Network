@@ -4,7 +4,7 @@
   "title": "Privi Ledger — Recovery Evaluation",
   "description": "Evaluation-only ledger MCP. Temporary storage; not durable audit evidence. Payments disabled.",
   "version": "0.14.2",
-  "websiteUrl": "https://privi-ledger-aqe5.onrender.com",
+  "websiteUrl": "https://privi-universe-demo.onrender.com",
   "repository": {
     "url": "https://github.com/canoydario847-cloud/Privi-Network",
     "source": "github",

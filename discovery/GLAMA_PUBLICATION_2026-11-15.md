@@ -8,6 +8,10 @@ This is the canonical, copy-ready Glama submission pack for the **six distinct h
 
 As of 2026-11-15, the connected Render workspace shows the five standalone MCP services below as deployed, with latest deploy status `live`; it also shows the gateway deployment `live`. **A Render deployment state does not prove an end-to-end Glama MCP handshake, billing, x402 settlement or user fulfillment.** Glama records below may still be using retired, unsuffixed Render domains; maintainers need to refresh existing Glama entries to the replacement addresses.
 
+## Portal link for all six listings
+
+For each connector, include [Privi Universe](https://github.com/canoydario847-cloud/Privi-Network/tree/main/privi-universe) as a related project website. The portal links the Privi ONE and OutcomeGrid sandbox demos and identifies source references for other products. Use the service-specific transport URL below for MCP clients.
+
 ## Existing Glama listings → current MCP endpoints
 
 | Product | Current MCP endpoint (submit/replace URL) | Existing Glama connector | GitHub metadata |

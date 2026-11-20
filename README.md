@@ -2,6 +2,8 @@
 
 > New here? See **[REPO_MAP.md](REPO_MAP.md)** for what every folder is.
 
+[Privi Universe](https://github.com/canoydario847-cloud/Privi-Network/tree/main/privi-universe) is Privi World Corp’s prelaunch navigation portal for sandbox demos and product source references.
+
 **Glama discovery:** [Privi Network (approved public server)](https://glama.ai/mcp/servers/canoydario847-cloud/Privi-Network) · [Six Privi remote MCP listings, current endpoints and publisher refresh instructions](discovery/GLAMA_PUBLICATION_2026-11-15.md). Existing Glama connector listings may still contain pre-migration addresses; do not use their old URLs for paid calls.
 
 [![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/canoydario847-cloud/privi-network)
