@@ -28,6 +28,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 
 from . import advantage, circuits, evidence_lab, govpqc, leaderboard as board, govreport, inventory, pqctls, qaoa, scanner, vault
+from .hardware_evidence import make_hardware_evidence
 from .hardware import HardwareError, HardwareRouter, backends_from_env
 from .dream import BENCHMARK, MODES, DreamError, DreamScape, DreamWeaver, Privilege
 from .accelerator import LEVEL_LABEL, STEPS, Accelerator, AcceleratorError, badge_svg
@@ -410,6 +411,43 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
         except (qaoa.ProblemError, ValueError, TypeError) as exc:
             return {"verified": False, "error": str(exc)[:200],
                     "physical_qpu": False, "quantum_advantage_claimed": False}
+
+    @mcp.tool(title="Quantum Hardware Evidence", annotations=READ_ONLY)
+    async def quantum_hardware_evidence(
+        Q: Annotated[list[list[float]], Field(description="QUBO matrix, max 10x10.")],
+        gammas: Annotated[list[float], Field(description="QAOA gamma angles.")],
+        betas: Annotated[list[float], Field(description="QAOA beta angles.")],
+        source_qasm: Annotated[str, Field(description="Original OpenQASM 2 circuit.")],
+        compiled_qasm: Annotated[str, Field(description="Backend-compiled OpenQASM 2 in h/rx/rz/cx basis.")],
+        counts: Annotated[dict[str, int], Field(description="Unverified bitstring count data.")],
+        provider: Annotated[str, Field(description="Self-reported provider identifier.")],
+        backend: Annotated[str, Field(description="Self-reported backend identifier.")],
+        provider_job_id: Annotated[str, Field(description="Self-reported provider job ID; not independently authenticated.")],
+        submitted_utc: Annotated[str, Field(description="ISO UTC submission timestamp.")],
+        completed_utc: Annotated[str, Field(description="ISO UTC completion timestamp.")],
+        shots: Annotated[int, Field(description="Reported shot count.")],
+        ctx: Context,
+        offset: Annotated[float, Field(description="QUBO additive cost.")] = 0.0,
+    ) -> dict[str, Any]:
+        """Offline analysis of QAOA, compiled QASM, and empirical samples. No provider
+        calls, no QPU charges, no job verification or quantum advantage claim."""
+        if not limiter.allow(_who(ctx)):
+            return {"error": "rate limit reached", "physical_qpu_execution_verified": False}
+        try:
+            return await anyio.to_thread.run_sync(
+                lambda: make_hardware_evidence(
+                    qubo=qaoa.Qubo(Q, offset), gammas=gammas, betas=betas,
+                    source_qasm=source_qasm, compiled_qasm=compiled_qasm,
+                    counts=counts, provider=provider, backend=backend,
+                    provider_job_id=provider_job_id, submitted_utc=submitted_utc,
+                    completed_utc=completed_utc, shots=shots),
+                limiter=cpu,
+            )
+        except (qaoa.ProblemError, ValueError, TypeError) as exc:
+            return {"error": str(exc)[:200],
+                    "physical_qpu_execution_verified": False,
+                    "provider_provenance_verified": False,
+                    "quantum_advantage_claimed": False}
 
     @mcp.tool(title="Quantum optimize", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False,
                                                                      idempotentHint=False, openWorldHint=True))
