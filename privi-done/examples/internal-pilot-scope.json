@@ -1,0 +1,14 @@
+{
+  "pilot_id": "PRIVI-ONE-INTERNAL-01",
+  "scope_owner": "Privi World Corp (internal test)",
+  "repository": "canoydario847-cloud/Privi-Network",
+  "service_id": "srv-dbvlkvt9el5s73a5dv80",
+  "expected_commit": "7d4299ab717e7cbd13344b1950127f574836d3dc",
+  "required_observations": [
+    "sandbox_health",
+    "version_self_report",
+    "local_journal_audit_reported",
+    "unsigned_checkpoint_correlates"
+  ],
+  "acceptance_policy": "HUMAN_SIGNOFF_REQUIRED_NO_AUTOBILL"
+}
