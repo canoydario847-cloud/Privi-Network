@@ -65,7 +65,7 @@ def test_bind_original_compiled_circuit_from_existing_job():
     assert output["receipt_sha256"]==receipt["content_sha256"]
     assert output["content_sha256"]==canonical_sha256(
         {k:v for k,v in output.items() if k!="content_sha256"})
-    assert service.calls==["synthetic-123","synthetic-123"]
+    assert service.calls==["synthetic-123"]
 
 
 def test_reject_tampered_qasm_before_readback():
