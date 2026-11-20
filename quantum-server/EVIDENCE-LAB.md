@@ -18,7 +18,7 @@ This is a correctness and accountability tool. It is **not** evidence of quantum
 6. Outputs QUBO, angles, circuit hash, exact optimum, distribution consistency, and canonical SHA-256 evidence identifier.
 7. Adds an independent Qiskit Statevector cross-check in GitHub Actions.
 
-SHA-256 content identifiers are integrity checks, **not** digital signatures or IBM QPU attestations. The standalone report does not yet use Privi's existing post-quantum signing service.
+SHA-256 content identifiers are integrity checks, **not** digital signatures or IBM QPU attestations. The evidence report does not yet use Privi's existing post-quantum signing service.
 
 ## Offline reproduction
 
@@ -39,6 +39,8 @@ PYTHONPATH=quantum-server/src python -m pytest quantum-server/tests/test_evidenc
 ~~~
 
 GitHub Actions workflow: .github/workflows/privi-quantum-evidence.yml.
+
+**MCP access:** Privi Quantum now registers a rate-limited, read-only `quantum_evidence_lab` tool accepting `Q`, `gammas`, `betas`, `offset`, optional `qasm`, and optional `counts`. This free evaluation tool is simulator-only and cannot call paid IBM hardware. Before recommending it for production use, verify the latest Render release and tool discovery, and require the independent Qiskit workflow to pass.
 
 ## Limits that an IBM reviewer should see
 
