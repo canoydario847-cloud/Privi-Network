@@ -4,6 +4,8 @@
 
 [Explore the Privi Universe demos](https://privi-universe-demo.onrender.com/) or [compare Privi World Corp’s paid services](https://privi-services.onrender.com/), including the [$19.99 one-time AI agent security review](https://privi-services.onrender.com/ai-agent-security-review/).
 
+**Privi DONE — free deployment evidence pilot:** Own a staging release and want to check the deployed commit and agreed read-only checks? [Request a free, non-production Privi DONE pilot](https://github.com/canoydario847-cloud/Privi-Network/issues/new?template=privi-done-free-pilot.yml) or [try the prelaunch preview](https://privi-done-version-preview.onrender.com/). Tests require deployment-owner permission and a written scope. Reports are human-reviewed, not security certifications or proof of customer acceptance. **Do not post secrets or private deployment information in public issues.**
+
 **Glama discovery:** [Privi Network (approved public server)](https://glama.ai/mcp/servers/canoydario847-cloud/Privi-Network) · [Six Privi remote MCP listings, current endpoints and publisher refresh instructions](discovery/GLAMA_PUBLICATION_2026-11-15.md). Existing Glama connector listings may still contain pre-migration addresses; do not use their old URLs for paid calls.
 
 [![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/canoydario847-cloud/privi-network)
