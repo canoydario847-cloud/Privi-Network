@@ -4,6 +4,9 @@ WORKDIR /app
 COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
 RUN pip install --no-cache-dir .
+# Evidence Lab regression: refuse an image whose QAOA->OpenQASM export is not equivalent.
+# Exact classical statevector only; does not contact Qiskit Runtime or paid QPUs.
+RUN python -c "from privi_quantum.qaoa import Qubo; from privi_quantum.evidence_lab import evaluate; r=evaluate(Qubo([[1.0,-0.4],[-0.4,-0.7]]),[0.7],[0.5]); assert r['verification']['passed'], 'QAOA/QASM evidence failed'"
 # IBM Quantum + Amazon Braket clients; IonQ needs nothing extra. A failure here never blocks the deploy.
 RUN pip install --no-cache-dir ".[hardware]" || echo "hardware extra not installed; IonQ and local still work"
 
