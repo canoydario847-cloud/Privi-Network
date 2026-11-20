@@ -79,7 +79,7 @@ def test_reject_tampered_qasm_before_readback():
 def test_valid_but_altered_input_rejected():
     receipt,qasm=inputs()
     wrong=QuantumCircuit.from_qasm_str(qasm)
-    wrong.x(0)
+    wrong.rz(0.2,0)
     service=ReadOnlyService(ExistingJob(wrong))
     with pytest.raises(ProblemError,match="differs"):
         bind_existing_ibm_job(receipt,compiled_qasm=qasm,service=service)
