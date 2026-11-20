@@ -51,6 +51,8 @@ def main():
             if reader.fieldnames is None or len(reader.fieldnames) != 3 or set(reader.fieldnames) != expected:
                 raise ValueError("CSV header must contain exactly one each of vehicle_id,odometer_km,consent")
             result = process_rows(reader)
+        if result["accepted"] == 0:
+            raise ValueError("no consented valid receipts; export not created")
         # Never overwrite an earlier pilot export (or follow a symlink).
         # Exclusive creation avoids a check-then-write race.
         with dest.open("x", encoding="utf-8") as handle:
