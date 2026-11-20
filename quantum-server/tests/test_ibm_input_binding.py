@@ -115,3 +115,43 @@ def test_modified_receipt_rejected_before_input_retrieval():
     with pytest.raises(ProblemError,match="hash mismatch"):
         bind_existing_ibm_job(receipt,compiled_qasm=qasm,service=service)
     assert service.calls==[]
+
+
+def test_single_snapshot_prevents_provider_job_swap():
+    receipt,qasm=inputs()
+    correct=ExistingJob(QuantumCircuit.from_qasm_str(qasm))
+    altered=QuantumCircuit.from_qasm_str(qasm)
+    altered.rz(0.4,0)
+    different=ExistingJob(altered)
+
+    class SwitchingService:
+        def __init__(self):
+            self.calls=0
+        def job(self, requested):
+            self.calls+=1
+            return correct if self.calls==1 else different
+
+    service=SwitchingService()
+    result=bind_existing_ibm_job(receipt,compiled_qasm=qasm,service=service)
+    assert result["retrieved_input_circuit_matches_declared"]
+    assert service.calls==1
+
+
+def test_single_snapshot_rejects_invalid_first_job_even_if_second_is_good():
+    receipt,qasm=inputs()
+    altered=QuantumCircuit.from_qasm_str(qasm)
+    altered.rz(0.4,0)
+    bad=ExistingJob(altered)
+    good=ExistingJob(QuantumCircuit.from_qasm_str(qasm))
+
+    class SwitchingService:
+        def __init__(self):
+            self.calls=0
+        def job(self, requested):
+            self.calls+=1
+            return bad if self.calls==1 else good
+
+    service=SwitchingService()
+    with pytest.raises(ProblemError,match="differs"):
+        bind_existing_ibm_job(receipt,compiled_qasm=qasm,service=service)
+    assert service.calls==1
