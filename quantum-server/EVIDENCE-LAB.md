@@ -96,3 +96,18 @@ The Docker production build includes `tests/test_ibm_certificate.py` to reject t
 ## Single-snapshot consistency hardening — November 20, 2026
 
 The optional IBM job input binder now resolves the customer's already-completed job **once** and uses the same returned job object for the count readback and circuit-input comparison. This addresses a time-of-check/time-of-use failure mode in which independent job lookups could return inconsistent snapshots. Two regression scenarios deliberately implement an adapter that swaps job objects on a second lookup; the binder accepts or rejects the first retrieved snapshot as appropriate and never makes the second lookup. This check neither verifies provider signatures nor proves that backend hardware executed the recovered circuit. No live provider account is accessed or exposed through an MCP route.
+
+## Independent third-party offline certificate audit
+
+The `offline_audit.py` module and `audit_cli.py` command allow IBM researchers and other reviewers to inspect the **complete evidence chain without connecting to Privi, IBM, the blockchain, or paid hardware**. A reviewer must acquire the actual Privi certificate, source hardware receipt, IBM readback record and input-binding record from the consenting job owner, and must obtain **Privi's issuer public keys from a separate, independently trusted channel**. The tool checks Ed25519 plus ML-DSA-87 signatures, pinned key ID and public keys, every SHA-256 evidence record, reported job IDs, compiled QASM digest and the links among the records. It rejects mislinked, tampered, unauthenticated or overclaiming bundles. No private signing seed should ever be shared.
+
+```bash
+PYTHONPATH=quantum-server/src python -m privi_quantum.audit_cli \
+  --bundle certificate.json --pins independently_verified_keys.json \
+  --hardware hardware_receipt.json --readback ibm_readback.json \
+  --binding ibm_input_binding.json --qasm compiled.qasm
+```
+
+Exit code **0** means only that the Privi-signed *local evidence chain and issuer pin* checked out. Exit **1** means the chain did not verify; exit **2** means the inputs were malformed. An offline tool cannot directly authenticate the claimed IBM Runtime service session, confirm physical quantum hardware executed a circuit, or prove quantum advantage. Those claims remain explicitly false. Published evidence files may contain proprietary algorithms, quantum job identifiers, or measurement data, so obtain consent and redact sensitive inputs before external sharing; redaction changes content hashes and requires fresh signed reports.
+
+The new checks run in the Quantum Docker build as `tests/test_offline_audit.py`.
