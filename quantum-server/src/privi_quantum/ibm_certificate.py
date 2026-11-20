@@ -70,7 +70,7 @@ def issue_readback_certificate(receipt:dict, *, compiled_qasm:str, service, atte
     return {"certificate":att,"privi_public_keys":attestor.public_keys()}
 
 
-def verify_readback_certificate(bundle:dict) -> dict:
+def verify_readback_certificate(bundle:dict, *, pinned_issuer_keys:dict | None = None) -> dict:
     """Verify both Privi signatures and the narrow immutable claim scope.
 
     Public keys supplied in the bundle are not a trust root. A reviewer must
@@ -90,9 +90,14 @@ def verify_readback_certificate(bundle:dict) -> dict:
               and body.get("scope",{}).get("blockchain_anchor_created") is False
               and att.get("anchor") is None
               and att.get("key_id")==public.get("key_id"))
+        pinned=(isinstance(pinned_issuer_keys,dict) and all(
+            isinstance(pinned_issuer_keys.get(field),str) and
+            isinstance(public.get(field),str) and
+            hmac.compare_digest(pinned_issuer_keys[field],public[field])
+            for field in ("key_id","ed25519","ml_dsa_87")))
         return {"cryptographically_valid":signed["valid"] and bool(safe),
                 "limited_claims_safe":bool(safe),
-                "issuer_key_independently_trusted":False,
+                "issuer_key_independently_trusted":bool(pinned) and signed["valid"] and bool(safe),
                 "physical_qpu_execution_verified":False,
                 "quantum_advantage_claimed":False}
     except (KeyError,TypeError,ValueError,AttributeError):
