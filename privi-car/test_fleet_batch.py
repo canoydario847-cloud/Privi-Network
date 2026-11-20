@@ -50,15 +50,15 @@ class FleetBatchTests(unittest.TestCase):
                     self.assertEqual(main(), 0)
             self.assertTrue(dest.is_file())
 
-    def test_export_rejects_zero_consented_records_without_creating_file(self):
+    def test_export_preserves_rejected_no_consent_rows_for_advisory_report(self):
         with tempfile.TemporaryDirectory() as folder:
             src = pathlib.Path(folder) / "declined.csv"
             dest = pathlib.Path(folder) / "should-not-exist.json"
             src.write_text("vehicle_id,odometer_km,consent\ndemo-van-1,1234,no\n", encoding="utf-8")
             with patch("sys.argv", ["fleet_batch.py", str(src), str(dest)]):
-                with contextlib.redirect_stderr(io.StringIO()):
-                    self.assertEqual(main(), 2)
-            self.assertFalse(dest.exists())
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(main(), 0)
+            self.assertEqual(__import__("json").loads(dest.read_text(encoding="utf-8"))["accepted"], 0)
 
     def test_export_rejects_header_only_csv_without_creating_file(self):
         with tempfile.TemporaryDirectory() as folder:
