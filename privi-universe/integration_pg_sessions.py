@@ -142,7 +142,8 @@ class PostgreSQLIntegrationTests(unittest.TestCase):
         # Use direct fixture inserts to avoid opening 200 network sessions.
         now = self.now
         with psycopg.connect(self.dsn) as db:
-            db.executemany(
+            with db.cursor() as cur:
+                cur.executemany(
                 "INSERT INTO privi_sessions.sessions "
                 "(handle_hash,subject,issuer,authenticated_at,expires_at,csrf_hash) "
                 "VALUES (%s,%s,%s,%s,%s,%s)",
