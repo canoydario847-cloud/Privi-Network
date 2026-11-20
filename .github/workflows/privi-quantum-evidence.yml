@@ -13,6 +13,9 @@ on:
       - 'quantum-server/tests/test_ibm_input_binding.py'
       - 'quantum-server/src/privi_quantum/ibm_certificate.py'
       - 'quantum-server/tests/test_ibm_certificate.py'
+      - 'quantum-server/src/privi_quantum/offline_audit.py'
+      - 'quantum-server/src/privi_quantum/audit_cli.py'
+      - 'quantum-server/tests/test_offline_audit.py'
       - 'quantum-server/src/privi_quantum/qaoa.py'
       - 'quantum-server/src/privi_quantum/hardware.py'
       - '.github/workflows/privi-quantum-evidence.yml'
@@ -37,4 +40,4 @@ jobs:
       - name: Run exact distribution equivalence and Qiskit oracle
         env:
           PYTHONPATH: quantum-server/src
-        run: python -m pytest quantum-server/tests/test_evidence_lab.py quantum-server/tests/test_evidence_qiskit.py quantum-server/tests/test_hardware_evidence.py quantum-server/tests/test_ibm_readback.py quantum-server/tests/test_ibm_input_binding.py quantum-server/tests/test_ibm_certificate.py -v
+        run: python -m pytest quantum-server/tests/test_evidence_lab.py quantum-server/tests/test_evidence_qiskit.py quantum-server/tests/test_hardware_evidence.py quantum-server/tests/test_ibm_readback.py quantum-server/tests/test_ibm_input_binding.py quantum-server/tests/test_ibm_certificate.py quantum-server/tests/test_offline_audit.py -v
