@@ -25,6 +25,12 @@ if _auth_spec is None or _auth_spec.loader is None:
     raise RuntimeError("Privi account verifier unavailable")
 account_access = importlib.util.module_from_spec(_auth_spec)
 _auth_spec.loader.exec_module(account_access)
+_store_spec = importlib.util.spec_from_file_location(
+    "privi_universe_session_storage_config", Path(__file__).with_name("session_storage_config.py"))
+if _store_spec is None or _store_spec.loader is None:
+    raise RuntimeError("Session configuration checker unavailable")
+_session_config = importlib.util.module_from_spec(_store_spec)
+_store_spec.loader.exec_module(_session_config)
 
 PRODUCTS = [
     {"id":"one","number":"01","name":"Privi ONE","tag":"AGENT INTELLIGENCE","summary":"Cost-aware routes, Guard inspection and synthetic action receipts.","status":"INTERACTIVE DEMO","mode":"demo","href":"https://privi-one-demo.onrender.com/","symbol":"✦"},
@@ -186,7 +192,9 @@ HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name=
     const config=await response.json();
     const identity=config.identity_provider==='settings_present_unverified'?'Settings present, provider unverified — login disabled':'Not configured';
     const billing=config.billing_proof==='settings_present_unverified'?'Settings present, entitlements unverified — access disabled':'Not configured';
+    const storage=config.session_storage?.ready===true?'Settings present, connectivity unverified':'Not ready';
     status.textContent='Identity provider: '+identity+' · Privi Pro entitlement verifier: '+billing+
+       ' · Session storage: '+storage+
        ' · Registration and login remain disabled.';
   }catch{status.textContent='Identity and entitlement readiness cannot be verified. Access remains disabled.';}
 })();
@@ -219,6 +227,7 @@ class Handler(BaseHTTPRequestHandler):
             settings=account_access.config_from_env()
             payload={"identity_provider":"settings_present_unverified" if account_access.configured(settings) else "not_configured",
                      "billing_proof":"settings_present_unverified" if account_access.billing_configured(settings) else "not_configured",
+                     "session_storage": _session_config.check_session_storage(),
                      "browser_login":"NOT_IMPLEMENTED",
                      "registration":"NOT_IMPLEMENTED",
                      "privileges":"DENIED_UNTIL_VERIFIED"}
