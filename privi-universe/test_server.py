@@ -62,6 +62,8 @@ class PortalTests(unittest.TestCase):
             self.assertEqual(data["billing_proof"],"settings_present_unverified")
             self.assertEqual(data["browser_login"],"NOT_IMPLEMENTED")
             self.assertEqual(data["privileges"],"DENIED_UNTIL_VERIFIED")
+            self.assertIn("session_storage",data)
+            self.assertFalse(data["session_storage"]["ready"])
         finally:
             app.account_access.config_from_env=original
 
