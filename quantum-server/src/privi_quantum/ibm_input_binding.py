@@ -83,12 +83,29 @@ def bind_existing_ibm_job(receipt:dict, *, compiled_qasm:str, service) -> dict:
     declared_hash=receipt.get("compiled_qasm_sha256")
     if hashlib.sha256(compiled_qasm.encode()).hexdigest()!=declared_hash:
         raise ProblemError("Declared compiled circuit digest mismatch")
-    # Recheck content-addressed readback and counts through existing job API.
-    readback=verify_ibm_readback(receipt,service=service)
-    job_id=_identifier(receipt["provider_job_id"],"provider_job_id")
+    # Retrieve exactly one authorized existing job and reuse the SAME object
+    # for result/count checks and recovered-input circuit verification.
+    # Two independent service.job calls can otherwise read different jobs
+    # under a mutable/misconfigured provider adapter (TOCTOU).
+    if not isinstance(receipt,dict):
+        raise ProblemError("Invalid receipt")
+    job_id=_identifier(receipt.get("provider_job_id"),"provider_job_id")
+    # Validate content hash before touching the provider-facing client.
+    receipt_hash=receipt.get("content_sha256")
+    if (not isinstance(receipt_hash,str) or
+            canonical_sha256({k:v for k,v in receipt.items() if k!="content_sha256"}) != receipt_hash):
+        raise ProblemError("Receipt content hash mismatch")
     job=service.job(job_id)
     if str(job.job_id())!=job_id:
         raise ProblemError("Recovered input job identifier mismatch")
+
+    class _SingleJobReadback:
+        def job(self, requested):
+            if requested != job_id:
+                raise ProblemError("Unexpected provider job lookup")
+            return job
+
+    readback=verify_ibm_readback(receipt,service=_SingleJobReadback())
     inputs=getattr(job,"inputs",None)
     if callable(inputs):
         inputs=inputs()
