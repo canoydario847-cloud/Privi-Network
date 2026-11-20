@@ -50,6 +50,26 @@ class FleetBatchTests(unittest.TestCase):
                     self.assertEqual(main(), 0)
             self.assertTrue(dest.is_file())
 
+    def test_export_rejects_zero_consented_records_without_creating_file(self):
+        with tempfile.TemporaryDirectory() as folder:
+            src = pathlib.Path(folder) / "declined.csv"
+            dest = pathlib.Path(folder) / "should-not-exist.json"
+            src.write_text("vehicle_id,odometer_km,consent\ndemo-van-1,1234,no\n", encoding="utf-8")
+            with patch("sys.argv", ["fleet_batch.py", str(src), str(dest)]):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    self.assertEqual(main(), 2)
+            self.assertFalse(dest.exists())
+
+    def test_export_rejects_header_only_csv_without_creating_file(self):
+        with tempfile.TemporaryDirectory() as folder:
+            src = pathlib.Path(folder) / "empty.csv"
+            dest = pathlib.Path(folder) / "should-not-exist.json"
+            src.write_text("vehicle_id,odometer_km,consent\n", encoding="utf-8")
+            with patch("sys.argv", ["fleet_batch.py", str(src), str(dest)]):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    self.assertEqual(main(), 2)
+            self.assertFalse(dest.exists())
+
     def test_unexpected_csv_fields(self):
         with self.assertRaises(ValueError):
             process_rows([{"vehicle_id": "demo-x", "odometer_km": "1", "consent": "yes", "driver_name": "X"}])
