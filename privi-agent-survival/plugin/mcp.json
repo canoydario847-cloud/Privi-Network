@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "privi-network": {
+      "type": "streamable-http",
+      "url": "https://privi-ai-21-gateway.onrender.com/mcp"
+    }
+  }
+}
