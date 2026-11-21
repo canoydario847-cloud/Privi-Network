@@ -1,0 +1,12 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "privi-network",
+  "version": "0.1.0",
+  "description": "Connect to Privi World Corp's remote MCP gateway for agent tools and CallProof evidence workflows.",
+  "author": {
+    "name": "Dario Canoy",
+    "url": "https://priviflow.us"
+  },
+  "homepage": "https://priviflow.us",
+  "repository": "https://github.com/canoydario847-cloud/Privi-Network"
+}
