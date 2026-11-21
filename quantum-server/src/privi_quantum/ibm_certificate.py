@@ -23,7 +23,7 @@ from .qaoa import ProblemError
 KIND="ibm_existing_job_input_readback_v1"
 
 
-def issue_readback_certificate(receipt:dict, *, compiled_qasm:str, service, attestor:Attestor) -> dict:
+def issue_readback_certificate(receipt:dict, *, compiled_qasm:str, service, attestor:Attestor, synthetic_demo:bool=False) -> dict:
     """Verify a previously completed job and sign a limited factual statement.
 
     This library requires explicit trusted server-side adapters; it is not
@@ -32,6 +32,10 @@ def issue_readback_certificate(receipt:dict, *, compiled_qasm:str, service, atte
     """
     if not isinstance(attestor, Attestor):
         raise ProblemError("Trusted Privi attestor required")
+    if type(synthetic_demo) is not bool:
+        raise ProblemError("Invalid demo classification")
+    if str(receipt.get("provider_job_id","")).startswith("SYNTHETIC-") and not synthetic_demo:
+        raise ProblemError("Synthetic job requires demo classification")
     binding=bind_existing_ibm_job(receipt,compiled_qasm=compiled_qasm,service=service)
     if (binding.get("retrieved_input_circuit_matches_declared") is not True
             or binding.get("job_inputs_retrieved_from_authenticated_client") is not True
@@ -41,7 +45,8 @@ def issue_readback_certificate(receipt:dict, *, compiled_qasm:str, service, atte
         raise ProblemError("Unsafe evidence claims")
     body={
         "schema":"privi.quantum.ibm_evidence_certificate.v1",
-        "evidence_class":"account_authenticated_client_readback_only",
+        "evidence_class":("synthetic_test_only" if synthetic_demo else "account_authenticated_client_readback_only"),
+        "synthetic_demo":synthetic_demo,
         "source_receipt_sha256":receipt["content_sha256"],
         "input_binding_sha256":binding["content_sha256"],
         "provider_job_id":binding["provider_job_id"],
@@ -59,7 +64,8 @@ def issue_readback_certificate(receipt:dict, *, compiled_qasm:str, service, atte
         },
         "limitations":[
             "Privi's own signature authenticates only this limited Privi statement",
-            "Existing IBM job was read via an account-authenticated SDK, not an IBM-signed independent certificate",
+            ("Synthetic fixture; no IBM account was contacted" if synthetic_demo else
+             "Existing IBM job was read via an account-authenticated SDK, not an IBM-signed independent certificate"),
             "Job execution, provider identity, backend physical type and quantum advantage are not proven",
         ],
     }
@@ -70,7 +76,7 @@ def issue_readback_certificate(receipt:dict, *, compiled_qasm:str, service, atte
     return {"certificate":att,"privi_public_keys":attestor.public_keys()}
 
 
-def verify_readback_certificate(bundle:dict, *, pinned_issuer_keys:dict | None = None) -> dict:
+def verify_readback_certificate(bundle:dict, *, pinned_issuer_keys:dict | None = None, allow_synthetic_demo:bool=False) -> dict:
     """Verify both Privi signatures and the narrow immutable claim scope.
 
     Public keys supplied in the bundle are not a trust root. A reviewer must
@@ -83,7 +89,11 @@ def verify_readback_certificate(bundle:dict, *, pinned_issuer_keys:dict | None =
         signed=Attestor.verify(att,public["ed25519"],public["ml_dsa_87"])
         safe=(body.get("schema")=="privi.quantum.ibm_evidence_certificate.v1"
               and body.get("kind")==KIND
-              and body.get("evidence_class")=="account_authenticated_client_readback_only"
+              and ((body.get("evidence_class")=="account_authenticated_client_readback_only"
+                    and body.get("synthetic_demo",False) is False
+                    and not str(body.get("provider_job_id","")).startswith("SYNTHETIC-"))
+                   or (allow_synthetic_demo is True and body.get("evidence_class")=="synthetic_test_only"
+                       and body.get("synthetic_demo") is True))
               and body.get("scope",{}).get("ibm_provider_signed_attestation") is False
               and body.get("scope",{}).get("physical_qpu_execution_verified") is False
               and body.get("scope",{}).get("quantum_advantage_claimed") is False
@@ -97,7 +107,8 @@ def verify_readback_certificate(bundle:dict, *, pinned_issuer_keys:dict | None =
             for field in ("key_id","ed25519","ml_dsa_87")))
         return {"cryptographically_valid":signed["valid"] and bool(safe),
                 "limited_claims_safe":bool(safe),
-                "issuer_key_independently_trusted":bool(pinned) and signed["valid"] and bool(safe),
+                "issuer_key_independently_trusted":bool(pinned) and signed["valid"] and bool(safe) and body.get("synthetic_demo") is not True,
+                "demo_signature_and_pin_valid":bool(pinned) and signed["valid"] and bool(safe) and body.get("synthetic_demo") is True,
                 "physical_qpu_execution_verified":False,
                 "quantum_advantage_claimed":False}
     except (KeyError,TypeError,ValueError,AttributeError):
