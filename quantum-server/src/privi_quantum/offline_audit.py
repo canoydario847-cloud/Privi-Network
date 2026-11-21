@@ -33,7 +33,7 @@ def _digest_ok(record):
 
 
 def audit_evidence_chain(bundle, *, pinned_issuer_keys, hardware_receipt,
-                         ibm_readback, input_binding, compiled_qasm=None):
+                         ibm_readback, input_binding, compiled_qasm=None, allow_synthetic_demo=False):
     """Produce a bounded verdict. All inputs local, no credential access."""
     rejected={
         "schema":"privi.quantum.offline_chain_audit.v1",
@@ -45,9 +45,10 @@ def audit_evidence_chain(bundle, *, pinned_issuer_keys, hardware_receipt,
         "quantum_advantage_claimed":False,
     }
     try:
-        cert=verify_readback_certificate(bundle,pinned_issuer_keys=pinned_issuer_keys)
+        cert=verify_readback_certificate(bundle,pinned_issuer_keys=pinned_issuer_keys, allow_synthetic_demo=allow_synthetic_demo)
         if (not cert["cryptographically_valid"] or
-                not cert["issuer_key_independently_trusted"]):
+                not (cert["issuer_key_independently_trusted"] or
+                     (allow_synthetic_demo is True and cert.get("demo_signature_and_pin_valid")))):
             return dict(rejected,reason="issuer_signature_or_trust_pin_failed")
         if not all(_digest_ok(item) for item in
                    (hardware_receipt,ibm_readback,input_binding)):
@@ -56,7 +57,7 @@ def audit_evidence_chain(bundle, *, pinned_issuer_keys, hardware_receipt,
         scope=body["scope"]
         if any((
             body.get("schema")!="privi.quantum.ibm_evidence_certificate.v1",
-            body.get("evidence_class")!="account_authenticated_client_readback_only",
+            body.get("evidence_class") not in ("account_authenticated_client_readback_only", "synthetic_test_only"),
             hardware_receipt.get("schema")!="privi.quantum.hardware_evidence.v1",
             ibm_readback.get("schema")!="privi.quantum.ibm_readback.v1",
             input_binding.get("schema")!="privi.quantum.ibm_input_binding.v1",
@@ -96,7 +97,9 @@ def audit_evidence_chain(bundle, *, pinned_issuer_keys, hardware_receipt,
         return {
             "schema":"privi.quantum.offline_chain_audit.v1",
             "valid":True,
-            "issuer_key_independently_trusted":True,
+            "issuer_key_independently_trusted":cert["issuer_key_independently_trusted"],
+            "synthetic_demo":body.get("synthetic_demo",False),
+            "demo_signature_and_pin_valid":cert.get("demo_signature_and_pin_valid",False),
             "chain_integrity_verified":True,
             "source_receipt_sha256":hardware_receipt["content_sha256"],
             "certificate_body_sha256":bundle["certificate"]["body_sha256"],
