@@ -1,0 +1,26 @@
+name: Privi Quantum enterprise decision gateway
+on:
+  pull_request:
+    paths:
+      - 'quantum-server/src/privi_quantum/enterprise_gateway.py'
+      - 'quantum-server/tests/test_enterprise_gateway.py'
+      - '.github/workflows/privi-quantum-enterprise-gateway.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test offline policy and no-spend invariants
+        working-directory: quantum-server
+        env:
+          PYTHONPATH: src
+        run: python -m unittest discover -s tests -p 'test_enterprise_gateway.py' -v
