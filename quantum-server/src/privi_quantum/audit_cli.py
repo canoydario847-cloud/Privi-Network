@@ -41,6 +41,7 @@ def main(argv=None):
     parser.add_argument("--readback",required=True)
     parser.add_argument("--binding",required=True)
     parser.add_argument("--qasm",help="Optional compiled OpenQASM file for digest verification")
+    parser.add_argument("--synthetic-demo",action="store_true",help="Explicitly allow disposable synthetic test certificates; never grants production trust")
     args=parser.parse_args(argv)
     try:
         evidence={
@@ -49,12 +50,13 @@ def main(argv=None):
             "hardware_receipt":_load(args.hardware),
             "ibm_readback":_load(args.readback),
             "input_binding":_load(args.binding),
+            "allow_synthetic_demo":args.synthetic_demo,
         }
         if args.qasm:
             p=Path(args.qasm)
             if not p.is_file() or p.stat().st_size>200_000:
                 raise ValueError("Compiled QASM missing or oversized")
-            evidence["compiled_qasm"]=p.read_text(encoding="utf-8")
+            evidence["compiled_qasm"]=p.read_bytes().decode("utf-8")
         result=audit_evidence_chain(**evidence)
     except (OSError,ValueError,UnicodeError,TypeError) as exc:
         print("Offline audit input error: "+str(exc),file=sys.stderr)
