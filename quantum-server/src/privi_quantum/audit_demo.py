@@ -52,12 +52,12 @@ def generate(output):
         signer=Attestor(str(Path(temp)/"disposable-demo.sqlite"))
         pins=signer.public_keys()
         bundle=issue_readback_certificate(receipt,compiled_qasm=qasm,
-                                          service=service,attestor=signer)
+                                          service=service,attestor=signer,synthetic_demo=True)
         signer._db.close()
     rb=verify_ibm_readback(receipt,service=service)
     binding=bind_existing_ibm_job(receipt,compiled_qasm=qasm,service=service)
     args=dict(bundle=bundle,pinned_issuer_keys=pins,hardware_receipt=receipt,
-              ibm_readback=rb,input_binding=binding,compiled_qasm=qasm)
+              ibm_readback=rb,input_binding=binding,compiled_qasm=qasm,allow_synthetic_demo=True)
     tampered=copy.deepcopy(receipt)
     tampered["shots"]=21
     report={
@@ -66,6 +66,7 @@ def generate(output):
         "provider_authenticated":False,
         "physical_qpu_execution_verified":False,
         "expected_pass":audit_evidence_chain(**args),
+        "production_rejection":audit_evidence_chain(**dict(args,allow_synthetic_demo=False)),
         "tampered_receipt":audit_evidence_chain(**dict(args,hardware_receipt=tampered)),
         "wrong_key":audit_evidence_chain(**dict(args,pinned_issuer_keys=None)),
         "tampered_qasm":audit_evidence_chain(**dict(args,compiled_qasm=qasm+"\n// alteration")),
@@ -84,7 +85,7 @@ def generate(output):
         "All job records simulate provider responses. Keys are disposable test keys, "
         "not Privi production issuer keys. Do not use these files as real execution evidence.\n")
     if not report["expected_pass"]["valid"] or any(report[k]["valid"]
-            for k in ("tampered_receipt","wrong_key","tampered_qasm")):
+            for k in ("tampered_receipt","wrong_key","tampered_qasm","production_rejection")):
         raise RuntimeError("Synthetic audit regression failed")
     return report
 
