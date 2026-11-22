@@ -1,0 +1,30 @@
+name: Hey Jose chat CI
+on:
+  pull_request:
+    paths:
+      - 'jose-backend/**'
+      - 'jose-site/**'
+      - '.github/workflows/jose-chat-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'jose-backend/**'
+      - 'jose-site/**'
+      - '.github/workflows/jose-chat-ci.yml'
+permissions:
+  contents: read
+jobs:
+  backend-syntax-and-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check Jose backend and site syntax
+        run: |
+          node --check jose-backend/src/server.js
+          node --check jose-site/ais.js
+      - name: Run Jose backend tests
+        run: npm test
+        working-directory: jose-backend

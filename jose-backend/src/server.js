@@ -175,7 +175,7 @@ const server = http.createServer(async (req, res) => {
     // ---- Jose text chat (opt-in configured AI provider, authenticated, bounded) ----
     if (req.method === 'GET' && url.pathname === '/api/chat/status') {
       const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
-      return sendJson(res, 200, { available: true, model: process.env.JOSE_AI_MODEL || 'gpt-4o-mini' });
+      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), mode: process.env.JOSE_AI_API_KEY ? 'provider' : 'unconfigured', model: process.env.JOSE_AI_API_KEY ? (process.env.JOSE_AI_MODEL || 'gpt-4o-mini') : null });
     }
     if (req.method === 'POST' && url.pathname === '/api/chat') {
       const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
@@ -193,7 +193,11 @@ const server = http.createServer(async (req, res) => {
       try { body = await readBody(req); }
       catch { return sendJson(res, 400, { error: 'Invalid JSON body.' }); }
       const message = typeof body.message === 'string' ? body.message.trim() : '';
-      if (!message || message.length > 2000) return sendJson(res, 400, { error: 'Enter a question of up to 2,000 characters.' });
+      if (!message || message.length > 12000) return sendJson(res, 400, { error: 'Enter a question of up to 12,000 characters.' });
+      const history = Array.isArray(body.history) ? body.history.slice(-16) : [];
+      if (history.some(m => !m || !['user','assistant'].includes(m.role) || typeof m.content !== 'string' || m.content.length > 12000) || history.reduce((n,m)=>n+m.content.length,0)>48000) {
+        return sendJson(res, 400, { error: 'Invalid or oversized conversation history.' });
+      }
       const localAnswer = (text) => {
         const q = text.toLowerCase();
         const spanish = /\b(hola|que|qué|como|cómo|precio|precios|ayuda|herramientas)\b/.test(q);
@@ -209,18 +213,19 @@ const server = http.createServer(async (req, res) => {
         if (/\\b(build|code|create|make|develop|program|website|app|software)\\b/.test(q)) return spanish ? 'Puedo convertir tu idea en un flujo de construcción: plan, archivos, código, pruebas y revisión. Describe lo que quieres construir y el resultado esperado.' : 'I can turn your idea into a build workflow with a plan, files, implementation code, tests, and review. Describe what you want to build and the expected result.';
         return spanish ? 'Puedo ayudarte con precios, plugins, construcción de proyectos y el espacio de Hey Jose. Describe tu objetivo para comenzar.' : 'I can help with pricing, plugins, building projects, and the Hey Jose workspace. Describe your goal to begin.';
       };
-      if (!apiKey) return sendJson(res, 200, { answer: localAnswer(message) });
+      if (!apiKey) return sendJson(res, 503, { error: 'Hey Jose AI is not configured. Add JOSE_AI_API_KEY in the backend service environment to enable real answers. The plugin directory remains separately available.' });
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 20000);
+      const timeout = setTimeout(() => controller.abort(), 60000);
       try {
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST', signal: controller.signal,
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
           body: JSON.stringify({
             model: process.env.JOSE_AI_MODEL || 'gpt-4o-mini',
-            max_tokens: 500,
+            max_completion_tokens: Number(process.env.JOSE_AI_MAX_TOKENS || 2500),
             messages: [
-              { role: 'system', content: 'You are Hey Jose A.I.S., an advanced autonomous workflow assistant for Privi. Respond in the user's language. For build requests, turn the goal into a practical plan, choose the right plugin or tool, generate complete implementation code, explain file changes, and include verification steps. Maintain task context, identify dependencies, validate assumptions, and surface errors instead of hiding them. You may draft actions, but never claim an external action happened unless the connected tool confirms it. Require explicit confirmation before sending email, spending money, publishing, deleting data, or changing production systems. Prefer small reversible steps, secure defaults, and production-ready code.' },
+              { role: 'system', content: 'You are Hey Jose A.I.S., an advanced autonomous workflow assistant for Privi. Respond in the user\'s language. For build requests, turn the goal into a practical plan, choose the right plugin or tool, generate complete implementation code, explain file changes, and include verification steps. Maintain task context, identify dependencies, validate assumptions, and surface errors instead of hiding them. You may draft actions, but never claim an external action happened unless the connected tool confirms it. Require explicit confirmation before sending email, spending money, publishing, deleting data, or changing production systems. Prefer small reversible steps, secure defaults, and production-ready code.' },
+              ...history.map(m => ({ role: m.role, content: m.content })),
               { role: 'user', content: message },
             ],
           }),
@@ -230,6 +235,7 @@ const server = http.createServer(async (req, res) => {
           if (response.status === 401 || response.status === 403) {
             return sendJson(res, 503, { error: 'Jose AI authentication failed. The operator must replace JOSE_AI_API_KEY with a valid OpenAI API key on Render.' });
           }
+          if (response.status === 400) return sendJson(res, 502, { error: 'Hey Jose model configuration was rejected by the AI provider. Check JOSE_AI_MODEL and token settings.' });
           if (response.status === 429) {
             return sendJson(res, 503, { error: 'Jose AI provider is rate-limited or out of API quota. Contact the operator.' });
           }
