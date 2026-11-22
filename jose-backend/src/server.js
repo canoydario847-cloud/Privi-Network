@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import { db } from './store.js';
+import { ensureConfiguredAdmin } from './admin-bootstrap.js';
 import { hashPassword, verifyPassword, encryptSecret, decryptSecret, randomToken } from './crypto-utils.js';
 import { plugins, getPlugin } from './plugins/index.js';
 import { createNetworkMonitor } from './network-monitor.js';
@@ -17,6 +18,7 @@ const PORT = process.env.PORT || 7000;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const SESSION_COOKIE = 'jose_session';
 const networkMonitor = createNetworkMonitor();
+ensureConfiguredAdmin();
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 // Short-lived store for OAuth `state` values, so the callback can be tied
