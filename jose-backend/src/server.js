@@ -183,6 +183,18 @@ const server = http.createServer(async (req, res) => {
       const origin = req.headers.origin;
       if (origin && origin !== new URL(BASE_URL).origin) return sendJson(res, 403, { error: 'Invalid request origin.' });
       const apiKey = process.env.JOSE_AI_API_KEY;
+      const now = Date.now();
+      const bucket = chatRate.get(user.id) || [];
+      const recent = bucket.filter(t => now - t < 60_000);
+      if (recent.length >= 5) return sendJson(res, 429, { error: 'Please wait a minute before asking more questions.' });
+      recent.push(now);
+      chatRate.set(user.id, recent);
+      let body;
+      try { body = await readBody(req); }
+      catch { return sendJson(res, 400, { error: 'Invalid JSON body.' }); }
+      const message = typeof body.message === 'string' ? body.message.trim() : '';
+      if (!message || message.length > 2000) return sendJson(res, 400, { error: 'Enter a question of up to 2,000 characters.' });
+      const apiKey = process.env.JOSE_AI_API_KEY;
       const localAnswer = (text) => {
         const q = text.toLowerCase();
         const spanish = /\\b(hola|que|qué|como|cómo|precio|precios|ayuda|herramientas)\\b/.test(q);
@@ -198,17 +210,6 @@ const server = http.createServer(async (req, res) => {
         return spanish ? 'Puedo ayudarte con precios, plugins y el espacio de Hey Jose. Para respuestas generales, configura el proveedor de IA del servicio.' : 'I can help with pricing, plugins, and the Hey Jose workspace. For general questions, configure the service AI provider.';
       };
       if (!apiKey) return sendJson(res, 200, { answer: localAnswer(message) });
-      const now = Date.now();
-      const bucket = chatRate.get(user.id) || [];
-      const recent = bucket.filter(t => now - t < 60_000);
-      if (recent.length >= 5) return sendJson(res, 429, { error: 'Please wait a minute before asking more questions.' });
-      recent.push(now);
-      chatRate.set(user.id, recent);
-      let body;
-      try { body = await readBody(req); }
-      catch { return sendJson(res, 400, { error: 'Invalid JSON body.' }); }
-      const message = typeof body.message === 'string' ? body.message.trim() : '';
-      if (!message || message.length > 2000) return sendJson(res, 400, { error: 'Enter a question of up to 2,000 characters.' });
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 20000);
       try {
