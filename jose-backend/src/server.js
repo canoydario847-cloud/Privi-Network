@@ -246,6 +246,33 @@ const server = http.createServer(async (req, res) => {
       } finally { clearTimeout(timeout); }
     }
 
+    // ---- email composer and explicit Gmail send ----
+    if (req.method === 'POST' && url.pathname === '/api/email/send') {
+      const user = getCurrentUser(req);
+      if (!user) return sendJson(res, 401, { error: 'Sign in to send email.' });
+      let body;
+      try { body = await readBody(req); } catch { return sendJson(res, 400, { error: 'Invalid JSON body.' }); }
+      const to = typeof body.to === 'string' ? body.to.trim() : '';
+      const subject = typeof body.subject === 'string' ? body.subject.trim() : '';
+      const text = typeof body.text === 'string' ? body.text.trim() : '';
+      if (!body.confirmSend) return sendJson(res, 400, { error: 'Set confirmSend=true after reviewing the message.' });
+      if (!to || !subject || !text || to.length > 320 || subject.length > 200 || text.length > 20000) {
+        return sendJson(res, 400, { error: 'Recipient, subject, and message are required.' });
+      }
+      const connection = db.getConnection(user.id, 'google');
+      if (!connection?.accessToken) return sendJson(res, 409, { error: 'Connect Google/Gmail in Plugins before sending email.' });
+      const raw = [`To: ${to}`, `Subject: ${subject}`, 'Content-Type: text/plain; charset=utf-8', '', text].join('\\r\\n');
+      const encoded = Buffer.from(raw).toString('base64url');
+      const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + decryptSecret(connection.accessToken), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ raw: encoded }),
+      });
+      if (!response.ok) return sendJson(res, 502, { error: 'Gmail could not send this message. Reconnect Google and try again.' });
+      const sent = await response.json();
+      return sendJson(res, 200, { ok: true, provider: 'gmail', messageId: sent.id || null });
+    }
+
     // ---- social sign-in ----
     if (req.method === 'GET' && (url.pathname === '/auth/github' || url.pathname === '/auth/google')) {
       const provider = url.pathname.split('/')[2];
