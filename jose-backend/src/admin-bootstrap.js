@@ -7,7 +7,10 @@ export function ensureConfiguredAdmin() {
   const password = String(process.env.JOSE_ADMIN_PASSWORD || '');
   if (!email || password.length < 8) return false;
   const existing = db.getUserByEmail(email);
-  if (existing) {\n    db.updateUser(existing.id, { email, passwordHash: hashPassword(password), role: 'admin' });\n    return true;\n  }
+  if (existing) {
+    db.updateUser(existing.id, { email, passwordHash: hashPassword(password), role: 'admin' });
+    return true;
+  }
   db.createUser({ id: crypto.randomUUID(), email, passwordHash: hashPassword(password), role: 'admin', createdAt: Date.now() });
   return true;
 }
