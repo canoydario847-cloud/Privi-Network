@@ -47,7 +47,7 @@
         body: JSON.stringify({ email, password }),
       });
       } catch (error) { document.getElementById('error').textContent = 'The sign-in service is unavailable. Please try again.'; return; }
-      const body = await res.json();
+      const body = await res.json().catch(() => ({ error: 'The sign-in server returned an invalid response.' }));
       if (res.ok) {
         const next = params.get('next') || 'dashboard.html';
         window.location.href = next.startsWith('/') && !next.startsWith('//') ? next : 'dashboard.html';
