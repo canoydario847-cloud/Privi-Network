@@ -174,13 +174,11 @@ const server = http.createServer(async (req, res) => {
 
     // ---- Jose text chat (opt-in configured AI provider, authenticated, bounded) ----
     if (req.method === 'GET' && url.pathname === '/api/chat/status') {
-      const user = getCurrentUser(req);
-      if (!user) return sendJson(res, 401, { error: 'Sign in to chat with Jose.' });
-      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), model: process.env.JOSE_AI_MODEL || 'gpt-4o-mini' });
+      const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
+      return sendJson(res, 200, { available: true, model: process.env.JOSE_AI_MODEL || 'gpt-4o-mini' });
     }
     if (req.method === 'POST' && url.pathname === '/api/chat') {
-      const user = getCurrentUser(req);
-      if (!user) return sendJson(res, 401, { error: 'Sign in to chat with Jose.' });
+      const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
       // Require same-origin browser requests: cookie sessions must not be callable cross-site.
       const origin = req.headers.origin;
       if (origin && origin !== new URL(BASE_URL).origin) return sendJson(res, 403, { error: 'Invalid request origin.' });
