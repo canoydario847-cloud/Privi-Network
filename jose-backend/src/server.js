@@ -230,6 +230,18 @@ const server = http.createServer(async (req, res) => {
       } finally { clearTimeout(timeout); }
     }
 
+    // ---- social sign-in ----
+    if (req.method === 'GET' && (url.pathname === '/auth/github' || url.pathname === '/auth/google')) {
+      const provider = url.pathname.split('/')[2];
+      const configured = provider === 'github'
+        ? Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET)
+        : Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+      if (!configured) {
+        return sendJson(res, 503, { error: provider + ' sign-in is not configured on this service yet. Add the provider OAuth credentials in Render environment variables.' });
+      }
+      return sendJson(res, 501, { error: provider + ' OAuth callback is not enabled in this release.' });
+    }
+
     // ---- auth ----
     if (req.method === 'POST' && url.pathname === '/api/signup') {
       const { email, password } = await readBody(req);
