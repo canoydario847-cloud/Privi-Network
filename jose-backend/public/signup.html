@@ -1,24 +1,24 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Crear cuenta — Jose</title>
+<title>Create account — Jose</title>
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div class="wrap">
     <h1>Crear cuenta</h1>
-    <p class="lede">Para conectar tus apps con Jose, primero necesitas una cuenta.</p>
+    <p class="lede">Create an account to connect your apps with Hey Jose.</p>
     <form id="form">
-      <label for="email">Correo</label>
+      <label for="email">Email</label>
       <input id="email" type="email" required />
-      <label for="password">Contraseña (mínimo 8 caracteres)</label>
+      <label for="password">Password (at least 8 characters)</label>
       <input id="password" type="password" required minlength="8" />
       <button type="submit">Crear cuenta</button>
       <p class="error" id="error"></p>
     </form>
-    <p class="switch">¿Ya tienes cuenta? <a href="login.html">Inicia sesión</a></p>
+    <p class="switch">Already have an account? <a href="login.html">Sign in</a></p>
   </div>
   <script>
     document.getElementById('form').addEventListener('submit', async (e) => {
