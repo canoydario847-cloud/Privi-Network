@@ -9,7 +9,7 @@
 **Glama discovery:** [Privi Network (approved public server)](https://glama.ai/mcp/servers/canoydario847-cloud/Privi-Network) · [Six Privi remote MCP listings, current endpoints and publisher refresh instructions](discovery/GLAMA_PUBLICATION_2026-11-15.md). Existing Glama connector listings may still contain pre-migration addresses; do not use their old URLs for paid calls.
 
 [![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/canoydario847-cloud/privi-network)
-[![MCPVault: claimed](https://mcpvault.io/badge/privi-network.svg)](https://mcpvault.io/servers/privi-network/health?utm_source=external_badge&utm_medium=referral&utm_campaign=mcp_health_report)
+[![MCPVault: verified](https://mcpvault.io/badge/privi-network.svg)](https://mcpvault.io/servers/privi-network/health?utm_source=external_badge&utm_medium=referral&utm_campaign=mcp_health_report)
 
 ## Status at a glance (Nov 15, 2026)
 
