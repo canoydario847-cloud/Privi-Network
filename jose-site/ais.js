@@ -1,64 +1,18 @@
-const get = id => document.getElementById(id);
-let catalog = [];
-let busy = false;
-async function gateway(method, params, key) {
-  const headers = {"Content-Type": "application/json"};
-  if (key) headers.Authorization = "Bearer " + key;
-  const res = await fetch("https://privi-ai-21-gateway.onrender.com/mcp", {
-    method:"POST", headers, credentials:"omit", redirect:"error", cache:"no-store",
-    signal:AbortSignal.timeout(45000),
-    body:JSON.stringify({jsonrpc:"2.0",id:1,method,params})
-  });
-  if (!res.ok) throw Error("Gateway returned HTTP " + res.status);
-  const data = await res.json();
-  if (data.error) throw Error(data.error.message);
-  return data.result;
-}
-function selectTool() {
-  const tool = catalog.find(t => t.name === get("tool").value);
-  get("description").textContent = tool?.description || "No matching tools";
-  get("schema").textContent = JSON.stringify(tool?.inputSchema || {}, null, 2);
-  get("run").disabled = !tool || busy;
-}
-function filterTools() {
-  const q = get("query").value.trim().toLowerCase();
-  const matches = catalog.filter(t => [t.name,t.title,t.description].join(" ").toLowerCase().includes(q));
-  get("tool").replaceChildren(...matches.map(t => new Option(t.title || t.name,t.name)));
-  selectTool();
-}
-async function discover() {
-  get("load").disabled = true;
-  get("status").textContent = "Connecting to Privi…";
-  try {
-    const data = await gateway("tools/list",{});
-    if (!Array.isArray(data.tools)) throw Error("Unexpected catalog response");
-    catalog = data.tools;
-    filterTools();
-    get("status").textContent = catalog.length + " tools available in the gateway catalog";
-  } catch(e) { get("status").textContent = "Catalog unavailable. " + e.message; }
-  finally { get("load").disabled = false; }
-}
-get("query").oninput = filterTools;
-get("tool").onchange = selectTool;
-get("load").onclick = discover;
-get("runner").onsubmit = async event => {
-  event.preventDefault();
-  if (busy) return;
-  let args;
-  try {
-    args = JSON.parse(get("args").value);
-    if (!args || typeof args !== "object" || Array.isArray(args)) throw Error();
-  } catch { get("output").textContent = "Enter a JSON object for the tool inputs."; return; }
-  const name = get("tool").value;
-  if (!catalog.some(t=>t.name===name)) return;
-  busy = true;
-  selectTool();
-  get("output").textContent = "Running " + name + "…";
-  try {
-    const result = await gateway("tools/call",{name,arguments:args},get("key").value.trim());
-    get("output").textContent = (result.isError ? "Tool declined the request\n" : "") +
-      JSON.stringify(result.structuredContent ?? result.content,null,2);
-  } catch(e) { get("output").textContent = e.message + ". Outcome unknown. Check your account before retrying."; }
-  finally { busy = false; selectTool(); }
-};
-discover();
+const $=id=>document.getElementById(id);
+const gateway="https://privi-ai-21-gateway.onrender.com/mcp";
+let tools=[],installed=JSON.parse(localStorage.getItem("jose-plugins")||"[]"),language=localStorage.getItem("jose-language")||"en";
+const T={en:{new:"New chat",explore:"Explore plugins",plugins:"Your plugins",connecting:"Connecting…",ready:n=>n+" plugins available",welcome:"What can I help you with?",sub:"Choose a plugin or ask Jose a question.",placeholder:"Message Hey Jose…",chat:"Chat",voice:"Speak",search:"Search plugins and tools",added:"Added",add:"Add",remove:"Remove",tool:"Run plugin",inputs:"Inputs · JSON",key:"Privi access key",run:"Run",directory:"Plugin directory",empty:"No plugins match your search.",answer:"Chat",signin:"Sign in is required to chat. Open chat",catalog:"Refresh plugins",toolrun:"Run selected tool →"},es:{new:"Nuevo chat",explore:"Explorar plugins",plugins:"Tus plugins",connecting:"Conectando…",ready:n=>n+" plugins disponibles",welcome:"¿En qué puedo ayudarte?",sub:"Elige un plugin o pregunta a Jose.",placeholder:"Mensaje para Hey Jose…",chat:"Chat",voice:"Hablar",search:"Buscar plugins y herramientas",added:"Añadido",add:"Añadir",remove:"Quitar",tool:"Ejecutar plugin",inputs:"Entradas · JSON",key:"Clave de acceso Privi",run:"Ejecutar",directory:"Directorio de plugins",empty:"No hay plugins para esta búsqueda.",answer:"Chat",signin:"Debes iniciar sesión para chatear. Abrir chat",catalog:"Actualizar plugins",toolrun:"Ejecutar herramienta →"}};
+const t=()=>T[language];
+function setLanguage(next){language=next;localStorage.setItem("jose-language",next);document.documentElement.lang=next;$("sideLang").textContent=next==="en"?"Español":"English";$("topLang").textContent=$("sideLang").textContent;renderHome();renderInstalled();renderCatalog();}
+$("sideLang").onclick=$("topLang").onclick=()=>setLanguage(language==="en"?"es":"en");
+function showChat(){ $("view").innerHTML='<iframe class="chatframe" title="Hey Jose chat" src="https://jose-backend-075d.onrender.com/chat.html"></iframe>'; }
+function renderHome(){ $("view").innerHTML='<div class="welcome"><div class="welcome-inner"><div class="orbital" aria-hidden="true"><b></b><i></i></div><h1>'+t().welcome+'</h1><p class="lead">'+t().sub+'</p><form class="composer" id="composer"><textarea id="prompt" aria-label="'+t().placeholder+'" placeholder="'+t().placeholder+'"></textarea><div class="composerbar"><div><button type="button" id="voice">🎙 '+t().voice+'</button><button type="button" id="browse">▦ '+t().explore+'</button></div><button class="send" type="submit">↑</button></div></form><div class="hints"><button class="hint" data-open="privi_time_now">Privi tools</button><button class="hint" data-open="privi_pro_retry_risk">Reliability</button><button class="hint" data-open="privi_pro_model_cost_estimate">AI cost</button></div><p id="chatStatus" class="notice" style="text-align:center"></p></div></div>'; $("composer").onsubmit=e=>{e.preventDefault();const q=$("prompt").value.trim();if(!q)return;showChat();sessionStorage.setItem("jose-first-message",q);};$("browse").onclick=openDrawer;$("voice").onclick=()=>{const R=window.SpeechRecognition||window.webkitSpeechRecognition;if(!R){$("chatStatus").textContent="Voice input is not supported in this browser.";return;}const r=new R();r.lang=language==="es"?"es-ES":"en-US";r.onresult=e=>$("prompt").value=e.results[0][0].transcript;r.start();};document.querySelectorAll("[data-open]").forEach(b=>b.onclick=()=>openTool(b.dataset.open));}
+function renderInstalled(){ $("installed").innerHTML=installed.map(name=>{const x=tools.find(v=>v.name===name);return x?'<button class="plugin-btn" data-launch="'+x.name+'"><span class="left">◈ '+(x.title||x.name)+'</span><span class="pill">›</span></button>':''}).join("");$("installed").querySelectorAll("[data-launch]").forEach(b=>b.onclick=()=>openTool(b.dataset.launch));}
+function escapeHtml(x){return String(x).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function renderCatalog(){const query=$("pluginSearch").value.toLowerCase().trim();const list=tools.filter(x=>(x.name+" "+x.title+" "+x.description).toLowerCase().includes(query));$("catalog").innerHTML=list.map(x=>'<div class="catalog-item"><div><h3>'+escapeHtml(x.title||x.name)+'</h3><p>'+escapeHtml(x.description||"Privi capability")+'</p></div><button class="btn" data-toggle="'+escapeHtml(x.name)+'">'+(installed.includes(x.name)?t().added:t().add)+'</button></div>').join("")||'<p class="muted">'+t().empty+'</p>';$("catalog").querySelectorAll("[data-toggle]").forEach(b=>b.onclick=()=>{const name=b.dataset.toggle;installed=installed.includes(name)?installed.filter(v=>v!==name):[...installed,name];localStorage.setItem("jose-plugins",JSON.stringify(installed));renderInstalled();renderCatalog();});}
+async function loadCatalog(){try{const res=await fetch(gateway,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:1,method:"tools/list",params:{}}),signal:AbortSignal.timeout(20000)});const data=await res.json();tools=data.result?.tools||[];$("health").textContent=t().ready(tools.length);renderInstalled();renderCatalog();}catch{$("health").textContent=t().connecting;}}
+function openDrawer(){$("drawer").classList.add("open");$("drawer").setAttribute("aria-hidden","false");$("pluginSearch").focus();}
+function closeDrawer(){$("drawer").classList.remove("open");$("drawer").setAttribute("aria-hidden","true");}
+$("openPlugins").onclick=openDrawer;$("closePlugins").onclick=closeDrawer;$("drawer").onclick=e=>{if(e.target===$("drawer"))closeDrawer();};$("pluginSearch").oninput=renderCatalog;
+$("home").onclick=()=>{renderHome();};function openTool(name){const tool=tools.find(x=>x.name===name);if(!tool)return;$("view").innerHTML='<section class="toolview"><div class="toolhead"><div><p class="muted">'+t().tool+'</p><h2>'+escapeHtml(tool.title||tool.name)+'</h2><p class="muted">'+escapeHtml(tool.description||"")+'</p></div><button class="btn" id="addCurrent">'+(installed.includes(name)?t().remove:t().add+' plugin')+'</button></div><div class="cards"><section class="card"><label for="toolArgs">'+t().inputs+'</label><textarea id="toolArgs" rows="8">{}</textarea><label for="apiKey">'+t().key+'</label><input id="apiKey" type="password" autocomplete="off"><p class="notice">Plugin calls follow the gateway access rules and applicable charges.</p><button id="execute" class="btn">'+t().toolrun+'</button></section><section class="card"><h3>Result</h3><pre class="toolresult" id="result"></pre></section></div></section>'; $("addCurrent").onclick=()=>{installed=installed.includes(name)?installed.filter(x=>x!==name):[...installed,name];localStorage.setItem("jose-plugins",JSON.stringify(installed));renderInstalled();openTool(name);};$("execute").onclick=async()=>{let args;try{args=JSON.parse($("toolArgs").value);if(!args||Array.isArray(args)||typeof args!=="object")throw Error();}catch{$("result").textContent="Provide a JSON object.";return;}const headers={"Content-Type":"application/json"};const key=$("apiKey").value.trim();if(key)headers.Authorization="Bearer "+key;$("execute").disabled=true;$("result").textContent="Running…";try{const r=await fetch(gateway,{method:"POST",headers,body:JSON.stringify({jsonrpc:"2.0",id:2,method:"tools/call",params:{name,arguments:args}}),signal:AbortSignal.timeout(45000)});const d=await r.json();$("result").textContent=JSON.stringify(d.result?.structuredContent??d.result?.content??d.error,null,2);}catch(e){$("result").textContent=e.message+". Check your account before retrying.";}finally{$("execute").disabled=false;};};}
+$("pluginSearch").placeholder=t().search;setLanguage(language);loadCatalog();
