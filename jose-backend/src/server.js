@@ -258,12 +258,12 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 400, { error: 'Recipient, subject, and message are required.' });
       }
       const connection = db.getConnection(user.id, 'google');
-      if (!connection?.accessToken) return sendJson(res, 409, { error: 'Connect Google/Gmail in Plugins before sending email.' });
+      if (!connection?.accessTokenEnc) return sendJson(res, 409, { error: 'Connect Google/Gmail in Plugins before sending email.' });
       const raw = [`To: ${to}`, `Subject: ${subject}`, 'Content-Type: text/plain; charset=utf-8', '', text].join('\\r\\n');
       const encoded = Buffer.from(raw).toString('base64url');
       const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
         method: 'POST',
-        headers: { Authorization: 'Bearer ' + decryptSecret(connection.accessToken), 'Content-Type': 'application/json' },
+        headers: { Authorization: 'Bearer ' + decryptSecret(connection.accessTokenEnc), 'Content-Type': 'application/json' },
         body: JSON.stringify({ raw: encoded }),
       });
       if (!response.ok) return sendJson(res, 502, { error: 'Gmail could not send this message. Reconnect Google and try again.' });
