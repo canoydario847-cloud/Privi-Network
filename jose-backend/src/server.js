@@ -281,7 +281,7 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && url.pathname === '/api/login') {
       const { email, password } = await readBody(req);
-      const user = db.getUserByEmail(email || '');
+      const user = db.getUserByEmail(String(email || '').trim().toLowerCase());
       if (!user || !verifyPassword(password || '', user.passwordHash)) {
         return sendJson(res, 401, { error: 'Incorrect email or password.' });
       }
