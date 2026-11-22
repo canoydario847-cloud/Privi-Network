@@ -183,7 +183,21 @@ const server = http.createServer(async (req, res) => {
       const origin = req.headers.origin;
       if (origin && origin !== new URL(BASE_URL).origin) return sendJson(res, 403, { error: 'Invalid request origin.' });
       const apiKey = process.env.JOSE_AI_API_KEY;
-      if (!apiKey) return sendJson(res, 503, { error: 'Jose AI chat is not configured yet. The operator must set JOSE_AI_API_KEY on the Jose backend.' });
+      const localAnswer = (text) => {
+        const q = text.toLowerCase();
+        const spanish = /\\b(hola|que|qué|como|cómo|precio|precios|ayuda|herramientas)\\b/.test(q);
+        if (/\\b(price|pricing|precio|precios|cost|costo)\\b/.test(q)) {
+          return spanish ? 'Hey Jose ofrece 500 preguntas y respuestas por $10 al mes, o 1,000 preguntas y respuestas por $35 al mes con acceso a los 85 plugins.' : 'Hey Jose offers 500 questions and answers for $10 per month, or 1,000 questions and answers for $35 per month with access to all 85 plugins.';
+        }
+        if (/\\b(plugin|plugins|tool|tools|herramienta|herramientas)\\b/.test(q)) {
+          return spanish ? 'Abre Explorar plugins para añadir las herramientas de Privi a tu espacio. Cada plugin conserva sus propios requisitos de acceso.' : 'Open Explore plugins to add Privi capabilities to your workspace. Each plugin keeps its own access requirements.';
+        }
+        if (/\\b(hello|hi|hola|hey)\\b/.test(q)) {
+          return spanish ? 'Hola. Soy Hey Jose. Puedo ayudarte con los plugins de Privi, tus preguntas y el espacio de trabajo.' : 'Hello. I am Hey Jose. I can help with Privi plugins, questions, and your workspace.';
+        }
+        return spanish ? 'Puedo ayudarte con precios, plugins y el espacio de Hey Jose. Para respuestas generales, configura el proveedor de IA del servicio.' : 'I can help with pricing, plugins, and the Hey Jose workspace. For general questions, configure the service AI provider.';
+      };
+      if (!apiKey) return sendJson(res, 200, { answer: localAnswer(message) });
       const now = Date.now();
       const bucket = chatRate.get(user.id) || [];
       const recent = bucket.filter(t => now - t < 60_000);
