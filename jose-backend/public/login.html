@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Sign in · Hey Jose Luna Light 5.6</title>
 <link rel="stylesheet" href="style.css" />
-</head>
+<style>.oauth-divider{margin:18px 0 8px;text-align:center;color:var(--ink-soft);font-size:.85rem}.oauth-buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px}.oauth-buttons button{background:var(--surface);border:1px solid var(--rule);color:var(--ink)}</style></head>
 <body>
   <div class="wrap">
     <h1>Iniciar sesión</h1>
@@ -15,13 +15,27 @@
       <input id="email" type="email" required />
       <label for="password">Contraseña</label>
       <input id="password" type="password" required />
-      <button type="submit">Sign in</button>
+      <button type="submit">Sign in</button><div class="oauth-divider">or continue with</div><div class="oauth-buttons"><button type="button" data-provider="github">GitHub</button><button type="button" data-provider="google">Google</button></div>
       <p class="error" id="error"></p>
     </form>
-    <p class="switch">New here? <a href="signup.html">Create an account</a></p>
+    <p class="switch">New here? <a href="signup.html">Create an account</a></p><p class="lede">Your session is saved securely for future sign-ins on this device.</p>
   </div>
   <script>
     const params = new URLSearchParams(window.location.search);
+    document.querySelectorAll('[data-provider]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const provider = button.dataset.provider;
+        button.disabled = true;
+        document.getElementById('error').textContent = 'Connecting to ' + provider + '…';
+        try {
+          const response = await fetch('/auth/' + provider + '?next=' + encodeURIComponent(params.get('next') || '/dashboard.html'), { headers: { Accept: 'application/json' } });
+          const data = await response.json();
+          if (response.ok && data.url) window.location.href = data.url;
+          else document.getElementById('error').textContent = data.error || provider + ' sign-in is not configured yet.';
+        } catch { document.getElementById('error').textContent = 'The sign-in service is unavailable. Please try again.'; }
+        finally { button.disabled = false; }
+      });
+    });
     document.getElementById('form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const email = document.getElementById('email').value;
