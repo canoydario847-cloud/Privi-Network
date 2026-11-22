@@ -206,7 +206,8 @@ const server = http.createServer(async (req, res) => {
         if (/\b(hello|hi|hola|hey)\b/.test(q)) {
           return spanish ? 'Hola. Soy Hey Jose. Puedo ayudarte con los plugins de Privi, tus preguntas y el espacio de trabajo.' : 'Hello. I am Hey Jose. I can help with Privi plugins, questions, and your workspace.';
         }
-        return spanish ? 'Puedo ayudarte con precios, plugins y el espacio de Hey Jose. Para respuestas generales, configura el proveedor de IA del servicio.' : 'I can help with pricing, plugins, and the Hey Jose workspace. For general questions, configure the service AI provider.';
+        if (/\\b(build|code|create|make|develop|program|website|app|software)\\b/.test(q)) return spanish ? 'Puedo convertir tu idea en un flujo de construcción: plan, archivos, código, pruebas y revisión. Describe lo que quieres construir y el resultado esperado.' : 'I can turn your idea into a build workflow with a plan, files, implementation code, tests, and review. Describe what you want to build and the expected result.';
+        return spanish ? 'Puedo ayudarte con precios, plugins, construcción de proyectos y el espacio de Hey Jose. Describe tu objetivo para comenzar.' : 'I can help with pricing, plugins, building projects, and the Hey Jose workspace. Describe your goal to begin.';
       };
       if (!apiKey) return sendJson(res, 200, { answer: localAnswer(message) });
       const controller = new AbortController();
@@ -219,7 +220,7 @@ const server = http.createServer(async (req, res) => {
             model: process.env.JOSE_AI_MODEL || 'gpt-4o-mini',
             max_tokens: 500,
             messages: [
-              { role: 'system', content: 'You are Hey Jose, a helpful Privi assistant. Respond in the same language as the user (English, Spanish, Portuguese or Chinese). Be accurate, concise, and admit uncertainty. Do not claim you took actions or accessed private accounts.' },
+              { role: 'system', content: 'You are Hey Jose A.I.S., an advanced autonomous workflow assistant for Privi. Respond in the user's language. For build requests, turn the goal into a practical plan, choose the right plugin or tool, generate complete implementation code, explain file changes, and include verification steps. Maintain task context, identify dependencies, validate assumptions, and surface errors instead of hiding them. You may draft actions, but never claim an external action happened unless the connected tool confirms it. Require explicit confirmation before sending email, spending money, publishing, deleting data, or changing production systems. Prefer small reversible steps, secure defaults, and production-ready code.' },
               { role: 'user', content: message },
             ],
           }),
