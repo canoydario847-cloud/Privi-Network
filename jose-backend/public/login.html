@@ -26,13 +26,17 @@
       e.preventDefault();
       const email = document.getElementById('email').value;
       const password = document.getElementById('password').value;
-      let res;\n      try { res = await fetch('/api/login', {
+      let res;
+      try { res = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
-      });\n      } catch (error) { document.getElementById('error').textContent = 'The sign-in service is unavailable. Please try again.'; return; }\n      const body = await res.json();
+      });
+      } catch (error) { document.getElementById('error').textContent = 'The sign-in service is unavailable. Please try again.'; return; }
+      const body = await res.json();
       if (res.ok) {
-        const next = params.get('next') || 'dashboard.html';\n        window.location.href = next.startsWith('/') && !next.startsWith('//') ? next : 'dashboard.html';
+        const next = params.get('next') || 'dashboard.html';
+        window.location.href = next.startsWith('/') && !next.startsWith('//') ? next : 'dashboard.html';
       } else {
         document.getElementById('error').textContent = body.error;
       }
