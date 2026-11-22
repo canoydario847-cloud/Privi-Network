@@ -1851,6 +1851,8 @@ def build_server(settings: Settings | None = None, attestor: Attestor | None = N
     _webapp.register(mcp, __version__, assetlinks=False)   # installable web app at /app/; assetlinks served by realcheck_web
     from . import toolkit as _toolkit
     _toolkit.register(mcp, attestor, PUBLIC_URL)
+    from . import future_compute as _future_compute
+    _future_compute.register(mcp, pay)
 
     # Central paywall: every priced tool that doesn't gate itself goes through x402 here (payments off -> unchanged).
     from .payments import ALWAYS_FREE
@@ -2184,6 +2186,7 @@ LANDING = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta na
 code,pre{{font:14px ui-monospace,monospace;background:#eef1f6;border-radius:6px}}pre{{padding:12px;overflow-x:auto}}code{{padding:1px 4px}}
 a{{color:#3451b2}}@media (prefers-color-scheme:dark){{body{{color:#e8eaee;background:#0f1115}}code,pre{{background:#1d222b}}a{{color:#8ea6ff}}}}</style></head><body>
 <h1>Privi Quantum</h1>
+<p><a href="/future-compute">Explore Privi Future Compute — commercial optimization and post-quantum security</a>.</p>
 <p>Quantum optimization for factory decisions (CVaR-QAOA, up to {qubits} qubits): balance production lines, choose which lots to inspect,
 split conflicting jobs across shifts. Every answer is checked against the proven classical optimum, signed with Ed25519 + ML-DSA-87
 (NIST FIPS 204) so not even a quantum computer can forge it, and anchored on chain (Base, until the Privi chain mainnet). The trained circuit exports as
