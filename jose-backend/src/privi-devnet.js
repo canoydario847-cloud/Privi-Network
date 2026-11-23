@@ -33,7 +33,8 @@ export function verifyDevnetIdentity(health,chainId,height,nowSeconds=Date.now()
     &&health?.cosmos_chain_id===DEVNET_COSMOS_ID
     &&Number.isFinite(age)&&age>=0&&age<120
     &&Number.isFinite(timestamp)&&Math.abs(nowSeconds-timestamp)<MAX_AGE_MS/1000
-    &&Number(health?.latest_block)===block;
+    &&Number.isSafeInteger(Number(health?.latest_block))
+    &&Math.abs(Number(health.latest_block)-block)<=3;
   return {
     connected:Boolean(safe),network:'Privi Devnet',expectedEvmChainId:DEVNET_EVM_ID,
     observedEvmChainId:Number.isSafeInteger(id)?id:null,cosmosChainId:DEVNET_COSMOS_ID,
