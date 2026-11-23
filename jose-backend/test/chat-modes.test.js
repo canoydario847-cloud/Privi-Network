@@ -27,3 +27,10 @@ test('the build instructions do not promise deployments or external tool access'
   assert.doesNotMatch(chatPrompt, /BUILD APP MODE/);
   assert.match(chatPrompt, /Never claim/);
 });
+
+test('Web3 assistant mode is distinct from browser app building',()=>{
+ assert.equal(normalizeChatMode('web3'),'web3');
+ assert.equal(maxCompletionTokens('web3'),4000);
+ assert.match(systemPromptFor('web3'),/Never request private keys/);
+ assert.match(systemPromptFor('web3'),/NOT the launch/);
+});
