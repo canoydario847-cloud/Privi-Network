@@ -16,7 +16,7 @@ const examples=[
  ['runway','/runway {"cash":1200,"monthlyBurn":600,"monthlyRevenue":200}','3.00 months'],
  ['break-even','/break-even {"fixedCost":1000,"price":35,"variableCost":5}','Required sales: 34'],
  ['unit-economics','/unit-economics {"revenue":1000,"variableCost":300,"customers":20}','35.00'],
- ['model-cost','/model-cost {"inputTokens":10000,"outputTokens":4000,"inputPerMillion":1,"outputPerMillion":4}','$0.0260'],
+ ['model-cost','/model-cost {"inputTokens":10000,"outputTokens":4000,"inputPerMillion":1,"outputPerMillion":4}','$0.026'],
  ['gas-cost','/gas-cost {"gasUnits":100000,"gwei":2,"nativePriceUsd":2000}','$0.40'],
  ['token-units','/token-units {"tokens":"1.5","decimals":18}','1500000000000000000'],
  ['chain-guard','/chain-guard {"chainId":772626}','Privi single-validator devnet'],
