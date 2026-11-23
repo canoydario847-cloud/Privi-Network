@@ -11,6 +11,7 @@ import { createNetworkMonitor } from './network-monitor.js';
 import { inferChatMode, normalizeChatMode, maxCompletionTokens, systemPromptFor } from './chat-modes.js';
 import { userContentWithAttachments } from './chat-attachments.js';
 import { createDevnetClient, devnetQuestion, devnetDetailsQuestion, DEVNET_EVM_ID } from './privi-devnet.js';
+import { runJosePower, JOSE_POWERS } from './jose-powers.js';
 import {
   REWARD_POLICY, validateRewardReceipt, verifyReceiptSignature, InvalidRewardReceipt,
 } from './duration-rewards.js';
@@ -213,7 +214,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/chat/status') {
       const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
-      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), mode: process.env.JOSE_AI_API_KEY ? 'provider' : 'unconfigured', model: process.env.JOSE_AI_API_KEY ? (process.env.JOSE_AI_MODEL || 'gpt-4o-mini') : null, chatModes: ['chat', 'build', 'web3'], priviDevnetExpectedChainId: DEVNET_EVM_ID, priviDevnetStatusUrl: '/api/devnet/status', attachments: ['image/png','image/jpeg','image/webp','text'], maxAttachments: 2 });
+      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), mode: process.env.JOSE_AI_API_KEY ? 'provider' : 'unconfigured', model: process.env.JOSE_AI_API_KEY ? (process.env.JOSE_AI_MODEL || 'gpt-4o-mini') : null, chatModes: ['chat', 'build', 'web3'], priviDevnetExpectedChainId: DEVNET_EVM_ID, priviDevnetStatusUrl: '/api/devnet/status', attachments: ['image/png','image/jpeg','image/webp','text'], maxAttachments: 2, localPowerCount: JOSE_POWERS.length });
     }
     if (req.method === 'POST' && url.pathname === '/api/chat') {
       const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
@@ -241,6 +242,15 @@ const server = http.createServer(async (req, res) => {
       const history = Array.isArray(body.history) ? body.history.slice(-16) : [];
       if (history.some(m => !m || !['user','assistant'].includes(m.role) || typeof m.content !== 'string' || m.content.length > 12000) || history.reduce((n,m)=>n+m.content.length,0)>48000) {
         return sendJson(res, 400, { error: 'Invalid or oversized conversation history.' });
+      }
+      // Explicit, read-only deterministic local powers run without paid model calls.
+      // Never silently discard attachments or claim a tool can see unseen files.
+      const localPower = await runJosePower(message);
+      if (localPower) {
+        if (Array.isArray(body.attachments) && body.attachments.length) {
+          return sendJson(res, 400, {error:'Local power commands currently accept pasted text or JSON, not file attachments.'});
+        }
+        return sendJson(res, 200, {answer:localPower.answer, mode:'chat', power:localPower.power, deterministic:true});
       }
       if (devnetQuestion(message)) {
         const report = await devnet.check();
