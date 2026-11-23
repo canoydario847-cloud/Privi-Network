@@ -26,6 +26,37 @@ export function gmailIntent(message){
    return {action:'compose'};
  return null;
 }
+// Explicitly explain live connection readiness instead of a generic AI refusal.
+// Only non-secret configuration KEY NAMES are exposed, never OAuth values.
+export function gmailConnectionGuide({configured=false,authenticated=false,connected=false,missingEnvVars=[]}={}){
+ const setupUrl='https://jose-backend-075d.onrender.com/chat.html?gmail=connect';
+ const missing=Array.isArray(missingEnvVars)
+   ?missingEnvVars.filter(name=>['GOOGLE_CLIENT_ID','GOOGLE_CLIENT_SECRET','APP_SECRET'].includes(name))
+   :[];
+ let gmailStatus,answer;
+ if(!configured){
+   gmailStatus='operator_setup';
+   answer='Hey Jose has Gmail reading, search and reviewed sending built into its backend, but this deployment cannot connect to Gmail yet. '+
+     'The operator must configure '+(missing.length?missing.join(' and '):'Google OAuth credentials')+
+     ' in the jose-backend Render environment, enable the Gmail API, and register the Google OAuth redirect URI https://jose-backend-075d.onrender.com/callback/google. '+
+     'Until Google OAuth is configured and you authorize your own account, I cannot read or send Gmail. Click Gmail in the chat header to view the connection status.';
+ }else if(!authenticated){
+   gmailStatus='sign_in';
+   answer='Hey Jose supports Gmail. First open Gmail in the chat header and sign in or create a Jose account. '+
+     'Then select Connect Gmail and approve Google permissions. I will not ask for your Google password.';
+ }else if(!connected){
+   gmailStatus='authorize';
+   answer='Hey Jose is ready for Gmail access, but your Gmail account has not been connected to this Jose account. '+
+     'Click Gmail in the chat header and choose Connect Gmail using Google, then approve read and send permissions. '+
+     'I cannot read your inbox until you authorize access.';
+ }else{
+   gmailStatus='connected';
+   answer='Your Gmail account is connected to Hey Jose. You can say "show my latest Gmail", '+
+     '"show my unread emails", "search my email for invoices", or use "/gmail read MESSAGE_ID". '+
+     'You can also draft a message using Gmail in this chat. Every send requires your review and explicit confirmation.';
+ }
+ return {answer,mode:'chat',gmailAction:'connect',gmailStatus,gmailSetupUrl:setupUrl};
+}
 export function formatGmailInbox(data){
  if(!data.messages?.length)return 'Gmail: no messages found for this search.';
  return 'Gmail '+(data.query?'search results':'recent inbox')+' ('+data.messages.length+'):\n'+
