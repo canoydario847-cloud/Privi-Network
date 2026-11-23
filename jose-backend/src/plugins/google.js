@@ -1,76 +1,55 @@
-// Google (Gmail / Calendar / Drive) via Google OAuth2.
-// Docs: https://developers.google.com/identity/protocols/oauth2/web-server
-//
-// Requires, from a Google Cloud project with the OAuth consent screen
-// configured:
-//   GOOGLE_CLIENT_ID
-//   GOOGLE_CLIENT_SECRET
-// Scopes below cover reading/sending mail, reading/writing calendar
-// events, and basic Drive file access — narrow this list to only what
-// Jose actually needs before submitting for Google's OAuth verification,
-// since broader ("sensitive"/"restricted") scopes trigger a stricter
-// review (and for some scopes, a paid third-party security assessment).
-
+// Hey Jose Gmail: least-permissive scopes required for reading and sending.
+// Note gmail.readonly is a Google restricted scope and public use may require
+// verification/security review. Never request Google passwords or Gmail tokens.
 import { postForm } from '../http-client.js';
 
-const SCOPES = [
+export const GMAIL_SCOPES=Object.freeze([
   'https://www.googleapis.com/auth/gmail.readonly',
-  'https://www.googleapis.com/auth/gmail.send',
-  'https://www.googleapis.com/auth/calendar.events',
-  'https://www.googleapis.com/auth/drive.file',
-].join(' ');
-
-export const google = {
-  id: 'google',
-  name: 'Google (Gmail, Calendar, Drive)',
-  setup: {
-    registerUrl: 'https://console.cloud.google.com/apis/credentials',
-    envVars: [
-      { key: 'GOOGLE_CLIENT_ID', label: 'OAuth Client ID del proyecto en Google Cloud' },
-      { key: 'GOOGLE_CLIENT_SECRET', label: 'OAuth Client Secret del proyecto en Google Cloud' },
+  'https://www.googleapis.com/auth/gmail.send'
+]);
+export const google={
+  id:'google',
+  name:'Gmail (read and send)',
+  setup:{
+    registerUrl:'https://console.cloud.google.com/apis/credentials',
+    envVars:[
+      {key:'GOOGLE_CLIENT_ID',label:'Google OAuth web client ID'},
+      {key:'GOOGLE_CLIENT_SECRET',label:'Google OAuth web client secret'},
+      {key:'APP_SECRET',label:'Hey Jose server encryption secret (32+ characters)'}
     ],
-    steps: [
-      'Crea un proyecto en Google Cloud Console y habilita las APIs de Gmail, Calendar y Drive.',
-      'Configura la pantalla de consentimiento OAuth (OAuth consent screen) con el nombre "Jose", logo y política de privacidad.',
-      'Crea credenciales OAuth 2.0 de tipo "Aplicación web" y agrega el Redirect URI de abajo.',
-      'Copia el Client ID y el Client Secret.',
-      'Para publicarlo en Google Workspace Marketplace: habilita la "Google Workspace Marketplace SDK", completa la ficha de la app (capturas, descripción, alcance de los permisos) y envíala a revisión — Google revisa manualmente cada permiso solicitado, lo cual puede tardar días o semanas.',
-    ],
+    steps:[
+      'Enable Gmail API in Google Cloud and configure OAuth consent, data-use policy, and only required Gmail scopes.',
+      'Create a Google OAuth 2.0 Web application and add https://jose-backend-075d.onrender.com/callback/google to authorized redirect URIs.',
+      'Configure GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and APP_SECRET in Jose backend Render environment.',
+      'Publish only after any required Google verification and security assessment. Users grant their own Gmail permissions and can disconnect.'
+    ]
   },
-  isConfigured() {
-    return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+  isConfigured(){return Boolean(process.env.GOOGLE_CLIENT_ID&&process.env.GOOGLE_CLIENT_SECRET&&(process.env.APP_SECRET||'').length>=32);},
+  missingEnvVars(){
+    return ['GOOGLE_CLIENT_ID','GOOGLE_CLIENT_SECRET',...((process.env.APP_SECRET||'').length>=32?[]:['APP_SECRET'])].filter(k=>!process.env[k]||(k==='APP_SECRET'&&process.env[k].length<32));
   },
-  missingEnvVars() {
-    return ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'].filter((k) => !process.env[k]);
-  },
-  buildAuthorizeUrl(state, redirectUri) {
-    const params = new URLSearchParams({
-      client_id: process.env.GOOGLE_CLIENT_ID,
-      redirect_uri: redirectUri,
-      response_type: 'code',
-      scope: SCOPES,
-      access_type: 'offline',
-      prompt: 'consent',
-      state,
+  buildAuthorizeUrl(state,redirectUri){
+    const p=new URLSearchParams({
+      client_id:process.env.GOOGLE_CLIENT_ID,
+      redirect_uri:redirectUri,response_type:'code',
+      scope:GMAIL_SCOPES.join(' '),
+      access_type:'offline',prompt:'consent',state
     });
-    return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+    return 'https://accounts.google.com/o/oauth2/v2/auth?'+p.toString();
   },
-  async exchangeCode(code, redirectUri) {
-    const { status, body } = await postForm('https://oauth2.googleapis.com/token', {
-      client_id: process.env.GOOGLE_CLIENT_ID,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET,
-      redirect_uri: redirectUri,
-      grant_type: 'authorization_code',
-      code,
+  async exchangeCode(code,redirectUri){
+    const {status,body}=await postForm('https://oauth2.googleapis.com/token',{
+      client_id:process.env.GOOGLE_CLIENT_ID,client_secret:process.env.GOOGLE_CLIENT_SECRET,
+      redirect_uri:redirectUri,grant_type:'authorization_code',code
     });
-    if (status !== 200 || !body.access_token) {
-      throw new Error(`Google token exchange failed: ${JSON.stringify(body)}`);
-    }
+    if(status!==200||!body?.access_token)throw Error('Google OAuth token exchange failed; restart Gmail connection.');
+    const granted=String(body.scope||'').split(/\s+/).filter(Boolean);
+    if(!GMAIL_SCOPES.every(s=>granted.includes(s)))throw Error('The Google authorization did not grant both Gmail read and send permissions.');
     return {
-      accessToken: body.access_token,
-      refreshToken: body.refresh_token || null,
-      expiresInSeconds: body.expires_in || null,
-      raw: body,
+      accessToken:body.access_token,
+      refreshToken:body.refresh_token||null,
+      expiresInSeconds:Number(body.expires_in)||3600,
+      scopes:granted
     };
-  },
+  }
 };
