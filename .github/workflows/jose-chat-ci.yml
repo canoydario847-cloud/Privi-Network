@@ -24,6 +24,10 @@ jobs:
       - name: Check Jose backend and site syntax
         run: |
           node --check jose-backend/src/server.js
+          node --check jose-backend/src/gmail-client.js
+          node --check jose-backend/src/gmail-review.js
+          node --check jose-backend/src/gmail-intents.js
+          node --check jose-backend/public/chat-gmail.js
           node --check jose-backend/src/chat-memory.js
           node --check jose-backend/public/chat-memory.js
           node --check jose-backend/src/jose-powers.js
