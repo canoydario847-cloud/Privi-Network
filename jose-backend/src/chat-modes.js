@@ -4,6 +4,21 @@ export function normalizeChatMode(value) {
   return value === 'build' || value === 'web3' ? value : 'chat';
 }
 
+// One conversational UI: classify an intent only to select an appropriate
+// system prompt. This never authorizes blockchain transactions or tool calls.
+export function inferChatMode(message) {
+  const text = typeof message === 'string' ? message.toLowerCase().slice(0,12000) : '';
+  if (/\b(?:web3|blockchains?|solidity|smart[\s-]?contracts?|nfts?|erc[\s-]?(?:20|721|1155)|crypto(?:currency|currencies)?|token(?:s)?\s+(?:launch|contract|mint|deploy)|ledger(?:s)?|mint(?:ing)?\s+(?:tokens?|nfts?))\b/i.test(text)) {
+    return 'web3';
+  }
+  if (/\b(?:build|create|make|generate|design|develop|code)\b/i.test(text)
+      && /\b(?:web[\s-]?(?:app|site|page)|website|dashboard|browser\s+app|task[\s-]?manager|todo[\s-]?app|calculator\s+app|application|interactive\s+game|app)\b/i.test(text)
+      && !/\b(?:what is|explain|describe|how to|why does|compare)\b/i.test(text)) {
+    return 'build';
+  }
+  return 'chat';
+}
+
 export function maxCompletionTokens(mode, configured) {
   const number = Number(configured);
   if (configured !== undefined && configured !== null && configured !== '' && Number.isInteger(number) && number >= 256) {
