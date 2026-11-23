@@ -23,6 +23,19 @@ header{height:60px;display:flex;align-items:center;justify-content:space-between
 .devnet-status.connected::before{color:#7fe7a0}
 .devnet-status.offline::before{color:#f1b37a}
 header .actions{display:flex;gap:8px}
+#memoryPanel{padding:15px 24px;border-bottom:1px solid var(--line);background:#171b2a}
+#memoryPanel .memory-inner{max-width:880px;margin:0 auto}
+#memoryPanel h2{font-size:16px;margin:0 0 7px;color:var(--gold)}
+#memoryPanel p{color:var(--muted);font-size:12px;line-height:1.4;margin:5px 0}
+#memoryPanel label{font-size:13px}
+#memoryPanel .memory-controls{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin:10px 0}
+#memoryInput{width:min(100%,550px);min-width:160px;flex:1;border:1px solid #5d5469;border-radius:9px;padding:10px;background:#0d1322;color:var(--text)}
+#memoryList{max-height:200px;overflow:auto}
+.memory-row{display:flex;align-items:center;justify-content:space-between;gap:14px;border-bottom:1px solid #ffffff19;padding:8px 0}
+.memory-row span{overflow-wrap:anywhere}
+.memory-row button{font-size:12px;padding:5px 8px}
+#memoryToggle{vertical-align:middle;accent-color:var(--gold)}
+.muted{color:var(--muted)}
 .iconbutton{border-color:transparent;background:transparent;padding:7px 10px;color:var(--muted);font-size:13px}
 .iconbutton:hover{color:var(--text)}
 main{flex:1;display:flex;flex-direction:column;min-height:0}
@@ -52,7 +65,7 @@ textarea::placeholder{color:#aaa7b9}
 #status{min-height:19px;max-width:880px;margin:8px auto 0;color:var(--muted);font-size:12px;text-align:center}
 #attachmentStatus{max-width:880px;margin:5px auto 0;color:var(--muted);font-size:12px;text-align:center}
 #attachmentStatus:empty{display:none}
-@media(max-width:650px){.devnet-status{display:block;margin-left:0;font-size:10px}header{padding:9px 12px}.brand{font-size:18px}.iconbutton{padding:7px 5px}#feed{padding:18px 12px}.composer-area{padding:8px 8px 14px}.welcome{padding:38px 8px}.bubble.jose{padding-left:28px}.send{min-width:72px}}
+@media(max-width:650px){.devnet-status{display:block;margin-left:0;font-size:10px}header{height:auto;min-height:64px;padding:9px 10px;gap:5px}.iconbutton{font-size:11px!important;padding:6px 3px!important}header .actions{gap:3px}#memoryPanel{padding:12px}.brand{font-size:18px}.iconbutton{padding:7px 5px}#feed{padding:18px 12px}.composer-area{padding:8px 8px 14px}.welcome{padding:38px 8px}.bubble.jose{padding-left:28px}.send{min-width:72px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 </style>
 </head>
@@ -62,10 +75,21 @@ textarea::placeholder{color:#aaa7b9}
   <div><span class="brand" aria-label="Hey Jose">Hey <span>Jose</span> ✦</span><span class="devnet-status" id="devnetStatus" title="Privi Devnet — checking actual RPC and chain ID">Devnet: checking…</span></div>
   <div class="actions">
     <button class="iconbutton" id="newChat" type="button" title="New conversation">New chat</button>
+    <button class="iconbutton" id="memoryBtn" type="button" title="Review and control what Jose remembers">Memory</button>
     <button class="iconbutton" id="copyReply" type="button" title="Copy last answer">Copy</button>
     <button class="iconbutton" id="exportChat" type="button" title="Export conversation">Export</button>
   </div>
 </header>
+<section id="memoryPanel" hidden aria-label="Hey Jose saved memories">
+<div class="memory-inner">
+<h2>Memory · Your choices</h2>
+<p>Jose remembers only what you explicitly save. Memories stay in this browser, not on Privi Devnet or the Jose server. They are not synced across devices, and anyone using this browser profile may access them. Do not save passwords, wallet keys or other secrets.</p>
+<label><input type="checkbox" id="memoryToggle"> Use saved memories when answering questions</label>
+<div class="memory-controls"><input id="memoryInput" type="text" maxlength="180" autocomplete="off" placeholder="A preference or project fact to remember…" aria-label="Memory note">
+<button type="button" id="memoryAdd">Save</button><button type="button" id="memoryClear">Forget all</button></div>
+<div id="memoryList" aria-live="polite"></div>
+</div>
+</section>
 <main>
   <div id="feed" role="log" aria-label="Conversation" aria-live="polite">
     <section class="welcome" id="welcome"><div class="emblem" aria-hidden="true">✦</div><h1>What can I help you with?</h1><p>Ask anything—writing, coding, analysis or Web3. Ask “What are your 20 powers?” to see Jose’s new built-in checks.</p></section>
@@ -164,6 +188,13 @@ form.addEventListener('submit',async event=>{
   if(running)return;
   const message=input.value.trim();
   if(!message)return;
+  const memoryAnswer=window.joseMemory?.message?.(message);
+  if(memoryAnswer!==null&&memoryAnswer!==undefined){
+    showMessage('user',message);
+    showMessage('jose',memoryAnswer);
+    window.joseAddons?.onSent?.(memoryAnswer);
+    input.value='';status.textContent='';return;
+  }
   const attachment=window.joseAddons?.getAttachment?.()||null;
   running=true;send.disabled=true;input.disabled=true;
   showMessage('user',message+(attachment?'\n[Attached '+attachment.kind+': '+attachment.name+']':''));
@@ -173,7 +204,7 @@ form.addEventListener('submit',async event=>{
   try {
     const r=await fetch('/api/chat',{
       method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',
-      body:JSON.stringify({message,history:history.slice(-16),attachments:attachment?[attachment]:[]})
+      body:JSON.stringify({message,history:history.slice(-16),attachments:attachment?[attachment]:[],memories:window.joseMemory?.getNotes?.()||[]})
     });
     const data=await r.json().catch(()=>({error:'Jose returned an invalid response.'}));
     if(!r.ok)throw new Error(data.error||'Unable to answer.');
@@ -226,5 +257,6 @@ setInterval(()=>{void checkPriviDevnet();},60000);
 input.focus();
 </script>
 <script src="/chat-extras.js?v=20261123-onechat"></script>
+<script src="/chat-memory.js?v=20261123"></script><script>window.joseMemory?.setup();</script>
 </body>
 </html>
