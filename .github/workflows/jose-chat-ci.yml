@@ -24,7 +24,18 @@ jobs:
       - name: Check Jose backend and site syntax
         run: |
           node --check jose-backend/src/server.js
+          node --check jose-backend/src/chat-modes.js
           node --check jose-site/ais.js
+      - name: Validate inline chat browser scripts
+        run: |
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          import vm from 'node:vm';
+          const html = fs.readFileSync('jose-backend/public/chat.html', 'utf8');
+          const scripts = html.split('<script>').slice(1).map(chunk => chunk.split('</script>')[0]).filter(Boolean);
+          if (scripts.length === 0) throw new Error('Hey Jose chat scripts missing');
+          for (const code of scripts) new vm.Script(code);
+          NODE
       - name: Run Jose backend tests
         run: npm test
         working-directory: jose-backend
