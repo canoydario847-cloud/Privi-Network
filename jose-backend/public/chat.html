@@ -23,6 +23,17 @@ header{height:60px;display:flex;align-items:center;justify-content:space-between
 .devnet-status.connected::before{color:#7fe7a0}
 .devnet-status.offline::before{color:#f1b37a}
 header .actions{display:flex;gap:8px}
+#gmailPanel{padding:12px 22px;border-bottom:1px solid var(--line);background:#121a2a}
+#gmailPanel .inside{max-width:880px;margin:0 auto}
+#gmailPanel h2{margin:0 0 6px;font-size:16px;color:var(--gold)}
+#gmailPanel p{margin:4px 0 9px;color:var(--muted);font-size:12px}
+#gmailPanel input,#gmailPanel textarea{width:100%;border:1px solid #585775;border-radius:8px;padding:9px;background:#0e1422;color:var(--text);min-height:37px;max-height:260px}
+#gmailPanel textarea{resize:vertical;min-height:95px}
+#gmailPanel label{display:block;font-size:12px;color:var(--muted);margin:8px 0 2px}
+.gmail-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:9px 0}
+.gmail-actions button{font-size:13px;padding:7px 11px}
+#gmailPanel .gmail-review{padding:12px;border:1px solid #8a764c;border-radius:9px;background:#222231}
+#gmailReviewText{white-space:pre-wrap;overflow-wrap:anywhere;max-height:170px;overflow:auto}
 #memoryPanel{padding:15px 24px;border-bottom:1px solid var(--line);background:#171b2a}
 #memoryPanel .memory-inner{max-width:880px;margin:0 auto}
 #memoryPanel h2{font-size:16px;margin:0 0 7px;color:var(--gold)}
@@ -76,10 +87,40 @@ textarea::placeholder{color:#aaa7b9}
   <div class="actions">
     <button class="iconbutton" id="newChat" type="button" title="New conversation">New chat</button>
     <button class="iconbutton" id="memoryBtn" type="button" title="Review and control what Jose remembers">Memory</button>
+    <button class="iconbutton" id="gmailBtn" type="button" title="Connect Gmail, read and write emails">Gmail</button>
     <button class="iconbutton" id="copyReply" type="button" title="Copy last answer">Copy</button>
     <button class="iconbutton" id="exportChat" type="button" title="Export conversation">Export</button>
   </div>
 </header>
+<section id="gmailPanel" hidden aria-label="Gmail connection and email composer">
+ <div class="inside">
+  <h2>Gmail · Read and write with Jose</h2>
+  <p id="gmailStatus" role="status">Checking your account…</p>
+  <div id="gmailAuth" hidden><p>Sign in to a Jose account to connect your own Gmail. Gmail passwords are entered only on Google's consent page, never in Jose.</p>
+   <label for="gmailEmail">Jose account email</label><input id="gmailEmail" type="email" autocomplete="username" maxlength="254">
+   <label for="gmailPassword">Jose account password</label><input id="gmailPassword" type="password" autocomplete="current-password" minlength="8" maxlength="256">
+   <div class="gmail-actions"><button id="gmailLogin" type="button">Sign in</button><button id="gmailSignup" type="button">Create Jose account</button></div>
+  </div>
+  <div class="gmail-actions" id="gmailAccountActions" hidden>
+    <button type="button" id="gmailConnect">Connect Gmail using Google</button>
+    <button type="button" id="gmailInbox">Read recent inbox</button>
+    <button type="button" id="gmailDisconnect">Disconnect Gmail</button>
+  </div>
+  <div id="gmailCompose" hidden>
+    <p>Jose can write the message. Review every recipient and word before sending. Nothing is sent until you approve.</p>
+    <label for="gmailTo">Recipient</label><input id="gmailTo" type="email" autocomplete="off" placeholder="someone@example.com">
+    <label for="gmailSubject">Subject</label><input id="gmailSubject" maxlength="180" autocomplete="off" placeholder="Email subject">
+    <label for="gmailText">Message</label><textarea id="gmailText" maxlength="16000" placeholder="Write here, or ask Jose to draft an email, then choose Use last Jose answer"></textarea>
+    <div class="gmail-actions"><button id="gmailUseReply" type="button">Use last Jose answer</button><button id="gmailPrepare" type="button">Review email</button></div>
+    <div id="gmailReview" class="gmail-review" hidden>
+      <strong>Final email review</strong>
+      <p id="gmailReviewHeader"></p>
+      <div id="gmailReviewText"></div>
+      <div class="gmail-actions"><button id="gmailConfirm" type="button">Send this exact email</button><button id="gmailCancel" type="button">Edit / cancel</button></div>
+    </div>
+  </div>
+ </div>
+</section>
 <section id="memoryPanel" hidden aria-label="Hey Jose saved memories">
 <div class="memory-inner">
 <h2>Memory · Your choices</h2>
@@ -258,5 +299,6 @@ input.focus();
 </script>
 <script src="/chat-extras.js?v=20261123-onechat"></script>
 <script src="/chat-memory.js?v=20261123"></script><script>window.joseMemory?.setup();</script>
+<script src="/chat-gmail.js?v=20261123-gmail"></script>
 </body>
 </html>
