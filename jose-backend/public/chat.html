@@ -17,7 +17,12 @@ button:focus-visible,textarea:focus-visible{outline:2px solid var(--gold);outlin
 #app{min-height:100dvh;display:flex;flex-direction:column;max-width:1120px;margin:0 auto}
 header{height:60px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 24px;border-bottom:1px solid #ffffff17}
 .brand{font:700 21px Georgia,serif;letter-spacing:.03em;color:var(--gold);text-shadow:0 0 16px #e08b4c33}
-.brand span{color:#e9d8f6}header .actions{display:flex;gap:8px}
+.brand span{color:#e9d8f6}
+.devnet-status{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin-left:12px;white-space:nowrap}
+.devnet-status::before{content:'•';font-size:18px;color:#a7a4b2;line-height:1}
+.devnet-status.connected::before{color:#7fe7a0}
+.devnet-status.offline::before{color:#f1b37a}
+header .actions{display:flex;gap:8px}
 .iconbutton{border-color:transparent;background:transparent;padding:7px 10px;color:var(--muted);font-size:13px}
 .iconbutton:hover{color:var(--text)}
 main{flex:1;display:flex;flex-direction:column;min-height:0}
@@ -47,14 +52,14 @@ textarea::placeholder{color:#aaa7b9}
 #status{min-height:19px;max-width:880px;margin:8px auto 0;color:var(--muted);font-size:12px;text-align:center}
 #attachmentStatus{max-width:880px;margin:5px auto 0;color:var(--muted);font-size:12px;text-align:center}
 #attachmentStatus:empty{display:none}
-@media(max-width:650px){header{padding:9px 12px}.brand{font-size:18px}.iconbutton{padding:7px 5px}#feed{padding:18px 12px}.composer-area{padding:8px 8px 14px}.welcome{padding:38px 8px}.bubble.jose{padding-left:28px}.send{min-width:72px}}
+@media(max-width:650px){.devnet-status{display:block;margin-left:0;font-size:10px}header{padding:9px 12px}.brand{font-size:18px}.iconbutton{padding:7px 5px}#feed{padding:18px 12px}.composer-area{padding:8px 8px 14px}.welcome{padding:38px 8px}.bubble.jose{padding-left:28px}.send{min-width:72px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 </style>
 </head>
 <body>
 <div id="app">
 <header>
-  <div class="brand" aria-label="Hey Jose">Hey <span>Jose</span> ✦</div>
+  <div><span class="brand" aria-label="Hey Jose">Hey <span>Jose</span> ✦</span><span class="devnet-status" id="devnetStatus" title="Privi Devnet — checking actual RPC and chain ID">Devnet: checking…</span></div>
   <div class="actions">
     <button class="iconbutton" id="newChat" type="button" title="New conversation">New chat</button>
     <button class="iconbutton" id="copyReply" type="button" title="Copy last answer">Copy</button>
@@ -195,6 +200,29 @@ fetch('/api/chat/status',{credentials:'same-origin'}).then(async r=>{
   const d=await r.json();
   status.textContent=d.available?'':"Jose AI is not configured. The site operator must connect an AI provider before answers work.";
 }).catch(()=>{status.textContent='Could not reach Jose. Try refreshing the page.';});
+async function checkPriviDevnet(){
+  const node=document.getElementById('devnetStatus');
+  try{
+    const res=await fetch('/api/devnet/status',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(9000)});
+    if(!res.ok)throw Error('RPC status unavailable');
+    const state=await res.json();
+    if(state.connected&&state.observedEvmChainId===772626&&Number.isInteger(state.latestBlock)){
+      node.className='devnet-status connected';
+      node.textContent='Privi Devnet connected';
+      node.title='Verified valueless TEST devnet · EVM chain 772626 · block '+state.latestBlock;
+    }else{
+      node.className='devnet-status offline';
+      node.textContent='Devnet unverified';
+      node.title=state.reason||'Privi Devnet RPC connection is not verified';
+    }
+  }catch{
+    node.className='devnet-status offline';
+    node.textContent='Devnet offline';
+    node.title='Unable to verify the devnet endpoint; Hey Jose chat may remain available';
+  }
+}
+void checkPriviDevnet();
+setInterval(()=>{void checkPriviDevnet();},60000);
 input.focus();
 </script>
 <script src="/chat-extras.js?v=20261123-onechat"></script>
