@@ -1,78 +1,202 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chat · Hey Jose · A.I.S. Build Studio</title><style>
-:root{color-scheme:dark;--bg:#090e1b;--panel:#101827;--line:#30394b;--text:#f3f4fa;--muted:#bbc3d3;--gold:#f5c582}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 "Inter",system-ui,sans-serif}
-.shell{width:min(1160px,92%);margin:auto}header{border-bottom:1px solid var(--line);background:#0a101e}header .shell,footer .shell,.bar{display:flex;align-items:center;justify-content:space-between;gap:18px}header .shell{min-height:68px}nav{display:flex;gap:clamp(10px,2vw,28px);align-items:center;flex-wrap:wrap}a{color:inherit;text-decoration:none}a:hover{color:var(--gold)}a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:3px solid #a5cfff;outline-offset:3px}.brand{display:inline-flex;align-items:center;gap:10px;font-weight:750;white-space:nowrap}.brand i{width:25px;height:25px;display:block;border:2px solid var(--gold);border-radius:50%;position:relative}.brand i:after{content:'';position:absolute;inset:7px -7px;border:2px solid var(--gold);border-radius:50%;transform:rotate(-32deg)}header nav{font-size:.9rem;color:var(--muted)}
-.hero{position:relative;overflow:hidden;isolation:isolate;background:linear-gradient(90deg,#090e1beF 0%,#0d1425c9 48%,#0b122755 100%),url("https://science.nasa.gov/wp-content/uploads/2023/06/solar-system-model.jpg") center/cover no-repeat,radial-gradient(ellipse at 76% 30%,#35415a 0%,#1d283f 23%,#101a2b 49%,#090e1b 80%);border-bottom:1px solid var(--line)}
-.hero:before{content:'';position:absolute;inset:0;z-index:-2;background-image:radial-gradient(1px 1px at 15px 27px,#fff 85%,transparent),radial-gradient(1.4px 1.4px at 104px 86px,#cde1ff 70%,transparent),radial-gradient(1px 1px at 66px 41px,#fff 65%,transparent);background-size:127px 113px,241px 199px,193px 157px;opacity:.54}.hero .shell{min-height:380px;display:grid;align-content:center;position:relative}.hero-copy{position:relative;z-index:1;width:max-content;max-width:58%;padding:48px 0}.eyebrow{color:var(--gold);font:600 .76rem/1.5 ui-monospace,monospace;letter-spacing:.15em;text-transform:uppercase;margin:0 0 12px}
-h1,h2,p{margin-top:0}h1{font-size:clamp(3.8rem,7.2vw,7rem);letter-spacing:-.075em;line-height:.95;margin-bottom:16px}h1 small{font-size:.43em;letter-spacing:-.045em;color:#f2d9b6}.subtitle{color:#d0d9ea;font-size:clamp(1rem,2vw,1.45rem);margin:0 0 25px}.actions{display:flex;flex-wrap:wrap;gap:12px}.cta,button{font:600 .92rem/1.25 inherit;font-family:inherit;cursor:pointer}.cta,button{display:inline-flex;align-items:center;justify-content:center;border-radius:9px;border:1px solid var(--line);padding:11px 17px;color:var(--text);background:#192336;font-weight:650}.primary{color:#1e1820;background:var(--gold);border-color:var(--gold)}a.primary:hover,button.primary:hover{background:#ffdab0;color:#18131c}button:disabled{opacity:.55;cursor:default}
-.space-art{position:absolute;pointer-events:none;width:min(45vw,530px);aspect-ratio:1.7;right:1%;top:49%;transform:translateY(-50%) rotate(-23deg);z-index:-1}.globe{position:absolute;left:29%;top:14%;width:42%;aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 28% 20%,#ffebbc55,transparent 43%),radial-gradient(circle at 22% 25%,transparent 25%,#1b182553 61%,#070d1c 94%),repeating-linear-gradient(3deg,#d7a574 0%,#e7bd86 5%,#b88866 8%,#e5bb90 12%,#d8aa7a 17%);box-shadow:inset 3px 1px 5px #ffe1a9,8px 8px 40px #090e1b66}.rings{position:absolute;left:0;top:35%;width:100%;height:32%;border-radius:50%;background:repeating-radial-gradient(ellipse closest-side,transparent 0 49%,#927c7155 50% 53%,#e1c399 54% 59%,#a48776 60% 61%,#d6b18b 62% 69%,#e2cbb0 70% 72%,#806d64 73% 74%,#bdab97 75% 79%,transparent 80% 82%,#b1947e 83% 89%,#bfa892 90% 94%,transparent 95% 100%)}.front{clip-path:inset(50% 0 0)}.moon{position:absolute;width:7%;aspect-ratio:1;right:13%;top:3%;border-radius:50%;background:radial-gradient(circle at 28% 25%,#eee3cf,#8d8291 36%,#252b42 69%,#121a2b)}.distant{position:absolute;left:14%;top:78%;width:3.5%;aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 25% 20%,#99d5f8,#3d669f 43%,#151f35 79%)}
-.workspace{margin:36px auto}.bar{align-items:flex-start;flex-wrap:wrap;margin-bottom:20px}h2{font-size:clamp(1.5rem,3vw,2rem);letter-spacing:-.045em;margin-bottom:4px}.muted,#status,#description{color:var(--muted)}#status{margin:0}.panels{display:grid;grid-template-columns:minmax(0,.94fr) minmax(0,1.06fr);gap:16px}.panel{min-width:0;background:linear-gradient(130deg,#172031,var(--panel) 80%);border:1px solid var(--line);border-radius:16px;padding:clamp(17px,3vw,30px)}h3{font-size:1.2rem;letter-spacing:-.02em;margin:0 0 15px}label,summary{display:block;font-size:.91rem;font-weight:650;margin:15px 0 6px}summary{cursor:pointer;color:#e7cba3}input,textarea,select{width:100%;font:inherit;background:#0a111f;border:1px solid #465166;color:var(--text);padding:11px;border-radius:8px}textarea,pre{font: .92rem/1.55 ui-monospace,monospace}textarea{resize:vertical}pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:400px;overflow:auto}.terms{font-size:.86rem;color:var(--muted);margin:12px 0 18px}#output:not(:empty){padding:14px;background:#090f1b;border-radius:8px}#network{margin:24px auto 40px}footer{border-top:1px solid var(--line);padding:20px 0;color:var(--muted);font-size:.85rem}
-@media(max-width:720px){.hero .shell{min-height:330px}.space-art{width:54vw;right:-9%;top:35%}.hero-copy{max-width:69%}.panels{grid-template-columns:1fr}.actions{gap:8px}header .shell{min-height:58px}.workspace{margin-top:26px}}@media(max-width:460px){header nav{gap:10px;font-size:.8rem}.hero .shell{min-height:355px;align-content:end}.hero-copy{max-width:100%;padding:115px 0 26px}.space-art{width:54vw;right:0;top:19%}h1{font-size:3.6rem}.hero-copy .eyebrow{margin-bottom:7px}.cta{padding:10px 13px}}
-
-.conversation{min-height:160px;max-height:56vh;overflow:auto;display:flex;flex-direction:column;gap:12px}.entry{align-self:flex-start;max-width:min(85%,720px);white-space:pre-wrap;overflow-wrap:anywhere;padding:12px 16px;background:#222f46;border-radius:14px}.entry.user{align-self:flex-end;background:#514235}.entry.error{color:#ffc7c7}.conversation:empty{min-height:30px}.chat-form{margin-top:20px}.chat-form button{margin-top:10px}.speak-toggle{display:flex;align-items:center;gap:8px;margin:10px 0;color:var(--muted)}.speak-toggle input{width:auto}.hero .shell{min-height:235px}.hero-copy{padding:26px 0}.space-art{max-width:380px}.chat-heading{font-size:clamp(2.6rem,6vw,5.4rem)}@media(max-width:460px){.hero .shell{min-height:260px}.hero-copy{padding-top:115px}.space-art{top:21%}}
-
-.solar{position:absolute;right:0;top:50%;width:min(47vw,545px);aspect-ratio:1.7;transform:translateY(-50%) rotate(-14deg);pointer-events:none;z-index:-1}.sun{position:absolute;left:50%;top:50%;width:12%;aspect-ratio:1;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle at 40% 40%,#fffadb 0%,#ffe8a5 32%,#ffc36b 68%,#ea7f3d);box-shadow:0 0 14px #ffd080,0 0 42px #ffb353a1,0 0 90px #df813e77}
-.orbit{position:absolute;inset:var(--oy) var(--ox);border:1px solid #bbb7ce42;border-radius:50%}.traveler{position:absolute;inset:0 auto auto 0;width:var(--size);aspect-ratio:1;offset-path:ellipse(50% 50% at 50% 50%) border-box;offset-rotate:0deg;animation:orbit var(--period) linear infinite;animation-delay:var(--phase);border-radius:50%;background:radial-gradient(circle at 30% 24%,var(--light),var(--base) 45%,#17192c 85%);box-shadow:inset 1px 1px 2px #ffffff55}
-.orbit.inner{--ox:35%;--oy:35%;--size:7%;--period:13s;--phase:-3s;--light:#f9dfc5;--base:#ce8151}
-.orbit.blue{--ox:23%;--oy:24%;--size:6%;--period:22s;--phase:-17s;--light:#c8f0fb;--base:#437bb6}
-.orbit.ringed{--ox:11%;--oy:13%;--size:12%;--period:34s;--phase:-2s;--light:#f5d6a4;--base:#bf8e68}.ringed .traveler:after{content:"";position:absolute;inset:34% -42%;border:3px double #dec49e;border-radius:50%;transform:rotate(-14deg);box-shadow:0 1px 0 #93735e}
-.orbit.outer{--ox:1%;--oy:2%;--size:4%;--period:47s;--phase:-23s;--light:#c8ceff;--base:#6e71b4}
-@keyframes orbit{to{offset-distance:100%}}.paused .traveler{animation-play-state:paused}.motion{position:absolute;bottom:10px;right:1%;font-size:.76rem;padding:6px 10px;background:#101828e8;color:#e7daff;z-index:2}
-@media(prefers-reduced-motion:reduce){.traveler{animation-play-state:paused}.playing .traveler{animation-play-state:running}}
-@media(max-width:720px){.solar{width:47vw;right:-1%;top:34%}}@media(max-width:460px){.solar{top:21%;width:51vw}.motion{top:10px;bottom:auto;right:auto;left:0}.hero .shell{min-height:360px}}
-
-#joseModes{margin-bottom:13px;gap:8px}
-[hidden]{display:none!important}
-#joseModes [hidden],#appPreview[hidden],#buildHelp[hidden]{display:none}
-#appPreview{margin:13px 0;border:1px solid #465166;border-radius:10px;padding:6px;background:white}
-#appFrame{width:100%;height:480px;max-height:65vh;border:0;background:white}
-</style></head><body><header><div class="shell"><span class="brand"><i aria-hidden="true"></i>Privi World</span><nav><a href="https://jose-site-21hs.onrender.com/web3.html" data-en="Web3 Studio" data-es="Estudio Web3">Web3 Studio</a><a href="https://jose-site-21hs.onrender.com/#workspace" data-en="Tool workspace" data-es="Herramientas">Tool workspace</a><a href="https://jose-site-21hs.onrender.com/" data-en="Hey Jose home" data-es="Inicio de Hey Jose">Hey Jose home</a><button id="language" class="lang" type="button">Español</button></nav></div></header><main>
-<section class="hero"><div class="shell"><div class="solar" aria-hidden="true"><span class="sun"></span><span class="orbit inner"><i class="traveler"></i></span><span class="orbit blue"><i class="traveler"></i></span><span class="orbit ringed"><i class="traveler"></i></span><span class="orbit outer"><i class="traveler"></i></span></div><button type="button" id="orbit-motion" class="motion" aria-label="Pause planetary orbits">Pause orbits</button><div class="hero-copy"><p class="eyebrow">Hey Jose · General AI + Web3</p><h1 class="chat-heading" data-en="Chat with Jose" data-es="Habla con Jose">Chat with Jose</h1></div></div></section>
-<section class="shell workspace panel"><p id="status" role="status">Checking AI availability…</p>
-<div class="actions"><button id="newChat" type="button">New chat</button><button id="exportChat" type="button">Export chat</button><button id="copyReply" type="button">Copy last answer</button></div>
-<p class="muted">Ask about writing, explanations, planning, coding, images, text files and Web3. Live web access and third-party actions require separate connections.</p>
-<div class="actions" id="joseModes"><button id="chatMode" type="button" class="primary" aria-pressed="true">Chat</button><button id="buildMode" type="button" aria-pressed="false">Build App</button><button id="web3Mode" type="button" aria-pressed="false">Web3 AI</button><button id="downloadApp" type="button" hidden>Download HTML</button><button id="previewApp" type="button" hidden>Preview app</button></div>
-<p id="buildHelp" class="muted" hidden>Describe a browser app. Jose will generate a self-contained HTML file you can preview and save. External APIs and deployments are not included.</p>
-<div id="appPreview" hidden><iframe id="appFrame" title="Isolated Hey Jose app preview" sandbox="allow-scripts" referrerpolicy="no-referrer" loading="lazy"></iframe></div>
-<div id="conversation" class="conversation" role="log" aria-live="polite"></div>
-<form id="chat" class="chat-form"><label for="message" data-en="Your message" data-es="Tu mensaje">Your message</label><textarea id="message" rows="3" maxlength="12000" placeholder="Ask in English or Spanish… / Pregunta en inglés o español…" required></textarea><div class="actions"><button class="primary" id="send" type="submit"><span data-en="Send message →" data-es="Enviar mensaje →">Send message →</span></button><button id="voice" type="button"><span data-en="🎙 Speak to Jose" data-es="🎙 Hablar con Jose">🎙 Speak to Jose</span></button><button id="attach" type="button">📎 Attach file</button><button id="clearAttachment" type="button" hidden>Remove attachment</button><label class="speak-toggle"><input id="speak" type="checkbox"><span data-en="Read replies aloud" data-es="Leer respuestas en voz alta">Read replies aloud</span></label></div><input id="attachmentFile" type="file" accept="image/png,image/jpeg,image/webp,.txt,.md,.csv,.json,.js,.ts,.py,.html,.css,.sol,.xml,.yaml,.yml,.log,.sql" hidden><p class="muted" id="attachmentStatus" role="status">Images and small text/code files supported. PDF and video uploads are not yet supported.</p></form></section><script>
-const log=document.getElementById('conversation'),status=document.getElementById('status'),send=document.getElementById('send');
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#090e1b">
+<title>Hey Jose · Ask anything</title>
+<style>
+:root{color-scheme:dark;--bg:#090e1b;--panel:#131a2b;--line:#3b4055;--text:#f6f0e8;--muted:#b8b5c9;--gold:#f5c582;--violet:#b2a1ea}
+*{box-sizing:border-box}[hidden]{display:none!important}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font:15px/1.6 system-ui,-apple-system,Segoe UI,sans-serif}
+body{background:radial-gradient(circle at 95% 0%,#38224b55,transparent 36%),linear-gradient(160deg,#090e1b,#111321)}
+button,textarea{font:inherit}
+button{cursor:pointer;color:var(--text);background:#1c2335;border:1px solid var(--line);border-radius:9px;padding:9px 13px}
+button:hover{background:#2c3347}button:disabled{opacity:.55;cursor:default}
+button:focus-visible,textarea:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+#app{min-height:100dvh;display:flex;flex-direction:column;max-width:1120px;margin:0 auto}
+header{height:60px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 24px;border-bottom:1px solid #ffffff17}
+.brand{font:700 21px Georgia,serif;letter-spacing:.03em;color:var(--gold);text-shadow:0 0 16px #e08b4c33}
+.brand span{color:#e9d8f6}header .actions{display:flex;gap:8px}
+.iconbutton{border-color:transparent;background:transparent;padding:7px 10px;color:var(--muted);font-size:13px}
+.iconbutton:hover{color:var(--text)}
+main{flex:1;display:flex;flex-direction:column;min-height:0}
+#feed{flex:1;overflow-y:auto;min-height:160px;scrollbar-color:#4e546a transparent;padding:23px 22px 40px;display:flex;flex-direction:column;gap:22px}
+.welcome{margin:auto;text-align:center;max-width:660px;padding:48px 16px}
+.welcome .emblem{display:inline-grid;place-items:center;width:64px;height:64px;border:1px solid #edbb81aa;transform:rotate(-14deg);border-radius:45%;color:var(--gold);font:34px Georgia,serif;box-shadow:0 0 45px #9e61372c}
+h1{font:600 clamp(30px,5vw,48px)/1.2 Georgia,serif;letter-spacing:-.04em;margin:22px 0 8px}
+.welcome p{margin:0;color:var(--muted);font-size:15px}
+.bubble{max-width:min(860px,93%);white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.68}
+.bubble.user{align-self:flex-end;background:#2d263c;border:1px solid #6b547a70;border-radius:20px 20px 5px 20px;padding:12px 17px}
+.bubble.jose{align-self:flex-start;padding:5px 0 10px 34px;position:relative;width:100%}
+.bubble.jose:before{content:'✦';position:absolute;top:1px;left:0;color:var(--gold);font-size:21px}
+.bubble.error{color:#ffc8bc;border-left:3px solid #eb8b73;padding:10px 15px;align-self:flex-start}
+#artifact{padding:10px 22px 15px}
+#artifact .bar{display:flex;gap:8px;flex-wrap:wrap}
+#preview{margin-top:10px;border-radius:9px;background:white;width:100%;height:400px;border:1px solid #515c77}
+.composer-area{padding:13px 18px max(15px,env(safe-area-inset-bottom));background:linear-gradient(transparent,#090e1b 22%)}
+.composer{max-width:880px;margin:0 auto;border:1px solid #56506b;background:#161827;border-radius:21px;box-shadow:0 10px 40px #0005}
+textarea{resize:none;display:block;min-height:58px;max-height:180px;width:100%;border:0;background:transparent;color:var(--text);padding:17px 18px 7px;outline:0}
+textarea::placeholder{color:#aaa7b9}
+.composer .toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:3px 10px 9px}
+.tools{display:flex;align-items:center;gap:5px}
+.tools button{border:0;background:transparent;font-size:20px;min-width:40px;height:38px;padding:4px 9px}
+.tools button:hover{background:#2b3042}
+.send{background:var(--gold);border-color:var(--gold);color:#241b20;font-weight:700;min-width:82px}
+.send:hover{background:#ffe0ae}
+#status{min-height:19px;max-width:880px;margin:8px auto 0;color:var(--muted);font-size:12px;text-align:center}
+#attachmentStatus{max-width:880px;margin:5px auto 0;color:var(--muted);font-size:12px;text-align:center}
+#attachmentStatus:empty{display:none}
+@media(max-width:650px){header{padding:9px 12px}.brand{font-size:18px}.iconbutton{padding:7px 5px}#feed{padding:18px 12px}.composer-area{padding:8px 8px 14px}.welcome{padding:38px 8px}.bubble.jose{padding-left:28px}.send{min-width:72px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<div id="app">
+<header>
+  <div class="brand" aria-label="Hey Jose">Hey <span>Jose</span> ✦</div>
+  <div class="actions">
+    <button class="iconbutton" id="newChat" type="button" title="New conversation">New chat</button>
+    <button class="iconbutton" id="copyReply" type="button" title="Copy last answer">Copy</button>
+    <button class="iconbutton" id="exportChat" type="button" title="Export conversation">Export</button>
+  </div>
+</header>
+<main>
+  <div id="feed" role="log" aria-label="Conversation" aria-live="polite">
+    <section class="welcome" id="welcome"><div class="emblem" aria-hidden="true">✦</div><h1>What can I help you with?</h1><p>Ask anything. Jose can help with everyday questions, writing, coding and Web3 ideas—all here in one conversation.</p></section>
+  </div>
+  <div id="artifact" hidden><div class="bar"><button id="downloadApp" type="button">Download generated HTML</button><button id="previewApp" type="button">Preview here</button></div><iframe id="preview" title="Isolated app preview" sandbox="allow-scripts" referrerpolicy="no-referrer" hidden></iframe></div>
+</main>
+<div class="composer-area">
+  <form class="composer" id="chat">
+    <label for="message" class="visually-hidden" style="position:absolute;left:-10000px">Your question</label>
+    <textarea id="message" rows="2" maxlength="12000" placeholder="Ask Hey Jose anything…" aria-label="Ask Hey Jose anything" required></textarea>
+    <div class="toolbar"><div class="tools">
+      <button id="attach" type="button" title="Attach image or text file" aria-label="Attach file">＋</button>
+      <button id="clearAttachment" type="button" title="Remove attachment" aria-label="Remove attachment" hidden>×</button>
+      <button id="voice" type="button" title="Dictate your question" aria-label="Use microphone">🎙</button>
+    </div><button id="send" class="send" type="submit">Send ↑</button></div>
+    <input id="attachmentFile" type="file" accept="image/png,image/jpeg,image/webp,.txt,.md,.csv,.json,.js,.ts,.py,.html,.css,.sol,.xml,.yaml,.yml,.log,.sql" hidden>
+  </form>
+  <p id="attachmentStatus" role="status"></p>
+  <p id="status" role="status">Connecting to Jose…</p>
+</div>
+</div>
+<script>
+const feed=document.getElementById('feed');
+const input=document.getElementById('message');
+const status=document.getElementById('status');
+const form=document.getElementById('chat');
+const send=document.getElementById('send');
 const history=[];
+let running=false,generatedApp='';
 window.joseChatHistory=history;
-window.joseResetChat=()=>{history.length=0;log.replaceChildren();updateAppActions('');document.getElementById('message').value='';setMode('chat');};
-let currentMode='chat';
-let generatedApp='';
-function setMode(mode){currentMode=['chat','build','web3'].includes(mode)?mode:'chat';document.getElementById('chatMode').classList.toggle('primary',currentMode==='chat');document.getElementById('buildMode').classList.toggle('primary',currentMode==='build');document.getElementById('web3Mode').classList.toggle('primary',currentMode==='web3');document.getElementById('chatMode').setAttribute('aria-pressed',String(currentMode==='chat'));document.getElementById('buildMode').setAttribute('aria-pressed',String(currentMode==='build'));document.getElementById('web3Mode').setAttribute('aria-pressed',String(currentMode==='web3'));document.getElementById('buildHelp').hidden=currentMode!=='build';document.getElementById('message').placeholder=currentMode==='build'?'Describe a browser app to build…':currentMode==='web3'?'Describe a token, NFT, contract, ledger or chain you want to build…':'Ask Hey Jose anything…';}
-document.getElementById('chatMode').addEventListener('click',()=>setMode('chat'));
-document.getElementById('buildMode').addEventListener('click',()=>setMode('build'));
-document.getElementById('web3Mode').addEventListener('click',()=>setMode('web3'));
-
-function extractApp(text){const match=String(text).match(/```html\s*([\s\S]*?)```/i);const html=(match?match[1]:text).trim();return /^(<!doctype\s+html|<html[\s>])/i.test(html)&&/<\/html\s*>/i.test(html)?html:null;}
-function updateAppActions(text){generatedApp=extractApp(text)||'';document.getElementById('downloadApp').hidden=!generatedApp;document.getElementById('previewApp').hidden=!generatedApp;document.getElementById('appPreview').hidden=true;}
-document.getElementById('downloadApp').addEventListener('click',()=>{if(!generatedApp)return;const url=URL.createObjectURL(new Blob([generatedApp],{type:'text/html;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='hey-jose-app.html';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);});
-document.getElementById('previewApp').addEventListener('click',()=>{if(!generatedApp)return;document.getElementById('appFrame').srcdoc=generatedApp;document.getElementById('appPreview').hidden=false;});
-function entry(role,text){const el=document.createElement('div');el.className='entry '+role;el.textContent=(role==='user'?(document.documentElement.lang==='es'?'Tú: ':'You: '):role==='jose'?'Jose: ':'')+text;log.append(el);log.scrollTop=log.scrollHeight;if(role==='jose'&&document.getElementById('speak').checked&&'speechSynthesis'in window){speechSynthesis.cancel();speechSynthesis.speak(new SpeechSynthesisUtterance(text));}}
-fetch('/api/chat/status',{credentials:'same-origin'}).then(async r=>{const d=await r.json();status.textContent=d.available?(document.documentElement.lang==='es'?'Jose está listo para responder.':'Jose is ready for questions.'):(document.documentElement.lang==='es'?'El chat necesita que el administrador configure el proveedor de IA.':'Chat answers need the operator to configure JOSE_AI_API_KEY on Render.');}).catch(()=>status.textContent='Could not check the AI service.');
-document.getElementById('language').addEventListener('click',()=>setLanguage(document.documentElement.lang==='en'?'es':'en'));
-function setLanguage(lang){document.documentElement.lang=lang;localStorage.setItem('jose-language',lang);document.querySelectorAll('[data-en][data-es]').forEach(el=>el.textContent=el.dataset[lang]);document.getElementById('language').textContent=lang==='en'?'Español':'English';}
-setLanguage(localStorage.getItem('jose-language')||'en');
-document.getElementById('voice').addEventListener('click',()=>{const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SpeechRecognition){status.textContent=document.documentElement.lang==='es'?'El dictado por voz no está disponible en este navegador.':'Voice input is not available in this browser.';return;}const recognition=new SpeechRecognition();recognition.lang=document.documentElement.lang==='es'?'es-ES':'en-US';recognition.interimResults=false;recognition.onresult=event=>{document.getElementById('message').value=event.results[0][0].transcript;document.getElementById('message').focus();};recognition.onerror=()=>{status.textContent=document.documentElement.lang==='es'?'No se pudo reconocer la voz. Inténtalo de nuevo.':'Voice input failed. Please try again.';};recognition.start();});
-window.addEventListener('message',event=>{if(event.origin!=='https://jose-site-21hs.onrender.com'||event.data?.type!=='jose-initial-message'||typeof event.data.message!=='string')return;setMode(event.data.mode);document.getElementById('message').value=event.data.message;document.getElementById('message').focus();if(event.data.message.trim())document.getElementById('chat').requestSubmit();});
-document.getElementById('chat').addEventListener('submit',async e=>{e.preventDefault();const field=document.getElementById('message'),message=field.value.trim(),attachment=window.joseAddons?.getAttachment?.()||null;if(!message){status.textContent='Write a question before sending.';return;}entry('user',message+(attachment?'\n[Attached '+attachment.kind+': '+attachment.name+']':''));field.value='';updateAppActions('');send.disabled=true;status.textContent='Jose is thinking…';try{const r=await fetch('/api/chat',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({message,mode:currentMode,history:history.slice(-16),attachments:attachment?[attachment]:[]})});const d=await r.json().catch(()=>({error:'The server returned an invalid response.'}));if(!r.ok)throw Error(d.error||'Unable to answer');entry('jose',d.answer);window.joseAddons?.onSent?.(d.answer);if(d.mode==='build')updateAppActions(d.answer);else updateAppActions('');history.push({role:'user',content:message},{role:'assistant',content:d.answer});while(history.length>16)history.shift();status.textContent=d.mode==='build'?(generatedApp?'App ready: preview or download HTML.':'Build reply received. A complete HTML file was not detected.'):'Ready';}catch(err){entry('error',err.message);field.value=message;status.textContent='Answer failed — details shown above. Retry when ready.';}finally{send.disabled=false;field.focus();}});
-</script></main><script>
-(() => {
-  const scene = document.querySelector(".solar");
-  const button = document.getElementById("orbit-motion");
-  const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
-  let paused = preference.matches;
-  function update() {
-    scene.classList.toggle("paused", paused);
-    scene.classList.toggle("playing", !paused);
-    button.textContent = paused ? "Play orbits" : "Pause orbits";
-    button.setAttribute("aria-label", paused ? "Play planetary orbits" : "Pause planetary orbits");
+function showWelcome(show){document.getElementById('welcome').hidden=!show;}
+function showMessage(role,message){
+  showWelcome(false);
+  const node=document.createElement('div');
+  node.className='bubble '+role;
+  node.textContent=message;
+  feed.append(node);
+  node.scrollIntoView({block:'end',behavior:'smooth'});
+}
+function artifactFromAnswer(message){
+  const matched=String(message).match(/\x60{3}html\s*([\s\S]*?)\x60{3}/i);
+  const html=(matched?matched[1]:message).trim();
+  if(/^(?:<!doctype\s+html|<html[\s>])/i.test(html)&&/<\/html\s*>/i.test(html))return html;
+  return '';
+}
+function clearArtifact(){
+  generatedApp='';
+  document.getElementById('artifact').hidden=true;
+  const frame=document.getElementById('preview');
+  frame.hidden=true;
+  frame.removeAttribute('srcdoc');
+}
+window.joseResetChat=()=>{
+  if(running)return;
+  history.length=0;
+  [...feed.querySelectorAll('.bubble')].forEach(node=>node.remove());
+  clearArtifact();showWelcome(true);input.value='';
+  input.focus();
+};
+document.getElementById('downloadApp').addEventListener('click',()=>{
+  if(!generatedApp)return;
+  const url=URL.createObjectURL(new Blob([generatedApp],{type:'text/html;charset=utf-8'}));
+  const link=document.createElement('a');link.href=url;link.download='hey-jose-app.html';
+  document.body.append(link);link.click();link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
+document.getElementById('previewApp').addEventListener('click',()=>{
+  if(!generatedApp)return;
+  const frame=document.getElementById('preview');
+  frame.srcdoc=generatedApp;frame.hidden=false;
+});
+document.getElementById('voice').addEventListener('click',()=>{
+  const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SpeechRecognition){status.textContent='Microphone dictation is not supported in this browser.';return;}
+  const recognition=new SpeechRecognition();
+  recognition.lang=document.documentElement.lang==='es'?'es-ES':'en-US';
+  recognition.onresult=e=>{input.value=e.results[0][0].transcript;input.focus();};
+  recognition.onerror=()=>{status.textContent='Microphone recognition failed. Try typing your question.';};
+  recognition.start();
+});
+input.addEventListener('keydown',event=>{
+  if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){
+    event.preventDefault();
+    if(!running)form.requestSubmit();
   }
-  button.addEventListener("click", () => { paused = !paused; update(); });
-  preference.addEventListener("change", event => { paused = event.matches; update(); });
-  update();
-})();
-</script><script src="/chat-extras.js?v=20261123"></script></body></html>
+});
+window.addEventListener('message',event=>{
+  if(event.origin!=='https://jose-site-21hs.onrender.com'||
+     event.data?.type!=='jose-initial-message'||
+     typeof event.data.message!=='string')return;
+  input.value=event.data.message.slice(0,12000);
+  if(input.value.trim()&&!running)form.requestSubmit();
+});
+form.addEventListener('submit',async event=>{
+  event.preventDefault();
+  if(running)return;
+  const message=input.value.trim();
+  if(!message)return;
+  const attachment=window.joseAddons?.getAttachment?.()||null;
+  running=true;send.disabled=true;input.disabled=true;
+  showMessage('user',message+(attachment?'\n[Attached '+attachment.kind+': '+attachment.name+']':''));
+  input.value='';
+  clearArtifact();
+  status.textContent='Jose is answering…';
+  try {
+    const r=await fetch('/api/chat',{
+      method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',
+      body:JSON.stringify({message,history:history.slice(-16),attachments:attachment?[attachment]:[]})
+    });
+    const data=await r.json().catch(()=>({error:'Jose returned an invalid response.'}));
+    if(!r.ok)throw new Error(data.error||'Unable to answer.');
+    if(typeof data.answer!=='string'||!data.answer.trim())throw new Error('Jose did not return an answer.');
+    showMessage('jose',data.answer);
+    window.joseAddons?.onSent?.(data.answer);
+    history.push({role:'user',content:message},{role:'assistant',content:data.answer.slice(0,12000)});
+    while(history.length>16||history.reduce((n,item)=>n+item.content.length,0)>42000)history.splice(0,2);
+    if(data.mode==='build'){
+      generatedApp=artifactFromAnswer(data.answer);
+      document.getElementById('artifact').hidden=!generatedApp;
+    }
+    status.textContent='';
+  } catch(error){
+    showMessage('error',error.message||'Jose could not answer your question.');
+    input.value=message;
+    status.textContent='The answer failed. Check the message above and retry.';
+  } finally {
+    input.disabled=false;send.disabled=false;running=false;input.focus();
+  }
+});
+fetch('/api/chat/status',{credentials:'same-origin'}).then(async r=>{
+  if(!r.ok)throw new Error('Status unavailable');
+  const d=await r.json();
+  status.textContent=d.available?'':"Jose AI is not configured. The site operator must connect an AI provider before answers work.";
+}).catch(()=>{status.textContent='Could not reach Jose. Try refreshing the page.';});
+input.focus();
+</script>
+<script src="/chat-extras.js?v=20261123-onechat"></script>
+</body>
+</html>
