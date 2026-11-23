@@ -82,6 +82,7 @@
   });
   window.joseAddons={
     getAttachment:()=>attachment,
+    getLastReply:()=>lastReply,
     onSent:(reply)=>{lastReply=reply;clearAttachment();}
   };
 })();
