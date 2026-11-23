@@ -9,6 +9,7 @@ import { hashPassword, verifyPassword, encryptSecret, decryptSecret, randomToken
 import { plugins, getPlugin } from './plugins/index.js';
 import { createNetworkMonitor } from './network-monitor.js';
 import { normalizeChatMode, maxCompletionTokens, systemPromptFor } from './chat-modes.js';
+import { userContentWithAttachments } from './chat-attachments.js';
 import {
   REWARD_POLICY, validateRewardReceipt, verifyReceiptSignature, InvalidRewardReceipt,
 } from './duration-rewards.js';
@@ -77,6 +78,19 @@ function readBody(req) {
     });
     req.on('error', reject);
   });
+}
+
+async function readLimitedJsonBody(req, maxBytes = 2200000) {
+  const declared = Number(req.headers['content-length'] || 0);
+  if (declared > maxBytes) throw new RangeError('Chat request exceeds 2.2 MB.');
+  const chunks = [];
+  let total = 0;
+  for await (const chunk of req) {
+    total += chunk.length;
+    if (total > maxBytes) throw new RangeError('Chat request exceeds 2.2 MB.');
+    chunks.push(chunk);
+  }
+  return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
 }
 
 async function readLimitedSignedBody(req) {
@@ -176,7 +190,7 @@ const server = http.createServer(async (req, res) => {
     // ---- Jose text chat (opt-in configured AI provider, authenticated, bounded) ----
     if (req.method === 'GET' && url.pathname === '/api/chat/status') {
       const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
-      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), mode: process.env.JOSE_AI_API_KEY ? 'provider' : 'unconfigured', model: process.env.JOSE_AI_API_KEY ? (process.env.JOSE_AI_MODEL || 'gpt-4o-mini') : null, chatModes: ['chat', 'build', 'web3'] });
+      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), mode: process.env.JOSE_AI_API_KEY ? 'provider' : 'unconfigured', model: process.env.JOSE_AI_API_KEY ? (process.env.JOSE_AI_MODEL || 'gpt-4o-mini') : null, chatModes: ['chat', 'build', 'web3'], attachments: ['image/png','image/jpeg','image/webp','text'], maxAttachments: 2 });
     }
     if (req.method === 'POST' && url.pathname === '/api/chat') {
       const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
@@ -191,10 +205,13 @@ const server = http.createServer(async (req, res) => {
       recent.push(now);
       chatRate.set(user.id, recent);
       let body;
-      try { body = await readBody(req); }
-      catch { return sendJson(res, 400, { error: 'Invalid JSON body.' }); }
+      try { body = await readLimitedJsonBody(req); }
+      catch (error) { return sendJson(res, error instanceof RangeError ? 413 : 400, { error: error instanceof RangeError ? 'Chat upload is too large.' : 'Invalid JSON body.' }); }
       const message = typeof body.message === 'string' ? body.message.trim() : '';
       const mode = normalizeChatMode(body.mode);
+      let userContent;
+      try { userContent = userContentWithAttachments(message, body.attachments); }
+      catch (error) { return sendJson(res, 400, { error: error.message }); }
       if (!message || message.length > 12000) return sendJson(res, 400, { error: 'Enter a question of up to 12,000 characters.' });
       const history = Array.isArray(body.history) ? body.history.slice(-16) : [];
       if (history.some(m => !m || !['user','assistant'].includes(m.role) || typeof m.content !== 'string' || m.content.length > 12000) || history.reduce((n,m)=>n+m.content.length,0)>48000) {
@@ -213,7 +230,7 @@ const server = http.createServer(async (req, res) => {
             messages: [
               { role: 'system', content: systemPromptFor(mode) },
               ...history.map(m => ({ role: m.role, content: m.content })),
-              { role: 'user', content: message },
+              { role: 'user', content: userContent },
             ],
           }),
         });
