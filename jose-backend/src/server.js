@@ -15,7 +15,7 @@ import { runJosePower, JOSE_POWERS } from './jose-powers.js';
 import { userMemoryMessage } from './chat-memory.js';
 import { createGmailClient } from './gmail-client.js';
 import { createMailReview } from './gmail-review.js';
-import { gmailIntent, formatGmailInbox, formatGmailMessage } from './gmail-intents.js';
+import { gmailIntent, gmailConnectionGuide, formatGmailInbox, formatGmailMessage } from './gmail-intents.js';
 import {
   REWARD_POLICY, validateRewardReceipt, verifyReceiptSignature, InvalidRewardReceipt,
 } from './duration-rewards.js';
@@ -267,12 +267,23 @@ const server = http.createServer(async (req, res) => {
       }
       const mailIntent=gmailIntent(message);
       if(mailIntent){
-        if(!user?.id||String(user.id).startsWith('guest:'))
-          return sendJson(res,401,{error:'Sign in to Jose before accessing Gmail. Use the Gmail button in chat.'});
-        if(!getPlugin('google').isConfigured())
-          return sendJson(res,503,{error:'Gmail OAuth is not configured on Jose. The operator must configure GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and APP_SECRET.'});
+        const googlePlugin=getPlugin('google');
+        const configured=googlePlugin.isConfigured();
+        const authenticated=Boolean(user?.id&&!String(user.id).startsWith('guest:'));
+        let connected=false;
+        if(configured&&authenticated){
+          try{gmail.connection(user.id);connected=true;}catch{}
+        }
+        const setup=gmailConnectionGuide({
+          configured,authenticated,connected,
+          missingEnvVars:configured?[]:googlePlugin.missingEnvVars()
+        });
+        // Never ask a general-purpose model to guess whether Gmail is connected.
+        // Setup and missing credentials have deterministic, truthful answers.
+        if(mailIntent.action==='connect'||!connected){
+          return sendJson(res,200,setup);
+        }
         try{
-          gmail.connection(user.id);
           if(mailIntent.action==='inbox'){
             const mailbox=await gmail.inbox(user.id,mailIntent.query);
             return sendJson(res,200,{answer:formatGmailInbox(mailbox),mode:'chat',gmailAction:'inbox',gmail:mailbox});
@@ -281,10 +292,8 @@ const server = http.createServer(async (req, res) => {
             const email=await gmail.read(user.id,mailIntent.id);
             return sendJson(res,200,{answer:formatGmailMessage(email),mode:'chat',gmailAction:'read'});
           }
-          if(mailIntent.action==='compose'||mailIntent.action==='help')
-            return sendJson(res,200,{answer:mailIntent.action==='compose'
-              ?'Your Gmail composer is available in this chat. Open Gmail, enter recipient, subject and message, then review before sending.'
-              :'Connect your Gmail from the Gmail button, approve Google permissions, and ask Jose to show your inbox or search messages. Every send requires a separate preview and click.',mode:'chat',gmailAction:mailIntent.action});
+          if(mailIntent.action==='compose')
+            return sendJson(res,200,{answer:'Gmail is connected. Click Gmail in the chat header to open the composer. You can paste a draft or use Jose’s last answer, then review the exact recipient, subject and body before approving Send.',mode:'chat',gmailAction:'compose'});
         }catch(error){return sendJson(res,error.status||502,{error:error.message});}
       }
       if (devnetQuestion(message)) {

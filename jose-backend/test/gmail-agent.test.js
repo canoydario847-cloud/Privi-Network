@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createGmailClient,validateEmailDraft,rawEmail,safeMessage} from '../src/gmail-client.js';
 import {createMailReview} from '../src/gmail-review.js';
-import {gmailIntent,formatGmailInbox,formatGmailMessage} from '../src/gmail-intents.js';
+import {gmailIntent,gmailConnectionGuide,formatGmailInbox,formatGmailMessage} from '../src/gmail-intents.js';
 import {GMAIL_SCOPES,google} from '../src/plugins/google.js';
 function tokenRecord(expiresAt=10000000){
   return {accessTokenEnc:'encrypted-at',refreshTokenEnc:'encrypted-rt',expiresAt,scopes:[...GMAIL_SCOPES]};
@@ -125,4 +125,45 @@ test('Gmail intents are explicit; normal chat unchanged',()=>{
  assert.equal(gmailIntent('Create an email app'),null);
  assert.match(formatGmailInbox({messages:[{id:'18ca6bba77e12abc',subject:'Hello',from:'Alice',snippet:'Hi'}]}),/\/gmail read/);
  assert.match(formatGmailMessage({id:'18ca6bba77e12abc',subject:'Hi',from:'Alice',to:'Bob',date:'Monday',body:'Hello!'}),/Hello!/);
+});
+
+test('plain-language Gmail connect requests never fall through to generic AI',()=>{
+ for(const q of [
+  'Connect Gmail',
+  'Can you connect to my Gmail account?',
+  'I want to link my Gmail',
+  'Please help me access Gmail',
+  'How can I connect my Gmail?',
+  'I cannot connect to Gmail',
+  'Authorize Google Mail',
+  '/gmail status',
+  '/gmail connect'
+ ]){
+  assert.equal(gmailIntent(q)?.action,'connect',q);
+ }
+});
+test('natural Gmail read requests enter the inbox rather than an AI refusal',()=>{
+ for(const q of ['Read my emails','Check my inbox','Show my Gmail','Can you read my Gmail?','Show unread emails','Get my latest email']){
+  assert.equal(gmailIntent(q)?.action,'inbox',q);
+ }
+ assert.deepEqual(gmailIntent('Show unread emails'),{action:'inbox',query:'is:unread in:inbox'});
+ assert.deepEqual(gmailIntent('Find my email from Jordan'),{action:'inbox',query:'Jordan'});
+});
+test('connection answers are precise, do not invent access, or leak credentials',()=>{
+ const unconfigured=gmailConnectionGuide({configured:false,authenticated:false,connected:false,missingEnvVars:['GOOGLE_CLIENT_ID','GOOGLE_CLIENT_SECRET']});
+ assert.equal(unconfigured.gmailStatus,'operator_setup');
+ assert.match(unconfigured.answer,/cannot connect to Gmail yet/);
+ assert.match(unconfigured.answer,/GOOGLE_CLIENT_ID/);
+ assert.match(unconfigured.answer,/GOOGLE_CLIENT_SECRET/);
+ assert.match(unconfigured.answer,/jose-backend-075d\.onrender\.com\/callback\/google/);
+ const login=gmailConnectionGuide({configured:true,authenticated:false});
+ assert.equal(login.gmailStatus,'sign_in');
+ assert.match(login.answer,/sign in/);
+ const authorize=gmailConnectionGuide({configured:true,authenticated:true});
+ assert.equal(authorize.gmailStatus,'authorize');
+ assert.match(authorize.answer,/not been connected/);
+ const ready=gmailConnectionGuide({configured:true,authenticated:true,connected:true});
+ assert.equal(ready.gmailStatus,'connected');
+ assert.match(ready.answer,/Every send requires your review/);
+ assert.doesNotMatch(ready.answer,/can't connect|cannot connect/);
 });
