@@ -26,6 +26,8 @@ jobs:
           node --check jose-backend/src/server.js
           node --check jose-backend/src/chat-modes.js
           node --check jose-site/ais.js
+          node --check jose-site/web3-core.mjs
+          node --check jose-site/web3-studio.mjs
       - name: Validate inline chat browser scripts
         run: |
           node --input-type=module - <<'NODE'
@@ -39,3 +41,8 @@ jobs:
       - name: Run Jose backend tests
         run: npm test
         working-directory: jose-backend
+      - name: Install isolated Solidity compiler for contract validation
+        run: npm install --no-save --ignore-scripts --no-audit --no-fund solc@0.8.28 @openzeppelin/contracts@5.4.0
+      - name: Compile all Web3 contract templates
+        run: node jose-backend/test/compile-web3-templates.mjs
+

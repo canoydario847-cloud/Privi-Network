@@ -1,7 +1,7 @@
 // Hey Jose's chat and browser-app generation modes.
 // Keep the mode selection server-controlled; the client never supplies a system prompt.
 export function normalizeChatMode(value) {
-  return value === 'build' ? 'build' : 'chat';
+  return value === 'build' || value === 'web3' ? value : 'chat';
 }
 
 export function maxCompletionTokens(mode, configured) {
@@ -9,7 +9,7 @@ export function maxCompletionTokens(mode, configured) {
   if (configured !== undefined && configured !== null && configured !== '' && Number.isInteger(number) && number >= 256) {
     return Math.min(number, 6000);
   }
-  return normalizeChatMode(mode) === 'build' ? 4500 : 2500;
+  return normalizeChatMode(mode) === 'build' ? 4500 : normalizeChatMode(mode) === 'web3' ? 4000 : 2500;
 }
 
 const BASE_PROMPT = [
@@ -22,6 +22,13 @@ const BASE_PROMPT = [
 ].join(' ');
 
 export function systemPromptFor(mode) {
+  if (normalizeChatMode(mode) === 'web3') return BASE_PROMPT +
+    '\nWEB3 ENGINEERING MODE: Help users design EVM tokens, ERC-721 NFTs, Solidity smart contracts, verifiable ledgers, and blockchain infrastructure. ' +
+    'Use reputable standards such as OpenZeppelin for token templates. Explain security risks, access controls, deployment costs, audits and validation. ' +
+    'A token contract deployment is NOT the launch of an independent blockchain. A browser hash chain is NOT a decentralized ledger. ' +
+    'Never request private keys or seed phrases. Never imply any transaction was signed or deployed without an independently verified receipt. ' +
+    'Always propose an audited testnet-first process and require users to inspect and approve every deployment using their own wallet. ' +
+    'Do not promise a price, token peg, financial return, or regulatory status. Do not execute or claim blockchain launch.';
   if (normalizeChatMode(mode) !== 'build') return BASE_PROMPT;
   return BASE_PROMPT + '\nBUILD APP MODE: The user is requesting a browser-based prototype. ' +
     'Produce exactly one complete, self-contained, working HTML5 document with inline CSS and JavaScript, ' +
