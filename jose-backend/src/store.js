@@ -2,7 +2,7 @@
 // deps, so it runs anywhere Node runs without npm install) — fine for a
 // first version; swap for a real database (Render Postgres, etc.) once
 // usage grows past what a single JSON file comfortably handles.
-import { readFileSync, writeFileSync, existsSync, renameSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -23,6 +23,9 @@ function load() {
 let state = load();
 
 function persist() {
+  // Fresh Render instances may not contain the gitignored data directory.
+  // Create it before the first signup/session write (0700 if newly created).
+  mkdirSync(path.dirname(DB_FILE), { recursive: true, mode: 0o700 });
   // Write to a temp file then rename, so a crash mid-write can't corrupt
   // the store.
   const tmp = DB_FILE + '.tmp';
@@ -42,6 +45,14 @@ export const db = {
     state.users[user.id] = user;
     persist();
     return user;
+  },
+  // Admin bootstrap may update the configured existing admin account.
+  updateUser(id, patch) {
+    if (!state.users[id]) return null;
+    const updated = { ...state.users[id], ...patch, id };
+    state.users[id] = updated;
+    persist();
+    return updated;
   },
 
   // --- sessions ---
