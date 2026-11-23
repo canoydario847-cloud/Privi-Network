@@ -24,6 +24,8 @@ jobs:
       - name: Check Jose backend and site syntax
         run: |
           node --check jose-backend/src/server.js
+          node --check jose-backend/test/jose-http-integration.test.js
+          node --check jose-backend/test/jose-live-smoke.mjs
           node --check jose-backend/src/gmail-client.js
           node --check jose-backend/src/gmail-review.js
           node --check jose-backend/src/gmail-intents.js
@@ -52,6 +54,10 @@ jobs:
       - name: Run Jose backend tests
         run: npm test
         working-directory: jose-backend
+      - name: Probe live Jose HTTP endpoints (read-only diagnostic)
+        continue-on-error: true
+        timeout-minutes: 4
+        run: node jose-backend/test/jose-live-smoke.mjs
       - name: Probe the real Privi Devnet RPC and latest block (diagnostic only)
         continue-on-error: true
         run: node jose-backend/test/privi-devnet-live-smoke.mjs
