@@ -8,6 +8,7 @@ import { ensureConfiguredAdmin } from './admin-bootstrap.js';
 import { hashPassword, verifyPassword, encryptSecret, decryptSecret, randomToken } from './crypto-utils.js';
 import { plugins, getPlugin } from './plugins/index.js';
 import { createNetworkMonitor } from './network-monitor.js';
+import { normalizeChatMode, maxCompletionTokens, systemPromptFor } from './chat-modes.js';
 import {
   REWARD_POLICY, validateRewardReceipt, verifyReceiptSignature, InvalidRewardReceipt,
 } from './duration-rewards.js';
@@ -175,7 +176,7 @@ const server = http.createServer(async (req, res) => {
     // ---- Jose text chat (opt-in configured AI provider, authenticated, bounded) ----
     if (req.method === 'GET' && url.pathname === '/api/chat/status') {
       const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
-      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), mode: process.env.JOSE_AI_API_KEY ? 'provider' : 'unconfigured', model: process.env.JOSE_AI_API_KEY ? (process.env.JOSE_AI_MODEL || 'gpt-4o-mini') : null });
+      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), mode: process.env.JOSE_AI_API_KEY ? 'provider' : 'unconfigured', model: process.env.JOSE_AI_API_KEY ? (process.env.JOSE_AI_MODEL || 'gpt-4o-mini') : null, chatModes: ['chat', 'build'] });
     }
     if (req.method === 'POST' && url.pathname === '/api/chat') {
       const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
@@ -193,26 +194,12 @@ const server = http.createServer(async (req, res) => {
       try { body = await readBody(req); }
       catch { return sendJson(res, 400, { error: 'Invalid JSON body.' }); }
       const message = typeof body.message === 'string' ? body.message.trim() : '';
+      const mode = normalizeChatMode(body.mode);
       if (!message || message.length > 12000) return sendJson(res, 400, { error: 'Enter a question of up to 12,000 characters.' });
       const history = Array.isArray(body.history) ? body.history.slice(-16) : [];
       if (history.some(m => !m || !['user','assistant'].includes(m.role) || typeof m.content !== 'string' || m.content.length > 12000) || history.reduce((n,m)=>n+m.content.length,0)>48000) {
         return sendJson(res, 400, { error: 'Invalid or oversized conversation history.' });
       }
-      const localAnswer = (text) => {
-        const q = text.toLowerCase();
-        const spanish = /\b(hola|que|qué|como|cómo|precio|precios|ayuda|herramientas)\b/.test(q);
-        if (/\b(price|pricing|precio|precios|cost|costo)\b/.test(q)) {
-          return spanish ? 'Hey Jose ofrece 500 preguntas y respuestas por $10 al mes, o 1,000 preguntas y respuestas por $35 al mes con acceso a los 85 plugins.' : 'Hey Jose offers 500 questions and answers for $10 per month, or 1,000 questions and answers for $35 per month with access to all 85 plugins.';
-        }
-        if (/\b(plugin|plugins|tool|tools|herramienta|herramientas)\b/.test(q)) {
-          return spanish ? 'Abre Explorar plugins para añadir las herramientas de Privi a tu espacio. Cada plugin conserva sus propios requisitos de acceso.' : 'Open Explore plugins to add Privi capabilities to your workspace. Each plugin keeps its own access requirements.';
-        }
-        if (/\b(hello|hi|hola|hey)\b/.test(q)) {
-          return spanish ? 'Hola. Soy Hey Jose. Puedo ayudarte con los plugins de Privi, tus preguntas y el espacio de trabajo.' : 'Hello. I am Hey Jose. I can help with Privi plugins, questions, and your workspace.';
-        }
-        if (/\\b(build|code|create|make|develop|program|website|app|software)\\b/.test(q)) return spanish ? 'Puedo convertir tu idea en un flujo de construcción: plan, archivos, código, pruebas y revisión. Describe lo que quieres construir y el resultado esperado.' : 'I can turn your idea into a build workflow with a plan, files, implementation code, tests, and review. Describe what you want to build and the expected result.';
-        return spanish ? 'Puedo ayudarte con precios, plugins, construcción de proyectos y el espacio de Hey Jose. Describe tu objetivo para comenzar.' : 'I can help with pricing, plugins, building projects, and the Hey Jose workspace. Describe your goal to begin.';
-      };
       if (!apiKey) return sendJson(res, 503, { error: 'Hey Jose AI is not configured. Add JOSE_AI_API_KEY in the backend service environment to enable real answers. The plugin directory remains separately available.' });
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 60000);
@@ -222,9 +209,9 @@ const server = http.createServer(async (req, res) => {
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
           body: JSON.stringify({
             model: process.env.JOSE_AI_MODEL || 'gpt-4o-mini',
-            max_completion_tokens: Number(process.env.JOSE_AI_MAX_TOKENS || 2500),
+            max_completion_tokens: maxCompletionTokens(mode, process.env.JOSE_AI_MAX_TOKENS),
             messages: [
-              { role: 'system', content: 'You are Hey Jose A.I.S., an advanced autonomous workflow assistant for Privi. Respond in the user\'s language. For build requests, turn the goal into a practical plan, choose the right plugin or tool, generate complete implementation code, explain file changes, and include verification steps. Maintain task context, identify dependencies, validate assumptions, and surface errors instead of hiding them. You may draft actions, but never claim an external action happened unless the connected tool confirms it. Require explicit confirmation before sending email, spending money, publishing, deleting data, or changing production systems. Prefer small reversible steps, secure defaults, and production-ready code.' },
+              { role: 'system', content: systemPromptFor(mode) },
               ...history.map(m => ({ role: m.role, content: m.content })),
               { role: 'user', content: message },
             ],
@@ -244,7 +231,7 @@ const server = http.createServer(async (req, res) => {
         const data = await response.json();
         const answer = data?.choices?.[0]?.message?.content;
         if (typeof answer !== 'string' || !answer.trim()) return sendJson(res, 502, { error: 'The AI provider returned no answer.' });
-        return sendJson(res, 200, { answer: answer.trim() });
+        return sendJson(res, 200, { answer: answer.trim(), mode });
       } catch (error) {
         console.error('Jose AI request failed', error?.name);
         return sendJson(res, 504, { error: 'Jose timed out while answering. Try again.' });
