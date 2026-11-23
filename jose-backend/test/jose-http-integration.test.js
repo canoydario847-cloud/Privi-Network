@@ -18,10 +18,11 @@ async function freePort(){
  await new Promise(resolve=>server.close(resolve));
  return port;
 }
-async function serverSession(dbFile){
+async function serverSession(dbFile, overrides={}){
  const port=await freePort(),base='http://127.0.0.1:'+port;
  const env={...process.env,PORT:String(port),BASE_URL:base,DB_FILE:dbFile};
  for(const key of ['JOSE_ADMIN_EMAIL','JOSE_ADMIN_PASSWORD','JOSE_AI_API_KEY','GOOGLE_CLIENT_ID','GOOGLE_CLIENT_SECRET'])delete env[key];
+ Object.assign(env,overrides);
  const proc=spawn(process.execPath,[serverFile],{cwd:projectDir,env,stdio:['ignore','pipe','pipe']});
  let output='';
  for(const name of ['stdout','stderr'])proc[name].on('data',chunk=>{output+=chunk.toString().slice(0,500);});
@@ -57,7 +58,7 @@ async function json(base,path,method='GET',body,extra={}){
 test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persistence and login', {timeout:40000},async()=>{
  const root=mkdtempSync(path.join(tmpdir(),'hey-jose-http-'));
  const dbFile=path.join(root,'newly-created','nested','jose.json');
- let first,second;
+ let first,second,third;
  try{
   first=await serverSession(dbFile);
   const base=first.base;
@@ -97,9 +98,16 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   const html=await fetch(second.base+'/chat.html',{signal:AbortSignal.timeout(2000)});
   assert.equal(html.status,200);const markup=await html.text();
   assert.match(markup,/chat-gmail\.js/);assert.match(markup,/chat-memory\.js/);
+  await stop(second.proc);second=null;
+  third=await serverSession(dbFile,{JOSE_ADMIN_EMAIL:accountEmail,JOSE_ADMIN_PASSWORD:'AnotherTestPassword-2!'});
+  const adminLogin=await json(third.base,'/api/login','POST',{email:accountEmail,password:'AnotherTestPassword-2!'});
+  assert.equal(adminLogin.status,200,'admin bootstrap should update existing account without crashing');
+  const stored=JSON.parse(readFileSync(dbFile));
+  assert.equal(Object.values(stored.users).find(u=>u.email===accountEmail)?.role,'admin');
  }finally{
   if(first)await stop(first.proc);
   if(second)await stop(second.proc);
+  if(third)await stop(third.proc);
   rmSync(root,{recursive:true,force:true});
  }
 });
