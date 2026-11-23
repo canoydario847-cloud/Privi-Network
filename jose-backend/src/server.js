@@ -10,6 +10,7 @@ import { plugins, getPlugin } from './plugins/index.js';
 import { createNetworkMonitor } from './network-monitor.js';
 import { inferChatMode, normalizeChatMode, maxCompletionTokens, systemPromptFor } from './chat-modes.js';
 import { userContentWithAttachments } from './chat-attachments.js';
+import { createDevnetClient, devnetQuestion, devnetDetailsQuestion, DEVNET_EVM_ID } from './privi-devnet.js';
 import {
   REWARD_POLICY, validateRewardReceipt, verifyReceiptSignature, InvalidRewardReceipt,
 } from './duration-rewards.js';
@@ -20,6 +21,7 @@ const PORT = process.env.PORT || 7000;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const SESSION_COOKIE = 'jose_session';
 const networkMonitor = createNetworkMonitor();
+const devnet = createDevnetClient();
 ensureConfiguredAdmin();
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
@@ -188,9 +190,30 @@ const server = http.createServer(async (req, res) => {
     }
 
     // ---- Jose text chat (opt-in configured AI provider, authenticated, bounded) ----
+    // Read-only Privi EVM Devnet. Verify remote health + JSON-RPC chain 772626.
+    // Never make signing keys, minting, transaction broadcasting or validators
+    // available through the chat endpoint.
+    if (req.method === 'GET' && url.pathname === '/api/devnet/status') {
+      res.setHeader('Cache-Control', 'no-store');
+      return sendJson(res, 200, await devnet.check());
+    }
+    if (req.method === 'GET' && /^\/api\/devnet\/balance\/0x[0-9a-fA-F]{40}$/.test(url.pathname)) {
+      try {
+        return sendJson(res, 200, await devnet.balance(url.pathname.split('/').at(-1)));
+      } catch(error) {
+        return sendJson(res, 503, {error:error.message});
+      }
+    }
+    if (req.method === 'GET' && /^\/api\/devnet\/tx\/0x[0-9a-fA-F]{64}$/.test(url.pathname)) {
+      try {
+        return sendJson(res, 200, await devnet.receipt(url.pathname.split('/').at(-1)));
+      } catch(error) {
+        return sendJson(res, 503, {error:error.message});
+      }
+    }
     if (req.method === 'GET' && url.pathname === '/api/chat/status') {
       const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
-      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), mode: process.env.JOSE_AI_API_KEY ? 'provider' : 'unconfigured', model: process.env.JOSE_AI_API_KEY ? (process.env.JOSE_AI_MODEL || 'gpt-4o-mini') : null, chatModes: ['chat', 'build', 'web3'], attachments: ['image/png','image/jpeg','image/webp','text'], maxAttachments: 2 });
+      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), mode: process.env.JOSE_AI_API_KEY ? 'provider' : 'unconfigured', model: process.env.JOSE_AI_API_KEY ? (process.env.JOSE_AI_MODEL || 'gpt-4o-mini') : null, chatModes: ['chat', 'build', 'web3'], priviDevnetExpectedChainId: DEVNET_EVM_ID, priviDevnetStatusUrl: '/api/devnet/status', attachments: ['image/png','image/jpeg','image/webp','text'], maxAttachments: 2 });
     }
     if (req.method === 'POST' && url.pathname === '/api/chat') {
       const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
@@ -219,6 +242,25 @@ const server = http.createServer(async (req, res) => {
       if (history.some(m => !m || !['user','assistant'].includes(m.role) || typeof m.content !== 'string' || m.content.length > 12000) || history.reduce((n,m)=>n+m.content.length,0)>48000) {
         return sendJson(res, 400, { error: 'Invalid or oversized conversation history.' });
       }
+      if (devnetQuestion(message)) {
+        const report = await devnet.check();
+        const answer = report.connected
+          ? 'Privi Devnet is connected and responding. Verified EVM chain ID: ' + DEVNET_EVM_ID +
+            '; Cosmos chain ID: ' + report.cosmosChainId +
+            '; latest block: ' + report.latestBlock +
+            '; last block age: ' + report.blockAgeSeconds + ' seconds. Gas token: valueless TEST. ' +
+            'Explorer: ' + report.rpcUrl + '. Jose runs as an off-chain AI service connected to the devnet; it is not an on-chain AI model, and this is not financial PRVI mainnet.'
+          : 'Privi Devnet connection is not verified at the moment. Expected EVM chain ID: ' +
+            DEVNET_EVM_ID + '; Cosmos chain ID: privi-devnet-1. ' +
+            'The endpoint may be offline, stale, or reporting a different chain. No financial mainnet activity or transaction is implied.';
+        return sendJson(res, 200, {answer, mode:'web3', devnet:report});
+      }
+      let devnetContext = '';
+      if (devnetDetailsQuestion(message)) {
+        const report=await devnet.check();
+        devnetContext = '\nTrusted read-only Privi Devnet observation: ' + JSON.stringify(report) +
+          '. If connected=false, do not claim a working live chain. The AI runs off-chain on Render; TEST is valueless. Never offer to sign transactions or invent a transaction receipt.';
+      }
       if (!apiKey) return sendJson(res, 503, { error: 'Hey Jose AI is not configured. Add JOSE_AI_API_KEY in the backend service environment to enable real answers. The plugin directory remains separately available.' });
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 60000);
@@ -230,7 +272,7 @@ const server = http.createServer(async (req, res) => {
             model: process.env.JOSE_AI_MODEL || 'gpt-4o-mini',
             max_completion_tokens: maxCompletionTokens(mode, process.env.JOSE_AI_MAX_TOKENS),
             messages: [
-              { role: 'system', content: systemPromptFor(mode) },
+              { role: 'system', content: systemPromptFor(mode) + devnetContext },
               ...history.map(m => ({ role: m.role, content: m.content })),
               { role: 'user', content: userContent },
             ],
