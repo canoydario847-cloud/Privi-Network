@@ -26,6 +26,8 @@ jobs:
           node --check jose-backend/src/server.js
           node --check jose-backend/src/chat-modes.js
           node --check jose-site/ais.js
+          node --check jose-site/web3-core.mjs
+          node --check jose-site/web3-studio.mjs
       - name: Validate inline chat browser scripts
         run: |
           node --input-type=module - <<'NODE'
