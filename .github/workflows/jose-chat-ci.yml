@@ -41,3 +41,8 @@ jobs:
       - name: Run Jose backend tests
         run: npm test
         working-directory: jose-backend
+      - name: Install isolated Solidity compiler for contract validation
+        run: npm install --no-save --ignore-scripts --no-audit --no-fund solc@0.8.28 @openzeppelin/contracts@5.4.0
+      - name: Compile all Web3 contract templates
+        run: node jose-backend/test/compile-web3-templates.mjs
+
