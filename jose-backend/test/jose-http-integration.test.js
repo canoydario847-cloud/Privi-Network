@@ -87,7 +87,7 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   const me=await json(base,'/api/me','GET',null,{Cookie:cookie});
   assert.equal(me.status,200);assert.equal(me.data.email,accountEmail);
   const gmailAuth=await json(base,'/api/gmail/status','GET',null,{Cookie:cookie});
-  assert.equal(gmailAuth.status,503);assert.match(gmailAuth.data.error,/Google OAuth/);
+  assert.equal(gmailAuth.status,503);assert.match(gmailAuth.data.error,/OAuth configuration/);
   await stop(first.proc);first=null;
   second=await serverSession(dbFile);
   const login=await json(second.base,'/api/login','POST',{email:accountEmail,password:'TestPassword-NotReal1!'});
