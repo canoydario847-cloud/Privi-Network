@@ -1,8 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {webcrypto} from 'node:crypto';
 import {buildSource,validateSupply,validateCreationBytecode,networkById,chainManifest,appendRecord,verifyRecords} from '../../jose-site/web3-core.mjs';
-globalThis.crypto=webcrypto;
 test('fixed-supply ERC20 escapes input and has no secondary mint',()=>{
  const x=buildSource('token',{name:'Sample Token',symbol:'SMPL',supply:'1000000'});
  assert.match(x.source,/_mint\(msg.sender/);
