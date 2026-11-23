@@ -8,7 +8,7 @@ export function normalizeChatMode(value) {
 // system prompt. This never authorizes blockchain transactions or tool calls.
 export function inferChatMode(message) {
   const text = typeof message === 'string' ? message.toLowerCase().slice(0,12000) : '';
-  if (/\b(?:web3|blockchains?|solidity|smart[\s-]?contracts?|nfts?|erc[\s-]?(?:20|721|1155)|crypto(?:currency|currencies)?|token(?:s)?\s+(?:launch|contract|mint|deploy)|ledger(?:s)?|mint(?:ing)?\s+(?:tokens?|nfts?))\b/i.test(text)) {
+  if (/\b(?:web3|blockchains?|solidity|smart[\s-]?contracts?|nfts?|erc[\s-]?(?:20|721|1155)|crypto(?:currency|currencies)?|token(?:s)?\s+(?:launch|contract|mint|deploy)|(?:launch|deploy|create|mint|issue|make|build)\s+(?:(?:a|an|new|my|the)\s+)?(?:crypto\s+)?tokens?|ledger(?:s)?|mint(?:ing)?\s+(?:tokens?|nfts?))\b/i.test(text)) {
     return 'web3';
   }
   if (/\b(?:build|create|make|generate|design|develop|code)\b/i.test(text)
