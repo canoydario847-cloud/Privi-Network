@@ -108,7 +108,7 @@ test('email send uses user-scoped access and actual Gmail API after exact confir
  assert.equal(calls[0].method,'POST');
  assert.ok(calls[0].url.endsWith('/messages/send'));
  const encoded=JSON.parse(calls[0].body).raw;
- assert.match(Buffer.from(encoded,'base64url').toString('utf8'),/Project update/); // Subject is base64 encoded, so don't rely on plain subject
+ assert.match(Buffer.from(encoded,'base64url').toString('utf8'),new RegExp(Buffer.from('Project update').toString('base64')));
 });
 test('review token fails when expired',()=>{
  let now=0;
