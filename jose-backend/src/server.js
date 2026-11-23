@@ -13,6 +13,9 @@ import { userContentWithAttachments } from './chat-attachments.js';
 import { createDevnetClient, devnetQuestion, devnetDetailsQuestion, DEVNET_EVM_ID } from './privi-devnet.js';
 import { runJosePower, JOSE_POWERS } from './jose-powers.js';
 import { userMemoryMessage } from './chat-memory.js';
+import { createGmailClient } from './gmail-client.js';
+import { createMailReview } from './gmail-review.js';
+import { gmailIntent, formatGmailInbox, formatGmailMessage } from './gmail-intents.js';
 import {
   REWARD_POLICY, validateRewardReceipt, verifyReceiptSignature, InvalidRewardReceipt,
 } from './duration-rewards.js';
@@ -24,6 +27,8 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const SESSION_COOKIE = 'jose_session';
 const networkMonitor = createNetworkMonitor();
 const devnet = createDevnetClient();
+const gmail = createGmailClient({getConnection:(userId,p)=>db.getConnection(userId,p),setConnection:(userId,p,row)=>db.setConnection(userId,p,row),encrypt:encryptSecret,decrypt:decryptSecret});
+const mailReview = createMailReview();
 ensureConfiguredAdmin();
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
@@ -32,6 +37,10 @@ const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 // CSRF attempts. In-memory is fine: a connect flow finishes in minutes.
 const pendingOAuth = new Map();
 const chatRate = new Map();
+const secureCookie = BASE_URL.startsWith('https:') ? '; Secure' : '';
+const authCookie = (token,age) => SESSION_COOKIE+'='+token+'; HttpOnly; SameSite=Lax'+secureCookie+'; Path=/; Max-Age='+age;
+function sameOrigin(req){const o=req.headers.origin;return !o || o===new URL(BASE_URL).origin;}
+function requireOrigin(req,res){if(sameOrigin(req))return true;sendJson(res,403,{error:'Invalid request origin.'});return false;}
 
 function sendJson(res, status, obj) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -215,7 +224,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/chat/status') {
       const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
-      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), mode: process.env.JOSE_AI_API_KEY ? 'provider' : 'unconfigured', model: process.env.JOSE_AI_API_KEY ? (process.env.JOSE_AI_MODEL || 'gpt-4o-mini') : null, chatModes: ['chat', 'build', 'web3'], priviDevnetExpectedChainId: DEVNET_EVM_ID, priviDevnetStatusUrl: '/api/devnet/status', attachments: ['image/png','image/jpeg','image/webp','text'], maxAttachments: 2, localPowerCount: JOSE_POWERS.length, browserMemorySupported: true, memoryStorage: 'USER_BROWSER_ONLY' });
+      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), mode: process.env.JOSE_AI_API_KEY ? 'provider' : 'unconfigured', model: process.env.JOSE_AI_API_KEY ? (process.env.JOSE_AI_MODEL || 'gpt-4o-mini') : null, chatModes: ['chat', 'build', 'web3'], priviDevnetExpectedChainId: DEVNET_EVM_ID, priviDevnetStatusUrl: '/api/devnet/status', attachments: ['image/png','image/jpeg','image/webp','text'], maxAttachments: 2, localPowerCount: JOSE_POWERS.length, browserMemorySupported: true, memoryStorage: 'USER_BROWSER_ONLY',gmailConfigured:getPlugin('google').isConfigured(),gmailConnectUrl:'/connect/google' });
     }
     if (req.method === 'POST' && url.pathname === '/api/chat') {
       const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
@@ -255,6 +264,28 @@ const server = http.createServer(async (req, res) => {
           return sendJson(res, 400, {error:'Local power commands currently accept pasted text or JSON, not file attachments.'});
         }
         return sendJson(res, 200, {answer:localPower.answer, mode:'chat', power:localPower.power, deterministic:true});
+      }
+      const mailIntent=gmailIntent(message);
+      if(mailIntent){
+        if(!user?.id||String(user.id).startsWith('guest:'))
+          return sendJson(res,401,{error:'Sign in to Jose before accessing Gmail. Use the Gmail button in chat.'});
+        if(!getPlugin('google').isConfigured())
+          return sendJson(res,503,{error:'Gmail OAuth is not configured on Jose. The operator must configure GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and APP_SECRET.'});
+        try{
+          gmail.connection(user.id);
+          if(mailIntent.action==='inbox'){
+            const mailbox=await gmail.inbox(user.id,mailIntent.query);
+            return sendJson(res,200,{answer:formatGmailInbox(mailbox),mode:'chat',gmailAction:'inbox',gmail:mailbox});
+          }
+          if(mailIntent.action==='read'){
+            const email=await gmail.read(user.id,mailIntent.id);
+            return sendJson(res,200,{answer:formatGmailMessage(email),mode:'chat',gmailAction:'read'});
+          }
+          if(mailIntent.action==='compose'||mailIntent.action==='help')
+            return sendJson(res,200,{answer:mailIntent.action==='compose'
+              ?'Your Gmail composer is available in this chat. Open Gmail, enter recipient, subject and message, then review before sending.'
+              :'Connect your Gmail from the Gmail button, approve Google permissions, and ask Jose to show your inbox or search messages. Every send requires a separate preview and click.',mode:'chat',gmailAction:mailIntent.action});
+        }catch(error){return sendJson(res,error.status||502,{error:error.message});}
       }
       if (devnetQuestion(message)) {
         const report = await devnet.check();
@@ -314,31 +345,45 @@ const server = http.createServer(async (req, res) => {
       } finally { clearTimeout(timeout); }
     }
 
-    // ---- email composer and explicit Gmail send ----
-    if (req.method === 'POST' && url.pathname === '/api/email/send') {
-      const user = getCurrentUser(req);
-      if (!user) return sendJson(res, 401, { error: 'Sign in to send email.' });
-      let body;
-      try { body = await readBody(req); } catch { return sendJson(res, 400, { error: 'Invalid JSON body.' }); }
-      const to = typeof body.to === 'string' ? body.to.trim() : '';
-      const subject = typeof body.subject === 'string' ? body.subject.trim() : '';
-      const text = typeof body.text === 'string' ? body.text.trim() : '';
-      if (!body.confirmSend) return sendJson(res, 400, { error: 'Set confirmSend=true after reviewing the message.' });
-      if (!to || !subject || !text || to.length > 320 || subject.length > 200 || text.length > 20000) {
-        return sendJson(res, 400, { error: 'Recipient, subject, and message are required.' });
+    // ---- Gmail API: account-bound, read-only queries and exact preview-before-send ----
+    if (url.pathname.startsWith('/api/gmail/') || url.pathname==='/api/email/send') {
+      const user=getCurrentUser(req);
+      if(!user)return sendJson(res,401,{error:'Sign in to Jose to use your Gmail account.'});
+      if(!getPlugin('google').isConfigured())
+        return sendJson(res,503,{error:'Gmail needs OAuth configuration by Jose operator: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and APP_SECRET.'});
+      if(req.method!=='GET'&&!requireOrigin(req,res))return;
+      if(url.pathname==='/api/email/send')return sendJson(res,410,{error:'Use /api/gmail/prepare and /api/gmail/send with a one-use user-confirmed review token.'});
+      if(req.method==='GET'&&url.pathname==='/api/gmail/status'){
+        let connected=false;
+        try{gmail.connection(user.id);connected=true;}catch{}
+        return sendJson(res,200,{connected,configured:true,scopes:['gmail.readonly','gmail.send'],email:user.email,
+          storage:'Current backend account store (not durable on Render free service)',reviewRequired:true});
       }
-      const connection = db.getConnection(user.id, 'google');
-      if (!connection?.accessTokenEnc) return sendJson(res, 409, { error: 'Connect Google/Gmail in Plugins before sending email.' });
-      const raw = [`To: ${to}`, `Subject: ${subject}`, 'Content-Type: text/plain; charset=utf-8', '', text].join('\\r\\n');
-      const encoded = Buffer.from(raw).toString('base64url');
-      const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
-        method: 'POST',
-        headers: { Authorization: 'Bearer ' + decryptSecret(connection.accessTokenEnc), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ raw: encoded }),
-      });
-      if (!response.ok) return sendJson(res, 502, { error: 'Gmail could not send this message. Reconnect Google and try again.' });
-      const sent = await response.json();
-      return sendJson(res, 200, { ok: true, provider: 'gmail', messageId: sent.id || null });
+      try{
+        if(req.method==='GET'&&url.pathname==='/api/gmail/inbox'){
+          const data=await gmail.inbox(user.id,url.searchParams.get('q')||'');
+          return sendJson(res,200,data);
+        }
+        const read=url.pathname.match(/^\/api\/gmail\/message\/([A-Za-z0-9]{8,50})$/);
+        if(req.method==='GET'&&read)return sendJson(res,200,await gmail.read(user.id,read[1]));
+        if(req.method==='POST'&&url.pathname==='/api/gmail/prepare'){
+          const body=await readLimitedJsonBody(req,30000);
+          gmail.connection(user.id);
+          return sendJson(res,200,mailReview.prepare(user.id,body));
+        }
+        if(req.method==='POST'&&url.pathname==='/api/gmail/send'){
+          const body=await readLimitedJsonBody(req,1000);
+          gmail.connection(user.id);
+          const draft=mailReview.consume(user.id,body.reviewToken,body.confirmSend);
+          // The one-time token is consumed before calling Gmail to avoid duplicate retries.
+          try{return sendJson(res,200,{ok:true,provider:'gmail',...await gmail.send(user.id,draft)});}
+          catch(error){return sendJson(res,502,{error:'Gmail send may have failed. Check Sent Mail before preparing a new message; do not retry this send token.'});}
+        }
+        return sendJson(res,404,{error:'Unknown Gmail endpoint.'});
+      }catch(error){
+        return sendJson(res,error instanceof SyntaxError?400:error instanceof RangeError?413:(error.status||400),
+          {error:error.message||'Gmail operation failed.'});
+      }
     }
 
     // ---- social sign-in ----
@@ -355,8 +400,10 @@ const server = http.createServer(async (req, res) => {
 
     // ---- auth ----
     if (req.method === 'POST' && url.pathname === '/api/signup') {
-      const { email, password } = await readBody(req);
-      if (!email || !password || password.length < 8) {
+      if(!requireOrigin(req,res))return;
+      const { email: rawEmail, password } = await readLimitedJsonBody(req,10000);
+      const email=typeof rawEmail==='string'?rawEmail.trim().toLowerCase():'';
+      if (!/^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(email) || typeof password!=='string' || password.length < 8 || password.length>256) {
         return sendJson(res, 400, { error: 'An email and an 8+ character password are required.' });
       }
       if (db.getUserByEmail(email)) {
@@ -370,26 +417,28 @@ const server = http.createServer(async (req, res) => {
       });
       const token = randomToken();
       db.createSession({ token, userId: user.id, expiresAt: Date.now() + SESSION_TTL_MS });
-      res.setHeader('Set-Cookie', `${SESSION_COOKIE}=${token}; HttpOnly; Path=/; Max-Age=${SESSION_TTL_MS / 1000}`);
+      res.setHeader('Set-Cookie', authCookie(token,SESSION_TTL_MS / 1000));
       return sendJson(res, 201, { email: user.email });
     }
 
     if (req.method === 'POST' && url.pathname === '/api/login') {
-      const { email, password } = await readBody(req);
+      if(!requireOrigin(req,res))return;
+      const { email, password } = await readLimitedJsonBody(req,10000);
       const user = db.getUserByEmail(String(email || '').trim().toLowerCase());
       if (!user || !verifyPassword(password || '', user.passwordHash)) {
         return sendJson(res, 401, { error: 'Incorrect email or password.' });
       }
       const token = randomToken();
       db.createSession({ token, userId: user.id, expiresAt: Date.now() + SESSION_TTL_MS });
-      res.setHeader('Set-Cookie', `${SESSION_COOKIE}=${token}; HttpOnly; Path=/; Max-Age=${SESSION_TTL_MS / 1000}`);
+      res.setHeader('Set-Cookie', authCookie(token,SESSION_TTL_MS / 1000));
       return sendJson(res, 200, { email: user.email });
     }
 
     if (req.method === 'POST' && url.pathname === '/api/logout') {
+      if(!requireOrigin(req,res))return;
       const cookies = parseCookies(req);
       if (cookies[SESSION_COOKIE]) db.deleteSession(cookies[SESSION_COOKIE]);
-      res.setHeader('Set-Cookie', `${SESSION_COOKIE}=; HttpOnly; Path=/; Max-Age=0`);
+      res.setHeader('Set-Cookie', authCookie('',0));
       return sendJson(res, 200, { ok: true });
     }
 
@@ -429,8 +478,10 @@ const server = http.createServer(async (req, res) => {
       const code = url.searchParams.get('code');
       const state = url.searchParams.get('state');
       const pending = state && pendingOAuth.get(state);
+      const currentUser=getCurrentUser(req);
 
-      if (!plugin || !code || !pending || pending.pluginId !== pluginId) {
+      if (!plugin || !code || !pending || pending.pluginId !== pluginId ||
+          !currentUser || currentUser.id!==pending.userId || Date.now()-pending.createdAt>600000) {
         res.writeHead(302, { Location: '/dashboard.html?error=invalid_oauth_state' });
         return res.end();
       }
@@ -444,16 +495,19 @@ const server = http.createServer(async (req, res) => {
           accessTokenEnc: encryptSecret(result.accessToken),
           refreshTokenEnc: result.refreshToken ? encryptSecret(result.refreshToken) : null,
           expiresInSeconds: result.expiresInSeconds || null,
+          expiresAt: Date.now() + (result.expiresInSeconds||3600)*1000,
+          scopes: result.scopes || [],
         });
-        res.writeHead(302, { Location: '/dashboard.html?connected=' + pluginId });
+        res.writeHead(302, { Location: pluginId==='google'?'/chat.html?gmail=connected':'/dashboard.html?connected='+pluginId });
         return res.end();
       } catch (err) {
-        res.writeHead(302, { Location: '/dashboard.html?error=' + encodeURIComponent(err.message) });
+        res.writeHead(302, { Location: pluginId==='google'?'/chat.html?gmail=error':'/dashboard.html?error=connection_failed' });
         return res.end();
       }
     }
 
     if (req.method === 'POST' && url.pathname.startsWith('/api/disconnect/')) {
+      if(!requireOrigin(req,res))return;
       const user = getCurrentUser(req);
       if (!user) return sendJson(res, 401, { error: 'Not signed in.' });
       const pluginId = url.pathname.split('/')[3];
