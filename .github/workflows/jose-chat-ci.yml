@@ -32,7 +32,7 @@ jobs:
           import fs from 'node:fs';
           import vm from 'node:vm';
           const html = fs.readFileSync('jose-backend/public/chat.html', 'utf8');
-          const scripts = [...html.matchAll(/<script\\b[^>]*>([\\s\\S]*?)<\\/script>/g)].map(match => match[1]).filter(Boolean);
+          const scripts = html.split('<script>').slice(1).map(chunk => chunk.split('</script>')[0]).filter(Boolean);
           if (scripts.length === 0) throw new Error('Hey Jose chat scripts missing');
           for (const code of scripts) new vm.Script(code);
           NODE
