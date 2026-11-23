@@ -8,7 +8,7 @@ import { ensureConfiguredAdmin } from './admin-bootstrap.js';
 import { hashPassword, verifyPassword, encryptSecret, decryptSecret, randomToken } from './crypto-utils.js';
 import { plugins, getPlugin } from './plugins/index.js';
 import { createNetworkMonitor } from './network-monitor.js';
-import { normalizeChatMode, maxCompletionTokens, systemPromptFor } from './chat-modes.js';
+import { inferChatMode, normalizeChatMode, maxCompletionTokens, systemPromptFor } from './chat-modes.js';
 import { userContentWithAttachments } from './chat-attachments.js';
 import {
   REWARD_POLICY, validateRewardReceipt, verifyReceiptSignature, InvalidRewardReceipt,
@@ -209,7 +209,8 @@ const server = http.createServer(async (req, res) => {
       catch (error) { return sendJson(res, error instanceof RangeError ? 413 : 400, { error: error instanceof RangeError ? 'Chat upload is too large.' : 'Invalid JSON body.' }); }
       if (!body || typeof body !== 'object' || Array.isArray(body)) return sendJson(res, 400, { error: 'Chat request must be a JSON object.' });
       const message = typeof body.message === 'string' ? body.message.trim() : '';
-      const mode = normalizeChatMode(body.mode);
+      const mode = body.mode === undefined || body.mode === 'auto'
+        ? inferChatMode(message) : normalizeChatMode(body.mode);
       let userContent;
       try { userContent = userContentWithAttachments(message, body.attachments); }
       catch (error) { return sendJson(res, 400, { error: error.message }); }
