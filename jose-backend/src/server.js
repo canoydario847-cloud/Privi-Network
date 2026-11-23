@@ -207,6 +207,7 @@ const server = http.createServer(async (req, res) => {
       let body;
       try { body = await readLimitedJsonBody(req); }
       catch (error) { return sendJson(res, error instanceof RangeError ? 413 : 400, { error: error instanceof RangeError ? 'Chat upload is too large.' : 'Invalid JSON body.' }); }
+      if (!body || typeof body !== 'object' || Array.isArray(body)) return sendJson(res, 400, { error: 'Chat request must be a JSON object.' });
       const message = typeof body.message === 'string' ? body.message.trim() : '';
       const mode = normalizeChatMode(body.mode);
       let userContent;
