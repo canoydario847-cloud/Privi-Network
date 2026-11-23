@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#100e24">
+<title>Hey Jose | Web3 Launch Studio</title>
+<meta name="description" content="Privi World Hey Jose Web3 Studio: design tokens, NFTs, contracts, blockchain devnets and a local hash-linked ledger.">
+<style>
+:root{color-scheme:dark;--bg:#0c0d1b;--panel:#171a2d;--line:#434359;--text:#f7f2e8;--muted:#bcb6d1;--gold:#f1c37d;--violet:#b99cff}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 90% 5%,#422657 0,transparent 34%),linear-gradient(135deg,#0c0d1b,#1e102a);color:var(--text);font:15px/1.55 system-ui,Arial,sans-serif}a{color:#d8c5ff}
+header,main,footer{max-width:1180px;margin:auto;padding:18px 24px}header{display:flex;align-items:center;justify-content:space-between;gap:15px;border-bottom:1px solid var(--line)}header strong,.brand{font-family:Georgia,serif;color:var(--gold);letter-spacing:.02em;font-size:21px}nav{display:flex;gap:15px;flex-wrap:wrap}h1,h2,h3{line-height:1.17;letter-spacing:-.02em}h1{font-family:Georgia,serif;color:#ffd8aa;font-size:clamp(32px,5vw,58px);margin:18px 0 10px}h2{font-size:22px;margin:0 0 14px}h3{font-size:17px}.intro{max-width:790px;color:var(--muted);font-size:17px}
+.layout{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(310px,.8fr);gap:18px;margin-top:26px}
+section.panel{border:1px solid var(--line);background:#171a2de8;border-radius:16px;padding:22px;margin-bottom:18px;min-width:0}
+label{display:block;font-weight:650;margin:12px 0 6px}textarea,input,select{display:block;background:#0a1020;border:1px solid #66637f;border-radius:8px;color:var(--text);font:inherit;padding:10px 12px;width:100%}textarea{resize:vertical;min-height:100px;font:13px/1.5 ui-monospace,Consolas,monospace}#source{min-height:330px}#bytecode{min-height:110px}
+button,.button{display:inline-flex;justify-content:center;align-items:center;gap:6px;cursor:pointer;border:1px solid #6d6881;border-radius:10px;color:var(--text);background:#323047;font:600 14px system-ui,sans-serif;padding:10px 14px;text-decoration:none}
+button:hover,.button:hover{filter:brightness(1.1)}button.primary{background:var(--gold);color:#1c1420;border-color:var(--gold)}button:disabled{opacity:.5;cursor:not-allowed}
+.controls{display:flex;gap:9px;flex-wrap:wrap;margin:17px 0 3px}.help,.muted{font-size:13px;color:var(--muted)}.warning{border-left:3px solid #f0b16c;padding:9px 12px;background:#55401f55;color:#ffe2b5;font-size:13px;margin:16px 0}.success{color:#a8f3bc}.error{color:#ffb4a9}
+code{font:13px ui-monospace,Consolas,monospace;overflow-wrap:anywhere}.status{min-height:25px;white-space:pre-wrap;overflow-wrap:anywhere}
+.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px}.fields .wide{grid-column:1/-1}
+#ledgerList{margin:10px 0;padding-left:20px;max-height:290px;overflow:auto;word-break:break-word}#ledgerList li{padding:8px 0;border-bottom:1px solid #ffffff18}#ledgerList code{display:block;color:var(--muted)}
+#aiPanel[hidden],.kind-only[hidden],#sourcePanel[hidden],#ledgerPanel[hidden],#networkPanel[hidden]{display:none}#aiFrame{width:100%;height:620px;border:1px solid var(--line);background:#fff;border-radius:12px}
+.checkbox{display:flex;gap:8px;align-items:flex-start;margin-top:10px}.checkbox input{width:auto;margin-top:5px}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0b1020;border-radius:8px;padding:12px;font-size:12px}
+footer{border-top:1px solid var(--line);font-size:12px;color:var(--muted);margin-top:20px}
+@media(max-width:820px){.layout{grid-template-columns:1fr}.fields{grid-template-columns:1fr}header,main,footer{padding:16px}}
+</style>
+</head>
+<body>
+<header><span class="brand">Hey Jose · Privi World</span><nav><a href="/">Back to Jose</a><a href="https://remix.ethereum.org/" target="_blank" rel="noopener noreferrer">Remix Solidity IDE</a></nav></header>
+<main>
+<p class="muted">WEB3 · CONTRACTS · USER-CONTROLLED WALLETS</p>
+<h1>Web3 Launch Studio</h1>
+<p class="intro">Design ERC-20 tokens, ERC-721 NFTs, smart contracts, ledger anchors, and independent blockchain devnet plans. Review source, compile it, then authorize EVM deployment from your own wallet. Jose never asks for your private key.</p>
+<div class="warning">Early-access tooling. Templates are not independently audited. A wallet transaction can cost gas and is irreversible. Test on a testnet before considering production.</div>
+<div class="layout">
+<div>
+<section class="panel">
+<h2>Create a Web3 project</h2>
+<label for="type">What should Jose build?</label>
+<select id="type"><option value="token">ERC-20 token</option><option value="nft">ERC-721 NFT collection</option><option value="contract">Smart contract (message vault)</option><option value="ledger-anchor">On-chain ledger root anchor</option><option value="ledger">Local hash-linked ledger</option><option value="network">Independent blockchain devnet blueprint</option></select>
+<div id="contractFields" class="fields">
+<div class="wide"><label for="projectName">Project or token name</label><input id="projectName" value="Jose Sample Token" maxlength="40"></div>
+<div class="kind-only" id="symbolField"><label for="symbol">Token symbol</label><input id="symbol" value="JOSE" maxlength="8"></div>
+<div class="kind-only" id="supplyField"><label for="supply">Whole tokens minted at deployment</label><input id="supply" value="1000000" inputmode="numeric"></div>
+</div>
+<div class="fields" id="chainFields" hidden><div><label for="devnetId">Devnet EVM chain ID</label><input id="devnetId" value="262144" inputmode="numeric"></div><div><label for="validators">Independent validators</label><input id="validators" type="number" min="4" max="16" value="4"></div></div>
+<div class="controls"><button id="generate" class="primary">Generate project</button><button id="askJose">Ask Jose AI to extend this</button></div>
+<p id="buildStatus" class="status" role="status"></p>
+</section>
+<section id="sourcePanel" class="panel">
+<h2>Review Solidity source</h2><p class="help">Generated code is a starter template, not an audit or a deployment. Token and NFT templates reference OpenZeppelin Contracts 5.x; compile with pinned dependencies in your compiler.</p>
+<label for="source">Solidity</label><textarea id="source" readonly spellcheck="false"></textarea>
+<div class="controls"><button id="downloadSource">Download .sol</button><button id="copySource">Copy source</button><a class="button" href="https://remix.ethereum.org/" target="_blank" rel="noopener noreferrer">Compile with Remix</a></div>
+<p class="help">In Remix: create a file with this source, compile with Solidity 0.8.24 or newer compatible 0.8.x, use matching OpenZeppelin 5.x dependencies, copy the full *creation bytecode* from Compilation Details, and return to the deployment panel.</p>
+</section>
+<section id="networkPanel" class="panel" hidden><h2>Blockchain network blueprint</h2><p class="help">Preparing a chain configuration does not launch a blockchain. Production needs real consensus software, funded/operated validators, peer discovery, monitoring, audit and genesis review.</p><pre id="manifest"></pre><button id="downloadManifest">Download launch blueprint</button></section>
+<section id="ledgerPanel" class="panel" hidden><h2>Run a local ledger</h2><p class="help">Entries are SHA-256 linked and saved in this browser. They are not decentralized, notarized or tamper-proof against someone who controls the device. Export backups regularly.</p>
+<label for="ledgerEntry">New ledger record</label><textarea id="ledgerEntry" rows="3" maxlength="2000" placeholder="Describe the event or transaction (never enter passwords or private keys)."></textarea>
+<div class="controls"><button id="appendLedger" class="primary">Append record</button><button id="verifyLedger">Verify all records</button><button id="exportLedger">Export JSON</button></div>
+<p id="ledgerStatus" class="status" role="status"></p><ol id="ledgerList"></ol>
+<p class="help">To anchor a ledger root on-chain, generate and deploy the separate Ledger Anchor contract, then submit the latest record hash as a bytes32 value using a contract interaction tool.</p></section>
+<section id="aiPanel" class="panel" hidden><h2>Hey Jose AI · Web3 specialist</h2><p class="help">Jose can explain and revise Web3 code, but will not deploy or sign transactions for you. Independently review AI-generated code.</p><iframe id="aiFrame" title="Hey Jose AI Web3 assistant"></iframe></section>
+</div>
+<div>
+<section class="panel">
+<h2>Connect an EVM wallet</h2>
+<p class="help">Your browser wallet controls keys and transaction approvals. Jose sees only the public account you authorize.</p>
+<div class="controls"><button id="walletConnect">Connect browser wallet</button></div><p id="walletStatus" class="status" role="status">Not connected.</p>
+<label for="network">Deploy to</label><select id="network"><option value="84532">Base Sepolia — testnet</option><option value="11155111">Ethereum Sepolia — testnet</option><option value="8453">Base — mainnet</option><option value="1">Ethereum — mainnet</option></select>
+<label for="bytecode">Compiled creation bytecode</label><textarea id="bytecode" placeholder="0x6080604052... Paste creation bytecode compiled from the reviewed Solidity source."></textarea>
+<p class="help">Compilation is performed in a dedicated Solidity tool such as Remix in this release. Source code alone is not deployable bytecode. Do not paste secrets.</p>
+<label class="checkbox"><input type="checkbox" id="reviewed"> <span>I reviewed the bytecode/source, gas fees and chain. I understand transactions are irreversible.</span></label>
+<div id="mainnetAck" hidden><label for="mainnetText">For mainnet, type DEPLOY to confirm</label><input id="mainnetText" autocomplete="off" placeholder="DEPLOY"></div>
+<div class="controls"><button id="estimate">Estimate gas</button><button id="deploy" class="primary">Request wallet deployment</button></div>
+<p id="deployStatus" class="status" role="status"></p>
+<p id="txLink"></p>
+</section>
+<section class="panel"><h2>What this launch flow does</h2><p>1. Generate Solidity and inspect it.</p><p>2. Compile with Remix and paste the creation bytecode.</p><p>3. Connect your wallet and choose a supported EVM network.</p><p>4. Review estimated gas and explicitly approve in your wallet.</p><p>5. Save the transaction hash and contract address.</p>
+<p class="warning">A new ERC-20 token contract is not an independently operated blockchain. The blockchain blueprint above is a separate infrastructure project, not a live network.</p></section>
+</div>
+</div>
+</main><footer>Created by Privi World Corp · Web3 Studio · No private keys stored or collected · Solidity and ledger templates are unaudited.</footer>
+<script type="module" src="./web3-studio.mjs?v=20261123"></script>
+</body></html>
