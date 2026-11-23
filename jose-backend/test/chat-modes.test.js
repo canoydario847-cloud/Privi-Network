@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeChatMode, maxCompletionTokens, systemPromptFor } from '../src/chat-modes.js';
+import { inferChatMode, normalizeChatMode, maxCompletionTokens, systemPromptFor } from '../src/chat-modes.js';
 
 test('only explicit build mode enables browser app generation', () => {
   assert.equal(normalizeChatMode('build'), 'build');
@@ -33,4 +33,17 @@ test('Web3 assistant mode is distinct from browser app building',()=>{
  assert.equal(maxCompletionTokens('web3'),4000);
  assert.match(systemPromptFor('web3'),/Never request private keys/);
  assert.match(systemPromptFor('web3'),/NOT the launch/);
+});
+
+test('one chat automatically chooses a useful response style without feature pages', () => {
+  assert.equal(inferChatMode('What is photosynthesis?'), 'chat');
+  assert.equal(inferChatMode('Can you explain how to build a website?'), 'chat');
+  assert.equal(inferChatMode('Build me a task manager app'), 'build');
+  assert.equal(inferChatMode('Make a responsive website for my business'), 'build');
+  assert.equal(inferChatMode('Launch a token with 100 million supply'), 'web3');
+  assert.equal(inferChatMode('Create an NFT collection'), 'web3');
+  assert.equal(inferChatMode('Deploy a smart contract on Base'), 'web3');
+  assert.equal(inferChatMode('Run a blockchain ledger'), 'web3');
+  assert.equal(inferChatMode('Build a website for an NFT collection'), 'web3');
+  assert.equal(inferChatMode(null), 'chat');
 });
