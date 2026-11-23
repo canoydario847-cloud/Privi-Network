@@ -1,4 +1,21 @@
-# Privi: the trust layer for AI agents
+# Privi Network
+
+[![CallProof demo showing a sample CRM write and its simulated executor report](docs/images/callproof-demo.png)](https://privi-ai-21-gateway.onrender.com/callproof/demo)
+
+Privi Network helps teams control what AI agents can do with external tools and keep a record of what each tool reports back.
+
+- **Tool permissions** — define which tools an agent can request.
+- **Budget limits** — set spending limits for tool calls.
+- **Human approvals** — require sign-off before sensitive actions such as CRM writes.
+- **Retry protection** — use an idempotency key to avoid authorizing the same request twice.
+- **Signed receipts** — record the outcome reported by the executor for later review.
+
+[Try the interactive CallProof demo](https://privi-ai-21-gateway.onrender.com/callproof/demo) · [Browse MCP tools](https://privi-ai-21-gateway.onrender.com/agent-hub)
+
+The demo runs in your browser with sample data and shows an unsigned receipt preview. Live CallProof requires Privi Pro activation. Signed receipts document the executor’s report rather than independently verifying the external action.
+
+## Explore Privi Network
+
 
 > New here? See **[REPO_MAP.md](REPO_MAP.md)** for what every folder is.
 
