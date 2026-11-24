@@ -51,8 +51,8 @@ export function shouldOfferReadTools(message,mode='chat'){
   const q=message.toLowerCase();
   // Limit provider overhead to relevant questions instead of charging
   // a tool-selection token premium on every everyday conversation.
-  return (/\\b(?:privi|devnet|jose|wallet|transaction|tx|on.chain|blockchain)\\b/i.test(q)
-    && /\\b(?:health|status|grade|down|up|online|working|availability|connected|balance|funds|receipt|transaction|tx|latest|block|network|chain\\s*id|capabilit|tools|services)\\b/i.test(q));
+  return (/\b(?:privi|devnet|jose|wallet|transaction|tx|on.chain|blockchain)\b/i.test(q)
+    && /\b(?:health|status|grade|down|up|online|working|availability|connected|balance|funds|receipt|transaction|tx|latest|block|network|chain\s*id|capabilit|tools|services)\b/i.test(q));
 }
 export function createJoseReadTools({devnet,monitor}){
   if(!devnet||!monitor)throw TypeError('Trusted devnet and monitor required');
