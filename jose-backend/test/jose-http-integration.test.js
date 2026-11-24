@@ -87,12 +87,70 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   const cookie=signup.cookie.split(';')[0];
   const me=await json(base,'/api/me','GET',null,{Cookie:cookie});
   assert.equal(me.status,200);assert.equal(me.data.email,accountEmail);
+  // Sidebar chat history: account-scoped, authorized, persisted, and bounded.
+  const guestList=await json(base,'/api/conversations');
+  assert.equal(guestList.status,401);
+  const none=await json(base,'/api/conversations','GET',null,{Cookie:cookie});
+  assert.equal(none.status,200);assert.deepEqual(none.data.conversations,[]);
+  const invalidOrigin=await json(base,'/api/conversations','POST',{title:'CSRF'},{
+   Cookie:cookie,Origin:'https://evil.example'
+  });
+  assert.equal(invalidOrigin.status,403);
+  const created=await json(base,'/api/conversations','POST',{title:'Build a Privi token'},{Cookie:cookie});
+  assert.equal(created.status,201,JSON.stringify(created.data));
+  const conversationId=created.data.id;
+  assert.match(conversationId,/^[a-f0-9-]{36}$/);
+  const invalidMessage=await json(base,'/api/conversations/'+conversationId,'PUT',{
+   messages:[{role:'system',content:'Forged system instructions'}]
+  },{Cookie:cookie});
+  assert.equal(invalidMessage.status,400);
+  const saved=await json(base,'/api/conversations/'+conversationId,'PUT',{
+   messages:[{role:'user',content:'Build a Web3 ledger'},{role:'assistant',content:'Use a testnet first.'}]
+  },{Cookie:cookie});
+  assert.equal(saved.status,200);
+  assert.equal(saved.data.messageCount,2);
+  const summary=await json(base,'/api/conversations','GET',null,{Cookie:cookie});
+  assert.equal(summary.status,200);assert.equal(summary.data.conversations.length,1);
+  assert.equal(summary.data.conversations[0].preview,'Build a Web3 ledger');
+  const renamed=await json(base,'/api/conversations/'+conversationId,'PATCH',{
+   title:'  Smart contract history  '
+  },{Cookie:cookie});
+  assert.equal(renamed.status,200);
+  assert.equal(renamed.data.title,'Smart contract history');
+  const detail=await json(base,'/api/conversations/'+conversationId,'GET',null,{Cookie:cookie});
+  assert.equal(detail.status,200);assert.equal(detail.data.messages[1].content,'Use a testnet first.');
+  const secondSignup=await json(base,'/api/signup','POST',{
+   email:'isolated-'+Date.now()+'@example.org',password:'AnotherTestPassword-3!'
+  });
+  assert.equal(secondSignup.status,201);
+  const secondCookie=secondSignup.cookie.split(';')[0];
+  const crossRead=await json(base,'/api/conversations/'+conversationId,'GET',null,{Cookie:secondCookie});
+  assert.equal(crossRead.status,404);
+  const crossEdit=await json(base,'/api/conversations/'+conversationId,'PATCH',{title:'Stolen'},{Cookie:secondCookie});
+  assert.equal(crossEdit.status,404);
+  const crossDelete=await json(base,'/api/conversations/'+conversationId,'DELETE',undefined,{Cookie:secondCookie});
+  assert.equal(crossDelete.status,404);
+
   const gmailAuth=await json(base,'/api/gmail/status','GET',null,{Cookie:cookie});
   assert.equal(gmailAuth.status,503);assert.match(gmailAuth.data.error,/OAuth configuration/);
   await stop(first.proc);first=null;
   second=await serverSession(dbFile);
   const login=await json(second.base,'/api/login','POST',{email:accountEmail,password:'TestPassword-NotReal1!'});
   assert.equal(login.status,200,JSON.stringify(login.data));
+  const reloaded=await json(second.base,'/api/conversations/'+conversationId,'GET',null,{
+   Cookie:login.cookie.split(';')[0]
+  });
+  assert.equal(reloaded.status,200);
+  assert.equal(reloaded.data.title,'Smart contract history');
+  const deleted=await json(second.base,'/api/conversations/'+conversationId,'DELETE',undefined,{
+   Cookie:login.cookie.split(';')[0]
+  });
+  assert.equal(deleted.status,200);assert.equal(deleted.data.deleted,true);
+  const gone=await json(second.base,'/api/conversations/'+conversationId,'GET',null,{
+   Cookie:login.cookie.split(';')[0]
+  });
+  assert.equal(gone.status,404);
+
   const wrong=await json(second.base,'/api/login','POST',{email:accountEmail,password:'WrongPassword-1'});
   assert.equal(wrong.status,401);
   const html=await fetch(second.base+'/chat.html',{signal:AbortSignal.timeout(2000)});
