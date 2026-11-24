@@ -39,10 +39,11 @@ export function splitSpeechText(value,maxChunk=230){
   const chunks=[];
   let rest=text;
   while(rest.length>cap){
+    // Keep sentence punctuation inside the cap (including the final mark).
     let cut=Math.max(
-      rest.lastIndexOf('. ',cap),rest.lastIndexOf('! ',cap),
-      rest.lastIndexOf('? ',cap),rest.lastIndexOf('。',cap),
-      rest.lastIndexOf('।',cap));
+      rest.lastIndexOf('. ',cap-1),rest.lastIndexOf('! ',cap-1),
+      rest.lastIndexOf('? ',cap-1),rest.lastIndexOf('。',cap-1),
+      rest.lastIndexOf('।',cap-1));
     if(cut<cap*0.5)cut=rest.lastIndexOf(' ',cap);
     if(cut<cap*0.4)cut=cap;
     else if(rest[cut]==='。'||rest[cut]==='।')cut+=1;
