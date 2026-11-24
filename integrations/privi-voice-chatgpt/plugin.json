@@ -1,0 +1,88 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "privi-voice",
+  "version": "1.0.0",
+  "description": "Listen to a reply or pasted text using a device voice and adjustable playback speed.",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Privi Voice",
+        "shortDescription": "Read answers aloud",
+        "longDescription": "Open a free read-aloud player for a ChatGPT reply, a selected excerpt, or text you paste. Choose a device voice, change the reading speed, and pause or stop anytime.",
+        "developerName": "Privi World Corp",
+        "category": "Productivity",
+        "capabilities": [
+          "Read"
+        ],
+        "websiteURL": "https://jose-backend-075d.onrender.com/privi-voice-privacy.html",
+        "privacyPolicyURL": "https://jose-backend-075d.onrender.com/privi-voice-privacy.html",
+        "supportURL": "https://jose-backend-075d.onrender.com/privi-voice-privacy.html",
+        "defaultPrompt": [
+          "Use Privi Voice to read your previous answer.",
+          "Open an empty Privi Voice player."
+        ],
+        "brandColor": "#6946CC",
+        "composerIcon": "./assets/icon.png",
+        "logo": "./assets/icon.png"
+      },
+      "review": {
+        "commerce": false,
+        "commerce_description": "Privi Voice for ChatGPT is free. It has no checkout, billing, or upsells.",
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Read supplied text",
+              "prompt": "Use Privi Voice to read this: The library closes at six.",
+              "tools_triggered": "open_voice_player",
+              "expected_behavior": "Open a player prefilled with the supplied sentence. Play reads it in a device voice."
+            },
+            {
+              "description": "Read the previous answer",
+              "prompt": "Use Privi Voice to read your previous reply aloud.",
+              "tools_triggered": "open_voice_player",
+              "expected_behavior": "Open a player with the previous reply only. Playback waits for Play."
+            },
+            {
+              "description": "Open a blank player",
+              "prompt": "Open Privi Voice without sending any text. I will paste it.",
+              "tools_triggered": "open_voice_player",
+              "expected_behavior": "Open an editable player with an empty text box."
+            },
+            {
+              "description": "Read an excerpt",
+              "prompt": "Use Privi Voice to read only these words: Ready to begin.",
+              "tools_triggered": "open_voice_player",
+              "expected_behavior": "Prefill the player with Ready to begin. Do not include surrounding wording."
+            },
+            {
+              "description": "Adjust speed and pause",
+              "prompt": "Open Privi Voice with: This is a speed test.",
+              "tools_triggered": "open_voice_player",
+              "expected_behavior": "After opening, adjust the speed control, then select Play, Pause, Resume and Stop."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Unrelated prompt",
+              "prompt": "How far is Earth from the Moon?",
+              "expected_behavior": "Answer normally without opening Privi Voice."
+            },
+            {
+              "description": "Different conversation",
+              "prompt": "Use Privi Voice to read an answer from my other chat.",
+              "expected_behavior": "Explain that Privi Voice cannot access other conversations and offer a blank player for pasted text."
+            },
+            {
+              "description": "Unsupported purchase",
+              "prompt": "Use Privi Voice to buy more speech credits.",
+              "expected_behavior": "Do not run a purchase flow. Explain that Privi Voice for ChatGPT is free."
+            }
+          ]
+        }
+      },
+      "publication": {
+        "release_notes": "Initial release with device voices, speed controls, pause, and stop."
+      }
+    }
+  }
+}
