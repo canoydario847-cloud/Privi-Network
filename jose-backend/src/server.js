@@ -227,7 +227,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/chat/status') {
       const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
-      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), mode: process.env.JOSE_AI_API_KEY ? 'provider' : 'unconfigured', model: process.env.JOSE_AI_API_KEY ? (process.env.JOSE_AI_MODEL || 'gpt-4o-mini') : null, chatModes: ['chat', 'build', 'web3'], priviDevnetExpectedChainId: DEVNET_EVM_ID, priviDevnetStatusUrl: '/api/devnet/status', attachments: ['image/png','image/jpeg','image/webp','text'], maxAttachments: 2, localPowerCount: JOSE_POWERS.length, agentReadOnlyToolCount: JOSE_READ_TOOLS.length, agentReadOnlyToolNames: JOSE_READ_TOOLS.map(t=>t.function.name), browserMemorySupported: true, memoryStorage: 'USER_BROWSER_ONLY',gmailConfigured:getPlugin('google').isConfigured(),gmailConnectUrl:'/connect/google' });
+      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), mode: process.env.JOSE_AI_API_KEY ? 'provider' : 'unconfigured', model: process.env.JOSE_AI_API_KEY ? (process.env.JOSE_AI_MODEL || 'gpt-4o-mini') : null, chatModes: ['chat', 'build', 'web3'], priviDevnetExpectedChainId: DEVNET_EVM_ID, priviDevnetStatusUrl: '/api/devnet/status', attachments: ['image/png','image/jpeg','image/webp','text'], maxAttachments: 2, localPowerCount: JOSE_POWERS.length, agentReadOnlyToolCount: JOSE_READ_TOOLS.length, agentReadOnlyToolNames: JOSE_READ_TOOLS.map(t=>t.function.name), browserMemorySupported: true, memoryStorage: 'USER_BROWSER_ONLY',conversationHistory:true,conversationHistoryRequiresLogin:true,conversationHistoryStorage:'TEMPORARY_RENDER_FILE_STORAGE',gmailConfigured:getPlugin('google').isConfigured(),gmailConnectUrl:'/connect/google' });
     }
     if (req.method === 'POST' && url.pathname === '/api/chat') {
       const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
@@ -459,6 +459,51 @@ const server = http.createServer(async (req, res) => {
       const user = getCurrentUser(req);
       if (!user) return sendJson(res, 401, { error: 'Not signed in.' });
       return sendJson(res, 200, { email: user.email, plugins: publicPluginList(user) });
+    }
+
+    // ---- Authenticated conversation history for the Jose sidebar ----
+    if (url.pathname==='/api/conversations' || url.pathname.startsWith('/api/conversations/')) {
+      res.setHeader('Cache-Control','no-store');
+      const user=getCurrentUser(req);
+      if(!user)return sendJson(res,401,{error:'Sign in to a Jose account to sync conversation history.'});
+      if(req.method!=='GET'&&!requireOrigin(req,res))return;
+      const parts=url.pathname.match(/^\/api\/conversations\/([0-9a-f-]{36})$/i);
+      if(!parts&&url.pathname!=='/api/conversations')
+        return sendJson(res,404,{error:'Conversation not found.'});
+      const id=parts?.[1];
+      try{
+        if(req.method==='GET'&&!id)
+          return sendJson(res,200,{conversations:db.listConversations(user.id),
+            storage:'TEMPORARY_RENDER_FILE_STORAGE',maxConversations:40});
+        if(req.method==='POST'&&!id){
+          const body=await readLimitedJsonBody(req,6000);
+          if(!body||typeof body!=='object'||Array.isArray(body))
+            return sendJson(res,400,{error:'Expected a conversation title object.'});
+          return sendJson(res,201,db.createConversation(user.id,body.title));
+        }
+        if(req.method==='GET'&&id){
+          const row=db.getConversation(user.id,id);
+          return row?sendJson(res,200,row):sendJson(res,404,{error:'Conversation not found.'});
+        }
+        if((req.method==='PUT'||req.method==='PATCH')&&id){
+          const body=await readLimitedJsonBody(req,125000);
+          if(!body||typeof body!=='object'||Array.isArray(body)||
+             (req.method==='PUT'&&!Array.isArray(body.messages)) ||
+             (req.method==='PATCH'&&typeof body.title!=='string'))
+            return sendJson(res,400,{error:'A valid chat history or title is required.'});
+          const allowed=req.method==='PUT'?{messages:body.messages}:{title:body.title};
+          const row=db.updateConversation(user.id,id,allowed);
+          return row?sendJson(res,200,row):sendJson(res,404,{error:'Conversation not found.'});
+        }
+        if(req.method==='DELETE'&&id)
+          return db.deleteConversation(user.id,id)?
+            sendJson(res,200,{deleted:true}):sendJson(res,404,{error:'Conversation not found.'});
+        return sendJson(res,405,{error:'Method not supported.'});
+      }catch(error){
+        return sendJson(res,error instanceof RangeError?413:error instanceof SyntaxError?400:error.status||500,
+          {error:error.status||error instanceof RangeError||error instanceof SyntaxError?
+            error.message:'Conversation could not be saved.'});
+      }
     }
 
     // ---- plugin connect / callback (real OAuth, per plugins/*.js) ----
