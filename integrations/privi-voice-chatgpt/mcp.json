@@ -1,0 +1,10 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "privi-voice": {
+      "type": "streamable-http",
+      "url": "https://jose-backend-075d.onrender.com/mcp/privi-voice",
+      "extensions": { "com.openai": { "auth": { "type": "none" } } }
+    }
+  }
+}

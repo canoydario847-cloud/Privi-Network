@@ -7,6 +7,7 @@ import { db } from './store.js';
 import { ensureConfiguredAdmin } from './admin-bootstrap.js';
 import { hashPassword, verifyPassword, encryptSecret, decryptSecret, randomToken } from './crypto-utils.js';
 import { plugins, getPlugin } from './plugins/index.js';
+import { handleVoiceMcp } from './privi-voice-mcp.js';
 import { createNetworkMonitor } from './network-monitor.js';
 import { inferChatMode, normalizeChatMode, maxCompletionTokens, systemPromptFor } from './chat-modes.js';
 import { userContentWithAttachments } from './chat-attachments.js';
@@ -140,6 +141,10 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, BASE_URL);
 
   try {
+    if (url.pathname === '/mcp/privi-voice') {
+      return await handleVoiceMcp(req, res, new URL(BASE_URL).origin, readLimitedJsonBody);
+    }
+
     // ---- Jose / Privi monitoring and read-only report card ----
     if (req.method === 'GET' && url.pathname === '/health') {
       return sendJson(res, 200, {

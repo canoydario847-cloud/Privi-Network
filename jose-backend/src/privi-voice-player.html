@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privi Voice</title>
+<style>
+  :root{color-scheme:light dark;font:15px/1.45 system-ui,sans-serif}
+  body{margin:0;padding:14px;color:var(--color-text-primary,CanvasText)}
+  h1{font-size:18px;margin:0 0 10px}
+  label{display:block;font-weight:600;margin:8px 0 4px}
+  textarea,select,input,button{font:inherit}
+  textarea,select{width:100%;box-sizing:border-box;border:1px solid GrayText;border-radius:8px;padding:8px}
+  textarea{resize:vertical}
+  input[type=range]{width:100%;margin:2px 0;accent-color:#6946cc}
+  output{float:right}
+  .controls{display:flex;flex-wrap:wrap;gap:7px;margin:8px 0}
+  button{border:1px solid GrayText;border-radius:8px;padding:6px 13px;cursor:pointer}
+  #play{background:#6946cc;color:white;border-color:#6946cc}
+  button:disabled{opacity:.55;cursor:default}
+  #status{font-size:13px;margin:5px 0;min-height:1.3em}
+  .settings{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:360px){.settings{grid-template-columns:1fr;gap:0}}
+</style>
+<body>
+  <h1>Privi Voice</h1>
+  <label for="text">Text to read</label>
+  <textarea id="text" rows="3" maxlength="10000" placeholder="Paste an answer or ask Privi Voice to read it."></textarea>
+  <div class="settings">
+    <div><label for="voice">Device voice</label><select id="voice"></select></div>
+    <div>
+      <label for="rate">Speed <output id="speed" for="rate">1.00×</output></label>
+      <input id="rate" type="range" min=".5" max="3" step=".05" value="1">
+    </div>
+  </div>
+  <div class="controls">
+    <button id="play">Play</button><button id="pause" disabled>Pause</button><button id="stop" disabled>Stop</button>
+  </div>
+  <p id="status" role="status"></p>
+<script>
+  const $ = id => document.getElementById(id);
+  const input = $('text');
+  const synthesis = window.speechSynthesis;
+  let voices = [];
+  let run = 0;
+  let utterance;
+
+  function status(text) { $('status').textContent = text; }
+  function refreshVoices() {
+    const previous = $('voice').value;
+    voices = synthesis.getVoices().filter(voice => voice.localService);
+    $('voice').replaceChildren(new Option(voices.length ? 'System default' : 'No device voices available', ''));
+    for (const voice of voices) $('voice').add(new Option(voice.name + ' · ' + voice.lang, voice.voiceURI));
+    if (voices.some(voice => voice.voiceURI === previous)) $('voice').value = previous;
+    $('play').disabled = !voices.length;
+    if (!voices.length) status('Install a device text-to-speech voice or open ChatGPT in a browser that supports it.');
+    else status('');
+  }
+
+  function resetControls() {
+    $('stop').disabled = $('pause').disabled = true;
+    $('pause').textContent = 'Pause';
+  }
+
+  function stop() {
+    run++;
+    synthesis?.cancel();
+    utterance = undefined;
+    resetControls();
+  }
+
+  $('play').onclick = () => {
+    const text = input.value.trim();
+    if (!text) return status('Add text to read first.');
+    const voice = voices.find(voice => voice.voiceURI === $('voice').value) ||
+      voices.find(voice => voice.default) || voices[0];
+    if (!voice) return status('No device speech voice is available.');
+    stop();
+    const active = run;
+    const parts = [];
+    let remaining = text;
+    while (remaining) {
+      let cut = Math.min(remaining.length, 180);
+      if (cut < remaining.length) {
+        const space = remaining.lastIndexOf(' ', cut);
+        if (space > 60) cut = space;
+        const char = remaining.charCodeAt(cut - 1);
+        if (char >= 0xd800 && char <= 0xdbff) cut--;
+      }
+      parts.push(remaining.slice(0, cut));
+      remaining = remaining.slice(cut).trimStart();
+    }
+    const rate = Number($('rate').value);
+    $('stop').disabled = $('pause').disabled = false;
+    status('Reading aloud.');
+    function next(index) {
+      if (active !== run) return;
+      if (index === parts.length) {
+        resetControls();
+        status('Finished reading.');
+        return;
+      }
+      utterance = new SpeechSynthesisUtterance(parts[index]);
+      utterance.voice = voice;
+      utterance.lang = voice.lang;
+      utterance.rate = rate;
+      utterance.onend = () => next(index + 1);
+      utterance.onerror = () => {
+        if (active !== run) return;
+        stop();
+        status('Playback stopped. Check your browser speech settings and try again.');
+      };
+      try { synthesis.speak(utterance); }
+      catch { utterance.onerror(); }
+    }
+    next(0);
+  };
+
+  $('pause').onclick = () => {
+    if (synthesis.paused) {
+      synthesis.resume();
+      $('pause').textContent = 'Pause';
+      status('Reading aloud.');
+    } else {
+      synthesis.pause();
+      $('pause').textContent = 'Resume';
+      status('Paused.');
+    }
+  };
+  $('stop').onclick = () => { stop(); status('Stopped.'); };
+  $('rate').oninput = () => { $('speed').textContent = Number($('rate').value).toFixed(2) + '×'; };
+  window.addEventListener('pagehide', stop);
+
+  if (synthesis && window.SpeechSynthesisUtterance) {
+    synthesis.addEventListener('voiceschanged', refreshVoices);
+    refreshVoices();
+  } else {
+    $('play').disabled = true;
+    status('Speech playback is unavailable in this browser.');
+  }
+
+  function loadText(text) {
+    if (typeof text === 'string' && text && !input.value) input.value = text.slice(0, 10000);
+  }
+
+  if (window.parent !== window) {
+    const initializeId = crypto.randomUUID();
+    function notify(method, params) {
+      window.parent.postMessage({ jsonrpc: '2.0', method, params }, '*');
+    }
+    window.addEventListener('message', event => {
+      if (event.source !== window.parent || event.data?.jsonrpc !== '2.0') return;
+      const message = event.data;
+      if (message.id === initializeId && message.result) {
+        notify('ui/notifications/initialized');
+        new ResizeObserver(() => {
+          notify('ui/notifications/size-changed', { height: document.body.scrollHeight });
+        }).observe(document.body);
+      } else if (message.method === 'ui/notifications/tool-result') {
+        loadText(message.params?._meta?.text);
+      } else if (message.method === 'ui/notifications/tool-input') {
+        loadText(message.params?.arguments?.text);
+      }
+    });
+    window.parent.postMessage({
+      jsonrpc: '2.0',
+      id: initializeId,
+      method: 'ui/initialize',
+      params: {
+        protocolVersion: '2026-01-26',
+        appInfo: { name: 'Privi Voice', version: '1.0.0' },
+        appCapabilities: {},
+      },
+    }, '*');
+    loadText(window.openai?.toolResponseMetadata?.text || window.openai?.toolInput?.text);
+    window.addEventListener('openai:set_globals', event => {
+      loadText(event.detail?.globals?.toolResponseMetadata?.text || event.detail?.globals?.toolInput?.text);
+    });
+  }
+</script>
+</body>
+</html>
