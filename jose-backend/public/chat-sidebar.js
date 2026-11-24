@@ -16,12 +16,19 @@
   const titleFor=text=>String(text||'New chat').replace(/\s+/g,' ').trim().slice(0,90)||'New chat';
   const stamp=()=>Date.now();
   const uuid=()=>window.crypto?.randomUUID?.()||('local-'+Date.now()+'-'+Math.random().toString(36).slice(2));
+  const desktop=()=>window.matchMedia('(min-width:861px)').matches;
   function closeDrawer(){
     $('sidebar').classList.remove('expanded');
     $('sidebarShade').hidden=true;
-    $('toggleSidebar').setAttribute('aria-expanded','false');
+    $('toggleSidebar').setAttribute('aria-expanded',String(desktop()&&!$('sidebar').classList.contains('collapsed')));
   }
   function toggleDrawer(){
+    if(desktop()){
+      const hidden=$('sidebar').classList.toggle('collapsed');
+      $('toggleSidebar').setAttribute('aria-expanded',String(!hidden));
+      if(!hidden)$('sidebarSearch').focus();
+      return;
+    }
     const open=!$('sidebar').classList.contains('expanded');
     $('sidebar').classList.toggle('expanded',open);
     $('sidebarShade').hidden=!open;
@@ -196,7 +203,10 @@
     render();
   }
   $('toggleSidebar').onclick=toggleDrawer;
-  $('closeSidebar').onclick=closeDrawer;
+  $('closeSidebar').onclick=()=>{
+    if(desktop()){$('sidebar').classList.add('collapsed');$('toggleSidebar').setAttribute('aria-expanded','false');}
+    else closeDrawer();
+  };
   $('sidebarShade').onclick=closeDrawer;
   $('sidebarNewChat').onclick=newChat;
   $('sidebarSearch').oninput=render;
@@ -223,6 +233,10 @@
     window.joseResetChat?.();
     ready=load();
   });
-  window.joseSidebar={newChat,onTurn,openChat};
+  window.joseSidebar={newChat,onTurn,openChat,getCurrentMessages:()=>{
+    const row=chats.find(c=>c.id===activeId);
+    return Array.isArray(row?.messages)?row.messages.slice():window.joseChatHistory?.slice()||[];
+  }};
+  $('toggleSidebar').setAttribute('aria-expanded',String(desktop()));
   ready=load();
 })();
