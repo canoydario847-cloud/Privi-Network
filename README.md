@@ -1,23 +1,28 @@
 # Privi Network
 
-[![CallProof demo showing a sample CRM write and its simulated executor report](docs/images/callproof-demo.png)](https://privi-ai-21-gateway.onrender.com/callproof/demo)
+Privi Network helps developers control which external tools AI agents can use, require approval for sensitive actions, and record what happened for review.
 
-Privi Network helps teams control what AI agents can do with external tools and keep a record of what each tool reports back.
+[![CallProof demo showing a simulated CRM write and its receipt preview](docs/images/callproof-demo.jpg)](docs/images/callproof-demo.jpg)
 
-- **Tool permissions** — define which tools an agent can request.
-- **Budget limits** — set spending limits for tool calls.
-- **Human approvals** — require sign-off before sensitive actions such as CRM writes.
-- **Retry protection** — use an idempotency key to avoid authorizing the same request twice.
-- **Signed receipts** — record the outcome reported by the executor for later review.
+*CallProof walkthrough showing a sample CRM write and an unsigned preview of the executor’s receipt.*
 
-[Try the interactive CallProof demo](https://privi-ai-21-gateway.onrender.com/callproof/demo) · [Browse MCP tools](https://privi-ai-21-gateway.onrender.com/agent-hub)
+## What CallProof does
 
-The demo runs in your browser with sample data and shows an unsigned receipt preview. Live CallProof requires Privi Pro activation. Signed receipts document the executor’s report rather than independently verifying the external action.
+- **Scope tool access** — let an agent request only the tools its policy allows.
+- **Set call budgets** — check tool costs against policy limits before authorizing a request.
+- **Require human approval** — ask a reviewer to approve sensitive actions such as a CRM write.
+- **Handle retries** — use an idempotency key to prevent duplicate authorizations for the same intent.
+- **Keep signed receipts** — review the outcome the executor reported. A receipt attests to the executor’s report. Independently confirming the external action requires separate evidence.
+
+## Try it locally
+
+Run the [Privi ONE simulator](privi-one/README.md#run-it-python-310-standard-library) with Python 3.10+. It checks a sample tool request against a budget and an approval, then lets you verify the simulated receipt locally. It runs without an account, paid calls, or blockchain transactions. The hosted CallProof demo is currently suspended.
+
+[Browse MCP tools](privi-agent-survival/submissions/docker-mcp-registry/servers/privi-agent-survival/tools.json) · [Read the MCP integration notes](privi-agent-survival/README.md) · [Find the source and SDKs](REPO_MAP.md)
+
+**Made by Dario Canoy** · Privi World Corp.
 
 ## Explore Privi Network
-
-
-> New here? See **[REPO_MAP.md](REPO_MAP.md)** for what every folder is.
 
 [Explore the Privi Universe demos](https://privi-universe-demo.onrender.com/) or [compare Privi World Corp’s paid services](https://privi-services.onrender.com/), including the [$19.99 one-time AI agent security review](https://privi-services.onrender.com/ai-agent-security-review/).
 
@@ -28,18 +33,20 @@ The demo runs in your browser with sample data and shows an unsigned receipt pre
 [![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/canoydario847-cloud/privi-network)
 [![MCPVault: verified](https://mcpvault.io/badge/privi-network.svg)](https://mcpvault.io/servers/privi-network/health?utm_source=external_badge&utm_medium=referral&utm_campaign=mcp_health_report)
 
-## Status at a glance (Nov 15, 2026)
+## Service endpoints
 
-| Service | Status | MCP endpoint |
+The table reflects the November 15, 2026 deployment snapshot, with the hosted CallProof demo status checked on November 24.
+
+| Service | Last reported status | MCP endpoint |
 |---|---|---|
 | Privi Ledger | **Live** | `https://privi-ledger-aqe5.onrender.com/mcp` |
 | Privi Verify | **Live** | `https://privi-verify-s4jb.onrender.com/mcp` |
 | Privi Anchor | **Live** (on-chain submissions paused until the anchor wallet has gas) | `https://privi-anchor-zsbk.onrender.com/mcp` |
 | Privi Quantum | **Live** | `https://privi-quantum-vvmj.onrender.com/mcp` |
 | Privi Call | **Live** | `https://privi-call-e3rb.onrender.com/mcp` |
-| Agent Survival & Premium gateway | **Live** | `https://privi-ai-21-gateway.onrender.com/mcp` |
+| Agent Survival & Premium gateway | **Hosted CallProof demo suspended** | `https://privi-ai-21-gateway.onrender.com/mcp` |
 
-Every Privi tool is paid (x402 USDC on Base, or a paid API key). There are no free tiers. Folder index: [REPO_MAP.md](REPO_MAP.md).
+Live tool execution requires paid access where enabled. Use the demos above to try the workflows for free.
 
 ## Privi World paid services — $19.99 one-time or $35 Pro Unlimited
 
@@ -60,19 +67,18 @@ After checkout, email **canoydario847@gmail.com** with your checkout email and a
 
 ## Privi Agent Survival & Premium — prepaid AI-agent utility gateway
 
-**51 new premium analyzers** plus 32 standard survival utilities available through a commercial MCP connector. The premium tools cover agent authorization, SLO/incident triage, data quality, API unit economics, procurement and release readiness. Premium calls cost **5 prepaid credits** and ordinary calls cost **1 credit**; tool discovery is public, but free execution will be disabled in the paid-only release.
+The public catalog lists **51 premium analyzers** and **32 standard utilities** for agent authorization, incident triage, data quality, API costs, procurement, and release readiness. The credit schedule specifies **5 prepaid credits** per premium call and **1 credit** per standard call. See the commercial status below for checkout and execution availability.
 
-- [Live agent hub](https://privi-ai-21-gateway.onrender.com/agent-hub) · [Premium catalog](https://privi-ai-21-gateway.onrender.com/premium.json) · [Pricing/checkout status](https://privi-ai-21-gateway.onrender.com/pricing)
+- [Tool manifest](privi-agent-survival/submissions/docker-mcp-registry/servers/privi-agent-survival/tools.json) · [Commercial access details](privi-agent-survival/FIRST-CUSTOMER-START-HERE.md)
 - **Remote MCP:** `https://privi-ai-21-gateway.onrender.com/mcp` · **[Official MCP Registry v0.7.1 (verified)](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.canoydario847-cloud%2Fprivi-agent-survival/versions/0.7.1)**.
 - [Public MCP directory metadata and listing guide](privi-agent-survival/README.md).
-- [32 Agent Skills](https://privi-ai-21-gateway.onrender.com/skills/index.json) · [Live 51-premium website](https://privi-premium-tools.onrender.com).
 
 **Infrastructure note:** Privi MCP servers moved to a new Render workspace on Nov 14, 2026. The older `privi-<name>.onrender.com` addresses (no suffix) are retired; use the endpoints in the status table above.
 
 **Commercial status:** The three $19.99 human-delivered services and separate $35 Pro offer above use existing active Stripe-hosted payment links. The separate automated API-credit checkout is not accepting payments while durable storage, Stripe webhook credentials/tax configuration, Base confirmation and fulfillment tests remain unverified. Do not transfer funds without a verified order. The commercial gateway is separate from Privi Ledger's existing plans.
 
 Privi is building remote MCP agent utilities and verifiable-action infrastructure. **The 83-tool API catalog can be discovered, but automated paid API-credit purchases and self-service execution are not enabled.** Each $19.99 payment selects one service; the $35 Unlimited offer includes every Privi service. Human fulfillment needs coordination, and automatic tool activation for unfinished features is not yet operational. x402/USDC features and native mainnet are not represented as live revenue sources.
-**Made by Dario Canoy** · Privi World Corp. Legacy product URLs below may be unavailable or evaluation-only; do not use them for payments or critical records. The [Privi Agent Survival gateway](https://privi-ai-21-gateway.onrender.com/agent-hub) and the [first-customer guide](privi-agent-survival/FIRST-CUSTOMER-START-HERE.md) are the recommended starting points.
+Legacy product URLs below may be unavailable or evaluation-only; do not use them for payments or critical records. The [MCP directory metadata](privi-agent-survival/README.md) and [first-customer guide](privi-agent-survival/FIRST-CUSTOMER-START-HERE.md) describe integration and fulfillment.
 
 ```json
 { "mcpServers": {
