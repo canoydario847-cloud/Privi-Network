@@ -26,6 +26,8 @@ jobs:
           node --check jose-backend/src/server.js
           node --check jose-backend/src/conversation-history.js
           node --check jose-backend/public/chat-sidebar.js
+          node --check jose-backend/public/privi-voice.js
+          node --check jose-backend/public/privi-voice-core.mjs
           node --check jose-backend/src/agent-tools.js
           node --check jose-backend/src/agent-runner.js
           node --check jose-backend/test/jose-http-integration.test.js
