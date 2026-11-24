@@ -57,7 +57,8 @@
     }catch(error){fail(error);}
   });
   $('newChat').addEventListener('click',()=>{
-    window.joseResetChat?.();
+    if(window.joseSidebar?.newChat)window.joseSidebar.newChat();
+    else window.joseResetChat?.();
     clearAttachment();
     lastReply='';
     $('status').textContent='New conversation started in this tab. Previous messages have been cleared.';
