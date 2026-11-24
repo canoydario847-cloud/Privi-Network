@@ -126,7 +126,7 @@
   }
   function newChat(){
     if(busy())return flash('Finish the current answer before starting another chat.');
-    activeId=null;window.joseResetChat?.();render();closeDrawer();
+    activeId=null;window.joseResetChat?.();window.joseAddons?.onSent?.('');render();closeDrawer();
     flash('New conversation. Ask Hey Jose anything.');
   }
   function enqueue(work){
