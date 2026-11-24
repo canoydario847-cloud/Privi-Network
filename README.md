@@ -2,6 +2,16 @@
 
 Privi Network helps developers control which external tools AI agents can use, require approval for sensitive actions, and record what happened for review.
 
+
+## Try Hey Jose — AI chat from Privi World
+
+**[Launch Hey Jose ✦](https://jose-site-21hs.onrender.com/)** · [English](https://jose-site-21hs.onrender.com/discover.html) · [Español](https://jose-site-21hs.onrender.com/es/) · [Português](https://jose-site-21hs.onrender.com/pt/) · [Français](https://jose-site-21hs.onrender.com/fr/) · [हिन्दी](https://jose-site-21hs.onrender.com/hi/)
+
+Hey Jose brings writing, coding assistance, self-contained web app prototypes, **20 local deterministic tools**, and read-only Privi Devnet **TEST** observations into one conversational interface. [See real examples and share](https://jose-site-21hs.onrender.com/share.html).
+
+**Availability details:** AI answers depend on the configured model provider; public Devnet observations are read-only and are **not** native financial-mainnet confirmation. Gmail requires additional Google OAuth setup and user authorization. Account chat history currently uses temporary server storage. [International launch materials](marketing/HEY_JOSE_GLOBAL_LAUNCH_2026-11-24.md).
+
+
 [![CallProof demo showing a simulated CRM write and its receipt preview](docs/images/callproof-demo.jpg)](docs/images/callproof-demo.jpg)
 
 *CallProof walkthrough showing a sample CRM write and an unsigned preview of the executor’s receipt.*
