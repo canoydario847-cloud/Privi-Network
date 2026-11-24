@@ -7,8 +7,7 @@ const $=id=>document.getElementById(id);
 const available=Boolean(window.speechSynthesis&&window.SpeechSynthesisUtterance);
 const synth=available?window.speechSynthesis:null;
 const STORE='hey-jose-privi-voice-settings-v1';
-let settings=DEFAULT_VOICE_SETTINGS,voiceList=[],run=0,lastSpoken='';
-let wasEnabled=false;
+let settings=DEFAULT_VOICE_SETTINGS,voiceList=[],run=0;
 
 try{settings=normalizeVoiceSettings(JSON.parse(localStorage.getItem(STORE)||'{}'));}
 catch{settings={...DEFAULT_VOICE_SETTINGS};}
@@ -65,7 +64,6 @@ function read(value){
   }
   stop();
   const activeRun=run;
-  lastSpoken=text;
   const parts=splitSpeechText(text);
   const selected=chooseVoice();
   const speakNext=(index)=>{
