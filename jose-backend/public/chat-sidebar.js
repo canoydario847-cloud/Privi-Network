@@ -222,7 +222,7 @@
       $('message').value='Help me build a safe Web3 smart contract for ';
       closeDrawer();$('message').focus();
     }else{
-      const id={gmail:'gmailBtn',memory:'memoryBtn',export:'exportChat',attach:'attach'}[action];
+      const id={gmail:'gmailBtn',memory:'memoryBtn',voice:'priviVoiceBtn',export:'exportChat',attach:'attach'}[action];
       if(id)$(id).click();
       closeDrawer();
     }

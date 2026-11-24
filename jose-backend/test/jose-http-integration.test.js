@@ -156,6 +156,19 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   const html=await fetch(second.base+'/chat.html',{signal:AbortSignal.timeout(2000)});
   assert.equal(html.status,200);const markup=await html.text();
   assert.match(markup,/chat-gmail\.js/);assert.match(markup,/chat-memory\.js/);
+  // The no-cost voice feature is a browser module. Both module files must be
+  // delivered with a JavaScript MIME type or the browser will reject imports.
+  assert.match(markup,/priviVoicePanel/);
+  assert.match(markup,/priviVoiceAuto/);
+  assert.match(markup,/priviVoiceBtn/);
+  assert.match(markup,/privi-voice\.js/);
+  for(const voicePath of ['/privi-voice.js','/privi-voice-core.mjs']){
+    const response=await fetch(second.base+voicePath,{signal:AbortSignal.timeout(2000)});
+    assert.equal(response.status,200,voicePath);
+    assert.match(response.headers.get('content-type')||'',/application\/javascript/,voicePath);
+    const source=await response.text();
+    assert.ok(source.includes('Privi Voice'),voicePath);
+  }
   await stop(second.proc);second=null;
   third=await serverSession(dbFile,{JOSE_ADMIN_EMAIL:accountEmail,JOSE_ADMIN_PASSWORD:'AnotherTestPassword-2!'});
   const adminLogin=await json(third.base,'/api/login','POST',{email:accountEmail,password:'AnotherTestPassword-2!'});

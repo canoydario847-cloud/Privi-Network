@@ -57,7 +57,7 @@ function sendFile(res, filePath) {
     return;
   }
   const ext = path.extname(filePath);
-  const type = { '.html': 'text/html', '.css': 'text/css', '.js': 'application/javascript' }[ext] || 'application/octet-stream';
+  const type = { '.html': 'text/html', '.css': 'text/css', '.js': 'application/javascript', '.mjs': 'application/javascript' }[ext] || 'application/octet-stream';
   res.writeHead(200, { 'Content-Type': type });
   res.end(readFileSync(filePath));
 }
