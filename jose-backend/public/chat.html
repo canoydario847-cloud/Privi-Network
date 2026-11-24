@@ -112,6 +112,11 @@ textarea::placeholder{color:#aaa7b9}
  #sidebarShade:not([hidden]){display:block;position:fixed;z-index:60;inset:0;background:#0009;width:100%;height:100dvh;border:0;border-radius:0;padding:0}
  #chatPane{width:100%;max-width:100vw}
 }
+
+.code-wrap{background:#0d1322;border:1px solid #3d4256;border-radius:11px;margin:12px 0;overflow:hidden;width:100%}
+.code-bar{display:flex;align-items:center;justify-content:space-between;background:#242739;padding:7px 11px;color:var(--muted);font:12px system-ui,sans-serif}
+.code-bar button{font-size:12px;padding:3px 8px;background:#36334a}
+.code-wrap pre{white-space:pre;overflow-x:auto;margin:0;padding:14px 16px;line-height:1.55;tab-size:2;font:13px ui-monospace,SFMono-Regular,Consolas,monospace}
 </style>
 </head>
 <body>
@@ -222,7 +227,26 @@ function showMessage(role,message){
   showWelcome(false);
   const node=document.createElement('div');
   node.className='bubble '+role;
-  node.textContent=message;
+  if(role==='jose'&&String(message).includes('\x60\x60\x60')){
+    // Show fenced code safely, without injecting HTML into the page.
+    for(const part of String(message).split(/(\x60{3}[\s\S]*?\x60{3})/g)){
+      const match=part.match(/^\x60{3}([\w.+-]{0,24})\s*\n([\s\S]*?)\x60{3}$/);
+      if(!match){
+        const plain=document.createElement('span');
+        plain.textContent=part;node.append(plain);continue;
+      }
+      const wrap=document.createElement('div');wrap.className='code-wrap';
+      const bar=document.createElement('div');bar.className='code-bar';
+      const name=document.createElement('span');name.textContent=match[1]||'code';
+      const copy=document.createElement('button');copy.type='button';copy.textContent='Copy code';copy.className='copy-code';
+      copy.onclick=async()=>{
+        try{await navigator.clipboard.writeText(match[2]);copy.textContent='Copied';}
+        catch{copy.textContent='Select and copy the code';}
+      };
+      const pre=document.createElement('pre');const code=document.createElement('code');
+      code.textContent=match[2];pre.append(code);bar.append(name,copy);wrap.append(bar,pre);node.append(wrap);
+    }
+  }else node.textContent=message;
   feed.append(node);
   node.scrollIntoView({block:'end',behavior:'smooth'});
 }
