@@ -117,6 +117,28 @@ textarea::placeholder{color:#aaa7b9}
 .code-bar{display:flex;align-items:center;justify-content:space-between;background:#242739;padding:7px 11px;color:var(--muted);font:12px system-ui,sans-serif}
 .code-bar button{font-size:12px;padding:3px 8px;background:#36334a}
 .code-wrap pre{white-space:pre;overflow-x:auto;margin:0;padding:14px 16px;line-height:1.55;tab-size:2;font:13px ui-monospace,SFMono-Regular,Consolas,monospace}
+
+/* Privi Voice: free browser-native playback integrated into the same Jose chat. */
+header .actions{flex-wrap:wrap;justify-content:flex-end}
+#priviVoicePanel{background:#151a2a;border-bottom:1px solid #514967;padding:12px 18px}
+.voice-inner{max-width:930px;margin:auto}
+.voice-heading{display:flex;justify-content:space-between;gap:12px;align-items:center}
+.voice-heading h2{margin:0;color:var(--gold);font:700 19px Georgia,serif}
+.voice-description{margin:5px 0 11px;color:var(--muted);font-size:12px}
+.voice-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;align-items:center}
+.voice-field{display:flex;flex-direction:column;gap:5px;color:var(--text);font-size:12px}
+.voice-field select{font:inherit;font-size:13px;border:1px solid #605a76;border-radius:8px;background:#101522;color:var(--text);padding:9px 8px;min-height:40px;max-width:100%}
+.voice-field input{width:100%;accent-color:var(--gold);height:25px}
+.voice-field input:focus-visible,.voice-field select:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.voice-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:11px}
+.voice-actions button{padding:7px 11px;font-size:13px}
+.voice-actions label{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text)}
+.voice-actions input{accent-color:var(--gold)}
+#priviVoiceNotice{color:var(--muted);font-size:12px;min-height:16px;margin:8px 0 0}
+.voice-message-actions{margin-top:9px;display:flex;gap:7px;align-items:center}
+.voice-listen{font-size:12px;padding:4px 10px;background:#222a3a;color:var(--gold);border-color:#554b61}
+.voice-listen:hover{background:#343046}
+@media(max-width:650px){#priviVoicePanel{padding:10px 12px}.voice-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.voice-field:first-child{grid-column:1/-1}#priviVoiceBtn{font-size:12px!important}}
 </style>
 </head>
 <body>
@@ -145,12 +167,38 @@ textarea::placeholder{color:#aaa7b9}
   <div class="header-leading"><button id="toggleSidebar" class="iconbutton" type="button" aria-label="Toggle sidebar" aria-expanded="true" aria-controls="sidebar">☰</button><div><span class="brand" aria-label="Hey Jose">Hey <span>Jose</span> ✦</span><span class="devnet-status" id="devnetStatus" title="Privi Devnet — checking actual RPC and chain ID">Devnet: checking…</span></div></div>
   <div class="actions">
     <button class="iconbutton" id="newChat" type="button" title="New conversation">New chat</button>
+    <button class="iconbutton" id="priviVoiceBtn" type="button" aria-controls="priviVoicePanel" aria-expanded="false" title="Free Privi Voice playback settings">🔊 Privi Voice</button>
     <button class="iconbutton" id="memoryBtn" type="button" title="Review and control what Jose remembers">Memory</button>
     <button class="iconbutton" id="gmailBtn" type="button" title="Connect Gmail, read and write emails">Gmail</button>
     <button class="iconbutton" id="copyReply" type="button" title="Copy last answer">Copy</button>
     <button class="iconbutton" id="exportChat" type="button" title="Export conversation">Export</button>
   </div>
 </header>
+<section id="priviVoicePanel" hidden aria-label="Privi Voice playback options">
+  <div class="voice-inner">
+    <div class="voice-heading"><h2>Privi Voice ✦ <small style="font:12px system-ui;color:var(--muted)">Free</small></h2><button id="priviVoiceClose" class="iconbutton" type="button" aria-label="Close voice settings">✕</button></div>
+    <p class="voice-description">Listen to Jose replies using voices available in your browser or device. No paid Privi Voice API or account required. Voice availability and speech processing depend on your browser and operating system.</p>
+    <div class="voice-grid">
+      <label class="voice-field" for="priviVoiceSelect">Voice
+        <select id="priviVoiceSelect"><option value="">System default</option></select>
+      </label>
+      <label class="voice-field" for="priviVoiceRate">Speed: <output id="priviVoiceRateValue">1.0×</output>
+        <input id="priviVoiceRate" type="range" min="0.6" max="2" value="1" step="0.1">
+      </label>
+      <label class="voice-field" for="priviVoicePitch">Pitch: <output id="priviVoicePitchValue">1.0</output>
+        <input id="priviVoicePitch" type="range" min="0.7" max="1.5" value="1" step="0.1">
+      </label>
+    </div>
+    <div class="voice-actions">
+      <button id="priviVoicePreview" type="button">▶ Try voice</button>
+      <button id="priviVoiceLast" type="button">🔊 Read latest answer</button>
+      <button id="priviVoiceStop" type="button" disabled>■ Stop</button>
+      <button id="priviVoiceMic" type="button" title="Dictate a message with your microphone">🎙 Talk to Jose</button>
+      <label for="priviVoiceAuto"><input id="priviVoiceAuto" type="checkbox"> Automatically read new answers</label>
+    </div>
+    <p id="priviVoiceNotice" role="status" aria-live="polite">Loading available device voices…</p>
+  </div>
+</section>
 <section id="gmailPanel" hidden aria-label="Gmail connection and email composer">
  <div class="inside">
   <h2>Gmail · Read and write with Jose</h2>
@@ -247,6 +295,18 @@ function showMessage(role,message){
       code.textContent=match[2];pre.append(code);bar.append(name,copy);wrap.append(bar,pre);node.append(wrap);
     }
   }else node.textContent=message;
+  if(role==='jose'){
+    const actions=document.createElement('div');actions.className='voice-message-actions';
+    const listen=document.createElement('button');
+    listen.type='button';listen.className='voice-listen';
+    listen.textContent='🔊 Listen';listen.title='Read this Jose reply with Privi Voice';
+    listen.setAttribute('aria-label','Listen to this Jose reply');
+    listen.onclick=()=>{
+      if(window.priviVoice)window.priviVoice.read(message);
+      else status.textContent='Privi Voice is loading. Please try again.';
+    };
+    actions.append(listen);node.append(actions);
+  }
   feed.append(node);
   node.scrollIntoView({block:'end',behavior:'smooth'});
 }
@@ -265,6 +325,7 @@ function clearArtifact(){
 }
 window.joseResetChat=()=>{
   if(running)return;
+  window.priviVoice?.stop();
   history.length=0;
   [...feed.querySelectorAll('.bubble')].forEach(node=>node.remove());
   clearArtifact();showWelcome(true);input.value='';
@@ -272,6 +333,7 @@ window.joseResetChat=()=>{
 };
 window.joseRestoreConversation=(messages)=>{
   if(running)return;
+  window.priviVoice?.stop();
   history.length=0;
   [...feed.querySelectorAll('.bubble')].forEach(node=>node.remove());
   clearArtifact();
@@ -329,6 +391,7 @@ form.addEventListener('submit',async event=>{
     showMessage('user',message);
     showMessage('jose',memoryAnswer);
     window.joseAddons?.onSent?.(memoryAnswer);
+    window.priviVoice?.onAnswer(memoryAnswer);
     input.value='';status.textContent='';return;
   }
   const attachment=window.joseAddons?.getAttachment?.()||null;
@@ -347,6 +410,7 @@ form.addEventListener('submit',async event=>{
     if(typeof data.answer!=='string'||!data.answer.trim())throw new Error('Jose did not return an answer.');
     showMessage('jose',data.answer);
     window.joseAddons?.onSent?.(data.answer);
+    if(!data.gmailAction)window.priviVoice?.onAnswer(data.answer);
     // Gmail message data must not be silently forwarded to the AI provider
     // as part of the next conversation-history request.
     if(!data.gmailAction){
@@ -401,5 +465,6 @@ input.focus();
 <script src="/chat-memory.js?v=20261123"></script><script>window.joseMemory?.setup();</script>
 <script src="/chat-gmail.js?v=20261123-gmail"></script>
 <script src="/chat-sidebar.js?v=20261124-history"></script>
+<script type="module" src="/privi-voice.js?v=20261124-free"></script>
 </body>
 </html>
