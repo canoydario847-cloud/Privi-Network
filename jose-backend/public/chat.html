@@ -78,12 +78,71 @@ textarea::placeholder{color:#aaa7b9}
 #attachmentStatus:empty{display:none}
 @media(max-width:650px){.devnet-status{display:block;margin-left:0;font-size:10px}header{height:auto;min-height:64px;padding:9px 10px;gap:5px}.iconbutton{font-size:11px!important;padding:6px 3px!important}header .actions{gap:3px}#memoryPanel{padding:12px}.brand{font-size:18px}.iconbutton{padding:7px 5px}#feed{padding:18px 12px}.composer-area{padding:8px 8px 14px}.welcome{padding:38px 8px}.bubble.jose{padding-left:28px}.send{min-width:72px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+
+/* ChatGPT-style layout structure with independent, accessible Jose sidebar. */
+#app{max-width:none;display:flex;flex-direction:row;margin:0}
+#chatPane{display:flex;flex-direction:column;flex:1;min-width:0;height:100dvh}
+#sidebar{width:265px;flex:0 0 265px;height:100dvh;min-height:0;display:flex;flex-direction:column;gap:12px;padding:16px 11px;background:#101522;border-right:1px solid #34394d}
+.sidebar-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 7px}
+.sidebar-name{font:700 19px Georgia,serif;color:var(--gold)}
+#sidebar button{font-size:13px}
+#sidebarNewChat{width:100%;text-align:left;background:#22283b;border-color:#54526a;padding:11px 13px;font-weight:650}
+#sidebarSearch{width:100%;border:1px solid #41465d;border-radius:10px;background:#171e2d;color:var(--text);padding:10px 11px;font:inherit;font-size:13px}
+#sidebarSearch:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
+.sidebar-section-title{color:#c9c1d5;font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin:5px 5px 0}
+#conversationList{flex:1;min-height:80px;overflow:auto;display:flex;flex-direction:column;gap:3px;scrollbar-color:#50566c transparent}
+.sidebar-chat{display:flex;align-items:center;gap:2px;border-radius:9px;padding:1px 3px}
+.sidebar-chat.selected{background:#34314a}
+.sidebar-chat:hover{background:#292c41}
+.sidebar-chat-title{border:0!important;background:transparent!important;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left;padding:9px 5px!important}
+.sidebar-mini{border:0!important;background:transparent!important;padding:5px!important;color:#c9c3d4!important;min-width:22px}
+.sidebar-mini:hover{color:#fff!important;background:#49405b!important}
+.sidebar-empty{margin:6px;color:var(--muted);font-size:12px}
+#sidebarTasks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+#sidebarTasks button{padding:8px 4px;background:#1b2232;font-size:12px}
+#sidebarAccount{width:100%;text-align:left;padding:9px}
+#sidebarStorage{font-size:11px;line-height:1.4;color:var(--muted);margin:6px}
+.header-leading{display:flex;align-items:center;gap:8px;min-width:0}
+#toggleSidebar{font-size:20px!important;padding:4px 8px!important}
+#sidebarShade{display:none}
+@media(min-width:861px){#sidebar.collapsed{display:none}}
+@media(max-width:860px){
+ #sidebar{position:fixed;z-index:70;left:0;top:0;width:min(86vw,300px);height:100dvh;transform:translateX(-103%);transition:transform .18s ease;box-shadow:6px 0 35px #0009}
+ #sidebar.expanded{transform:translateX(0)}
+ #sidebarShade:not([hidden]){display:block;position:fixed;z-index:60;inset:0;background:#0009;width:100%;height:100dvh;border:0;border-radius:0;padding:0}
+ #chatPane{width:100%;max-width:100vw}
+}
+
+.code-wrap{background:#0d1322;border:1px solid #3d4256;border-radius:11px;margin:12px 0;overflow:hidden;width:100%}
+.code-bar{display:flex;align-items:center;justify-content:space-between;background:#242739;padding:7px 11px;color:var(--muted);font:12px system-ui,sans-serif}
+.code-bar button{font-size:12px;padding:3px 8px;background:#36334a}
+.code-wrap pre{white-space:pre;overflow-x:auto;margin:0;padding:14px 16px;line-height:1.55;tab-size:2;font:13px ui-monospace,SFMono-Regular,Consolas,monospace}
 </style>
 </head>
 <body>
 <div id="app">
+<aside id="sidebar" aria-label="Conversation history and quick tasks">
+  <div class="sidebar-head"><span class="sidebar-name">Hey Jose ✦</span><button id="closeSidebar" class="iconbutton" type="button" aria-label="Close sidebar" title="Close sidebar">✕</button></div>
+  <button id="sidebarNewChat" type="button">＋ New chat</button>
+  <input id="sidebarSearch" type="search" aria-label="Search conversations" placeholder="Search chats…" autocomplete="off">
+  <h2 class="sidebar-section-title">Your conversations</h2>
+  <nav id="conversationList" aria-label="Saved conversations"></nav>
+  <h2 class="sidebar-section-title">Quick tasks</h2>
+  <div id="sidebarTasks">
+    <button type="button" data-action="powers">20 tools</button>
+    <button type="button" data-action="devnet">Devnet status</button>
+    <button type="button" data-action="web3">Build Web3</button>
+    <button type="button" data-action="gmail">Gmail</button>
+    <button type="button" data-action="memory">Memory</button>
+    <button type="button" data-action="attach">Attach file</button>
+    <button type="button" data-action="export">Export</button>
+  </div>
+  <div><button id="sidebarAccount" type="button">Sign in / sync chats</button><p id="sidebarStorage" role="status">Loading chat history…</p></div>
+</aside>
+<button id="sidebarShade" type="button" hidden aria-label="Close sidebar overlay"></button>
+<div id="chatPane">
 <header>
-  <div><span class="brand" aria-label="Hey Jose">Hey <span>Jose</span> ✦</span><span class="devnet-status" id="devnetStatus" title="Privi Devnet — checking actual RPC and chain ID">Devnet: checking…</span></div>
+  <div class="header-leading"><button id="toggleSidebar" class="iconbutton" type="button" aria-label="Toggle sidebar" aria-expanded="true" aria-controls="sidebar">☰</button><div><span class="brand" aria-label="Hey Jose">Hey <span>Jose</span> ✦</span><span class="devnet-status" id="devnetStatus" title="Privi Devnet — checking actual RPC and chain ID">Devnet: checking…</span></div></div>
   <div class="actions">
     <button class="iconbutton" id="newChat" type="button" title="New conversation">New chat</button>
     <button class="iconbutton" id="memoryBtn" type="button" title="Review and control what Jose remembers">Memory</button>
@@ -152,6 +211,7 @@ textarea::placeholder{color:#aaa7b9}
   <p id="status" role="status">Connecting to Jose…</p>
 </div>
 </div>
+</div>
 <script>
 const feed=document.getElementById('feed');
 const input=document.getElementById('message');
@@ -160,13 +220,33 @@ const form=document.getElementById('chat');
 const send=document.getElementById('send');
 const history=[];
 let running=false,generatedApp='';
+window.joseChatBusy=false;
 window.joseChatHistory=history;
 function showWelcome(show){document.getElementById('welcome').hidden=!show;}
 function showMessage(role,message){
   showWelcome(false);
   const node=document.createElement('div');
   node.className='bubble '+role;
-  node.textContent=message;
+  if(role==='jose'&&String(message).includes('\x60\x60\x60')){
+    // Show fenced code safely, without injecting HTML into the page.
+    for(const part of String(message).split(/(\x60{3}[\s\S]*?\x60{3})/g)){
+      const match=part.match(/^\x60{3}([\w.+-]{0,24})\s*\n([\s\S]*?)\x60{3}$/);
+      if(!match){
+        const plain=document.createElement('span');
+        plain.textContent=part;node.append(plain);continue;
+      }
+      const wrap=document.createElement('div');wrap.className='code-wrap';
+      const bar=document.createElement('div');bar.className='code-bar';
+      const name=document.createElement('span');name.textContent=match[1]||'code';
+      const copy=document.createElement('button');copy.type='button';copy.textContent='Copy code';copy.className='copy-code';
+      copy.onclick=async()=>{
+        try{await navigator.clipboard.writeText(match[2]);copy.textContent='Copied';}
+        catch{copy.textContent='Select and copy the code';}
+      };
+      const pre=document.createElement('pre');const code=document.createElement('code');
+      code.textContent=match[2];pre.append(code);bar.append(name,copy);wrap.append(bar,pre);node.append(wrap);
+    }
+  }else node.textContent=message;
   feed.append(node);
   node.scrollIntoView({block:'end',behavior:'smooth'});
 }
@@ -189,6 +269,21 @@ window.joseResetChat=()=>{
   [...feed.querySelectorAll('.bubble')].forEach(node=>node.remove());
   clearArtifact();showWelcome(true);input.value='';
   input.focus();
+};
+window.joseRestoreConversation=(messages)=>{
+  if(running)return;
+  history.length=0;
+  [...feed.querySelectorAll('.bubble')].forEach(node=>node.remove());
+  clearArtifact();
+  const safe=Array.isArray(messages)?messages.filter(m=>m&&['user','assistant'].includes(m.role)&&typeof m.content==='string').slice(-80):[];
+  showWelcome(safe.length===0);
+  for(const m of safe)showMessage(m.role==='user'?'user':'jose',m.content);
+  for(const m of safe.slice(-16))history.push({role:m.role,content:m.content.slice(0,12000)});
+  while(history.length>16||history.reduce((n,m)=>n+m.content.length,0)>42000)history.splice(0,2);
+  const last=[...safe].reverse().find(m=>m.role==='assistant');
+  window.joseAddons?.onSent?.(last?.content||'');
+  if(last){generatedApp=artifactFromAnswer(last.content);document.getElementById('artifact').hidden=!generatedApp;}
+  input.value='';status.textContent='';
 };
 document.getElementById('downloadApp').addEventListener('click',()=>{
   if(!generatedApp)return;
@@ -237,7 +332,7 @@ form.addEventListener('submit',async event=>{
     input.value='';status.textContent='';return;
   }
   const attachment=window.joseAddons?.getAttachment?.()||null;
-  running=true;send.disabled=true;input.disabled=true;
+  running=true;window.joseChatBusy=true;send.disabled=true;input.disabled=true;
   showMessage('user',message+(attachment?'\n[Attached '+attachment.kind+': '+attachment.name+']':''));
   input.value='';
   clearArtifact();
@@ -256,8 +351,9 @@ form.addEventListener('submit',async event=>{
     // as part of the next conversation-history request.
     if(!data.gmailAction){
       history.push({role:'user',content:message},{role:'assistant',content:data.answer.slice(0,12000)});
+      while(history.length>16||history.reduce((n,item)=>n+item.content.length,0)>42000)history.splice(0,2);
+      void window.joseSidebar?.onTurn?.(message,data.answer,{gmailAction:data.gmailAction});
     }
-    while(history.length>16||history.reduce((n,item)=>n+item.content.length,0)>42000)history.splice(0,2);
     if(data.mode==='build'){
       generatedApp=artifactFromAnswer(data.answer);
       document.getElementById('artifact').hidden=!generatedApp;
@@ -268,7 +364,7 @@ form.addEventListener('submit',async event=>{
     input.value=message;
     status.textContent='The answer failed. Check the message above and retry.';
   } finally {
-    input.disabled=false;send.disabled=false;running=false;input.focus();
+    input.disabled=false;send.disabled=false;running=false;window.joseChatBusy=false;input.focus();
   }
 });
 fetch('/api/chat/status',{credentials:'same-origin'}).then(async r=>{
@@ -304,5 +400,6 @@ input.focus();
 <script src="/chat-extras.js?v=20261123-onechat"></script>
 <script src="/chat-memory.js?v=20261123"></script><script>window.joseMemory?.setup();</script>
 <script src="/chat-gmail.js?v=20261123-gmail"></script>
+<script src="/chat-sidebar.js?v=20261124-history"></script>
 </body>
 </html>

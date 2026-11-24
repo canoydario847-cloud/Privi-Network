@@ -4,6 +4,8 @@
 // usage grows past what a single JSON file comfortably handles.
 import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync } from 'fs';
 import path from 'path';
+import crypto from 'node:crypto';
+import { MAX_CONVERSATIONS, normalizeTitle, validateConversationMessages, conversationSummary } from './conversation-history.js';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -86,6 +88,50 @@ export const db = {
       delete state.connections[userId][pluginId];
       persist();
     }
+  },
+
+  // Conversation history belongs to one authenticated Jose account. No
+  // global guest session or public URL can read another user's chats.
+  listConversations(userId) {
+    const items=Object.values(state.conversations || {}).filter(c=>c.ownerId===userId);
+    return items.sort((a,b)=>b.updatedAt-a.updatedAt).map(conversationSummary);
+  },
+  getConversation(userId,id) {
+    const row=state.conversations?.[id];
+    if(!row||row.ownerId!==userId)return null;
+    return {id:row.id,title:row.title,createdAt:row.createdAt,updatedAt:row.updatedAt,
+      messages:row.messages.map(m=>({...m}))};
+  },
+  createConversation(userId,title) {
+    const existing=this.listConversations(userId);
+    if(existing.length>=MAX_CONVERSATIONS)
+      throw Object.assign(new Error('Conversation limit reached. Delete an older chat before starting another.'),{status:409});
+    state.conversations ||= {};
+    const now=Date.now();
+    const id=crypto.randomUUID();
+    const row={id,ownerId:userId,title:normalizeTitle(title),createdAt:now,updatedAt:now,messages:[]};
+    state.conversations[id]=row;
+    persist();
+    return conversationSummary(row);
+  },
+  updateConversation(userId,id,{title,messages}={}) {
+    const row=state.conversations?.[id];
+    if(!row||row.ownerId!==userId)return null;
+    // Validate the entire payload before modifying the stored record.
+    const revisedMessages=messages===undefined?row.messages:validateConversationMessages(messages);
+    const revisedTitle=title===undefined?row.title:normalizeTitle(title);
+    row.title=revisedTitle;
+    row.messages=revisedMessages;
+    row.updatedAt=Date.now();
+    persist();
+    return conversationSummary(row);
+  },
+  deleteConversation(userId,id) {
+    const row=state.conversations?.[id];
+    if(!row||row.ownerId!==userId)return false;
+    delete state.conversations[id];
+    persist();
+    return true;
   },
 
   // Prelaunch NONFINANCIAL credits only; no on-chain PRVI or transferable value.

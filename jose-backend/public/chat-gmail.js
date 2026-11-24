@@ -61,6 +61,7 @@
         body:JSON.stringify({email,password})
       });
       $('gmailPassword').value='';await refresh();
+      window.dispatchEvent(new Event('jose-auth-changed'));
     }catch(e){message(e.message);}
     finally{button.disabled=false;}
   }

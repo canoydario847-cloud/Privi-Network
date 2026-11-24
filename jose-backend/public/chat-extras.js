@@ -57,13 +57,14 @@
     }catch(error){fail(error);}
   });
   $('newChat').addEventListener('click',()=>{
-    window.joseResetChat?.();
+    if(window.joseSidebar?.newChat)window.joseSidebar.newChat();
+    else window.joseResetChat?.();
     clearAttachment();
     lastReply='';
     $('status').textContent='New conversation started in this tab. Previous messages have been cleared.';
   });
   $('exportChat').addEventListener('click',()=>{
-    const payload=JSON.stringify({format:'hey-jose-chat-v1',exportedAt:new Date().toISOString(),messages:window.joseChatHistory||[]},null,2);
+    const payload=JSON.stringify({format:'hey-jose-chat-v1',exportedAt:new Date().toISOString(),messages:window.joseSidebar?.getCurrentMessages?.()||window.joseChatHistory||[]},null,2);
     const url=URL.createObjectURL(new Blob([payload],{type:'application/json'}));
     const link=document.createElement('a');
     link.href=url;link.download='hey-jose-conversation.json';
