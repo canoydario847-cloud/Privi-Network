@@ -327,8 +327,7 @@ form.addEventListener('submit',async event=>{
     // as part of the next conversation-history request.
     if(!data.gmailAction){
       history.push({role:'user',content:message},{role:'assistant',content:data.answer.slice(0,12000)});
-    }
-    while(history.length>16||history.reduce((n,item)=>n+item.content.length,0)>42000)history.splice(0,2);
+      while(history.length>16||history.reduce((n,item)=>n+item.content.length,0)>42000)history.splice(0,2);
       void window.joseSidebar?.onTurn?.(message,data.answer,{gmailAction:data.gmailAction});
     }
     if(data.mode==='build'){
