@@ -20,6 +20,10 @@ import { gmailIntent, gmailConnectionGuide, formatGmailInbox, formatGmailMessage
 import { createJoseReadTools, JOSE_READ_TOOLS } from './agent-tools.js';
 import { QuantumInputError,MAX_QUBITS,QUANTUM_HELP,parseQasm as parseQuantumQasm,quantumRequest,simulateCircuit,formatQuantumAnswer } from './privi-quantum-simulator.js';
 import {readQuantumProjectStatus,formatQuantumProjectStatus} from './privi-quantum-project.js';
+import {QuantumOptimizationError,MAX_QUBO_VARIABLES,optimizationRequest,
+  solveExactQubo,optimizeBalanceLines,formatOptimizationResult,OPTIMIZATION_HELP
+} from './privi-quantum-optimization.js';
+import {createQuantumCloudBridge} from './privi-quantum-cloud-bridge.js';
 import { completeJose, JoseProviderError } from './agent-runner.js';
 import {
   REWARD_POLICY, validateRewardReceipt, verifyReceiptSignature, InvalidRewardReceipt,
@@ -44,6 +48,7 @@ const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const pendingOAuth = new Map();
 const chatRate = new Map();
 const quantumRate = new Map();
+const quantumCloudBridge=createQuantumCloudBridge();
 let quantumProjectCache=null;
 let quantumProjectCacheExpires=0;
 let quantumProjectInFlight=null;
@@ -265,6 +270,59 @@ const server = http.createServer(async (req, res) => {
         hardwareQpu:false,paidCalls:false,blockchainTransactions:false,
         help:QUANTUM_HELP});
     }
+    if(req.method==='GET'&&url.pathname==='/api/quantum/optimization-info'){
+      res.setHeader('Cache-Control','no-store');
+      return sendJson(res,200,{algorithm:'classical_exhaustive_qubo',
+        maxVariables:MAX_QUBO_VARIABLES,maxConfigurations:2**MAX_QUBO_VARIABLES,
+        problems:['qubo','balance_lines'],
+        qaoaExecuted:false,physicalQpu:false,paymentRequired:false,
+        help:OPTIMIZATION_HELP});
+    }
+    if(req.method==='POST'&&url.pathname==='/api/quantum/optimize'){
+      if(!requireOrigin(req,res))return;
+      const owner=getCurrentUser(req)?.id||'guest:'+(req.socket.remoteAddress||'unknown');
+      if(!quantumRateAllowed(owner))return sendJson(res,429,{error:'Quantum request limit reached. Retry in one minute.'});
+      try{
+        const body=await readLimitedJsonBody(req,12000);
+        const result=body&&Object.prototype.hasOwnProperty.call(body,'jobs')?
+          optimizeBalanceLines(body):solveExactQubo(body);
+        return sendJson(res,200,{...result,answer:formatOptimizationResult(result)});
+      }catch(error){
+        return sendJson(res,error instanceof RangeError?413:error instanceof SyntaxError||error instanceof QuantumOptimizationError?400:500,
+          {error:error instanceof QuantumOptimizationError?error.message:error instanceof RangeError?'Optimization request too large.':error instanceof SyntaxError?'Invalid optimization JSON.':'Optimization failed.'});
+      }
+    }
+    // The remote Quantum Cloud bridge is DISABLED unless an operator explicitly
+    // configures the private API key and a Jose account email allowlist.
+    // It only accesses the cloud's classical simulator-only endpoints.
+    if(req.method==='GET'&&url.pathname==='/api/quantum/cloud/info'){
+      res.setHeader('Cache-Control','no-store');
+      return sendJson(res,200,quantumCloudBridge.status());
+    }
+    if(req.method==='POST'&&url.pathname==='/api/quantum/cloud/jobs'){
+      if(!requireOrigin(req,res))return;
+      const user=getCurrentUser(req);
+      if(!user)return sendJson(res,401,{error:'Sign in to request an operator-only remote simulator job.'});
+      if(!quantumRateAllowed(user.id))return sendJson(res,429,{error:'Quantum request limit reached.'});
+      try{
+        const body=await readLimitedJsonBody(req,8000);
+        return sendJson(res,202,await quantumCloudBridge.submit(user,body));
+      }catch(error){
+        return sendJson(res,error instanceof RangeError?413:error.status||400,
+          {error:error.status?error.message:error instanceof RangeError?'Quantum job request too large.':'Invalid quantum job request.'});
+      }
+    }
+    if(req.method==='GET'&&/^\/api\/quantum\/cloud\/jobs\/qj_[0-9a-f]{32}$/.test(url.pathname)){
+      res.setHeader('Cache-Control','no-store');
+      const user=getCurrentUser(req);
+      if(!user)return sendJson(res,401,{error:'Sign in to view an operator-only quantum job.'});
+      try{
+        const jobId=url.pathname.split('/').at(-1);
+        return sendJson(res,200,await quantumCloudBridge.get(user,jobId));
+      }catch(error){
+        return sendJson(res,error.status||503,{error:error.status?error.message:'Quantum job unavailable.'});
+      }
+    }
     if (req.method === 'GET' && url.pathname === '/api/quantum/project') {
       res.setHeader('Cache-Control','no-store');
       return sendJson(res,200,await quantumProjectStatus());
@@ -286,7 +344,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/chat/status') {
       const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
-      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), mode: process.env.JOSE_AI_API_KEY ? 'provider' : 'unconfigured', model: process.env.JOSE_AI_API_KEY ? (process.env.JOSE_AI_MODEL || 'gpt-4o-mini') : null, chatModes: ['chat', 'build', 'web3'], priviDevnetExpectedChainId: DEVNET_EVM_ID, priviDevnetStatusUrl: '/api/devnet/status', attachments: ['image/png','image/jpeg','image/webp','text'], maxAttachments: 2, localPowerCount: JOSE_POWERS.length, agentReadOnlyToolCount: JOSE_READ_TOOLS.length, agentReadOnlyToolNames: JOSE_READ_TOOLS.map(t=>t.function.name), freePriviQuantumSimulator:true, quantumSimulatorMaxQubits:MAX_QUBITS, quantumSimulatorUrl:'/api/quantum/simulate', browserMemorySupported: true, memoryStorage: 'USER_BROWSER_ONLY',conversationHistory:true,conversationHistoryRequiresLogin:true,conversationHistoryStorage:'TEMPORARY_RENDER_FILE_STORAGE',gmailConfigured:getPlugin('google').isConfigured(),gmailConnectUrl:'/connect/google' });
+      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), mode: process.env.JOSE_AI_API_KEY ? 'provider' : 'unconfigured', model: process.env.JOSE_AI_API_KEY ? (process.env.JOSE_AI_MODEL || 'gpt-4o-mini') : null, chatModes: ['chat', 'build', 'web3'], priviDevnetExpectedChainId: DEVNET_EVM_ID, priviDevnetStatusUrl: '/api/devnet/status', attachments: ['image/png','image/jpeg','image/webp','text'], maxAttachments: 2, localPowerCount: JOSE_POWERS.length, agentReadOnlyToolCount: JOSE_READ_TOOLS.length, agentReadOnlyToolNames: JOSE_READ_TOOLS.map(t=>t.function.name), freePriviQuantumSimulator:true, quantumSimulatorMaxQubits:MAX_QUBITS, quantumSimulatorUrl:'/api/quantum/simulate', quantumOptimizationMaxVariables:MAX_QUBO_VARIABLES, quantumOptimizationUrl:'/api/quantum/optimize', quantumCloudBridgeConfigured:quantumCloudBridge.status().enabled, browserMemorySupported: true, memoryStorage: 'USER_BROWSER_ONLY',conversationHistory:true,conversationHistoryRequiresLogin:true,conversationHistoryStorage:'TEMPORARY_RENDER_FILE_STORAGE',gmailConfigured:getPlugin('google').isConfigured(),gmailConnectUrl:'/connect/google' });
     }
     if (req.method === 'POST' && url.pathname === '/api/chat') {
       const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
@@ -317,6 +375,25 @@ const server = http.createServer(async (req, res) => {
       const history = Array.isArray(body.history) ? body.history.slice(-16) : [];
       if (history.some(m => !m || !['user','assistant'].includes(m.role) || typeof m.content !== 'string' || m.content.length > 12000) || history.reduce((n,m)=>n+m.content.length,0)>48000) {
         return sendJson(res, 400, { error: 'Invalid or oversized conversation history.' });
+      }
+      // Deterministic, no-cost QUBO optimization. This is a classical exact
+      // reference optimum, NOT the independent CVaR-QAOA or a hardware result.
+      try{
+        const optimization=optimizationRequest(message);
+        if(optimization){
+          if(Array.isArray(body.attachments)&&body.attachments.length)
+            return sendJson(res,400,{error:'Paste QUBO or jobs JSON. Attachments are not accepted for optimization.'});
+          if(optimization.type==='help')
+            return sendJson(res,200,{answer:OPTIMIZATION_HELP,mode:'chat',
+              optimizationHelp:true,deterministic:true});
+          const result=optimization.type==='balance'?
+            optimizeBalanceLines(optimization.input):solveExactQubo(optimization.input);
+          return sendJson(res,200,{answer:formatOptimizationResult(result),mode:'chat',
+            optimization:result,deterministic:true,physicalQpu:false});
+        }
+      }catch(error){
+        if(error instanceof QuantumOptimizationError)return sendJson(res,400,{error:error.message});
+        return sendJson(res,500,{error:'The classical optimization could not be completed.'});
       }
       // Quantum circuit requests execute the Privi Quantum local simulator,
       // never use the AI provider, paid MCP tools, physical hardware or a wallet.
