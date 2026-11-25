@@ -65,6 +65,23 @@ await probe('Privi Quantum public project status proxy',BACKEND+'/api/quantum/pr
  optional:true
 });
 
+// Operator-only cloud jobs remain untouched. These optional checks only read
+// public metadata or perform an inexpensive local classical calculation.
+await probe('Privi Quantum exact QUBO optimizer metadata',BACKEND+'/api/quantum/optimization-info',{
+ expect:(r,j)=>r.status===200&&j?.maxVariables===16&&j?.qaoaExecuted===false&&j?.physicalQpu===false,
+ optional:true
+});
+await probe('Privi Quantum exact QUBO baseline',BACKEND+'/api/quantum/optimize',{
+ method:'POST',payload:{Q:[[1,-2],[-2,1]],names:['a','b']},
+ expect:(r,j)=>r.status===200&&j?.optimumCost===-2&&j?.qaoaExecuted===false&&
+  j?.configurationsEvaluated===4&&j?.remoteJobsSubmitted===false,
+ optional:true
+});
+await probe('Privi Quantum Cloud does not expose hardware calls',BACKEND+'/api/quantum/cloud/info',{
+ expect:(r,j)=>r.status===200&&j?.physicalQpu===false&&j?.paidHardwareAllowed===false&&
+  typeof j?.enabled==='boolean',
+ optional:true
+});
 const card=await probe('Network report card response',BACKEND+'/api/network/report-card',{expect:(r,j)=>r.status===200&&j&&typeof j==='object',optional:true});
 if(card?.json)report.monitorFresh=card.json.fresh===true;
 const dev=await probe('Devnet verification endpoint',BACKEND+'/api/devnet/status',{expect:(r,j)=>r.status===200&&typeof j?.connected==='boolean',optional:true});

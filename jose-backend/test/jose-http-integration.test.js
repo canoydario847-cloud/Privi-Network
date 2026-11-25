@@ -22,6 +22,7 @@ async function serverSession(dbFile, overrides={}){
  const port=await freePort(),base='http://127.0.0.1:'+port;
  const env={...process.env,PORT:String(port),BASE_URL:base,DB_FILE:dbFile};
  for(const key of ['JOSE_ADMIN_EMAIL','JOSE_ADMIN_PASSWORD','JOSE_AI_API_KEY','GOOGLE_CLIENT_ID','GOOGLE_CLIENT_SECRET'])delete env[key];
+ for(const key of Object.keys(env))if(key.startsWith('JOSE_QUANTUM_CLOUD_'))delete env[key];
  Object.assign(env,overrides);
  const proc=spawn(process.execPath,[serverFile],{cwd:projectDir,env,stdio:['ignore','pipe','pipe']});
  let output='';
@@ -73,6 +74,17 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   assert.equal(quantumInfo.data.hardwareQpu,false);
   assert.equal(quantumInfo.data.maxQubits,12);
   assert.equal(quantumInfo.data.paidCalls,false);
+  const optimizationInfo=await json(base,'/api/quantum/optimization-info');
+  assert.equal(optimizationInfo.status,200);
+  assert.equal(optimizationInfo.data.maxVariables,16);
+  assert.equal(optimizationInfo.data.qaoaExecuted,false);
+  const cloudInfo=await json(base,'/api/quantum/cloud/info');
+  assert.equal(cloudInfo.status,200);
+  assert.equal(cloudInfo.data.enabled,false);
+  assert.equal(cloudInfo.data.physicalQpu,false);
+  const anonCloud=await json(base,'/api/quantum/cloud/jobs','POST',
+    {qasm:'OPENQASM 2.0; qreg q[1]; h q[0];'});
+  assert.equal(anonCloud.status,401);
   const quantumCircuit={qubits:2,gates:[{gate:'h',target:0},{gate:'cx',control:0,target:1}],shots:512,seed:77};
   const quantum=await json(base,'/api/quantum/simulate','POST',quantumCircuit);
   assert.equal(quantum.status,200,JSON.stringify(quantum.data));
@@ -125,6 +137,27 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   assert.ok(existsSync(dbFile),'signup must create missing DB parent directories');
   assert.ok(Object.keys(JSON.parse(readFileSync(dbFile))).includes('users'));
   const cookie=signup.cookie.split(';')[0];
+  const exactQubo=await json(base,'/api/quantum/optimize','POST',
+    {Q:[[1,-2],[-2,1]],names:['a','b']},{Cookie:cookie});
+  assert.equal(exactQubo.status,200,JSON.stringify(exactQubo.data));
+  assert.equal(exactQubo.data.optimumCost,-2);
+  assert.equal(exactQubo.data.qaoaExecuted,false);
+  assert.equal(exactQubo.data.quantumHardware,false);
+  const balanced=await json(base,'/api/quantum/optimize','POST',{
+    jobs:[{name:'A',minutes:42},{name:'B',minutes:17},{name:'C',minutes:33}]
+  },{Cookie:cookie});
+  assert.equal(balanced.status,200);
+  assert.equal(balanced.data.differenceMinutes,8);
+  const invalidQubo=await json(base,'/api/quantum/optimize','POST',{Q:[[null]]},{Cookie:cookie});
+  assert.equal(invalidQubo.status,400);
+  const outsider=await json(base,'/api/quantum/cloud/jobs','POST',{
+    qasm:'OPENQASM 2.0; qreg q[1]; h q[0];'
+  },{Cookie:cookie});
+  // The remote bridge is disabled before any account allowlist is evaluated.
+  assert.equal(outsider.status,503);
+  const cloudStatus=await json(base,'/api/chat','POST',{message:'/quantum cloud'},{Cookie:cookie});
+  assert.equal(cloudStatus.status,200);
+  assert.equal(cloudStatus.data.quantumCloud.enabled,false);
   const me=await json(base,'/api/me','GET',null,{Cookie:cookie});
   assert.equal(me.status,200);assert.equal(me.data.email,accountEmail);
   // Sidebar chat history: account-scoped, authorized, persisted, and bounded.
@@ -202,6 +235,9 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   assert.match(markup,/Quantum simulation/);
   assert.match(markup,/showQuantumResult\(data.quantum\)/);
   assert.match(markup,/Download JSON/);
+  assert.match(markup,/QUBO optimizer/);
+  assert.match(markup,/Balance work/);
+  assert.match(markup,/showOptimizationResult\(data.optimization\)/);
   assert.match(markup,/Quantum status/);
   assert.match(markup,/priviVoiceAuto/);
   assert.match(markup,/priviVoiceLanguage/);
