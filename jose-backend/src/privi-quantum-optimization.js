@@ -29,6 +29,7 @@ export function validateQubo(raw){
   if(!Array.isArray(names)||names.length!==n||
     names.some(name=>typeof name!=='string'||name.length>42||!name.trim()))
     fail('names must contain one nonempty short string for each variable.');
+  if(new Set(names.map(x=>x.trim())).size!==n)fail('Variable names must be unique.');
   return {Q:Q.map(row=>row.slice()),offset,names:names.map(x=>x.trim()),variables:n};
 }
 
