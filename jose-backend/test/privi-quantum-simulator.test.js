@@ -31,7 +31,7 @@ test('X, Z, H preserve expected basis measurements and q0 bit ordering',()=>{
   assert.equal(p(run(1,[{gate:'x',target:0},{gate:'x',target:0}]),'0'),1);
 });
 test('GHZ family produces only all-zeros and all-ones states',()=>{
-  for(const n of [2,3,6,8]){
+  for(const n of [2,3,6,8,12]){
     const gates=[H(0),...Array.from({length:n-1},(_,i)=>CX(i,i+1))];
     const r=run(n,gates,{seed:42});
     assert.equal(r.probabilities.length,2);
@@ -104,4 +104,37 @@ test('qubit, gate, shot and angle limits reject unsafe or expensive inputs',()=>
   assert.throws(()=>parseQasm('OPENQASM 2.0; qreg q[2]; measure q[0] -> c[0]; h q[0];'),QuantumInputError);
   assert.throws(()=>parseQasm('OPENQASM 2.0; qreg q[2]; system("rm -rf /");'),QuantumInputError);
   assert.throws(()=>parseQasm('OPENQASM 3.0; qubit[2] q;'),QuantumInputError);
+});
+
+
+test('12-qubit high-entropy superposition is bounded without claiming full output',()=>{
+  assert.equal(MAX_QUBITS,12);
+  const result=run(12,Array.from({length:12},(_,q)=>H(q)),{shots:4096,seed:13});
+  assert.equal(result.qubits,12);
+  assert.equal(result.distributionTruncated,true);
+  assert.equal(result.basisStatesWithProbability,4096);
+  assert.ok(result.returnedStates<=64);
+  assert.ok(result.probabilities.length<=64);
+  assert.ok(Object.keys(result.counts).length<=64);
+  assert.equal(result.countsTotal,4096);
+  assert.ok(result.countsShown<=4096);
+  assert.ok(result.probabilityMassReturned>0&&result.probabilityMassReturned<1);
+  assert.match(formatQuantumAnswer(result),/Partial distribution/);
+  assert.equal(result.physicalQpu,false);
+  assert.equal(result.paymentRequired,false);
+});
+test('12-qubit sparse GHZ remains complete and normalized',()=>{
+  const n=12, r=run(n,[H(0),...Array.from({length:n-1},(_,i)=>CX(i,i+1))],{shots:512,seed:4});
+  assert.equal(r.distributionTruncated,false);
+  assert.equal(r.returnedStates,2);
+  assert.equal(r.probabilityMassReturned,1);
+  assert.equal(sum(r),512);
+  assert.equal(p(r,'0'.repeat(n)),0.5);
+  assert.equal(p(r,'1'.repeat(n)),0.5);
+});
+test('status request is separate from quantum simulation and cannot submit remote jobs',()=>{
+  assert.deepEqual(quantumRequest('Privi Quantum project status'),{type:'project_status'});
+  assert.deepEqual(quantumRequest('Check Privi Quantum status'),{type:'project_status'});
+  assert.deepEqual(quantumRequest('Quantum server status'),{type:'project_status'});
+  assert.equal(quantumRequest('What is quantum computing?'),null);
 });
