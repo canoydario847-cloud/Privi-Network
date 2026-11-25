@@ -65,6 +65,24 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   const health=await json(base,'/health');assert.equal(health.status,200);assert.equal(health.data.ok,true);
   const status=await json(base,'/api/chat/status');assert.equal(status.status,200);
   assert.equal(status.data.localPowerCount,20);
+  assert.equal(status.data.freePriviQuantumSimulator,true);
+  assert.equal(status.data.quantumSimulatorMaxQubits,8);
+  const quantumInfo=await json(base,'/api/quantum/info');
+  assert.equal(quantumInfo.status,200);
+  assert.equal(quantumInfo.data.physicalQpu,undefined);
+  assert.equal(quantumInfo.data.hardwareQpu,false);
+  assert.equal(quantumInfo.data.paidCalls,false);
+  const quantumCircuit={qubits:2,gates:[{gate:'h',target:0},{gate:'cx',control:0,target:1}],shots:512,seed:77};
+  const quantum=await json(base,'/api/quantum/simulate','POST',quantumCircuit);
+  assert.equal(quantum.status,200,JSON.stringify(quantum.data));
+  assert.equal(quantum.data.physicalQpu,false);
+  assert.equal(quantum.data.probabilities.find(x=>x.state==='11').probability,0.5);
+  assert.equal(Object.values(quantum.data.counts).reduce((a,b)=>a+b,0),512);
+  assert.match(quantum.data.answer,/classical exact-statevector simulator/);
+  const quantumForbidden=await json(base,'/api/quantum/simulate','POST',quantumCircuit,{Origin:'https://evil.example'});
+  assert.equal(quantumForbidden.status,403);
+  const quantumInvalid=await json(base,'/api/quantum/simulate','POST',{qubits:33,gates:[]});
+  assert.equal(quantumInvalid.status,400);
   assert.equal(status.data.gmailConfigured,false);
   const noAuth=await json(base,'/api/gmail/status');assert.equal(noAuth.status,401);
   const powers=await json(base,'/api/chat','POST',{message:'/powers'});
@@ -75,6 +93,11 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   assert.doesNotMatch(connect.data.answer,/unable to connect to Gmail or any external services directly/i);
   const inbox=await json(base,'/api/chat','POST',{message:'Read my emails'});
   assert.equal(inbox.status,200);assert.equal(inbox.data.gmailStatus,'operator_setup');
+  const bellChat=await json(base,'/api/chat','POST',{message:'Simulate a 2-qubit Bell state with Privi Quantum'});
+  assert.equal(bellChat.status,200,JSON.stringify(bellChat.data));
+  assert.equal(bellChat.data.deterministic,true);
+  assert.equal(bellChat.data.quantum.physicalQpu,false);
+  assert.equal(bellChat.data.quantum.probabilities.find(x=>x.state==='00').probability,0.5);
   const crossOrigin=await json(base,'/api/signup','POST',{email:'test@example.org',password:'mySecurePass1!'},{Origin:'https://evil.example'});
   assert.equal(crossOrigin.status,403);
   const accountEmail='test-'+Date.now()+'@example.org';
@@ -159,6 +182,7 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   // The no-cost voice feature is a browser module. Both module files must be
   // delivered with a JavaScript MIME type or the browser will reject imports.
   assert.match(markup,/priviVoicePanel/);
+  assert.match(markup,/Quantum simulation/);
   assert.match(markup,/priviVoiceAuto/);
   assert.match(markup,/priviVoiceLanguage/);
   assert.match(markup,/priviVoicePause/);
