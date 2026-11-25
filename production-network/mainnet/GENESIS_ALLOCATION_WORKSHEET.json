@@ -1,0 +1,116 @@
+{
+  "$schema_note": "Candidate inputs only. NOT a genesis file, NOT signed, NOT mainnet authorization. Fill public fields only. Never put private keys or mnemonics in this file or in git.",
+  "document": "PRVI_GENESIS_ALLOCATION_WORKSHEET",
+  "version": 1,
+  "status": "DRAFT_UNFILLED",
+  "as_of_utc": "2026-11-25",
+  "policy_proposal": {
+    "asset_symbol": "PRVI",
+    "distinct_from": ["BNB_CHAIN_PRIV", "TEST_DEV_TOKEN"],
+    "max_lifetime_whole_units": "1000000000",
+    "decimals": 18,
+    "max_lifetime_base_units": "1000000000000000000000000000",
+    "base_denom_candidate": "aprvi",
+    "base_denom_status": "TBD_PENDING_AUDIT",
+    "cosmos_chain_id": "TBD",
+    "eip155_chain_id": "TBD",
+    "forbidden_demo_ids": {
+      "cosmos": ["local-4221"],
+      "evm": [262144]
+    }
+  },
+  "binary": {
+    "git_commit": "TBD",
+    "release_tag": "TBD",
+    "artifact_sha256": "TBD",
+    "reproducible_build_doc": "TBD"
+  },
+  "genesis": {
+    "genesis_time_utc": "TBD",
+    "unsigned_genesis_sha256": "TBD",
+    "signed_by_operators": false,
+    "operator_signature_set_id": "TBD"
+  },
+  "allocations": [
+    {
+      "bucket": "founder_team",
+      "whole_prvi": "TBD",
+      "public_addresses": [],
+      "vesting": "TBD",
+      "approval_record": "TBD"
+    },
+    {
+      "bucket": "foundation_treasury",
+      "whole_prvi": "TBD",
+      "public_addresses": [],
+      "vesting": "TBD",
+      "approval_record": "TBD"
+    },
+    {
+      "bucket": "community_ecosystem",
+      "whole_prvi": "TBD",
+      "public_addresses": [],
+      "vesting": "TBD",
+      "approval_record": "TBD"
+    },
+    {
+      "bucket": "validators_staking_bootstrap",
+      "whole_prvi": "TBD",
+      "public_addresses": [],
+      "vesting": "TBD",
+      "approval_record": "TBD"
+    },
+    {
+      "bucket": "reserves_other",
+      "whole_prvi": "TBD",
+      "public_addresses": [],
+      "vesting": "TBD",
+      "approval_record": "TBD"
+    }
+  ],
+  "totals": {
+    "sum_allocated_whole_prvi": "TBD",
+    "must_equal_bank_genesis_supply": true,
+    "lifetime_cap_includes_future_mints": true,
+    "notes": "Initial allocation + all future issuance routes must never exceed 1_000_000_000 whole PRVI. A JSON number alone does not enforce a chain-level cap."
+  },
+  "audit_commands_readonly": [
+    "python3 production-network/ops/genesis_supply_audit.py --genesis /secure/review/candidate-genesis.json --denom REVIEWED_BASE_DENOM --chain-id REVIEWED_COSMOS_MAINNET_CHAIN_ID",
+    "python3 production-network/ops/prvi_genesis_preflight.py --help"
+  ],
+  "operators": [
+    {
+      "operator_id": "op-1",
+      "organization": "TBD",
+      "fault_domain": "TBD",
+      "consensus_pubkey": "TBD",
+      "independent_control_attestation": "TBD"
+    },
+    {
+      "operator_id": "op-2",
+      "organization": "TBD",
+      "fault_domain": "TBD",
+      "consensus_pubkey": "TBD",
+      "independent_control_attestation": "TBD"
+    },
+    {
+      "operator_id": "op-3",
+      "organization": "TBD",
+      "fault_domain": "TBD",
+      "consensus_pubkey": "TBD",
+      "independent_control_attestation": "TBD"
+    },
+    {
+      "operator_id": "op-4",
+      "organization": "TBD",
+      "fault_domain": "TBD",
+      "consensus_pubkey": "TBD",
+      "independent_control_attestation": "TBD"
+    }
+  ],
+  "launch_gate": {
+    "mainnet_activated": false,
+    "financial_prvi_issued": false,
+    "verdict": "NO_GO_UNTIL_ALL_GATES_EVIDENCED"
+  }
+}
