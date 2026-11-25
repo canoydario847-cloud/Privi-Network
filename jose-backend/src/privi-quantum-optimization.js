@@ -108,6 +108,7 @@ export function optimizeBalanceLines(input){
 export function optimizationRequest(message){
   if(typeof message!=='string')return null;
   const q=message.trim();
+  if(/^\/quantum\s+cloud(?:\s+status)?\s*$/i.test(q))return {type:'cloud_status'};
   if(/^(?:\/quantum\s+optimize|\/qubo)\s+/i.test(q)){
     const json=q.replace(/^(?:\/quantum\s+optimize|\/qubo)\s+/i,'');
     let input;
@@ -130,6 +131,7 @@ export const OPTIMIZATION_HELP=
   'Privi Quantum optimization in Hey Jose runs a **free, exact classical QUBO baseline** for up to 16 binary variables. It does not run the separate QAOA engine or any paid quantum hardware.\n\n'+
   'Try:\n'+
   '• /quantum optimize {"Q":[[1,-2],[-2,1]],"names":["a","b"]}\n'+
+  '• /quantum cloud (check whether the restricted remote simulator is configured)\n'+
   '• /quantum balance {"jobs":[{"name":"A","minutes":42},{"name":"B","minutes":17},{"name":"C","minutes":33}]}\n\n'+
   'The output is a proven minimum over up to 65,536 assignments, suitable as a reference for comparing later QAOA runs. The existing Privi Quantum CVaR-QAOA server remains a separate, potentially paid tool.';
 export function formatOptimizationResult(result){
