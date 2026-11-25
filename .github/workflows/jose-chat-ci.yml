@@ -26,6 +26,10 @@ jobs:
           node --check jose-backend/src/server.js
           node --check jose-backend/src/privi-quantum-simulator.js
           node --check jose-backend/src/privi-quantum-project.js
+          node --check jose-backend/src/privi-quantum-optimization.js
+          node --check jose-backend/test/privi-quantum-optimization.test.js
+          node --check jose-backend/src/privi-quantum-cloud-bridge.js
+          node --check jose-backend/test/privi-quantum-cloud-bridge.test.js
           node --check jose-backend/test/privi-quantum-project.test.js
           node --check jose-backend/test/privi-quantum-simulator.test.js
           node --check jose-backend/src/conversation-history.js
