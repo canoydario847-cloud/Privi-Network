@@ -144,6 +144,22 @@ header .actions{flex-wrap:wrap;justify-content:flex-end}
 .voice-listen{font-size:12px;padding:4px 10px;background:#222a3a;color:var(--gold);border-color:#554b61}
 .voice-listen:hover{background:#343046}
 @media(max-width:650px){#priviVoicePanel{padding:10px 12px}.voice-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.voice-field:first-child{grid-column:1/-1}#priviVoiceBtn{font-size:12px!important}}
+
+/* Privi Quantum chart: pure browser DOM, no chart library or paid API. */
+.quantum-card{align-self:flex-start;width:min(880px,98%);border:1px solid #615278;
+  border-radius:13px;background:#13182a;padding:14px 17px;margin-left:25px}
+.quantum-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:13px}
+.quantum-card h2{font-size:16px;margin:0 0 2px;color:var(--gold)}
+.quantum-card p{margin:0;font-size:12px;color:var(--muted)}
+.quantum-card button{font-size:12px;padding:5px 10px}
+.quantum-state{display:grid;grid-template-columns:minmax(45px,88px) minmax(0,1fr) minmax(100px,130px);gap:10px;align-items:center;margin:6px 0;font-size:12px}
+.quantum-state code{font-family:ui-monospace,monospace;overflow:hidden;text-overflow:ellipsis}
+.quantum-bar{height:13px;border-radius:4px;background:#313049;overflow:hidden}
+.quantum-bar span{display:block;height:100%;background:#b2a1ea;min-width:1px;border-radius:4px}
+.quantum-percent{text-align:right;font-variant-numeric:tabular-nums;color:#e7dfec}
+.quantum-card .quantum-note{margin-top:12px;font-size:11px}
+@media(max-width:650px){.quantum-card{width:100%;margin:0;padding:12px}
+.quantum-state{grid-template-columns:minmax(36px,70px) minmax(0,1fr) minmax(72px,105px);gap:6px;font-size:11px}}
 </style>
 </head>
 <body>
@@ -160,6 +176,7 @@ header .actions{flex-wrap:wrap;justify-content:flex-end}
     <button type="button" data-action="devnet">Devnet status</button>
     <button type="button" data-action="web3">Build Web3</button>
     <button type="button" data-action="quantum">⚛ Quantum simulation</button>
+    <button type="button" data-action="quantumproject">Quantum status</button>
     <button type="button" data-action="gmail">Gmail</button>
     <button type="button" data-action="memory">Memory</button>
     <button type="button" data-action="voice">🔊 Privi Voice</button>
@@ -322,6 +339,58 @@ function showMessage(role,message){
   feed.append(node);
   node.scrollIntoView({block:'end',behavior:'smooth'});
 }
+// Visualization is constructed from trusted structured simulation data using
+// DOM text nodes, never innerHTML or generated model markup.
+function showQuantumResult(result){
+  if(!result||!Array.isArray(result.probabilities)||result.method!=='classical_exact_statevector')return;
+  const n=Number(result.qubits),shots=Number(result.shots);
+  if(!Number.isInteger(n)||n<1||n>12||!Number.isInteger(shots))return;
+  const card=document.createElement('section');
+  card.className='quantum-card';
+  card.setAttribute('aria-label','Privi Quantum simulation probabilities');
+  const top=document.createElement('div');top.className='quantum-card-head';
+  const info=document.createElement('div');
+  const heading=document.createElement('h2');heading.textContent='⚛ Privi Quantum · '+n+'-qubit result';
+  const meta=document.createElement('p');
+  meta.textContent='Classical exact-statevector simulation · '+shots+' simulated shots · No QPU or fees';
+  info.append(heading,meta);
+  const download=document.createElement('button');
+  download.type='button';download.textContent='Download JSON';
+  download.setAttribute('aria-label','Download Privi Quantum simulation result JSON');
+  download.onclick=()=>{
+    const blob=new Blob([JSON.stringify(result,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement('a');link.href=url;
+    link.download='privi-quantum-'+n+'qubits.json';document.body.append(link);
+    link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  };
+  top.append(info,download);card.append(top);
+  const rows=result.probabilities.filter(row=>row&&typeof row.state==='string'&&
+    Number.isFinite(row.probability)&&row.probability>=0&&row.probability<=1)
+    .sort((a,b)=>b.probability-a.probability).slice(0,12);
+  for(const row of rows){
+    const p=Number(row.probability);
+    const line=document.createElement('div');line.className='quantum-state';
+    const label=document.createElement('code');label.textContent='|'+row.state+'⟩';
+    const bar=document.createElement('div');bar.className='quantum-bar';
+    bar.setAttribute('role','img');
+    const sampled=Math.max(0,Number(result.counts?.[row.state]||0));
+    bar.setAttribute('aria-label','State '+row.state+', theoretical probability '+(p*100).toFixed(3)+' percent, sampled '+sampled+' shots');
+    const fill=document.createElement('span');fill.style.width=(p*100).toFixed(5)+'%';bar.append(fill);
+    const pct=document.createElement('span');pct.className='quantum-percent';
+    pct.textContent=(100*p).toFixed(p<0.01?3:1)+'% · '+sampled;
+    line.append(label,bar,pct);card.append(line);
+  }
+  const note=document.createElement('p');note.className='quantum-note';
+  note.textContent=result.distributionTruncated
+    ?'Showing a subset of '+result.returnedStates+' reported states; '+
+      Math.max(0,result.basisStatesWithProbability-result.returnedStates)+
+      ' additional nonzero/observed states omitted. '+result.countsShown+
+      ' of '+shots+' sampled shots are shown in the structured result. Download JSON for its bounded top states.'
+    :'Probabilities are calculated; shot counts are seeded samples. q0 is the rightmost bit.';
+  card.append(note);feed.append(card);
+  card.scrollIntoView({block:'nearest',behavior:'smooth'});
+}
 function artifactFromAnswer(message){
   const matched=String(message).match(/\x60{3}html\s*([\s\S]*?)\x60{3}/i);
   const html=(matched?matched[1]:message).trim();
@@ -480,6 +549,7 @@ form.addEventListener('submit',async event=>{
     if(!r.ok)throw new Error(data.error||'Unable to answer.');
     if(typeof data.answer!=='string'||!data.answer.trim())throw new Error('Jose did not return an answer.');
     showMessage('jose',data.answer);
+    if(data.quantum)showQuantumResult(data.quantum);
     window.joseAddons?.onSent?.(data.answer);
     if(!data.gmailAction)window.priviVoice?.onAnswer(data.answer);
     // Gmail message data must not be silently forwarded to the AI provider
