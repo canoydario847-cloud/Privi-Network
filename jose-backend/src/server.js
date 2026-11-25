@@ -381,6 +381,12 @@ const server = http.createServer(async (req, res) => {
       try{
         const optimization=optimizationRequest(message);
         if(optimization){
+          if(optimization.type==='cloud_status'){
+            const cloud=quantumCloudBridge.status();
+            return sendJson(res,200,{mode:'chat',deterministic:true,quantumCloud:cloud,
+              answer:cloud.enabled?'Privi Quantum Cloud: restricted operator-only classical simulator bridge configured. Use authenticated operator endpoints for jobs. Physical QPU and paid hardware remain disabled.':
+              'Privi Quantum Cloud: remote simulation is not configured. Operators must configure matching server-only API keys and an allowlist. Jose local 12-qubit simulation and 16-variable classical optimization remain available and free.'});
+          }
           if(Array.isArray(body.attachments)&&body.attachments.length)
             return sendJson(res,400,{error:'Paste QUBO or jobs JSON. Attachments are not accepted for optimization.'});
           if(optimization.type==='help')
