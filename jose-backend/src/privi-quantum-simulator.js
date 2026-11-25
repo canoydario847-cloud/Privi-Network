@@ -98,8 +98,8 @@ export function quantumRequest(message){
   const q=message.trim();
   if(!q)return null;
   // Exact status intents make a bounded read-only call to the EXISTING Quantum service.
-  if(/^(?:(?:check|show)\\s+)?(?:privi\\s+)?quantum(?:\\s+(?:project|server|service|cloud))?\\s+status[!?.]*$/i.test(q)||
-      /^(?:is\\s+)?privi\\s+quantum(?:\\s+(?:project|server|service))?\\s+online\\??$/i.test(q))
+  if(/^(?:(?:check|show)\s+)?(?:privi\s+)?quantum(?:\s+(?:project|server|service|cloud))?\s+status[!?.]*$/i.test(q)||
+      /^(?:is\s+)?privi\s+quantum(?:\s+(?:project|server|service))?\s+online\??$/i.test(q))
     return {type:'project_status'};
   const structured=q.match(/^\/?quantum\s+(?:simulate\s+)?(\{[\s\S]*\})$/i);
   if(structured){
