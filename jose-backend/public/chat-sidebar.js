@@ -215,8 +215,8 @@
     const button=event.target.closest('[data-action]');
     if(!button||busy())return;
     const action=button.dataset.action;
-    if(action==='powers'||action==='devnet'||action==='quantum'){
-      $('message').value=action==='powers'?'/powers':action==='devnet'?'Privi Devnet status':'Simulate a 2-qubit Bell state with Privi Quantum';
+    if(action==='powers'||action==='devnet'||action==='quantum'||action==='quantumproject'){
+      $('message').value=action==='powers'?'/powers':action==='devnet'?'Privi Devnet status':action==='quantumproject'?'Privi Quantum project status':'Simulate a 2-qubit Bell state with Privi Quantum';
       closeDrawer();$('chat').requestSubmit();
     }else if(action==='web3'){
       $('message').value='Help me build a safe Web3 smart contract for ';

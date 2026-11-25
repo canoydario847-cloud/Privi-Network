@@ -19,6 +19,7 @@ import { createMailReview } from './gmail-review.js';
 import { gmailIntent, gmailConnectionGuide, formatGmailInbox, formatGmailMessage } from './gmail-intents.js';
 import { createJoseReadTools, JOSE_READ_TOOLS } from './agent-tools.js';
 import { QuantumInputError,MAX_QUBITS,QUANTUM_HELP,parseQasm as parseQuantumQasm,quantumRequest,simulateCircuit,formatQuantumAnswer } from './privi-quantum-simulator.js';
+import {readQuantumProjectStatus,formatQuantumProjectStatus} from './privi-quantum-project.js';
 import { completeJose, JoseProviderError } from './agent-runner.js';
 import {
   REWARD_POLICY, validateRewardReceipt, verifyReceiptSignature, InvalidRewardReceipt,
@@ -43,6 +44,19 @@ const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const pendingOAuth = new Map();
 const chatRate = new Map();
 const quantumRate = new Map();
+let quantumProjectCache=null;
+let quantumProjectCacheExpires=0;
+let quantumProjectInFlight=null;
+async function quantumProjectStatus(){
+  if(quantumProjectCache&&Date.now()<quantumProjectCacheExpires)return quantumProjectCache;
+  if(quantumProjectInFlight)return quantumProjectInFlight;
+  quantumProjectInFlight=readQuantumProjectStatus();
+  try{
+    quantumProjectCache=await quantumProjectInFlight;
+    quantumProjectCacheExpires=Date.now()+30000;
+    return quantumProjectCache;
+  }finally{quantumProjectInFlight=null;}
+}
 function quantumRateAllowed(key){
   const now=Date.now();
   const count=(quantumRate.get(key)||[]).filter(t=>now-t<60000);
@@ -251,6 +265,10 @@ const server = http.createServer(async (req, res) => {
         hardwareQpu:false,paidCalls:false,blockchainTransactions:false,
         help:QUANTUM_HELP});
     }
+    if (req.method === 'GET' && url.pathname === '/api/quantum/project') {
+      res.setHeader('Cache-Control','no-store');
+      return sendJson(res,200,await quantumProjectStatus());
+    }
     if (req.method === 'POST' && url.pathname === '/api/quantum/simulate') {
       if(!requireOrigin(req,res))return;
       const owner=getCurrentUser(req)?.id||'guest:'+(req.socket.remoteAddress||'unknown');
@@ -305,6 +323,11 @@ const server = http.createServer(async (req, res) => {
       try {
         const request=quantumRequest(message);
         if(request){
+          if(request.type==='project_status'){
+            const project=await quantumProjectStatus();
+            return sendJson(res,200,{answer:formatQuantumProjectStatus(project),
+              mode:'chat',quantumProject:project,deterministic:true});
+          }
           if(Array.isArray(body.attachments)&&body.attachments.length)
             return sendJson(res,400,{error:'Paste circuit JSON or OpenQASM; quantum simulation does not accept uploaded files.'});
           if(request.type==='help')
