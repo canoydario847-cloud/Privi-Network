@@ -18,6 +18,7 @@ import { createGmailClient } from './gmail-client.js';
 import { createMailReview } from './gmail-review.js';
 import { gmailIntent, gmailConnectionGuide, formatGmailInbox, formatGmailMessage } from './gmail-intents.js';
 import { createJoseReadTools, JOSE_READ_TOOLS } from './agent-tools.js';
+import { QuantumInputError,MAX_QUBITS,QUANTUM_HELP,parseQasm as parseQuantumQasm,quantumRequest,simulateCircuit,formatQuantumAnswer } from './privi-quantum-simulator.js';
 import { completeJose, JoseProviderError } from './agent-runner.js';
 import {
   REWARD_POLICY, validateRewardReceipt, verifyReceiptSignature, InvalidRewardReceipt,
@@ -41,6 +42,15 @@ const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 // CSRF attempts. In-memory is fine: a connect flow finishes in minutes.
 const pendingOAuth = new Map();
 const chatRate = new Map();
+const quantumRate = new Map();
+function quantumRateAllowed(key){
+  const now=Date.now();
+  const count=(quantumRate.get(key)||[]).filter(t=>now-t<60000);
+  if(count.length>=6)return false;
+  count.push(now);quantumRate.set(key,count);
+  if(quantumRate.size>5000)quantumRate.clear();
+  return true;
+}
 const secureCookie = BASE_URL.startsWith('https:') ? '; Secure' : '';
 const authCookie = (token,age) => SESSION_COOKIE+'='+token+'; HttpOnly; SameSite=Lax'+secureCookie+'; Path=/; Max-Age='+age;
 function sameOrigin(req){const o=req.headers.origin;return !o || o===new URL(BASE_URL).origin;}
@@ -230,9 +240,35 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 503, {error:error.message});
       }
     }
+    // Free local adapter for the same H/RX/RZ/CX basis used by Privi Quantum.
+    // This never contacts paid quantum MCP, tokens, or QPUs and does not persist circuits.
+    if (req.method === 'GET' && url.pathname === '/api/quantum/info') {
+      res.setHeader('Cache-Control','no-store');
+      return sendJson(res,200,{name:'Privi Quantum in Hey Jose',engine:'classical_exact_statevector',
+        maxQubits:MAX_QUBITS,maxShots:4096,maxGates:80,
+        gates:['h','x','z','rx','rz','cx'],qasm:'restricted OpenQASM 2.0',
+        sourceProject:'https://github.com/canoydario847-cloud/Privi-Network/tree/main/quantum-server',
+        hardwareQpu:false,paidCalls:false,blockchainTransactions:false,
+        help:QUANTUM_HELP});
+    }
+    if (req.method === 'POST' && url.pathname === '/api/quantum/simulate') {
+      if(!requireOrigin(req,res))return;
+      const owner=getCurrentUser(req)?.id||'guest:'+(req.socket.remoteAddress||'unknown');
+      if(!quantumRateAllowed(owner))return sendJson(res,429,{error:'Maximum six quantum simulation requests per minute.'});
+      try{
+        const body=await readLimitedJsonBody(req,30000);
+        const circuit=typeof body?.qasm==='string'&&Object.keys(body).length===1
+          ?parseQuantumQasm(body.qasm):body;
+        const result=simulateCircuit(circuit);
+        return sendJson(res,200,{...result,answer:formatQuantumAnswer(result)});
+      }catch(error){
+        return sendJson(res,error instanceof RangeError?413:error instanceof SyntaxError||error instanceof QuantumInputError?400:500,
+          {error:error instanceof QuantumInputError?error.message:error instanceof RangeError?'Quantum request too large.':error instanceof SyntaxError?'Invalid circuit JSON.':'Simulation failed.'});
+      }
+    }
     if (req.method === 'GET' && url.pathname === '/api/chat/status') {
       const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
-      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), mode: process.env.JOSE_AI_API_KEY ? 'provider' : 'unconfigured', model: process.env.JOSE_AI_API_KEY ? (process.env.JOSE_AI_MODEL || 'gpt-4o-mini') : null, chatModes: ['chat', 'build', 'web3'], priviDevnetExpectedChainId: DEVNET_EVM_ID, priviDevnetStatusUrl: '/api/devnet/status', attachments: ['image/png','image/jpeg','image/webp','text'], maxAttachments: 2, localPowerCount: JOSE_POWERS.length, agentReadOnlyToolCount: JOSE_READ_TOOLS.length, agentReadOnlyToolNames: JOSE_READ_TOOLS.map(t=>t.function.name), browserMemorySupported: true, memoryStorage: 'USER_BROWSER_ONLY',conversationHistory:true,conversationHistoryRequiresLogin:true,conversationHistoryStorage:'TEMPORARY_RENDER_FILE_STORAGE',gmailConfigured:getPlugin('google').isConfigured(),gmailConnectUrl:'/connect/google' });
+      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), mode: process.env.JOSE_AI_API_KEY ? 'provider' : 'unconfigured', model: process.env.JOSE_AI_API_KEY ? (process.env.JOSE_AI_MODEL || 'gpt-4o-mini') : null, chatModes: ['chat', 'build', 'web3'], priviDevnetExpectedChainId: DEVNET_EVM_ID, priviDevnetStatusUrl: '/api/devnet/status', attachments: ['image/png','image/jpeg','image/webp','text'], maxAttachments: 2, localPowerCount: JOSE_POWERS.length, agentReadOnlyToolCount: JOSE_READ_TOOLS.length, agentReadOnlyToolNames: JOSE_READ_TOOLS.map(t=>t.function.name), freePriviQuantumSimulator:true, quantumSimulatorMaxQubits:MAX_QUBITS, quantumSimulatorUrl:'/api/quantum/simulate', browserMemorySupported: true, memoryStorage: 'USER_BROWSER_ONLY',conversationHistory:true,conversationHistoryRequiresLogin:true,conversationHistoryStorage:'TEMPORARY_RENDER_FILE_STORAGE',gmailConfigured:getPlugin('google').isConfigured(),gmailConnectUrl:'/connect/google' });
     }
     if (req.method === 'POST' && url.pathname === '/api/chat') {
       const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
@@ -263,6 +299,23 @@ const server = http.createServer(async (req, res) => {
       const history = Array.isArray(body.history) ? body.history.slice(-16) : [];
       if (history.some(m => !m || !['user','assistant'].includes(m.role) || typeof m.content !== 'string' || m.content.length > 12000) || history.reduce((n,m)=>n+m.content.length,0)>48000) {
         return sendJson(res, 400, { error: 'Invalid or oversized conversation history.' });
+      }
+      // Quantum circuit requests execute the Privi Quantum local simulator,
+      // never use the AI provider, paid MCP tools, physical hardware or a wallet.
+      try {
+        const request=quantumRequest(message);
+        if(request){
+          if(Array.isArray(body.attachments)&&body.attachments.length)
+            return sendJson(res,400,{error:'Paste circuit JSON or OpenQASM; quantum simulation does not accept uploaded files.'});
+          if(request.type==='help')
+            return sendJson(res,200,{answer:QUANTUM_HELP,mode:'chat',quantumHelp:true,deterministic:true});
+          const result=simulateCircuit(request.circuit);
+          return sendJson(res,200,{answer:formatQuantumAnswer(result),
+            mode:'chat',quantum:result,deterministic:true,physicalQpu:false});
+        }
+      }catch(error){
+        if(error instanceof QuantumInputError)return sendJson(res,400,{error:error.message});
+        return sendJson(res,500,{error:'Quantum simulation failed. No quantum hardware was used.'});
       }
       // Explicit, read-only deterministic local powers run without paid model calls.
       // Never silently discard attachments or claim a tool can see unseen files.
