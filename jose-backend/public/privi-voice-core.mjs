@@ -1,7 +1,28 @@
 // Privi Voice — cost-free browser speech helpers, no model API or paid TTS.
+// The same language choice is used for speaking and optional microphone
+// dictation. Availability depends on voices and recognition languages installed
+// in the visitor's browser, not the Privi backend.
+export const SPEECH_LANGUAGES=Object.freeze([
+  {code:'auto',label:'Browser language'},
+  {code:'en-US',label:'English (US)'},
+  {code:'es-ES',label:'Español'},
+  {code:'pt-BR',label:'Português (Brasil)'},
+  {code:'fr-FR',label:'Français'},
+  {code:'hi-IN',label:'हिन्दी'},
+  {code:'de-DE',label:'Deutsch'},
+  {code:'ar-SA',label:'العربية'},
+  {code:'zh-CN',label:'中文 (普通话)'},
+  {code:'ja-JP',label:'日本語'},
+]);
 export const DEFAULT_VOICE_SETTINGS=Object.freeze({
-  voiceUri:'',rate:1,pitch:1,autoRead:false,
+  voiceUri:'',rate:1,pitch:1,autoRead:false,language:'auto',autoSend:false,
 });
+export function speechLanguage(settings,browserLanguage='en-US'){
+  const selected=settings?.language;
+  if(selected && selected!=='auto' && SPEECH_LANGUAGES.some(v=>v.code===selected))return selected;
+  return typeof browserLanguage==='string' && /^[a-z]{2,3}(?:-[A-Za-z]{2,8})?$/.test(browserLanguage)
+    ? browserLanguage:'en-US';
+}
 const bound=(value,min,max,fallback)=>{
   const num=Number(value);
   return Number.isFinite(num)?Math.min(max,Math.max(min,num)):fallback;
@@ -13,6 +34,9 @@ export function normalizeVoiceSettings(value){
     rate:bound(raw.rate,0.6,2,1),
     pitch:bound(raw.pitch,0.7,1.5,1),
     autoRead:raw.autoRead===true,
+    language:typeof raw.language==='string'&&SPEECH_LANGUAGES.some(v=>v.code===raw.language)?raw.language:'auto',
+    // Speech recognition can be imperfect. Never auto-submit unless enabled.
+    autoSend:raw.autoSend===true,
   };
 }
 

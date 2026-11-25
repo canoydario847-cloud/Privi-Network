@@ -1,173 +1,193 @@
-// Privi Voice for Hey Jose: browser speech synthesis, no voice API charges.
-// Only voice preferences are saved. Speech content is never stored here.
-import {DEFAULT_VOICE_SETTINGS,normalizeVoiceSettings,prepareSpeechText,splitSpeechText}
-  from './privi-voice-core.mjs';
+// Privi Voice: free browser-native text-to-speech.
+// Only settings are saved in this browser; conversation text stays in the chat.
+import {
+  DEFAULT_VOICE_SETTINGS,SPEECH_LANGUAGES,normalizeVoiceSettings,
+  speechLanguage,prepareSpeechText,splitSpeechText,
+} from './privi-voice-core.mjs';
 
 const $=id=>document.getElementById(id);
 const available=Boolean(window.speechSynthesis&&window.SpeechSynthesisUtterance);
 const synth=available?window.speechSynthesis:null;
 const STORE='hey-jose-privi-voice-settings-v1';
-let settings=DEFAULT_VOICE_SETTINGS,voiceList=[],run=0;
+let settings={...DEFAULT_VOICE_SETTINGS},voiceList=[],run=0,active=false,paused=false;
 
 try{settings=normalizeVoiceSettings(JSON.parse(localStorage.getItem(STORE)||'{}'));}
 catch{settings={...DEFAULT_VOICE_SETTINGS};}
 
-function save(){
-  try{localStorage.setItem(STORE,JSON.stringify(settings));}catch{}
-}
+function save(){try{localStorage.setItem(STORE,JSON.stringify(settings));}catch{}}
 function status(message){$('priviVoiceNotice').textContent=message;}
-function resetStop(){
-  $('priviVoiceStop').disabled=true;
+function controls(){
+  $('priviVoiceStop').disabled=!available||!active;
+  $('priviVoicePause').disabled=!available||!active;
+  $('priviVoicePause').textContent=paused?'▶ Resume':'⏸ Pause';
+  $('priviVoicePause').setAttribute('aria-label',paused?'Resume voice playback':'Pause voice playback');
 }
-function stop(){
+function stop({quiet=false}={}){
   ++run;
   if(available)synth.cancel();
-  resetStop();
-  status(available?'Playback stopped.':'Text-to-speech is not supported in this browser.');
+  active=false;paused=false;
+  controls();
+  if(!quiet)status(available?'Playback stopped.':'Text-to-speech unavailable in this browser.');
 }
 function chooseVoice(){
-  return voiceList.find(v=>v.voiceURI===settings.voiceUri)||null;
+  const direct=voiceList.find(v=>v.voiceURI===settings.voiceUri);
+  if(direct)return direct;
+  const lang=speechLanguage(settings,navigator.language||'en-US').toLowerCase();
+  return voiceList.find(v=>v.lang.toLowerCase()===lang)
+    ||voiceList.find(v=>v.lang.slice(0,2).toLowerCase()===lang.slice(0,2))
+    ||null;
 }
 function refreshVoices(){
   if(!available)return;
   try{voiceList=synth.getVoices().slice().sort((a,b)=>
     a.lang.localeCompare(b.lang)||a.name.localeCompare(b.name));}
   catch{voiceList=[];}
-  const sel=$('priviVoiceSelect'),previous=sel.value||settings.voiceUri;
+  const sel=$('priviVoiceSelect');
   sel.replaceChildren();
-  const defaultOption=document.createElement('option');
-  defaultOption.value='';defaultOption.textContent='System default';
-  sel.append(defaultOption);
-  for(const voice of voiceList){
+  const base=document.createElement('option');
+  base.value='';base.textContent='Match language / system voice';
+  sel.append(base);
+  for(const v of voiceList){
     const option=document.createElement('option');
-    option.value=voice.voiceURI;
-    option.textContent=voice.name+' ('+voice.lang+')'+(voice.localService?' · device':'');
+    option.value=v.voiceURI;
+    option.textContent=v.name+' ('+v.lang+')'+(v.localService?' · device':'');
     sel.append(option);
   }
-  sel.value=voiceList.some(v=>v.voiceURI===previous)?previous:'';
-  if(!voiceList.some(v=>v.voiceURI===settings.voiceUri)){
-    settings={...settings,voiceUri:''};
-    save();
-  }
-  if(available&&voiceList.length===0)
-    status('Using your system default voice. More voices may appear after your browser loads them.');
+  // Do not throw away a stored preference while the browser loads its voices.
+  sel.value=voiceList.some(v=>v.voiceURI===settings.voiceUri)?settings.voiceUri:'';
+  if(!voiceList.length)status('Device voices are still loading; the default may be available.');
 }
 function read(value){
   if(!available){
-    status('Privi Voice is unavailable in this browser. Try a current Chrome, Edge, or Safari browser.');
+    status('Text-to-speech is unavailable. Try a current Chrome, Edge or Safari browser.');
     return false;
   }
   const text=prepareSpeechText(value);
-  if(!text){
-    status('There is no text to read.');
-    return false;
-  }
-  stop();
+  if(!text){status('There is no reply text to read.');return false;}
+  stop({quiet:true});
   const activeRun=run;
   const parts=splitSpeechText(text);
   const selected=chooseVoice();
-  const speakNext=(index)=>{
+  const language=speechLanguage(settings,navigator.language||'en-US');
+  active=true;paused=false;controls();
+  function next(index){
     if(run!==activeRun)return;
     if(index>=parts.length){
-      resetStop();status('Finished reading.');return;
+      active=false;paused=false;controls();status('Finished reading.');return;
     }
     const utterance=new SpeechSynthesisUtterance(parts[index]);
     utterance.rate=settings.rate;
     utterance.pitch=settings.pitch;
     utterance.volume=1;
-    if(selected){utterance.voice=selected;utterance.lang=selected.lang;}
-    else utterance.lang=navigator.language||'en-US';
-    utterance.onend=()=>speakNext(index+1);
-    utterance.onerror=event=>{
+    utterance.lang=selected?.lang||language;
+    if(selected)utterance.voice=selected;
+    utterance.onend=()=>next(index+1);
+    utterance.onerror=(event)=>{
       if(run!==activeRun)return;
-      resetStop();
+      active=false;paused=false;controls();
       if(event?.error!=='interrupted'&&event?.error!=='canceled')
-        status('Voice playback failed or was blocked. Try pressing Listen again.');
+        status('Speech was blocked or unavailable. Press Listen to try again.');
     };
     try{
       synth.speak(utterance);
-      $('priviVoiceStop').disabled=false;
       status('Reading with Privi Voice…');
     }catch{
-      resetStop();status('Unable to start speech in this browser.'); 
+      active=false;paused=false;controls();status('Unable to start browser speech.');
     }
-  };
-  speakNext(0);
+  }
+  next(0);
   return true;
+}
+function pauseResume(){
+  if(!available||!active)return;
+  try{
+    if(paused){synth.resume();paused=false;status('Reading with Privi Voice…');}
+    else{synth.pause();paused=true;status('Playback paused.');}
+    controls();
+  }catch{status('Pause/resume is unavailable in this browser.');}
 }
 function toggle(){
   const panel=$('priviVoicePanel');
   panel.hidden=!panel.hidden;
   $('priviVoiceBtn').setAttribute('aria-expanded',String(!panel.hidden));
-  if(!panel.hidden){
-    refreshVoices();
-    $('priviVoiceSelect').focus();
-  }
+  if(!panel.hidden){refreshVoices();$('priviVoiceSelect').focus();}
 }
 
+const languageSelect=$('priviVoiceLanguage');
+for(const item of SPEECH_LANGUAGES){
+  const opt=document.createElement('option');
+  opt.value=item.code;opt.textContent=item.label;
+  languageSelect.append(opt);
+}
+languageSelect.value=settings.language;
+languageSelect.addEventListener('change',event=>{
+  settings=normalizeVoiceSettings({...settings,language:event.target.value,voiceUri:''});
+  $('priviVoiceSelect').value='';
+  save();
+  if(active)stop();
+  status('Voice and microphone language: '+speechLanguage(settings,navigator.language)+'.');
+});
 $('priviVoiceBtn').addEventListener('click',toggle);
-$('priviVoiceClose').addEventListener('click',()=>{ 
+$('priviVoiceClose').addEventListener('click',()=>{
   $('priviVoicePanel').hidden=true;
   $('priviVoiceBtn').setAttribute('aria-expanded','false');
   $('priviVoiceBtn').focus();
 });
 $('priviVoiceSelect').addEventListener('change',event=>{
-  settings={...settings,voiceUri:event.target.value};save();
-  if(available&&synth.speaking)stop();
+  settings=normalizeVoiceSettings({...settings,voiceUri:event.target.value});save();
+  if(active)stop();
 });
 $('priviVoiceRate').addEventListener('input',event=>{
   settings=normalizeVoiceSettings({...settings,rate:Number(event.target.value)});
-  $('priviVoiceRateValue').textContent=settings.rate.toFixed(1)+'×';
-  save();
+  $('priviVoiceRateValue').textContent=settings.rate.toFixed(1)+'×';save();
 });
 $('priviVoicePitch').addEventListener('input',event=>{
   settings=normalizeVoiceSettings({...settings,pitch:Number(event.target.value)});
-  $('priviVoicePitchValue').textContent=settings.pitch.toFixed(1);
-  save();
+  $('priviVoicePitchValue').textContent=settings.pitch.toFixed(1);save();
 });
 $('priviVoiceAuto').addEventListener('change',event=>{
-  settings={...settings,autoRead:event.target.checked};
-  save();
-  status(settings.autoRead?
-    'Auto-read enabled. New regular answers will be spoken when your browser allows playback.':
-    'Auto-read off. Use Listen to hear any answer.');
+  settings=normalizeVoiceSettings({...settings,autoRead:event.target.checked});save();
+  status(settings.autoRead?'New regular replies will be read aloud when browser playback is allowed.':
+    'Automatic read-aloud is off.');
+});
+$('priviVoiceAutoSend').addEventListener('change',event=>{
+  settings=normalizeVoiceSettings({...settings,autoSend:event.target.checked});save();
+  status(settings.autoSend?'Voice questions will be sent after recognition. Disable to review before sending.':
+    'Dictated questions will remain in the composer until you press Send.');
 });
 $('priviVoicePreview').addEventListener('click',()=>{
-  read('Hello! This is Privi Voice. You can listen to Hey Jose at your own speed.');
+  read('Hello! This is Privi Voice. Choose your language, voice, and speaking speed.');
 });
-$('priviVoiceStop').addEventListener('click',stop);
+$('priviVoicePause').addEventListener('click',pauseResume);
+$('priviVoiceStop').addEventListener('click',()=>stop());
 $('priviVoiceLast').addEventListener('click',()=>{
   const latest=window.joseAddons?.getLastReply?.()||'';
   if(latest)read(latest);
-  else status('Ask Hey Jose something first, or choose Try voice.');
+  else status('Ask Hey Jose a question first, or select Try voice.');
 });
-$('priviVoiceMic').addEventListener('click',()=>{
-  $('voice').click();
-});
+$('priviVoiceMic').addEventListener('click',()=>$('voice').click());
 $('priviVoiceRate').value=String(settings.rate);
 $('priviVoicePitch').value=String(settings.pitch);
-$('priviVoiceSelect').value=settings.voiceUri;
 $('priviVoiceRateValue').textContent=settings.rate.toFixed(1)+'×';
 $('priviVoicePitchValue').textContent=settings.pitch.toFixed(1);
 $('priviVoiceAuto').checked=settings.autoRead;
-$('priviVoiceStop').disabled=true;
+$('priviVoiceAutoSend').checked=settings.autoSend;
+controls();
 if(!available){
-  for(const id of ['priviVoiceSelect','priviVoiceRate','priviVoicePitch','priviVoiceAuto',
-    'priviVoicePreview','priviVoiceStop','priviVoiceLast'])$(id).disabled=true;
-  status('Privi Voice text-to-speech is not available in this browser. Microphone dictation may still work.');
+  for(const id of ['priviVoiceSelect','priviVoiceRate','priviVoicePitch',
+    'priviVoiceAuto','priviVoicePreview','priviVoicePause',
+    'priviVoiceStop','priviVoiceLast'])$(id).disabled=true;
+  status('Your browser cannot play speech. Microphone dictation may still work.');
 }else{
   synth.addEventListener?.('voiceschanged',refreshVoices);
   refreshVoices();
-  status('Free browser voices. Choose a voice, then select Listen on any Jose reply.');
+  status('Privi Voice is free. Choose a language and tap Listen on any reply.');
 }
 window.addEventListener('pagehide',()=>{if(available)synth.cancel();});
 window.priviVoice=Object.freeze({
-  supported:available,
-  read,
-  onAnswer(value){
-    if(settings.autoRead)return read(value);
-    return false;
-  },
-  stop,
+  supported:available,read,stop,pauseResume,
+  getLanguage:()=>speechLanguage(settings,navigator.language||'en-US'),
+  autoSend:()=>settings.autoSend,
+  onAnswer(value){return settings.autoRead?read(value):false;},
   settings:()=>({...settings}),
 });

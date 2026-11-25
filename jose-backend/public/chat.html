@@ -119,6 +119,9 @@ textarea::placeholder{color:#aaa7b9}
 .code-wrap pre{white-space:pre;overflow-x:auto;margin:0;padding:14px 16px;line-height:1.55;tab-size:2;font:13px ui-monospace,SFMono-Regular,Consolas,monospace}
 
 /* Privi Voice: free browser-native playback integrated into the same Jose chat. */
+header{height:auto;min-height:60px;flex-shrink:0}
+#priviVoicePanel{max-height:min(58dvh,560px);overflow-y:auto;flex-shrink:0}
+
 header .actions{flex-wrap:wrap;justify-content:flex-end}
 #priviVoicePanel{background:#151a2a;border-bottom:1px solid #514967;padding:12px 18px}
 .voice-inner{max-width:930px;margin:auto}
@@ -135,6 +138,8 @@ header .actions{flex-wrap:wrap;justify-content:flex-end}
 .voice-actions label{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text)}
 .voice-actions input{accent-color:var(--gold)}
 #priviVoiceNotice{color:var(--muted);font-size:12px;min-height:16px;margin:8px 0 0}
+#voice[aria-pressed="true"],#priviVoiceMic[aria-pressed="true"]{background:#693e5b;color:#fff;border-radius:10px}
+.voice-actions label{line-height:1.5}
 .voice-message-actions{margin-top:9px;display:flex;gap:7px;align-items:center}
 .voice-listen{font-size:12px;padding:4px 10px;background:#222a3a;color:var(--gold);border-color:#554b61}
 .voice-listen:hover{background:#343046}
@@ -178,10 +183,13 @@ header .actions{flex-wrap:wrap;justify-content:flex-end}
 <section id="priviVoicePanel" hidden aria-label="Privi Voice playback options">
   <div class="voice-inner">
     <div class="voice-heading"><h2>Privi Voice ✦ <small style="font:12px system-ui;color:var(--muted)">Free</small></h2><button id="priviVoiceClose" class="iconbutton" type="button" aria-label="Close voice settings">✕</button></div>
-    <p class="voice-description">Listen to Jose replies using voices available in your browser or device. No paid Privi Voice API or account required. Voice availability and speech processing depend on your browser and operating system.</p>
+    <p class="voice-description">Speak or listen in your chosen language using available browser/device voices. No additional Privi Voice subscription or API fee. Speech recognition may use your browser provider's servers; your microphone activates only when you press Talk or 🎙. Dictation stays in the composer unless you enable automatic sending.</p>
     <div class="voice-grid">
+      <label class="voice-field" for="priviVoiceLanguage">Language
+        <select id="priviVoiceLanguage"></select>
+      </label>
       <label class="voice-field" for="priviVoiceSelect">Voice
-        <select id="priviVoiceSelect"><option value="">System default</option></select>
+        <select id="priviVoiceSelect"><option value="">Match language / system voice</option></select>
       </label>
       <label class="voice-field" for="priviVoiceRate">Speed: <output id="priviVoiceRateValue">1.0×</output>
         <input id="priviVoiceRate" type="range" min="0.6" max="2" value="1" step="0.1">
@@ -193,9 +201,11 @@ header .actions{flex-wrap:wrap;justify-content:flex-end}
     <div class="voice-actions">
       <button id="priviVoicePreview" type="button">▶ Try voice</button>
       <button id="priviVoiceLast" type="button">🔊 Read latest answer</button>
+      <button id="priviVoicePause" type="button" disabled>⏸ Pause</button>
       <button id="priviVoiceStop" type="button" disabled>■ Stop</button>
-      <button id="priviVoiceMic" type="button" title="Dictate a message with your microphone">🎙 Talk to Jose</button>
+      <button id="priviVoiceMic" type="button" title="Dictate a message with your microphone" aria-pressed="false">🎙 Talk to Jose</button>
       <label for="priviVoiceAuto"><input id="priviVoiceAuto" type="checkbox"> Automatically read new answers</label>
+      <label for="priviVoiceAutoSend"><input id="priviVoiceAutoSend" type="checkbox"> Send recognized voice questions automatically (off by default)</label>
     </div>
     <p id="priviVoiceNotice" role="status" aria-live="polite">Loading available device voices…</p>
   </div>
@@ -252,7 +262,7 @@ header .actions{flex-wrap:wrap;justify-content:flex-end}
     <div class="toolbar"><div class="tools">
       <button id="attach" type="button" title="Attach image or text file" aria-label="Attach file">＋</button>
       <button id="clearAttachment" type="button" title="Remove attachment" aria-label="Remove attachment" hidden>×</button>
-      <button id="voice" type="button" title="Dictate your question" aria-label="Use microphone">🎙</button>
+      <button id="voice" type="button" title="Dictate your question" aria-label="Use microphone" aria-pressed="false">🎙</button>
     </div><button id="send" class="send" type="submit">Send ↑</button></div>
     <input id="attachmentFile" type="file" accept="image/png,image/jpeg,image/webp,.txt,.md,.csv,.json,.js,.ts,.py,.html,.css,.sol,.xml,.yaml,.yml,.log,.sql" hidden>
   </form>
@@ -326,6 +336,7 @@ function clearArtifact(){
 }
 window.joseResetChat=()=>{
   if(running)return;
+  window.joseStopDictation?.();
   window.priviVoice?.stop();
   history.length=0;
   [...feed.querySelectorAll('.bubble')].forEach(node=>node.remove());
@@ -334,6 +345,7 @@ window.joseResetChat=()=>{
 };
 window.joseRestoreConversation=(messages)=>{
   if(running)return;
+  window.joseStopDictation?.();
   window.priviVoice?.stop();
   history.length=0;
   [...feed.querySelectorAll('.bubble')].forEach(node=>node.remove());
@@ -360,14 +372,70 @@ document.getElementById('previewApp').addEventListener('click',()=>{
   const frame=document.getElementById('preview');
   frame.srcdoc=generatedApp;frame.hidden=false;
 });
+// Explicit push-to-talk speech recognition, never continuous microphone access.
+// Recognition can run through the browser vendor; no extra Privi speech backend.
+let activeRecognition=null;
+function stopVoiceDictation(){
+  const recognition=activeRecognition;
+  activeRecognition=null;
+  document.getElementById('voice').setAttribute('aria-pressed','false');
+  document.getElementById('priviVoiceMic').setAttribute('aria-pressed','false');
+  document.getElementById('voice').title='Dictate your question';
+  document.getElementById('priviVoiceMic').textContent='🎙 Talk to Jose';
+  if(recognition)try{recognition.stop();}catch{}
+}
+window.joseStopDictation=stopVoiceDictation;
 document.getElementById('voice').addEventListener('click',()=>{
+  if(activeRecognition){stopVoiceDictation();return;}
+  if(running){status.textContent='Finish the current answer before dictating another question.';return;}
   const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SpeechRecognition){status.textContent='Microphone dictation is not supported in this browser.';return;}
+  window.priviVoice?.stop({quiet:true});
   const recognition=new SpeechRecognition();
-  recognition.lang=document.documentElement.lang==='es'?'es-ES':'en-US';
-  recognition.onresult=e=>{input.value=e.results[0][0].transcript;input.focus();};
-  recognition.onerror=()=>{status.textContent='Microphone recognition failed. Try typing your question.';};
-  recognition.start();
+  recognition.lang=window.priviVoice?.getLanguage?.()||navigator.language||'en-US';
+  recognition.interimResults=false;
+  recognition.continuous=false;
+  recognition.maxAlternatives=1;
+  activeRecognition=recognition;
+  const micButton=document.getElementById('voice');
+  const panelButton=document.getElementById('priviVoiceMic');
+  micButton.setAttribute('aria-pressed','true');
+  panelButton.setAttribute('aria-pressed','true');
+  micButton.title='Stop dictation';
+  panelButton.textContent='■ Stop listening';
+  recognition.onresult=event=>{
+    if(activeRecognition!==recognition)return;
+    const spoken=String(event.results?.[0]?.[0]?.transcript||'').trim().slice(0,12000);
+    if(!spoken){status.textContent='No speech detected. Try again.';return;}
+    input.value=spoken;input.focus();
+    // Explicit opt-in. Never silently submit attached files with speech.
+    if(window.priviVoice?.autoSend?.()&&!running&&!window.joseAddons?.getAttachment?.()){
+      status.textContent='Sending recognized voice question…';
+      form.requestSubmit();
+    }else status.textContent='Dictation ready. Review your words, then press Send.';
+  };
+  recognition.onerror=event=>{
+    if(activeRecognition!==recognition)return;
+    status.textContent=event.error==='not-allowed'?
+      'Microphone access was denied. Allow access in browser settings to dictate.':
+      'Speech recognition could not finish. Type your question or retry.';
+  };
+  recognition.onend=()=>{
+    if(activeRecognition===recognition){
+      activeRecognition=null;
+      micButton.setAttribute('aria-pressed','false');
+      panelButton.setAttribute('aria-pressed','false');
+      micButton.title='Dictate your question';
+      panelButton.textContent='🎙 Talk to Jose';
+    }
+  };
+  try{
+    recognition.start();
+    status.textContent='Listening ('+recognition.lang+')… Press the microphone again to stop.';
+  }catch{
+    stopVoiceDictation();
+    status.textContent='Could not start the microphone. Please try again.';
+  }
 });
 input.addEventListener('keydown',event=>{
   if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){
@@ -385,6 +453,7 @@ window.addEventListener('message',event=>{
 form.addEventListener('submit',async event=>{
   event.preventDefault();
   if(running)return;
+  window.joseStopDictation?.();
   const message=input.value.trim();
   if(!message)return;
   const memoryAnswer=window.joseMemory?.message?.(message);
