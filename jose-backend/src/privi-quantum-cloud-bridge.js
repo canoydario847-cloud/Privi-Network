@@ -78,8 +78,8 @@ async function safeRequest(fetchImpl,url,key,{method='GET',body,timeoutMs=7500}=
 export function createQuantumCloudBridge({env=process.env,fetchImpl=globalThis.fetch}={}){
   const ownedJobs=new Map();
   function assertCaller(user){
-    if(!operatorAuthorized(user,env))bad('This Cloud simulator is restricted to approved operator accounts.',403);
     if(!cloudBridgeEnabled(env))bad('Cloud simulator not configured; local quantum features remain available.',503);
+    if(!operatorAuthorized(user,env))bad('This Cloud simulator is restricted to approved operator accounts.',403);
   }
   function cleanup(){
     const now=Date.now();
