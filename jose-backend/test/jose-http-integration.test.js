@@ -160,6 +160,11 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   // delivered with a JavaScript MIME type or the browser will reject imports.
   assert.match(markup,/priviVoicePanel/);
   assert.match(markup,/priviVoiceAuto/);
+  assert.match(markup,/priviVoiceLanguage/);
+  assert.match(markup,/priviVoicePause/);
+  assert.match(markup,/priviVoiceAutoSend/);
+  assert.match(markup,/recognition\.lang=window\.priviVoice/);
+  assert.match(markup,/window\.priviVoice\?\.autoSend/);
   assert.match(markup,/priviVoiceBtn/);
   assert.match(markup,/privi-voice\.js/);
   for(const voicePath of ['/privi-voice.js','/privi-voice-core.mjs']){
