@@ -221,6 +221,15 @@
     }else if(action==='web3'){
       $('message').value='Help me build a safe Web3 smart contract for ';
       closeDrawer();$('message').focus();
+    }else if(action==='qubo'||action==='balance'||action==='cloudstatus'){
+      $('message').value=action==='qubo'?
+        '/quantum optimize {"Q":[[1,-2],[-2,1]],"names":["a","b"]}':
+        action==='balance'?
+        '/quantum balance {"jobs":[{"name":"A","minutes":42},{"name":"B","minutes":17},{"name":"C","minutes":33}]}':
+        '/quantum cloud';
+      closeDrawer();
+      if(action==='cloudstatus')$('chat').requestSubmit();
+      else $('message').focus();
     }else{
       const id={gmail:'gmailBtn',memory:'memoryBtn',voice:'priviVoiceBtn',export:'exportChat',attach:'attach'}[action];
       if(id)$(id).click();
