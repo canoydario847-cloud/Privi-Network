@@ -113,7 +113,8 @@ export function optimizationRequest(message){
     const json=q.replace(/^(?:\/quantum\s+optimize|\/qubo)\s+/i,'');
     let input;
     try{input=JSON.parse(json);}catch{fail('Use valid JSON: /quantum optimize {"Q":[[1,-2],[-2,1]]}');}
-    return {type:'qubo',input:validateQubo(input)};
+    validateQubo(input); // Validate before constructing a request; solver revalidates independently.
+    return {type:'qubo',input};
   }
   if(/^\/quantum\s+balance\s+/i.test(q)){
     let input;
