@@ -4,12 +4,45 @@
  *
  * NOT a production P2P stack, NOT gossip, NOT authenticated transport,
  * NOT mainnet networking. Used to drive ResearchRoundMachine peers in tests.
+ *
+ * Latency metrics are research instrumentation only (publish→deliver delay).
  */
 const { EventEmitter } = require("node:events");
 
 const TYPES = Object.freeze(["proposal", "prevote", "precommit", "timeout"]);
 
 function must(ok, why) { if (!ok) throw Error(why); }
+
+function percentile(sorted, p) {
+  if (!sorted.length) return null;
+  if (sorted.length === 1) return sorted[0];
+  const idx = (p / 100) * (sorted.length - 1);
+  const lo = Math.floor(idx);
+  const hi = Math.ceil(idx);
+  if (lo === hi) return sorted[lo];
+  const w = idx - lo;
+  return sorted[lo] * (1 - w) + sorted[hi] * w;
+}
+
+function summarize(samples) {
+  if (!samples.length) {
+    return {
+      count: 0, minMs: null, maxMs: null, meanMs: null,
+      p50Ms: null, p95Ms: null, p99Ms: null,
+    };
+  }
+  const sorted = [...samples].sort((a, b) => a - b);
+  const sum = sorted.reduce((a, b) => a + b, 0);
+  return {
+    count: sorted.length,
+    minMs: sorted[0],
+    maxMs: sorted[sorted.length - 1],
+    meanMs: sum / sorted.length,
+    p50Ms: percentile(sorted, 50),
+    p95Ms: percentile(sorted, 95),
+    p99Ms: percentile(sorted, 99),
+  };
+}
 
 /**
  * Envelope shape (research):
@@ -18,7 +51,7 @@ function must(ok, why) { if (!ok) throw Error(why); }
  *   from: validatorId (0x…64),
  *   height, round,
  *   chainId,
- *   payload: object,   // proposal body or vote {validatorId,signature}
+ *   payload: object,
  *   researchOnly: true
  * }
  */
@@ -32,13 +65,16 @@ class ResearchMessageBus extends EventEmitter {
     this.latencyMs = latencyMs;
     this.dropRate = dropRate;
     this.rng = rng;
-    this.partitioned = new Set(); // validatorIds that cannot send or receive
+    this.partitioned = new Set();
     this.delivered = [];
     this.dropped = [];
     this._seq = 0;
+    /** @type {number[]} publish→deliver samples (ms) */
+    this._latencySamples = [];
+    /** @type {Record<string, number[]>} */
+    this._latencyByType = Object.fromEntries(TYPES.map((t) => [t, []]));
   }
 
-  /** Isolate a set of validator IDs (no send/receive). */
   setPartition(validatorIds) {
     this.partitioned = new Set(validatorIds || []);
   }
@@ -55,9 +91,11 @@ class ResearchMessageBus extends EventEmitter {
     must(Number.isSafeInteger(envelope.height) && envelope.height >= 1, "invalid height");
     must(Number.isSafeInteger(envelope.round) && envelope.round >= 0, "invalid round");
     must(typeof envelope.chainId === "string", "chainId required");
+    const publishedAt = Date.now();
     const msg = Object.freeze({
       ...envelope,
       seq: ++this._seq,
+      publishedAt,
       researchOnly: true,
       productionConsensus: false,
     });
@@ -70,34 +108,51 @@ class ResearchMessageBus extends EventEmitter {
       return false;
     }
     const deliver = () => {
-      // Receivers in partition do not get the message.
-      this.delivered.push(msg);
-      this.emit("message", msg);
-      this.emit(msg.type, msg);
+      const deliveredAt = Date.now();
+      const latencyMs = deliveredAt - publishedAt;
+      this._latencySamples.push(latencyMs);
+      this._latencyByType[msg.type].push(latencyMs);
+      const withLatency = Object.freeze({ ...msg, deliveredAt, latencyMs });
+      this.delivered.push(withLatency);
+      this.emit("message", withLatency);
+      this.emit(msg.type, withLatency);
     };
     if (this.latencyMs > 0) {
       setTimeout(deliver, this.latencyMs);
     } else {
-      // Async microtask so publish() returns before handlers run (avoids reentrancy).
       queueMicrotask(deliver);
     }
     return true;
   }
 
-  /**
-   * Subscribe to all messages. Handler may filter by type.
-   * Returns unsubscribe function.
-   */
   subscribe(handler) {
     must(typeof handler === "function", "handler required");
-    const wrapped = (msg) => {
-      // Partitioned nodes still "hear" nothing: filter at delivery for receivers
-      // is applied by the peer driver (bus delivers to all subscribers; peer
-      // ignores if it is partitioned). Keep bus simple.
-      handler(msg);
-    };
+    const wrapped = (msg) => { handler(msg); };
     this.on("message", wrapped);
     return () => this.off("message", wrapped);
+  }
+
+  /** Aggregate publish→deliver latency (research metrics only). */
+  latencyMetrics() {
+    const byType = {};
+    for (const t of TYPES) {
+      byType[t] = summarize(this._latencyByType[t]);
+    }
+    return {
+      configuredLatencyMs: this.latencyMs,
+      dropRate: this.dropRate,
+      overall: summarize(this._latencySamples),
+      byType,
+      researchOnly: true,
+      productionConsensus: false,
+    };
+  }
+
+  resetMetrics() {
+    this._latencySamples = [];
+    this._latencyByType = Object.fromEntries(TYPES.map((t) => [t, []]));
+    this.delivered = [];
+    this.dropped = [];
   }
 
   stats() {
@@ -106,9 +161,10 @@ class ResearchMessageBus extends EventEmitter {
       dropped: this.dropped.length,
       seq: this._seq,
       partitioned: [...this.partitioned],
+      latency: this.latencyMetrics(),
       researchOnly: true,
     };
   }
 }
 
-module.exports = { ResearchMessageBus, TYPES };
+module.exports = { ResearchMessageBus, TYPES, summarize, percentile };
