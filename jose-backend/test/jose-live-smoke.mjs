@@ -44,6 +44,27 @@ const inbox=await probe('Gmail read intent gives truthful state',BACKEND+'/api/c
 if(inbox?.json)report.gmailReadIntentState=inbox.json.gmailStatus||inbox.json.gmailAction;
 await probe('Gmail API rejects unauthenticated access',BACKEND+'/api/gmail/status',{expect:401});
 await probe('Gmail send endpoint rejects unauthenticated requests',BACKEND+'/api/gmail/send',{method:'POST',payload:{reviewToken:'test-invalid',confirmSend:true},expect:401});
+
+// New release diagnostics. These are optional in PR checks because the old
+// production deployment may still be live; rerun after Render deploys.
+await probe('Privi Quantum local simulator metadata (12 qubits)',BACKEND+'/api/quantum/info',{
+ expect:(r,j)=>r.status===200&&j?.engine==='classical_exact_statevector'&&j?.maxQubits===12&&j?.hardwareQpu===false,
+ optional:true
+});
+await probe('Privi Quantum 12-qubit GHZ simulation',BACKEND+'/api/quantum/simulate',{
+ method:'POST',
+ payload:{qubits:12,gates:[{gate:'h',target:0},...Array.from({length:11},(_,i)=>({gate:'cx',control:i,target:i+1}))],shots:512,seed:1},
+ expect:(r,j)=>r.status===200&&j?.physicalQpu===false&&j?.paymentRequired===false&&
+   j?.probabilities?.find(v=>v.state==='1'.repeat(12))?.probability===0.5&&
+   Object.values(j?.counts||{}).reduce((a,b)=>a+b,0)===512,
+ optional:true
+});
+await probe('Privi Quantum public project status proxy',BACKEND+'/api/quantum/project',{
+ expect:(r,j)=>r.status===200&&typeof j?.connected==='boolean'&&j?.canSubmitJobsFromJose===false&&
+   j?.qpuRunVerified===false,
+ optional:true
+});
+
 const card=await probe('Network report card response',BACKEND+'/api/network/report-card',{expect:(r,j)=>r.status===200&&j&&typeof j==='object',optional:true});
 if(card?.json)report.monitorFresh=card.json.fresh===true;
 const dev=await probe('Devnet verification endpoint',BACKEND+'/api/devnet/status',{expect:(r,j)=>r.status===200&&typeof j?.connected==='boolean',optional:true});
