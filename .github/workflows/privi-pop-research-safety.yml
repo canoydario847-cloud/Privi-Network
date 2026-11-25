@@ -1,7 +1,8 @@
 name: Privi PoP research consensus-safety regressions (not live)
 
-# Signer locks and committee proofs are experimental; they are deliberately
-# not imported by the Cosmos EVM production application or deployed validators.
+# Signer locks, round machine, message bus, and worker peers are experimental.
+# They are deliberately not imported by the Cosmos EVM production application
+# or deployed validators. Passing CI is NOT mainnet authorization.
 on:
   pull_request:
     paths:
@@ -29,24 +30,62 @@ concurrency:
 
 jobs:
   pop-research-safety:
-    name: PoP signed committee and durable lock adversarial tests (research only)
+    name: PoP research suite (Node ${{ matrix.node-version }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ["20", "24"]
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: ${{ matrix.node-version }}
+
       - name: Assert candidate cannot be mistaken for production consensus
         run: |
           set -euo pipefail
           grep -Fq 'attested-position-research-not-live-consensus' production-network/mainnet/pop_candidate/engine.cjs
           grep -Fq 'productionConsensus:false' production-network/mainnet/pop_candidate/engine.cjs
           grep -Fq 'RESEARCH ONLY' production-network/mainnet/pop_candidate/persistent_vote_guard.cjs
-      - name: Exercise Ed25519 admission, quorum, replay and recovery locks
+          grep -Fq 'RESEARCH ONLY' production-network/mainnet/pop_candidate/round_machine.cjs
+          grep -Fq 'RESEARCH ONLY' production-network/mainnet/pop_candidate/message_bus.cjs
+          grep -Fq 'RESEARCH ONLY' production-network/mainnet/pop_candidate/worker_bus.cjs
+          grep -Fq 'productionConsensus: false' production-network/mainnet/pop_candidate/bus_driver.cjs
+
+      - name: Engine, locks, certificates, and linked verifier
+        working-directory: production-network/mainnet/pop_candidate
         run: |
           set -euo pipefail
-          node --test production-network/mainnet/pop_candidate/test_*.cjs
+          node --test \
+            test_engine.cjs \
+            test_persistent_vote_guard.cjs \
+            test_cross_process_lock.cjs \
+            test_linked_certificate_verifier.cjs
+
+      - name: Round machine, in-process bus, latency metrics
+        working-directory: production-network/mainnet/pop_candidate
+        run: |
+          set -euo pipefail
+          node --test \
+            test_round_machine.cjs \
+            test_bus_driver.cjs \
+            test_message_bus_latency.cjs
+
+      - name: Multi-worker thread bus
+        working-directory: production-network/mainnet/pop_candidate
+        run: |
+          set -euo pipefail
+          node --test test_worker_bus.cjs
+
+      - name: Full pop_candidate test_*.cjs sweep
+        working-directory: production-network/mainnet/pop_candidate
+        run: |
+          set -euo pipefail
+          node --test test_*.cjs
+
       - name: Fail-closed PoP mainnet approval regressions
         run: |
           set -euo pipefail
@@ -58,9 +97,21 @@ jobs:
           else
             echo "Expected refusal: native Point of Position mainnet remains NO-GO"
           fi
+
       - name: Disclose research-only limits in check output
         if: always()
         run: |
-          echo "## PRVI financial mainnet still NO-GO" >> "$GITHUB_STEP_SUMMARY"
-          echo "These tests prove only isolated candidate safety properties, not live PoP finality, native validator admissions, any ledger proof, or independent hosting." >> "$GITHUB_STEP_SUMMARY"
-          echo "No PRVI coins, real signer keys, signed genesis, mainnet transactions, or production validator services are created." >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## PRVI financial mainnet still NO-GO"
+            echo
+            echo "Node **${{ matrix.node-version }}** research suite only."
+            echo
+            echo "Covered modules: engine, persistent vote guard, round machine,"
+            echo "message bus (+ latency metrics), bus driver, worker_threads bus."
+            echo
+            echo "These tests prove isolated candidate safety properties — not live"
+            echo "PoP finality, native validator admissions, ledger proofs, or independent hosting."
+            echo
+            echo "No PRVI coins, real signer keys, signed genesis, mainnet transactions,"
+            echo "or production validator services are created."
+          } >> "$GITHUB_STEP_SUMMARY"
