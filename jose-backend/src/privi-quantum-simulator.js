@@ -1,7 +1,8 @@
 // Privi Quantum for Hey Jose: FREE, deterministic local exact-statevector
 // simulations. Gate and bit ordering follow quantum-server/src/privi_quantum/hardware.py.
 // This JS adapter does NOT invoke Privi Quantum's paid MCP tools or any QPU.
-export const MAX_QUBITS=8;
+export const MAX_QUBITS=12;
+export const MAX_RETURNED_STATES=64; // Keep 12-qubit uniform-state responses small.
 export const MAX_GATES=80;
 export const MAX_SHOTS=4096;
 export class QuantumInputError extends Error{
@@ -40,7 +41,7 @@ export function validateCircuit(body){
   if(Object.keys(body).some(k=>!allowed.includes(k)))invalid('Only qubits, gates, shots and seed are accepted.');
   const n=body.qubits;
   if(!Number.isInteger(n)||n<1||n>MAX_QUBITS)
-    invalid('Hey Jose runs 1–8 qubits locally (the separate Privi Quantum server has different limits).');
+    invalid('Hey Jose runs 1–12 qubits locally (the separate Privi Quantum server has different limits).');
   const shots=body.shots===undefined?1024:body.shots;
   if(!Number.isInteger(shots)||shots<1||shots>MAX_SHOTS)
     invalid('Shots must be an integer from 1 to 4096.');
@@ -85,9 +86,10 @@ export function parseQasm(source){
   return validateCircuit({qubits,gates});
 }
 export const QUANTUM_HELP=
-  'Privi Quantum is built into Hey Jose as a free, **classical exact-statevector qubit simulator** (1–8 qubits). Try:\n'+
+  'Privi Quantum is built into Hey Jose as a free, **classical exact-statevector qubit simulator** (1–12 qubits). Try:\n'+
   '• "Simulate a 2-qubit Bell state"\n'+
-  '• "Simulate a 3-qubit GHZ state"\n'+
+  '• "Simulate a 12-qubit GHZ state"\n'+
+  '• "Privi Quantum project status" (live read-only service check)\n'+
   '• /quantum simulate {"qubits":2,"gates":[{"gate":"h","target":0},{"gate":"cx","control":0,"target":1}]}\n'+
   '• /quantum qasm OPENQASM 2.0; include "qelib1.inc"; qreg q[2]; h q[0]; cx q[0],q[1];\n'+
   'Allowed gates: H, X, Z, RX(angle), RZ(angle), CX. Input qubits use zero-based indices. No quantum hardware, paid API or on-chain write is used. The independent Privi Quantum project also has advanced optimization services; those are not silently called by this free chat simulator.';
@@ -111,7 +113,7 @@ export function quantumRequest(message){
   if(/\bghz(?:\s+state)?\b/i.test(q)){
     const number=q.match(/(\d{1,2})\s*[- ]?\s*qubits?/i)||q.match(/ghz\s+(\d{1,2})/i);
     const n=number?Number(number[1]):3;
-    if(!Number.isInteger(n)||n<2||n>MAX_QUBITS)invalid('GHZ simulations require 2–8 qubits.');
+    if(!Number.isInteger(n)||n<2||n>MAX_QUBITS)invalid('GHZ simulations require 2–12 qubits.');
     return {type:'simulate',circuit:validateCircuit({qubits:n,gates:[{gate:'h',target:0},...Array.from({length:n-1},(_,i)=>({gate:'cx',control:i,target:i+1}))]})};
   }
   return {type:'help'};
@@ -175,8 +177,25 @@ export function simulateCircuit(input){
     counts[lo]++;
   }
   const bitstring=i=>i.toString(2).padStart(n,'0');
+  // The full statevector remains on the server. For large superpositions,
+  // return a bounded high-probability / most-sampled subset rather than up
+  // to 4096 amplitudes in an HTTP response.
+  const active=Array.from({length:dim},(_,i)=>i)
+    .filter(i=>probabilities[i]>1e-12||counts[i]>0);
+  let visible=active;
+  if(active.length>MAX_RETURNED_STATES){
+    const byProbability=[...active].sort((a,b)=>
+      probabilities[b]-probabilities[a]||counts[b]-counts[a]||a-b).slice(0,32);
+    const bySamples=[...active].sort((a,b)=>
+      counts[b]-counts[a]||probabilities[b]-probabilities[a]||a-b).slice(0,32);
+    visible=[...new Set([...byProbability,...bySamples])].slice(0,MAX_RETURNED_STATES).sort((a,b)=>a-b);
+  }
+  const visibleSet=new Set(visible);
+  let retainedProbability=0,shownShots=0;
+  for(const i of visible){retainedProbability+=probabilities[i];shownShots+=counts[i];}
+  const truncated=active.length>visible.length;
   const probabilitiesOut=[],countsOut={},amplitudes=[];
-  for(let i=0;i<dim;i++){
+  for(const i of visible){
     const p=probabilities[i];
     if(p>1e-12)probabilitiesOut.push({state:bitstring(i),probability:Number(p.toFixed(12))});
     if(counts[i]>0)countsOut[bitstring(i)]=counts[i];
@@ -189,6 +208,9 @@ export function simulateCircuit(input){
     bitOrder:'q0 is least-significant (rightmost) bit',
     qubits:n,gates:circuit.gates,shots:circuit.shots,seed:circuit.seed,
     probabilities:probabilitiesOut,counts:countsOut,amplitudes:n<=4?amplitudes:undefined,
+    basisStatesWithProbability:active.length,returnedStates:visible.length,
+    distributionTruncated:truncated,probabilityMassReturned:Number(retainedProbability.toFixed(12)),
+    countsTotal:circuit.shots,countsShown:shownShots,
     totalProbability:total};
 }
 export function formatQuantumAnswer(result){
@@ -196,6 +218,10 @@ export function formatQuantumAnswer(result){
   const probabilities=top.map(row=>'- |'+row.state+'⟩: '+(100*row.probability).toFixed(3)+'% (sampled '+(result.counts[row.state]||0)+'/'+result.shots+' shots)').join('\n');
   return 'Privi Quantum — '+result.qubits+'-qubit circuit simulation\n\n'+
     'Ran '+result.gates.length+' gates using a **classical exact-statevector simulator**. '+result.shots+' seeded simulated measurement shots.\n\n'+probabilities+
-    (result.probabilities.length>top.length?'\n- ... '+(result.probabilities.length-top.length)+' other nonzero states (see structured result).':'')+
+    (result.distributionTruncated?
+      '\n- Partial distribution: '+(result.basisStatesWithProbability-result.returnedStates)+
+      ' nonzero/observed states omitted; '+(result.shots-result.countsShown)+
+      ' shots not shown. Calculated probabilities are exact to floating-point precision.':
+      result.probabilities.length>top.length?'\n- ... '+(result.probabilities.length-top.length)+' other nonzero states available in the structured result.':'')+
     '\n\nGate convention: q0 is the rightmost bit. No physical quantum processor, charges, tokens, wallet transactions, QPU advantage, or on-chain receipts were involved.';
 }
