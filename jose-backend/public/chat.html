@@ -160,6 +160,8 @@ header .actions{flex-wrap:wrap;justify-content:flex-end}
 .quantum-card .quantum-note{margin-top:12px;font-size:11px}
 @media(max-width:650px){.quantum-card{width:100%;margin:0;padding:12px}
 .quantum-state{grid-template-columns:minmax(36px,70px) minmax(0,1fr) minmax(72px,105px);gap:6px;font-size:11px}}
+
+.optimization-highlight{font-size:14px!important;color:#eee3c9!important;font-weight:700;margin:10px 0!important;line-height:1.6}
 </style>
 </head>
 <body>
@@ -177,6 +179,9 @@ header .actions{flex-wrap:wrap;justify-content:flex-end}
     <button type="button" data-action="web3">Build Web3</button>
     <button type="button" data-action="quantum">⚛ Quantum simulation</button>
     <button type="button" data-action="quantumproject">Quantum status</button>
+    <button type="button" data-action="qubo">QUBO optimizer</button>
+    <button type="button" data-action="balance">Balance work</button>
+    <button type="button" data-action="cloudstatus">Quantum Cloud</button>
     <button type="button" data-action="gmail">Gmail</button>
     <button type="button" data-action="memory">Memory</button>
     <button type="button" data-action="voice">🔊 Privi Voice</button>
@@ -391,6 +396,39 @@ function showQuantumResult(result){
   card.append(note);feed.append(card);
   card.scrollIntoView({block:'nearest',behavior:'smooth'});
 }
+function showOptimizationResult(result){
+  if(!result||result.method!=='classical_exhaustive_qubo'||
+     !Number.isInteger(result.variables)||result.variables<1||result.variables>16)return;
+  const card=document.createElement('section');card.className='quantum-card';
+  card.setAttribute('aria-label','Privi Quantum exact classical optimization');
+  const top=document.createElement('div');top.className='quantum-card-head';
+  const header=document.createElement('div');
+  const h=document.createElement('h2');h.textContent='⚛ QUBO · '+result.variables+' binary variables';
+  const detail=document.createElement('p');
+  detail.textContent='Classical exact enumeration · '+result.configurationsEvaluated+' configurations · No QPU';
+  header.append(h,detail);
+  const download=document.createElement('button');download.type='button';download.textContent='Download JSON';
+  download.onclick=()=>{
+    const blob=new Blob([JSON.stringify(result,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download='privi-quantum-classical-optimization.json';
+    document.body.append(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  };
+  top.append(header,download);card.append(top);
+  const resultHeading=document.createElement('p');
+  if(result.problem==='balance_lines')
+    resultHeading.textContent='Line A: '+result.lineAMinutes+' min · Line B: '+
+      result.lineBMinutes+' min · Difference: '+result.differenceMinutes+' min';
+  else resultHeading.textContent='Minimum objective: '+result.optimumCost+
+    ' · Best bitstring: '+result.optimalBitstring;
+  resultHeading.className='optimization-highlight';card.append(resultHeading);
+  const note=document.createElement('p');note.className='quantum-note';
+  note.textContent='Verified mathematical classical search, not CVaR-QAOA or physical quantum execution.';
+  card.append(note);feed.append(card);
+  card.scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+
 function artifactFromAnswer(message){
   const matched=String(message).match(/\x60{3}html\s*([\s\S]*?)\x60{3}/i);
   const html=(matched?matched[1]:message).trim();
@@ -550,6 +588,7 @@ form.addEventListener('submit',async event=>{
     if(typeof data.answer!=='string'||!data.answer.trim())throw new Error('Jose did not return an answer.');
     showMessage('jose',data.answer);
     if(data.quantum)showQuantumResult(data.quantum);
+    if(data.optimization)showOptimizationResult(data.optimization);
     window.joseAddons?.onSent?.(data.answer);
     if(!data.gmailAction)window.priviVoice?.onAnswer(data.answer);
     // Gmail message data must not be silently forwarded to the AI provider
