@@ -153,7 +153,8 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   const outsider=await json(base,'/api/quantum/cloud/jobs','POST',{
     qasm:'OPENQASM 2.0; qreg q[1]; h q[0];'
   },{Cookie:cookie});
-  assert.equal(outsider.status,403);
+  // The remote bridge is disabled before any account allowlist is evaluated.
+  assert.equal(outsider.status,503);
   const cloudStatus=await json(base,'/api/chat','POST',{message:'/quantum cloud'},{Cookie:cookie});
   assert.equal(cloudStatus.status,200);
   assert.equal(cloudStatus.data.quantumCloud.enabled,false);
