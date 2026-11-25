@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  DEFAULT_VOICE_SETTINGS,normalizeVoiceSettings,prepareSpeechText,splitSpeechText,
+  DEFAULT_VOICE_SETTINGS,SPEECH_LANGUAGES,normalizeVoiceSettings,speechLanguage,
+  prepareSpeechText,splitSpeechText,
 } from '../public/privi-voice-core.mjs';
 
 test('Privi Voice defaults are free, bounded and opt-in',()=>{
@@ -13,8 +14,27 @@ test('Privi Voice defaults are free, bounded and opt-in',()=>{
   assert.equal(changed.pitch,0.7);
   assert.equal(changed.autoRead,false);
   assert.equal(changed.voiceUri.length,250);
-  assert.deepEqual(normalizeVoiceSettings({rate:0.6,pitch:1.5,autoRead:true}),
-    {voiceUri:'',rate:0.6,pitch:1.5,autoRead:true});
+  assert.equal(changed.autoSend,false);
+  assert.equal(changed.language,'auto');
+  assert.deepEqual(normalizeVoiceSettings({rate:0.6,pitch:1.5,autoRead:true,language:'es-ES',autoSend:true}),
+    {voiceUri:'',rate:0.6,pitch:1.5,autoRead:true,language:'es-ES',autoSend:true});
+});
+test('Voice language is validated and shared with optional dictation',()=>{
+  const languages=SPEECH_LANGUAGES.map(x=>x.code);
+  assert.ok(languages.includes('pt-BR'));
+  assert.ok(languages.includes('hi-IN'));
+  assert.ok(languages.includes('ar-SA'));
+  assert.equal(speechLanguage({language:'es-ES'},'en-US'),'es-ES');
+  assert.equal(speechLanguage({language:'auto'},'pt-BR'),'pt-BR');
+  assert.equal(speechLanguage({language:'auto'},'INVALID LOCALE'),'en-US');
+  assert.equal(normalizeVoiceSettings({language:'file:///etc/passwd'}).language,'auto');
+  assert.equal(normalizeVoiceSettings({autoSend:'true'}).autoSend,false);
+  assert.equal(normalizeVoiceSettings({autoSend:true}).autoSend,true);
+});
+test('Voice settings can recover invalid data without enabling automatic sending',()=>{
+  assert.equal(normalizeVoiceSettings(null).autoSend,false);
+  assert.equal(normalizeVoiceSettings([]).autoSend,false);
+  assert.equal(normalizeVoiceSettings({language:29,autoSend:1}).autoSend,false);
 });
 
 test('Privi Voice reads prose, not entire generated code samples or URLs',()=>{
