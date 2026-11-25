@@ -119,6 +119,9 @@ textarea::placeholder{color:#aaa7b9}
 .code-wrap pre{white-space:pre;overflow-x:auto;margin:0;padding:14px 16px;line-height:1.55;tab-size:2;font:13px ui-monospace,SFMono-Regular,Consolas,monospace}
 
 /* Privi Voice: free browser-native playback integrated into the same Jose chat. */
+header{height:auto;min-height:60px;flex-shrink:0}
+#priviVoicePanel{max-height:min(58dvh,560px);overflow-y:auto;flex-shrink:0}
+
 header .actions{flex-wrap:wrap;justify-content:flex-end}
 #priviVoicePanel{background:#151a2a;border-bottom:1px solid #514967;padding:12px 18px}
 .voice-inner{max-width:930px;margin:auto}
@@ -200,7 +203,7 @@ header .actions{flex-wrap:wrap;justify-content:flex-end}
       <button id="priviVoiceLast" type="button">🔊 Read latest answer</button>
       <button id="priviVoicePause" type="button" disabled>⏸ Pause</button>
       <button id="priviVoiceStop" type="button" disabled>■ Stop</button>
-      <button id="priviVoiceMic" type="button" title="Dictate a message with your microphone">🎙 Talk to Jose</button>
+      <button id="priviVoiceMic" type="button" title="Dictate a message with your microphone" aria-pressed="false">🎙 Talk to Jose</button>
       <label for="priviVoiceAuto"><input id="priviVoiceAuto" type="checkbox"> Automatically read new answers</label>
       <label for="priviVoiceAutoSend"><input id="priviVoiceAutoSend" type="checkbox"> Send recognized voice questions automatically (off by default)</label>
     </div>
@@ -259,7 +262,7 @@ header .actions{flex-wrap:wrap;justify-content:flex-end}
     <div class="toolbar"><div class="tools">
       <button id="attach" type="button" title="Attach image or text file" aria-label="Attach file">＋</button>
       <button id="clearAttachment" type="button" title="Remove attachment" aria-label="Remove attachment" hidden>×</button>
-      <button id="voice" type="button" title="Dictate your question" aria-label="Use microphone">🎙</button>
+      <button id="voice" type="button" title="Dictate your question" aria-label="Use microphone" aria-pressed="false">🎙</button>
     </div><button id="send" class="send" type="submit">Send ↑</button></div>
     <input id="attachmentFile" type="file" accept="image/png,image/jpeg,image/webp,.txt,.md,.csv,.json,.js,.ts,.py,.html,.css,.sol,.xml,.yaml,.yml,.log,.sql" hidden>
   </form>
