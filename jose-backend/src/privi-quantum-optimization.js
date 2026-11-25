@@ -2,7 +2,7 @@
 // Compatible with the convention x^T Q x + offset in quantum-server/src/privi_quantum/qaoa.py.
 // Does NOT execute the separate CVaR-QAOA algorithm, spend credits or run on a QPU.
 export const MAX_QUBO_VARIABLES=16;
-export const MAX_QUBO_ABS_VALUE=1_000_000;
+export const MAX_QUBO_ABS_VALUE=10_000_000_000;
 export class QuantumOptimizationError extends Error {
   constructor(message){super(message);this.name='QuantumOptimizationError';this.status=400;}
 }
@@ -19,12 +19,12 @@ export function validateQubo(raw){
     if(!Array.isArray(row)||row.length!==n)fail('Q must have exactly '+n+' numbers per row.');
     for(const v of row){
       if(typeof v!=='number'||!Number.isFinite(v)||Math.abs(v)>MAX_QUBO_ABS_VALUE)
-        fail('Q entries must be finite numbers with magnitude at most 1,000,000.');
+        fail('Q entries must be finite numbers with magnitude at most 10,000,000,000.');
     }
   }
   const offset=raw.offset===undefined?0:raw.offset;
-  if(typeof offset!=='number'||!Number.isFinite(offset)||Math.abs(offset)>1_000_000_000)
-    fail('offset must be a finite number with magnitude at most 1,000,000,000.');
+  if(typeof offset!=='number'||!Number.isFinite(offset)||Math.abs(offset)>1_000_000_000_000)
+    fail('offset must be a finite number with magnitude at most 1,000,000,000,000.');
   const names=raw.names===undefined?Array.from({length:n},(_,i)=>'x'+i):raw.names;
   if(!Array.isArray(names)||names.length!==n||
     names.some(name=>typeof name!=='string'||name.length>42||!name.trim()))
