@@ -1,0 +1,68 @@
+name: Privi launch readiness scorecard (NO-GO)
+
+# Engineering progress inventory only. Never authorizes financial mainnet.
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/privi-launch-readiness-scorecard.yml"
+      - "production-network/ops/launch_readiness_scorecard.py"
+      - "production-network/ops/test_launch_readiness_scorecard.py"
+      - "production-network/ops/PATH_TO_LAUNCH.md"
+      - "production-network/ops/MAINNET_LAUNCH_GATE.md"
+      - "production-network/mainnet/pop_candidate/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/privi-launch-readiness-scorecard.yml"
+      - "production-network/ops/launch_readiness_scorecard.py"
+      - "production-network/ops/test_launch_readiness_scorecard.py"
+      - "production-network/ops/PATH_TO_LAUNCH.md"
+      - "production-network/ops/MAINNET_LAUNCH_GATE.md"
+      - "production-network/mainnet/pop_candidate/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: privi-launch-scorecard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scorecard:
+    name: Launch readiness scorecard (expect NO-GO)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unit tests for scorecard
+        run: |
+          set -euo pipefail
+          python3 -m unittest -v production-network/ops/test_launch_readiness_scorecard.py
+
+      - name: Run scorecard (must report NO-GO)
+        run: |
+          set -euo pipefail
+          python3 production-network/ops/launch_readiness_scorecard.py | tee /tmp/scorecard.json
+          python3 - <<'PY'
+          import json
+          data = json.load(open("/tmp/scorecard.json"))
+          assert data["verdict"] == "NO_GO"
+          assert data["production_mainnet_activated"] is False
+          assert data["financial_prvi_issued"] is False
+          assert data["blocked_gate_count"] == 8
+          print("scorecard OK: all gates BLOCKED, mainnet not activated")
+          PY
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Launch readiness: NO-GO"
+            echo
+            echo "Scorecard measures engineering artifacts only."
+            echo "It does **not** authorize PRVI issuance or mainnet activation."
+            echo
+            echo "See production-network/ops/PATH_TO_LAUNCH.md for the build ladder."
+          } >> "$GITHUB_STEP_SUMMARY"
