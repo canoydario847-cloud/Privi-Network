@@ -97,6 +97,10 @@ export function quantumRequest(message){
   if(typeof message!=='string')return null;
   const q=message.trim();
   if(!q)return null;
+  // Exact status intents make a bounded read-only call to the EXISTING Quantum service.
+  if(/^(?:(?:check|show)\\s+)?(?:privi\\s+)?quantum(?:\\s+(?:project|server|service|cloud))?\\s+status[!?.]*$/i.test(q)||
+      /^(?:is\\s+)?privi\\s+quantum(?:\\s+(?:project|server|service))?\\s+online\\??$/i.test(q))
+    return {type:'project_status'};
   const structured=q.match(/^\/?quantum\s+(?:simulate\s+)?(\{[\s\S]*\})$/i);
   if(structured){
     try{return {type:'simulate',circuit:validateCircuit(JSON.parse(structured[1]))};}
@@ -190,7 +194,6 @@ export function simulateCircuit(input){
       counts[b]-counts[a]||probabilities[b]-probabilities[a]||a-b).slice(0,32);
     visible=[...new Set([...byProbability,...bySamples])].slice(0,MAX_RETURNED_STATES).sort((a,b)=>a-b);
   }
-  const visibleSet=new Set(visible);
   let retainedProbability=0,shownShots=0;
   for(const i of visible){retainedProbability+=probabilities[i];shownShots+=counts[i];}
   const truncated=active.length>visible.length;
