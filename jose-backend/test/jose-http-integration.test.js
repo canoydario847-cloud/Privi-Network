@@ -66,11 +66,12 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   const status=await json(base,'/api/chat/status');assert.equal(status.status,200);
   assert.equal(status.data.localPowerCount,20);
   assert.equal(status.data.freePriviQuantumSimulator,true);
-  assert.equal(status.data.quantumSimulatorMaxQubits,8);
+  assert.equal(status.data.quantumSimulatorMaxQubits,12);
   const quantumInfo=await json(base,'/api/quantum/info');
   assert.equal(quantumInfo.status,200);
   assert.equal(quantumInfo.data.physicalQpu,undefined);
   assert.equal(quantumInfo.data.hardwareQpu,false);
+  assert.equal(quantumInfo.data.maxQubits,12);
   assert.equal(quantumInfo.data.paidCalls,false);
   const quantumCircuit={qubits:2,gates:[{gate:'h',target:0},{gate:'cx',control:0,target:1}],shots:512,seed:77};
   const quantum=await json(base,'/api/quantum/simulate','POST',quantumCircuit);
@@ -79,6 +80,22 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   assert.equal(quantum.data.probabilities.find(x=>x.state==='11').probability,0.5);
   assert.equal(Object.values(quantum.data.counts).reduce((a,b)=>a+b,0),512);
   assert.match(quantum.data.answer,/classical exact-statevector simulator/);
+  const ghzGates=[{gate:'h',target:0},...Array.from({length:11},(_,i)=>({gate:'cx',control:i,target:i+1}))];
+  const ghz12=await json(base,'/api/quantum/simulate','POST',{
+    qubits:12,gates:ghzGates,shots:1024,seed:5
+  });
+  assert.equal(ghz12.status,200,JSON.stringify(ghz12.data));
+  assert.equal(ghz12.data.qubits,12);
+  assert.equal(ghz12.data.distributionTruncated,false);
+  assert.equal(ghz12.data.countsTotal,1024);
+  assert.equal(ghz12.data.probabilities.find(x=>x.state==='1'.repeat(12))?.probability,0.5);
+  const uniform12=await json(base,'/api/quantum/simulate','POST',{
+    qubits:12,gates:Array.from({length:12},(_,i)=>({gate:'h',target:i})),shots:1024
+  });
+  assert.equal(uniform12.status,200);
+  assert.equal(uniform12.data.distributionTruncated,true);
+  assert.ok(uniform12.data.returnedStates<=64);
+  assert.equal(uniform12.data.countsTotal,1024);
   const quantumForbidden=await json(base,'/api/quantum/simulate','POST',quantumCircuit,{Origin:'https://evil.example'});
   assert.equal(quantumForbidden.status,403);
   const quantumInvalid=await json(base,'/api/quantum/simulate','POST',{qubits:33,gates:[]});
@@ -183,6 +200,9 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   // delivered with a JavaScript MIME type or the browser will reject imports.
   assert.match(markup,/priviVoicePanel/);
   assert.match(markup,/Quantum simulation/);
+  assert.match(markup,/showQuantumResult\(data.quantum\)/);
+  assert.match(markup,/Download JSON/);
+  assert.match(markup,/Quantum status/);
   assert.match(markup,/priviVoiceAuto/);
   assert.match(markup,/priviVoiceLanguage/);
   assert.match(markup,/priviVoicePause/);
