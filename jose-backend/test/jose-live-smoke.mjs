@@ -82,6 +82,17 @@ await probe('Privi Quantum Cloud does not expose hardware calls',BACKEND+'/api/q
   typeof j?.enabled==='boolean',
  optional:true
 });
+// Public read-only smoke: Mission Control requires real login for task sync.
+// No tasks are written by production smoke checks.
+await probe('Hey Jose Mission Control manual task capability',BACKEND+'/api/chat/status',{
+  expect:(r,j)=>r.status===200&&j?.missionControl===true&&
+    j?.missionControlManualOnly===true&&j?.missionControlRequiresLoginForSync===true,
+  optional:true
+});
+await probe('Mission Control guest account access denied',BACKEND+'/api/tasks',{
+  expect:(r,j)=>r.status===401&&typeof j?.error==='string',
+  optional:true
+});
 const card=await probe('Network report card response',BACKEND+'/api/network/report-card',{expect:(r,j)=>r.status===200&&j&&typeof j==='object',optional:true});
 if(card?.json)report.monitorFresh=card.json.fresh===true;
 const dev=await probe('Devnet verification endpoint',BACKEND+'/api/devnet/status',{expect:(r,j)=>r.status===200&&typeof j?.connected==='boolean',optional:true});
