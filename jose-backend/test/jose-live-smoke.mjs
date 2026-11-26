@@ -50,7 +50,22 @@ await probe('PRVI future mainnet remains no-go and unconnected',
   BACKEND+'/api/prvi/mainnet/plan',{
   expect:(r,j)=>r.status===200&&j?.connected===false&&
     j?.readiness==='NO_GO_AWAITING_INDEPENDENT_RELEASE_EVIDENCE'&&
-    j?.chainId===null&&j?.paymentsEnabled===false&&j?.pricePegActive===false,
+    j?.chainId===null&&j?.paymentsEnabled===false&&j?.pricePegActive===false&&
+    j?.economicModel==='SELECTED_DESIGN_HEY_JOSE_USERS_AND_USAGE_ONLY'&&
+    j?.proposedUsageModel?.usdDollarIndexUsed===false&&
+    j?.proposedUsageModel?.stablecoinSelected===false,
+  optional:true
+});
+// No financial calls or price quotes: exercise only user/usage index math.
+await probe('PRVI Hey Jose users+usage illustrative index',
+  BACKEND+'/api/prvi/mainnet/usage-index-preview',{
+  method:'POST',
+  payload:{usersBaseline:100,usersCurrent:120,usageBaseline:1000,
+    usageCurrent:1500,usersWeight:0.5,usageWeight:0.5},
+  expect:(r,j)=>r.status===200&&
+    j?.kind==='HYPOTHETICAL_HEY_JOSE_USER_USAGE_INDEX'&&
+    j?.dollarIndexUsed===false&&j?.pricePegEnforced===false&&
+    j?.tokenMinted===false&&Math.abs(j?.indexValue-134.16407865)<0.001,
   optional:true
 });
 // New release diagnostics. These are optional in PR checks because the old
