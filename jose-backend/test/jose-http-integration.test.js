@@ -66,6 +66,41 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   const health=await json(base,'/health');assert.equal(health.status,200);assert.equal(health.data.ok,true);
   const status=await json(base,'/api/chat/status');assert.equal(status.status,200);
   assert.equal(status.data.localPowerCount,20);
+  assert.equal(status.data.futurePrviMainnetIntegration,'NO_GO_DESIGN_ONLY');
+  assert.equal(status.data.financialPrviConnected,false);
+  assert.equal(status.data.prviPricePegActive,false);
+  const future=await json(base,'/api/prvi/mainnet/plan');
+  assert.equal(future.status,200);
+  assert.equal(future.data.connected,false);
+  assert.equal(future.data.chainId,null);
+  assert.equal(future.data.financialMainnetLive,false);
+  assert.equal(future.data.pricePegActive,false);
+  assert.equal(future.data.paymentsEnabled,false);
+  assert.equal(future.data.walletSigningEnabled,false);
+  assert.equal(future.data.mintingEnabled,false);
+  assert.equal(future.data.automaticMigrationEnabled,false);
+  assert.equal(future.data.upstreamDemoEvmId,262144);
+  assert.equal(future.data.priviTestDevnetId,772626);
+  const indexScenario={
+    usageBaseline:1000,usageCurrent:1250,
+    dollarIndexBaseline:100,dollarIndexCurrent:102,
+    usageWeight:0.5,dollarWeight:0.5
+  };
+  const index=await json(base,'/api/prvi/mainnet/index-preview','POST',indexScenario);
+  assert.equal(index.status,200,JSON.stringify(index.data));
+  assert.equal(index.data.kind,'HYPOTHETICAL_NON_FINANCIAL_REFERENCE_INDEX');
+  assert.equal(index.data.pegEnforced,false);
+  assert.equal(index.data.marketPriceUsd,null);
+  assert.equal(index.data.oracleVerified,false);
+  assert.ok(Math.abs(index.data.indexValue-112.915898)<0.001);
+  const wrongOrigin=await json(base,'/api/prvi/mainnet/index-preview','POST',
+    indexScenario,{Origin:'https://malicious.example'});
+  assert.equal(wrongOrigin.status,403);
+  const badIndex=await json(base,'/api/prvi/mainnet/index-preview','POST',{
+    ...indexScenario,pegToUsd:1
+  });
+  assert.equal(badIndex.status,400);
+
   assert.equal(status.data.missionControl,true);
   assert.equal(status.data.missionControlManualOnly,true);
   assert.equal(status.data.missionControlRequiresLoginForSync,true);
