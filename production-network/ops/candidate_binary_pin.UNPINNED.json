@@ -1,0 +1,21 @@
+{
+  "schema": "privi-candidate-binary-pin-v1",
+  "scope": "testnet-candidate-only",
+  "financial_mainnet": false,
+  "production_release": false,
+  "mainnet_activated": false,
+  "upstream": {
+    "repo": "cosmos/evm",
+    "tag": "v0.7.3",
+    "commit": "c3ae9067a7eadcdea55a5192226916deb44c71c4"
+  },
+  "go": "1.25.9",
+  "sdk": "v0.54.3",
+  "cosmos_chain_id": "privi-testnet-candidate",
+  "evm_chain_id": 867530901,
+  "artifact": {
+    "name": "evmd",
+    "sha256": "UNPINNED"
+  },
+  "notes": "Placeholder only. evm_chain_id 867530901 is not a registered chain and must be replaced before any testnet. Do not use local-4221 or EVM 262144. SHA stays UNPINNED until a reviewed testnet evmd artifact exists. This file does not authorize mainnet."
+}
