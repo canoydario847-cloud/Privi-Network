@@ -348,7 +348,7 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   assert.match(markup,/QUBO optimizer/);
   assert.match(markup,/Balance work/);
   assert.match(markup,/showOptimizationResult\(data.optimization\)/);
-  assert.match(markup,/Quantum status/);
+  assert.match(markup,/Quantum project status/);
   assert.match(markup,/priviVoiceAuto/);
   assert.match(markup,/priviVoiceLanguage/);
   assert.match(markup,/priviVoicePause/);
