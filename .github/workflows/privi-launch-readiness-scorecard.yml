@@ -9,6 +9,9 @@ on:
       - "production-network/ops/test_launch_readiness_scorecard.py"
       - "production-network/ops/PATH_TO_LAUNCH.md"
       - "production-network/ops/MAINNET_LAUNCH_GATE.md"
+      - "production-network/ops/candidate_binary_pin.py"
+      - "production-network/ops/test_candidate_binary_pin.py"
+      - "production-network/ops/candidate_binary_pin.UNPINNED.json"
       - "production-network/mainnet/pop_candidate/**"
   push:
     branches: [main]
@@ -18,6 +21,9 @@ on:
       - "production-network/ops/test_launch_readiness_scorecard.py"
       - "production-network/ops/PATH_TO_LAUNCH.md"
       - "production-network/ops/MAINNET_LAUNCH_GATE.md"
+      - "production-network/ops/candidate_binary_pin.py"
+      - "production-network/ops/test_candidate_binary_pin.py"
+      - "production-network/ops/candidate_binary_pin.UNPINNED.json"
       - "production-network/mainnet/pop_candidate/**"
   workflow_dispatch:
 
@@ -41,6 +47,17 @@ jobs:
           set -euo pipefail
           python3 -m unittest -v production-network/ops/test_launch_readiness_scorecard.py
 
+      - name: Candidate binary pin tests (testnet only)
+        run: |
+          set -euo pipefail
+          python3 -m unittest -v production-network/ops/test_candidate_binary_pin.py
+          set +e
+          python3 production-network/ops/candidate_binary_pin.py \
+            --pin production-network/ops/candidate_binary_pin.UNPINNED.json
+          code=$?
+          set -e
+          test "$code" -eq 1
+
       - name: Run scorecard (must report NO-GO)
         run: |
           set -euo pipefail
@@ -62,6 +79,7 @@ jobs:
             echo "## Launch readiness: NO-GO"
             echo
             echo "Scorecard measures engineering artifacts only."
+            echo "Candidate binary pin is testnet-only and currently UNPINNED."
             echo "It does **not** authorize PRVI issuance or mainnet activation."
             echo
             echo "See production-network/ops/PATH_TO_LAUNCH.md for the build ladder."
