@@ -218,6 +218,8 @@
     if(action==='powers'||action==='devnet'||action==='quantum'||action==='quantumproject'){
       $('message').value=action==='powers'?'/powers':action==='devnet'?'Privi Devnet status':action==='quantumproject'?'Privi Quantum project status':'Simulate a 2-qubit Bell state with Privi Quantum';
       closeDrawer();$('chat').requestSubmit();
+    }else if(action==='tasks'){
+      window.joseTasks?.open();closeDrawer();
     }else if(action==='web3'){
       $('message').value='Help me build a safe Web3 smart contract for ';
       closeDrawer();$('message').focus();
