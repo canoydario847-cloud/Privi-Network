@@ -45,6 +45,14 @@ if(inbox?.json)report.gmailReadIntentState=inbox.json.gmailStatus||inbox.json.gm
 await probe('Gmail API rejects unauthenticated access',BACKEND+'/api/gmail/status',{expect:401});
 await probe('Gmail send endpoint rejects unauthenticated requests',BACKEND+'/api/gmail/send',{method:'POST',payload:{reviewToken:'test-invalid',confirmSend:true},expect:401});
 
+// Future PRVI integration is explicitly inert; verify status after deployment.
+await probe('PRVI future mainnet remains no-go and unconnected',
+  BACKEND+'/api/prvi/mainnet/plan',{
+  expect:(r,j)=>r.status===200&&j?.connected===false&&
+    j?.readiness==='NO_GO_AWAITING_INDEPENDENT_RELEASE_EVIDENCE'&&
+    j?.chainId===null&&j?.paymentsEnabled===false&&j?.pricePegActive===false,
+  optional:true
+});
 // New release diagnostics. These are optional in PR checks because the old
 // production deployment may still be live; rerun after Render deploys.
 await probe('Privi Quantum local simulator metadata (12 qubits)',BACKEND+'/api/quantum/info',{
