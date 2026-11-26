@@ -12,7 +12,7 @@ import { createNetworkMonitor } from './network-monitor.js';
 import { inferChatMode, normalizeChatMode, maxCompletionTokens, systemPromptFor } from './chat-modes.js';
 import { userContentWithAttachments } from './chat-attachments.js';
 import { createDevnetClient, devnetQuestion, devnetDetailsQuestion, DEVNET_EVM_ID } from './privi-devnet.js';
-import {FUTURE_PRVI_INTEGRATION,PolicyPreviewError,previewUsageDollarReference} from './prvi-future-mainnet-policy.js';
+import {FUTURE_PRVI_INTEGRATION,PROPOSED_PRVI_STABLECOIN,PolicyPreviewError,previewUsageDollarReference} from './prvi-future-mainnet-policy.js';
 import { runJosePower, JOSE_POWERS } from './jose-powers.js';
 import { userMemoryMessage } from './chat-memory.js';
 import { createGmailClient } from './gmail-client.js';
@@ -243,7 +243,7 @@ const server = http.createServer(async (req, res) => {
     // automatic network switch, issuance or redemption mechanism.
     if(req.method==='GET' && url.pathname==='/api/prvi/mainnet/plan'){
       res.setHeader('Cache-Control','no-store');
-      return sendJson(res,200,FUTURE_PRVI_INTEGRATION);
+      return sendJson(res,200,{...FUTURE_PRVI_INTEGRATION,proposedStablecoinPolicy:PROPOSED_PRVI_STABLECOIN});
     }
     if(req.method==='POST' && url.pathname==='/api/prvi/mainnet/index-preview'){
       if(!requireOrigin(req,res))return;
@@ -368,7 +368,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/chat/status') {
       const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
-      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), mode: process.env.JOSE_AI_API_KEY ? 'provider' : 'unconfigured', model: process.env.JOSE_AI_API_KEY ? (process.env.JOSE_AI_MODEL || 'gpt-4o-mini') : null, chatModes: ['chat', 'build', 'web3'], priviDevnetExpectedChainId: DEVNET_EVM_ID, priviDevnetStatusUrl: '/api/devnet/status', attachments: ['image/png','image/jpeg','image/webp','text'], maxAttachments: 2, localPowerCount: JOSE_POWERS.length, agentReadOnlyToolCount: JOSE_READ_TOOLS.length, agentReadOnlyToolNames: JOSE_READ_TOOLS.map(t=>t.function.name), freePriviQuantumSimulator:true, quantumSimulatorMaxQubits:MAX_QUBITS, quantumSimulatorUrl:'/api/quantum/simulate', quantumOptimizationMaxVariables:MAX_QUBO_VARIABLES, quantumOptimizationUrl:'/api/quantum/optimize', quantumCloudBridgeConfigured:quantumCloudBridge.status().enabled, browserMemorySupported: true, memoryStorage: 'USER_BROWSER_ONLY',conversationHistory:true,conversationHistoryRequiresLogin:true,conversationHistoryStorage:'TEMPORARY_RENDER_FILE_STORAGE', missionControl:true,missionControlManualOnly:true,missionControlRequiresLoginForSync:true,missionControlStorage:'TEMPORARY_RENDER_FILE_STORAGE', futurePrviMainnetIntegration:'NO_GO_DESIGN_ONLY',financialPrviConnected:false,prviPricePegActive:false,gmailConfigured:getPlugin('google').isConfigured(),gmailConnectUrl:'/connect/google' });
+      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), mode: process.env.JOSE_AI_API_KEY ? 'provider' : 'unconfigured', model: process.env.JOSE_AI_API_KEY ? (process.env.JOSE_AI_MODEL || 'gpt-4o-mini') : null, chatModes: ['chat', 'build', 'web3'], priviDevnetExpectedChainId: DEVNET_EVM_ID, priviDevnetStatusUrl: '/api/devnet/status', attachments: ['image/png','image/jpeg','image/webp','text'], maxAttachments: 2, localPowerCount: JOSE_POWERS.length, agentReadOnlyToolCount: JOSE_READ_TOOLS.length, agentReadOnlyToolNames: JOSE_READ_TOOLS.map(t=>t.function.name), freePriviQuantumSimulator:true, quantumSimulatorMaxQubits:MAX_QUBITS, quantumSimulatorUrl:'/api/quantum/simulate', quantumOptimizationMaxVariables:MAX_QUBO_VARIABLES, quantumOptimizationUrl:'/api/quantum/optimize', quantumCloudBridgeConfigured:quantumCloudBridge.status().enabled, browserMemorySupported: true, memoryStorage: 'USER_BROWSER_ONLY',conversationHistory:true,conversationHistoryRequiresLogin:true,conversationHistoryStorage:'TEMPORARY_RENDER_FILE_STORAGE', missionControl:true,missionControlManualOnly:true,missionControlRequiresLoginForSync:true,missionControlStorage:'TEMPORARY_RENDER_FILE_STORAGE', futurePrviMainnetIntegration:'NO_GO_DESIGN_ONLY',financialPrviConnected:false,prviPricePegActive:false, selectedPrviDesign:'USD_REDEEMABLE_PAYMENT_STABLECOIN',prviIssuerApproved:false,prviReservesVerified:false,prviRedemptionEnabled:false,gmailConfigured:getPlugin('google').isConfigured(),gmailConnectUrl:'/connect/google' });
     }
     if (req.method === 'POST' && url.pathname === '/api/chat') {
       const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
