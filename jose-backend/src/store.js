@@ -6,6 +6,7 @@ import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync } from '
 import path from 'path';
 import crypto from 'node:crypto';
 import { MAX_CONVERSATIONS, normalizeTitle, validateConversationMessages, conversationSummary } from './conversation-history.js';
+import {MAX_TASKS,validateNewTask,validateTaskChanges,publicTask,TaskInputError} from './task-center.js';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -130,6 +131,54 @@ export const db = {
     const row=state.conversations?.[id];
     if(!row||row.ownerId!==userId)return false;
     delete state.conversations[id];
+    persist();
+    return true;
+  },
+
+  // Mission Control is a user-operated task ledger, not a background worker.
+  // Owner IDs never leave this database's internal records.
+  listTasks(userId){
+    return Object.values(state.tasks||{})
+      .filter(row=>row.ownerId===userId)
+      .sort((a,b)=>b.updatedAt-a.updatedAt)
+      .map(publicTask);
+  },
+  getTask(userId,id){
+    const row=state.tasks?.[id];
+    return row&&row.ownerId===userId?publicTask(row):null;
+  },
+  createTask(userId,input){
+    const item=validateNewTask(input);
+    if(this.listTasks(userId).length>=MAX_TASKS)
+      throw new TaskInputError('Maximum 30 tasks per account. Archive work by exporting or delete older tasks.',409);
+    const now=Date.now(),id=crypto.randomUUID();
+    const row={...item,id,ownerId:userId,status:'planned',
+      steps:item.steps.map(title=>({id:crypto.randomUUID(),title,done:false})),
+      createdAt:now,updatedAt:now,completionNote:'',
+      completionEvidenceType:null,execution:'MANUAL_USER_CONTROLLED',
+      events:[{at:now,action:'CREATED_BY_USER'}]};
+    state.tasks ||= Object.create(null);
+    state.tasks[id]=row;
+    persist();
+    return publicTask(row);
+  },
+  updateTask(userId,id,changes){
+    const row=state.tasks?.[id];
+    if(!row||row.ownerId!==userId)return null;
+    const revised=validateTaskChanges(changes,row);
+    revised.updatedAt=Date.now();
+    revised.events=[...(row.events||[]),{
+      at:revised.updatedAt,action:'UPDATED_BY_USER',
+      status:revised.status
+    }].slice(-30);
+    state.tasks[id]=revised;
+    persist();
+    return publicTask(revised);
+  },
+  deleteTask(userId,id){
+    const row=state.tasks?.[id];
+    if(!row||row.ownerId!==userId)return false;
+    delete state.tasks[id];
     persist();
     return true;
   },
