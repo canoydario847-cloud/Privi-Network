@@ -37,6 +37,7 @@ jobs:
           node --check jose-backend/test/privi-quantum-simulator.test.js
           node --check jose-backend/src/conversation-history.js
           node --check jose-backend/public/chat-sidebar.js
+          node --check jose-backend/test/sidebar-layout.test.js
           node --check jose-backend/public/privi-voice.js
           node --check jose-backend/public/privi-voice-core.mjs
           node --check jose-backend/src/agent-tools.js
