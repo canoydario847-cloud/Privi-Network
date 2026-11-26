@@ -1,112 +1,134 @@
-# Hey Jose on PRVI mainnet — future architecture and usage/dollar model
+# Hey Jose and native PRVI — USD-redeemable payment stablecoin target
 
-**Status: DESIGN PROPOSAL / NO-GO / NOT DEPLOYED.** Updated 2026-11-26.
-Owner: Privi World Corp. Not a genesis change, price quote, token issuance,
-reserve attestation, investment projection, or launch authorization.
+**Design selection: GENUINELY REDEEMABLE USD PAYMENT STABLECOIN.**
+**Launch status: NO-GO / NOT ISSUED / NOT BACKED / NOT REDEEMABLE.**
+Updated 2026-11-26. Owner: Privi World Corp.
 
-## Product decision
-Long-term plan: **Hey Jose will use native PRVI financial mainnet** for approved
-agent-call fees, service access, and ledger receipts, but only after the chain
-and app independently pass release gates. Until then Jose continues on existing
-hosting. Privi Devnet TEST stays permanently valueless.
+This decision supersedes the previous plan to make PRVI's token price float with a
+formula tied to Hey Jose usage and an FX-dollar index. The project is now
+**targeting** a par redemption model: after all requirements are met, an
+eligible holder should be able to redeem one issued PRVI for USD 1.00 under
+legally approved and disclosed redemption procedures. This document is
+a design selection, NOT evidence that Privi can issue or honor such a claim.
 
-The proposed economic research considers two inputs:
-1. **Verified Hey Jose usage** — independently auditable aggregate successful
-   billable service units. Filter out retries, bots, test accounts, failures and
-   promotional traffic. Number of signups alone is insufficient.
-2. **The dollar index** — a reproducible, identified and timestamped index.
-   One candidate is the Federal Reserve H.10 nominal broad USD index, tracking
-   USD versus trading-partner currencies. This is NOT the dollar's face value
-   or a $1 redemption guarantee. Specific index, vintage, cadence and provider
-   require a separate approval.
+## Selected economics and clear separation of usage metrics
 
-## A reference index is NOT a price peg
-An illustrative dimensionless reference index is:
+- **PRVI target:** one issued PRVI represents an obligation redeemable for
+  **USD 1.00** by a legally permitted issuer, subject to its legally compliant
+  procedures. Secondary-market prices can temporarily deviate from $1 even
+  with a redemption mechanism.
+- **Backing:** maintain at least $1 of eligible, properly valued and controlled
+  reserve assets for each $1 of outstanding PRVI stablecoins at all times,
+  subject to any additional liquidity, capital and risk requirements. Eligible
+  reserves may include USD cash, appropriate bank deposits, short-dated U.S.
+  Treasuries and other specifically permitted instruments. **Hey Jose usage,
+  personal data, AI work, promised income, uncollateralized PRVI, and
+  unbacked PRIV tokens are not eligible dollar reserves.**
+- **Issuance:** never create circulating, treasury, founder, validator,
+  vested, locked or staked payment stablecoins without an equal legally
+  eligible reserve claim and full authorization. This includes genesis
+  balances: being initially locked does not turn issued tokens into unissued
+  tokens. No automatic mint as a reward for Jose user growth.
+- **Redemption:** an authorized issuer must provide published, reasonably
+  accessible redemption instructions, onboarding/screening, processing-time
+  disclosures, liquidity contingency management and lawful token retirement /
+  supply reconciliation on redeemed units. There is currently **no such
+  operating program or verified treasury**.
+- **Hey Jose usage:** measure verified aggregate service consumption for
+  **operational planning and customer analytics only**, not as price
+  collateral or backing. If Jose accepts PRVI for payment after launch, its
+  service fee could be denominated in USD, with approved PRVI payment mechanics;
+  such transactions must be authorized and audited independently.
+- **The dollar index:** the Federal Reserve's nominal broad dollar index
+  measures exchange value of USD versus currencies. **It does not change the
+  $1 redemption obligation and cannot maintain backing.** Keep any H.10 usage
+  as a separately labeled nonfinancial economic research chart. It must never
+  set redemption amount, peg, collateral, or new mint quantity.
+- **No yield promise:** do not promise issuer-paid staking interest or yield
+  on payment stablecoin holdings. Validator incentives and fees must be
+  reviewed as an independently funded operating expense; creating unbacked
+  reward coins is inconsistent with par-redemption economics.
 
-    I(t) = 100 * (verified_usage_t / verified_usage_0)^w_usage
-              * (dollar_index_t / dollar_index_0)^w_dollar
+## Supply implications for the previously proposed allocations
 
-Nonnegative weights must sum to one and both inputs need compatible periods.
-Weight, base period and data source are not approved yet. A hypothetical index
-does not mechanically determine or guarantee PRVI market price, backing,
-liquidity, exchange rate, token supply, redemption, staking rewards or yield.
+The founder's earlier engineering target included a proposed **maximum of
+1,000,000,000 PRVI** and a worksheet with 900 million liquid plus 100 million
+vested units. **A maximum token cap is not an initial issuance instruction.**
 
-Three distinct possible products require separate decisions:
-- **Utility token with index-aware disclosure:** PRVI pays for agent services,
-  and verified usage/dollar metrics are published. Token market price floats.
-  A separately approved fee or bounded reward-budget policy could use the
-  metrics while preserving the lifetime supply cap. DO NOT call this a peg.
-- **True USD payment stablecoin:** a separate issuer, reserve, redemption,
-  licensing, supervision and audit framework. Hey Jose usage is not collateral.
-- **Index-linked redemption promise:** another potentially regulated financial
-  product with custody/liquidity obligations; it is NOT selected by default.
+If one billion PRVI were **issued**, the project would need at least
+**USD 1 billion in eligible reserves** plus additional required liquidity,
+capital and operational safeguards. Even an issuance of 900 million liquid
+PRVI would entail at least USD 900 million of qualifying reserves; vesting
+does not waive backing if the other 100 million tokens are also issued.
 
-The user has not yet specified a binding valuation formula or approved one of
-these mechanisms, dollar series, base period, and weights. No peg is active.
+No approved reserve funding, issuer authorization or signed genesis has
+been evidenced. Therefore do **not** encode that historical 900M/100M
+allocation as real stablecoin genesis balances or advertise outstanding PRVI.
+The issuer may instead design an **unissued issuance ceiling** of up to
+one billion, subject to legal advice and a chain-enforced lifetime cap.
+Unissued capacity is not a token balance.
 
-## Current network identity and safeguards
-- Proposed native PRVI lifetime hard maximum: 1,000,000,000 whole PRVI,
-  not a claim of issued supply or market value.
-- Production Cosmos and EVM chain IDs: **TBD** pending unique-network review.
-- Numeric EVM 262144 belongs to an upstream developer demo in the repository;
-  PRVI TEST devnet 772626 is valueless and NOT the financial mainnet.
-  The founder's proposed chain number cannot be activated without verified
-  unique production genesis identity and signed release approval.
-- Current gate: **NO-GO**, see
-  [PATH_TO_LAUNCH](../production-network/ops/PATH_TO_LAUNCH.md),
-  [MAINNET_LAUNCH_GATE](../production-network/ops/MAINNET_LAUNCH_GATE.md),
-  [GENESIS_INPUTS_AND_REVIEW](../production-network/mainnet/GENESIS_INPUTS_AND_REVIEW.md).
-- Launch requires audited consensus and chain binary, persistent lifetime
-  supply cap, signed genesis and hashes, independent validators, publicly
-  exercised multi-host testnet/recovery, RPC/wallet/explorer validation,
-  legal/security reviews and an explicit signed GO record.
-- No operator-controlled switch alone can authorize financial transactions.
+## Regulatory and operating gates (must pass before launch)
 
-## Engineering sequence
-1. **Usage measurement:** Meter completed Jose requests in a privacy-safe
-   server accounting system. Unique IDs, timestamps, successful outcome,
-   anti-replay, exclusion rules, corrections and reconciliation required.
-   Never publish prompts, user IDs, emails, IPs, secrets or personal data on-chain.
-2. **Signed aggregate attestation:** Independent operator quorum signs
-   aggregate usage windows, with schema/version, correction policy, fraud
-   filters, rate limits, privacy review and audit trails.
-3. **Dollar-series oracle:** Choose one authoritative index and vintage,
-   base date, update cadence and source terms. Verify authenticity,
-   freshness, revision and data-lag policies, fallbacks and circuit-breakers.
-4. **Tokenomics and legal design:** Approve weights, cap-safe fee/reward policy,
-   reserves if any, budget, disclosures, stress testing and legal review.
-   Separate public index disclosures from token-price or peg promises.
-5. **Testnet-only wallet adapter:** User-approved scoped transactions, chain
-   and genesis pinning, replay protection, transaction preview and receipts.
-   Isolate TEST, BNB PRIV and native PRVI, and never request seed phrases.
-6. **Mainnet integration:** Only after independent chain GO, signed release
-   artifacts, audits, identity check and app-specific GO, enable audited
-   PRVI payment functionality through a newly reviewed rollout.
+1. Identify a qualifying issuer entity and jurisdiction. The GENIUS Act
+   generally requires a permitted payment stablecoin issuer under federal
+   or qualifying state oversight. **Privi World Corp's corporate form and
+   software business status do not establish eligibility**. Its treatment
+   as a nonfinancial company requires specific legal analysis.
+2. Retain U.S. stablecoin regulatory counsel and assess the GENIUS Act,
+   applicable federal/state law, issuer ownership restrictions, banking
+   agreements, AML/KYC, OFAC sanctions and international distribution.
+   OCC's final rule and GENIUS Act take effect January 18, 2027; being
+   pre-effective does not waive other currently applicable laws.
+3. Establish properly documented reserve custody, qualified custodians /
+   insured depository relationships where applicable, reserve segregation,
+   asset-eligibility and valuation rules, concentration limits, a liquidity
+   policy, banking settlement and operational recovery.
+4. Build an issuance and redemption system in which each issued PRVI
+   is fully reconciled with eligible reserves and liabilities. Independent
+   reserve reconciliations, regular disclosure/attestations, periodic
+   examinations and incident/insolvency plans must be in place.
+5. Implement robust cryptographic controls (separation of duties,
+   authorized mint/burn, independent signer quorum, dual approvals, audit
+   logs, circuit breakers, rate limits, sanctions screening, privacy).
+6. Pass the existing native PRVI chain launch gates: independently audited
+   PoP integration in real node binary, verified lifetime hard cap,
+   unique production chain IDs, signed genesis, four independent validator
+   operators, public multi-host testnet/recovery evidence, external
+   security reviews, approved wallet/RPC/explorer, signed explicit GO.
+7. Validate the combined financial and technical release in a nonfinancial
+   test environment first. Only then may the authorized issuer seek
+   approval to start **fully backed** issuance and redemption.
+   Neither a code commit nor a passing CI run constitutes any approval.
 
-## Safe design-only Jose backend interfaces
-- GET /api/prvi/mainnet/plan — explicit NO-GO, no network identity, and
-  payments/signing/minting/bridging/pegs disabled.
-- POST /api/prvi/mainnet/index-preview — same-origin arithmetic on six
-  user-provided finite numeric observations; no wallet, chain, market data,
-  feed verification, reserves or token price. This is a hypothetical scenario,
-  not a quote or mint/burn policy.
+## Existing Hey Jose endpoints — remain inert
 
-Illustrative request only:
+- GET /api/prvi/mainnet/plan: returns the selected proposed design and
+  explicitly reports no issuer, reserves, approval, active peg, redemption,
+  minting, payment or mainnet connectivity.
+- POST /api/prvi/mainnet/index-preview: preserves a historical mathematical
+  research calculator. Its result is a dimensionless normalized reference
+  with zero effect on issuance, token price, backing or redemption. The
+  previously proposed usage/dollar-index formula is now **out of scope
+  for the selected stablecoin redemption mechanism**.
+- No production smart contracts, genesis accounts, customer wallets, bank
+  reserves, tokens or payment flows are altered by this decision.
 
-    {
-      "usageBaseline": 1000,
-      "usageCurrent": 1250,
-      "dollarIndexBaseline": 100,
-      "dollarIndexCurrent": 102,
-      "usageWeight": 0.5,
-      "dollarWeight": 0.5
-    }
+## Project identifiers
+- Existing **Privi Devnet**: EVM chain 772626, TEST, valueless, separate.
+- **Upstream Cosmos EVM demo**: EVM chain 262144, NOT assigned PRVI mainnet.
+- Financial native PRVI mainnet: Cosmos ID and EVM ID **unapproved / TBD**;
+  the actual identity must be independently validated and signed.
 
-The result is an abstract index around 112.916, NOT $112.916 per PRVI.
+## Authorities consulted (November 2026)
+- OCC GENIUS Act final rule bulletin:
+  https://www.occ.gov/news-issuances/bulletins/2026/bulletin-2026-50.html
+- OCC application/waiver bulletin:
+  https://www.occ.gov/news-issuances/bulletins/2026/bulletin-2026-51.html
+- Congressional Research Service summary:
+  https://www.everycrsreport.com/files/2026-08-20_IN12553_0b329134f6be0cc12f78017358552f4053d52c5e.html
+- Privi mainnet gates:
+  ../production-network/ops/PATH_TO_LAUNCH.md
 
-## Legal and reference sources
-- [U.S. payment stablecoin issuer requirements](https://uscode.house.gov/us/usc/119-120/t12/s5903/)
-- [OCC 2026 stablecoin implementation](https://www.occ.treas.gov/news-issuances/bulletins/2026/bulletin-2026-50.html)
-- [Federal Reserve H.10 USD index series](https://www.federalreserve.gov/releases/H10/summary/default.htm)
-
-A nonfinancial index study never constitutes mainnet or stablecoin approval.
+**This product decision is not a legal assessment, a promise to pay,
+an active stablecoin peg, an investor solicitation, or permission to issue.**
