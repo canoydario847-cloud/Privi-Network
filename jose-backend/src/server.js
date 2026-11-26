@@ -12,6 +12,7 @@ import { createNetworkMonitor } from './network-monitor.js';
 import { inferChatMode, normalizeChatMode, maxCompletionTokens, systemPromptFor } from './chat-modes.js';
 import { userContentWithAttachments } from './chat-attachments.js';
 import { createDevnetClient, devnetQuestion, devnetDetailsQuestion, DEVNET_EVM_ID } from './privi-devnet.js';
+import {FUTURE_PRVI_INTEGRATION,PolicyPreviewError,previewUsageDollarReference} from './prvi-future-mainnet-policy.js';
 import { runJosePower, JOSE_POWERS } from './jose-powers.js';
 import { userMemoryMessage } from './chat-memory.js';
 import { createGmailClient } from './gmail-client.js';
@@ -237,6 +238,29 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    // Future PRVI: design-only, static NO-GO state. Deliberately no RPC
+    // signer, token quote, contract call, market feed, financial transaction,
+    // automatic network switch, issuance or redemption mechanism.
+    if(req.method==='GET' && url.pathname==='/api/prvi/mainnet/plan'){
+      res.setHeader('Cache-Control','no-store');
+      return sendJson(res,200,FUTURE_PRVI_INTEGRATION);
+    }
+    if(req.method==='POST' && url.pathname==='/api/prvi/mainnet/index-preview'){
+      if(!requireOrigin(req,res))return;
+      res.setHeader('Cache-Control','no-store');
+      try{
+        const input=await readLimitedJsonBody(req,2000);
+        return sendJson(res,200,previewUsageDollarReference(input));
+      }catch(error){
+        return sendJson(res,error instanceof RangeError?413:
+          error instanceof SyntaxError||error instanceof PolicyPreviewError?400:500,
+          {error:error instanceof PolicyPreviewError?error.message:
+            error instanceof RangeError?'Index preview request too large.':
+            error instanceof SyntaxError?'Invalid index-preview JSON.':
+            'Could not calculate illustrative index.'});
+      }
+    }
+
     // ---- Jose text chat (opt-in configured AI provider, authenticated, bounded) ----
     // Read-only Privi EVM Devnet. Verify remote health + JSON-RPC chain 772626.
     // Never make signing keys, minting, transaction broadcasting or validators
@@ -344,7 +368,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/chat/status') {
       const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
-      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), mode: process.env.JOSE_AI_API_KEY ? 'provider' : 'unconfigured', model: process.env.JOSE_AI_API_KEY ? (process.env.JOSE_AI_MODEL || 'gpt-4o-mini') : null, chatModes: ['chat', 'build', 'web3'], priviDevnetExpectedChainId: DEVNET_EVM_ID, priviDevnetStatusUrl: '/api/devnet/status', attachments: ['image/png','image/jpeg','image/webp','text'], maxAttachments: 2, localPowerCount: JOSE_POWERS.length, agentReadOnlyToolCount: JOSE_READ_TOOLS.length, agentReadOnlyToolNames: JOSE_READ_TOOLS.map(t=>t.function.name), freePriviQuantumSimulator:true, quantumSimulatorMaxQubits:MAX_QUBITS, quantumSimulatorUrl:'/api/quantum/simulate', quantumOptimizationMaxVariables:MAX_QUBO_VARIABLES, quantumOptimizationUrl:'/api/quantum/optimize', quantumCloudBridgeConfigured:quantumCloudBridge.status().enabled, browserMemorySupported: true, memoryStorage: 'USER_BROWSER_ONLY',conversationHistory:true,conversationHistoryRequiresLogin:true,conversationHistoryStorage:'TEMPORARY_RENDER_FILE_STORAGE', missionControl:true,missionControlManualOnly:true,missionControlRequiresLoginForSync:true,missionControlStorage:'TEMPORARY_RENDER_FILE_STORAGE',gmailConfigured:getPlugin('google').isConfigured(),gmailConnectUrl:'/connect/google' });
+      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), mode: process.env.JOSE_AI_API_KEY ? 'provider' : 'unconfigured', model: process.env.JOSE_AI_API_KEY ? (process.env.JOSE_AI_MODEL || 'gpt-4o-mini') : null, chatModes: ['chat', 'build', 'web3'], priviDevnetExpectedChainId: DEVNET_EVM_ID, priviDevnetStatusUrl: '/api/devnet/status', attachments: ['image/png','image/jpeg','image/webp','text'], maxAttachments: 2, localPowerCount: JOSE_POWERS.length, agentReadOnlyToolCount: JOSE_READ_TOOLS.length, agentReadOnlyToolNames: JOSE_READ_TOOLS.map(t=>t.function.name), freePriviQuantumSimulator:true, quantumSimulatorMaxQubits:MAX_QUBITS, quantumSimulatorUrl:'/api/quantum/simulate', quantumOptimizationMaxVariables:MAX_QUBO_VARIABLES, quantumOptimizationUrl:'/api/quantum/optimize', quantumCloudBridgeConfigured:quantumCloudBridge.status().enabled, browserMemorySupported: true, memoryStorage: 'USER_BROWSER_ONLY',conversationHistory:true,conversationHistoryRequiresLogin:true,conversationHistoryStorage:'TEMPORARY_RENDER_FILE_STORAGE', missionControl:true,missionControlManualOnly:true,missionControlRequiresLoginForSync:true,missionControlStorage:'TEMPORARY_RENDER_FILE_STORAGE', futurePrviMainnetIntegration:'NO_GO_DESIGN_ONLY',financialPrviConnected:false,prviPricePegActive:false,gmailConfigured:getPlugin('google').isConfigured(),gmailConnectUrl:'/connect/google' });
     }
     if (req.method === 'POST' && url.pathname === '/api/chat') {
       const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
