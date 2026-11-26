@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   FUTURE_PRVI_INTEGRATION,
+  PROPOSED_PRVI_STABLECOIN,
   PolicyPreviewError,
   previewUsageDollarReference,
 } from '../src/prvi-future-mainnet-policy.js';
@@ -29,6 +30,16 @@ test('Future PRVI launch status remains fail-closed with unassigned production i
   assert.equal(f.usdRedemptionGuaranteed,false);
   assert.equal(f.economicModelApproved,false);
   assert.equal(f.indexOracleConfigured,false);
+  assert.equal(f.economicModel,'SELECTED_DESIGN_USD_REDEEMABLE_PAYMENT_STABLECOIN');
+  assert.equal(f.selectedStablecoinDesign,'USD_REDEEMABLE_PAYMENT_STABLECOIN');
+  assert.equal(f.proposedRedemptionUsdPerToken,1);
+  assert.equal(f.issuerApprovalVerified,false);
+  assert.equal(f.reservesVerified,false);
+  assert.equal(f.reserveAttestationVerified,false);
+  assert.equal(f.redemptionEnabled,false);
+  assert.equal(f.issuanceAgainstReservesVerified,false);
+  assert.equal(f.heyJoseUsageBacksToken,false);
+  assert.equal(f.dollarFxIndexDeterminesTokenPrice,false);
   assert.equal(f.publicUserDataOnChain,false);
   assert.equal(f.upstreamDemoEvmId,262144);
   assert.equal(f.priviTestDevnetId,772626);
@@ -90,5 +101,44 @@ test('No dollar value, chain state, minting or live oracle is inferred from this
     FUTURE_PRVI_INTEGRATION.indexOracleConfigured,
   ];
   assert.deepEqual(js,[false,false,false,false]);
-  assert.equal(FUTURE_PRVI_INTEGRATION.economicModel,'DRAFT_USAGE_AND_DOLLAR_REFERENCE_INDEX');
+  assert.equal(FUTURE_PRVI_INTEGRATION.economicModel,'SELECTED_DESIGN_USD_REDEEMABLE_PAYMENT_STABLECOIN');
+});
+
+
+test('Selected PRVI stablecoin policy targets cash USD par, not a USD FX index or user activity',()=>{
+ const p=PROPOSED_PRVI_STABLECOIN;
+ assert.equal(Object.isFrozen(p),true);
+ assert.equal(p.proposedAsset,'native PRVI');
+ assert.equal(p.designSelection,'USD_REDEEMABLE_PAYMENT_STABLECOIN');
+ assert.equal(p.redemptionTarget,'USD 1.00 per issued PRVI');
+ assert.equal(p.usdPerTokenTarget,1);
+ assert.match(p.reserveCoveragePolicy,/one_USD_eligible_reserves_per_outstanding_PRVI/);
+ assert.equal(p.lifetimeWholeTokenCapProposed,'1000000000');
+ assert.equal(p.reserveBackingForHypotheticalFullCapUsd,'1000000000');
+ assert.equal(p.dollarFxIndexDeterminesRedemption,false);
+ assert.equal(p.heyJoseUsageDeterminesRedemption,false);
+ assert.equal(p.heyJoseUsageCanMintUnbackedTokens,false);
+ assert.equal(p.userActivityUsedAsCollateral,false);
+ assert.equal(p.userActivityPermittedForServiceMetricsOnly,true);
+});
+test('Stablecoin issuer authority, reserve accounting and redemption gates all fail closed',()=>{
+ const p=PROPOSED_PRVI_STABLECOIN;
+ for(const k of [
+   'issuerApprovalVerified','authorizedReserveCustodianVerified','reservesVerified',
+   'reserveAttestationVerified','redemptionOperationsVerified','mintingEnabled',
+   'redemptionEnabled','publicOfferingEnabled','mainnetLive'
+ ])assert.equal(p[k],false,k);
+ assert.equal(p.planIsNotApproval,true);
+ assert.equal(FUTURE_PRVI_INTEGRATION.financialMainnetLive,false);
+ assert.equal(FUTURE_PRVI_INTEGRATION.pricePegActive,false);
+ assert.equal(FUTURE_PRVI_INTEGRATION.usdRedemptionGuaranteed,false);
+});
+test('Legacy usage and FX index preview cannot authorize redemption or issuance',()=>{
+ const result=previewUsageDollarReference(sample);
+ assert.equal(result.kind,'HYPOTHETICAL_NON_FINANCIAL_REFERENCE_INDEX');
+ assert.equal(result.redemptionRightCreated,false);
+ assert.equal(result.pegEnforced,false);
+ assert.equal(result.mintingEnabled,false);
+ assert.equal(result.reservesVerified,false);
+ assert.match(result.warning,/NOT inputs to PRVI dollar redemption/);
 });
