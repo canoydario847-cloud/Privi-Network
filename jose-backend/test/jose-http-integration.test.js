@@ -66,6 +66,14 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   const health=await json(base,'/health');assert.equal(health.status,200);assert.equal(health.data.ok,true);
   const status=await json(base,'/api/chat/status');assert.equal(status.status,200);
   assert.equal(status.data.localPowerCount,20);
+  assert.equal(status.data.missionControl,true);
+  assert.equal(status.data.missionControlManualOnly,true);
+  assert.equal(status.data.missionControlRequiresLoginForSync,true);
+  const guestTasks=await json(base,'/api/tasks');
+  assert.equal(guestTasks.status,401);
+  const guestCreate=await json(base,'/api/tasks','POST',{title:'Forged task'});
+  assert.equal(guestCreate.status,401);
+
   assert.equal(status.data.freePriviQuantumSimulator,true);
   assert.equal(status.data.quantumSimulatorMaxQubits,12);
   const quantumInfo=await json(base,'/api/quantum/info');
@@ -137,6 +145,55 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   assert.ok(existsSync(dbFile),'signup must create missing DB parent directories');
   assert.ok(Object.keys(JSON.parse(readFileSync(dbFile))).includes('users'));
   const cookie=signup.cookie.split(';')[0];
+  // Muse-style task board: account-scoped, manual actions only, evidence
+  // required for completion, and protection from cross-account access.
+  const initialTasks=await json(base,'/api/tasks','GET',null,{Cookie:cookie});
+  assert.equal(initialTasks.status,200);
+  assert.deepEqual(initialTasks.data.tasks,[]);
+  assert.equal(initialTasks.data.execution,'MANUAL_USER_CONTROLLED');
+  const badTaskOrigin=await json(base,'/api/tasks','POST',
+    {title:'Forged'}, {Cookie:cookie,Origin:'https://evil.example'});
+  assert.equal(badTaskOrigin.status,403);
+  const createdTask=await json(base,'/api/tasks','POST',{
+    title:'Publish verified Jose demo',
+    steps:['Capture real demo','Review claims'],dueDate:'2026-12-01'
+  },{Cookie:cookie});
+  assert.equal(createdTask.status,201,JSON.stringify(createdTask.data));
+  assert.equal(createdTask.data.status,'planned');
+  assert.equal(createdTask.data.execution,'MANUAL_USER_CONTROLLED');
+  assert.equal(createdTask.data.verification,'USER_MANAGED_NOT_AUTOMATICALLY_EXECUTED');
+  assert.equal(createdTask.data.ownerId,undefined);
+  const taskId=createdTask.data.id;
+  assert.match(taskId,/^[a-f0-9-]{36}$/);
+  const taskSteps=createdTask.data.steps.map(x=>x.id);
+  const noEvidence=await json(base,'/api/tasks/'+taskId,'PATCH',{status:'completed'},
+    {Cookie:cookie});
+  assert.equal(noEvidence.status,400);
+  const noSteps=await json(base,'/api/tasks/'+taskId,'PATCH',{
+    status:'completed',completionNote:'Real recording uploaded by user'
+  },{Cookie:cookie});
+  assert.equal(noSteps.status,400);
+  const invalidStep=await json(base,'/api/tasks/'+taskId,'PATCH',{
+    doneSteps:['another-users-step']
+  },{Cookie:cookie});
+  assert.equal(invalidStep.status,400);
+  const progress=await json(base,'/api/tasks/'+taskId,'PATCH',{
+    status:'in_progress',doneSteps:[taskSteps[0]]
+  },{Cookie:cookie});
+  assert.equal(progress.status,200);
+  assert.equal(progress.data.steps.filter(x=>x.done).length,1);
+  const completedTask=await json(base,'/api/tasks/'+taskId,'PATCH',{
+    status:'completed',doneSteps:taskSteps,
+    completionNote:'Manually reviewed demo recording at test link'
+  },{Cookie:cookie});
+  assert.equal(completedTask.status,200,JSON.stringify(completedTask.data));
+  assert.equal(completedTask.data.completionEvidenceType,'USER_REPORTED_NOT_INDEPENDENTLY_VERIFIED');
+  assert.equal(completedTask.data.status,'completed');
+  const taskList=await json(base,'/api/tasks','GET',null,{Cookie:cookie});
+  assert.equal(taskList.status,200);
+  assert.equal(taskList.data.tasks.length,1);
+  assert.equal(taskList.data.tasks[0].status,'completed');
+
   const exactQubo=await json(base,'/api/quantum/optimize','POST',
     {Q:[[1,-2],[-2,1]],names:['a','b']},{Cookie:cookie});
   assert.equal(exactQubo.status,200,JSON.stringify(exactQubo.data));
@@ -197,6 +254,15 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   });
   assert.equal(secondSignup.status,201);
   const secondCookie=secondSignup.cookie.split(';')[0];
+  const crossTaskRead=await json(base,'/api/tasks/'+taskId,'GET',null,{Cookie:secondCookie});
+  assert.equal(crossTaskRead.status,404);
+  const crossTaskEdit=await json(base,'/api/tasks/'+taskId,'PATCH',
+    {status:'blocked'}, {Cookie:secondCookie});
+  assert.equal(crossTaskEdit.status,404);
+  const crossTaskDelete=await json(base,'/api/tasks/'+taskId,'DELETE',undefined,
+    {Cookie:secondCookie});
+  assert.equal(crossTaskDelete.status,404);
+
   const crossRead=await json(base,'/api/conversations/'+conversationId,'GET',null,{Cookie:secondCookie});
   assert.equal(crossRead.status,404);
   const crossEdit=await json(base,'/api/conversations/'+conversationId,'PATCH',{title:'Stolen'},{Cookie:secondCookie});
@@ -209,7 +275,26 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   await stop(first.proc);first=null;
   second=await serverSession(dbFile);
   const login=await json(second.base,'/api/login','POST',{email:accountEmail,password:'TestPassword-NotReal1!'});
+  // Account tasks are retained across controlled local server restarts.
+  // Render without persistent disk remains non-durable across deployments.
+
   assert.equal(login.status,200,JSON.stringify(login.data));
+  const restoredTask=await json(second.base,'/api/tasks/'+taskId,'GET',null,{
+    Cookie:login.cookie.split(';')[0]
+  });
+  assert.equal(restoredTask.status,200);
+  assert.equal(restoredTask.data.title,'Publish verified Jose demo');
+  assert.equal(restoredTask.data.status,'completed');
+  const removedTask=await json(second.base,'/api/tasks/'+taskId,'DELETE',undefined,{
+    Cookie:login.cookie.split(';')[0]
+  });
+  assert.equal(removedTask.status,200);
+  assert.equal(removedTask.data.deleted,true);
+  const taskGone=await json(second.base,'/api/tasks/'+taskId,'GET',null,{
+    Cookie:login.cookie.split(';')[0]
+  });
+  assert.equal(taskGone.status,404);
+
   const reloaded=await json(second.base,'/api/conversations/'+conversationId,'GET',null,{
    Cookie:login.cookie.split(';')[0]
   });
@@ -229,6 +314,15 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   const html=await fetch(second.base+'/chat.html',{signal:AbortSignal.timeout(2000)});
   assert.equal(html.status,200);const markup=await html.text();
   assert.match(markup,/chat-gmail\.js/);assert.match(markup,/chat-memory\.js/);
+  assert.match(markup,/id="taskPanel"/);
+  assert.match(markup,/id="taskToggle"/);
+  assert.match(markup,/data-action="tasks"/);
+  assert.match(markup,/jose-tasks\.js/);
+  const taskScript=await fetch(second.base+'/jose-tasks.js',{signal:AbortSignal.timeout(2500)});
+  assert.equal(taskScript.status,200);
+  assert.match(taskScript.headers.get('content-type')||'',/application\/javascript/);
+  assert.match(await taskScript.text(),/MANUAL_USER_CONTROLLED/);
+
   // The no-cost voice feature is a browser module. Both module files must be
   // delivered with a JavaScript MIME type or the browser will reject imports.
   assert.match(markup,/priviVoicePanel/);

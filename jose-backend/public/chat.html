@@ -162,6 +162,45 @@ header .actions{flex-wrap:wrap;justify-content:flex-end}
 .quantum-state{grid-template-columns:minmax(36px,70px) minmax(0,1fr) minmax(72px,105px);gap:6px;font-size:11px}}
 
 .optimization-highlight{font-size:14px!important;color:#eee3c9!important;font-weight:700;margin:10px 0!important;line-height:1.6}
+
+/* Mission Control: user-governed task tracking; browser-only guest mode. */
+#taskPanel{border-bottom:1px solid var(--line);padding:15px 22px;
+ background:#111927;max-height:min(75dvh,760px);overflow-y:auto;flex-shrink:0}
+.task-inner{max-width:940px;margin:auto}
+.task-top{display:flex;align-items:center;gap:10px;justify-content:space-between}
+.task-top h2{font:700 21px Georgia,serif;color:var(--gold);margin:0}
+.task-muted{font-size:12px;color:var(--muted);line-height:1.55;margin:6px 0}
+#taskNotice{min-height:20px;color:var(--gold)}
+.task-new{display:grid;grid-template-columns:1fr 165px;gap:9px;margin:12px 0}
+.task-new label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted)}
+.task-new label:nth-child(3){grid-column:1/-1}
+.task-new input,.task-new textarea,.task-edit select,.task-edit textarea,#taskFilter{
+ background:#0c1321;color:var(--text);border:1px solid #68607b;
+ border-radius:8px;padding:8px 10px;min-height:39px;width:100%;font:inherit}
+.task-new textarea{min-height:92px;resize:vertical}
+.task-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:9px 0}
+.task-row button{font-size:12px;padding:6px 10px}
+#taskList{display:grid;grid-template-columns:repeat(auto-fit,minmax(285px,1fr));gap:12px;margin-top:15px}
+.task-item{background:#161f2e;border:1px solid #45475c;border-radius:12px;padding:13px}
+.task-item h3{font-size:15px;margin:0 0 4px;overflow-wrap:anywhere}
+.task-edit{display:grid;gap:10px;margin-top:10px}
+.task-edit label{font-size:12px;display:flex;flex-direction:column;gap:5px}
+.task-edit textarea{min-height:70px;resize:vertical}
+.task-checklist{display:grid;gap:7px;border:1px solid #343c50;border-radius:8px;padding:9px}
+.task-checklist label{display:flex;flex-direction:row;align-items:flex-start;gap:5px;line-height:1.45}
+.task-checklist input{accent-color:var(--gold);margin-top:3px;flex-shrink:0}
+.task-delete{color:#f5b5b5;border-color:#77535e}
+.task-item details{font-size:12px;color:var(--muted);margin-top:8px}
+.task-item summary{cursor:pointer}
+#taskFilter{width:auto;max-width:180px;font-size:12px}
+#taskPanel button:focus-visible,#taskPanel input:focus-visible,#taskPanel textarea:focus-visible,
+#taskPanel select:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+@media(max-width:650px){
+#taskPanel{padding:12px 14px;max-height:65dvh}
+.task-new{grid-template-columns:1fr}
+.task-new label:nth-child(3){grid-column:auto}
+#taskList{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
@@ -183,6 +222,7 @@ header .actions{flex-wrap:wrap;justify-content:flex-end}
     <button type="button" data-action="balance">Balance work</button>
     <button type="button" data-action="cloudstatus">Quantum Cloud</button>
     <button type="button" data-action="gmail">Gmail</button>
+    <button type="button" data-action="tasks">✓ Mission Control</button>
     <button type="button" data-action="memory">Memory</button>
     <button type="button" data-action="voice">🔊 Privi Voice</button>
     <button type="button" data-action="attach">Attach file</button>
@@ -197,12 +237,47 @@ header .actions{flex-wrap:wrap;justify-content:flex-end}
   <div class="actions">
     <button class="iconbutton" id="newChat" type="button" title="New conversation">New chat</button>
     <button class="iconbutton" id="priviVoiceBtn" type="button" aria-controls="priviVoicePanel" aria-expanded="false" title="Free Privi Voice playback settings">🔊 Privi Voice</button>
+    <button class="iconbutton" id="taskToggle" type="button" aria-controls="taskPanel" aria-expanded="false" title="Track tasks and approvals">✓ Tasks</button>
     <button class="iconbutton" id="memoryBtn" type="button" title="Review and control what Jose remembers">Memory</button>
     <button class="iconbutton" id="gmailBtn" type="button" title="Connect Gmail, read and write emails">Gmail</button>
     <button class="iconbutton" id="copyReply" type="button" title="Copy last answer">Copy</button>
     <button class="iconbutton" id="exportChat" type="button" title="Export conversation">Export</button>
   </div>
 </header>
+<section id="taskPanel" hidden aria-label="Hey Jose Mission Control task workspace">
+  <div class="task-inner">
+    <div class="task-top"><h2>Mission Control ✦</h2>
+      <button type="button" id="taskClose" aria-label="Close Mission Control">✕</button></div>
+    <p class="task-muted">Plan real work, mark each step, and record evidence. Jose does not execute these tasks in the background. Completion means <strong>you reported it</strong>; it is not independently verified.</p>
+    <p id="taskStorage" class="task-muted"></p>
+    <div class="task-new">
+      <label>Goal or task title <input id="taskTitle" maxlength="160" type="text" placeholder="e.g. Publish Hey Jose demo" autocomplete="off"></label>
+      <label>Due date (optional) <input id="taskDue" type="date"></label>
+      <label>Checklist — one step per line (up to 12)
+        <textarea id="taskSteps" rows="4" maxlength="2200" placeholder="Define a measurable result&#10;Review permissions and resources&#10;Perform an approved action&#10;Record evidence"></textarea>
+      </label>
+    </div>
+    <div class="task-row">
+      <button id="taskSuggest" type="button">Suggest starter steps</button>
+      <button id="taskAdd" type="button">＋ Save task</button>
+      <button id="taskExport" type="button">Export JSON</button>
+    </div>
+    <div class="task-row">
+      <strong id="taskCount">0 / 30 tasks</strong> · <span id="taskProgress" class="task-muted">0 completed</span>
+      <label for="taskFilter" class="task-muted">Filter</label>
+      <select id="taskFilter" aria-label="Filter tasks by progress">
+        <option value="all">All tasks</option>
+        <option value="planned">Planned</option>
+        <option value="in_progress">In progress</option>
+        <option value="blocked">Blocked</option>
+        <option value="awaiting_approval">Needs approval</option>
+        <option value="completed">Completed (user-reported)</option>
+      </select>
+    </div>
+    <p id="taskNotice" role="status" aria-live="polite">Ready.</p>
+    <div id="taskList" aria-label="Your current tasks"></div>
+  </div>
+</section>
 <section id="priviVoicePanel" hidden aria-label="Privi Voice playback options">
   <div class="voice-inner">
     <div class="voice-heading"><h2>Privi Voice ✦ <small style="font:12px system-ui;color:var(--muted)">Free</small></h2><button id="priviVoiceClose" class="iconbutton" type="button" aria-label="Close voice settings">✕</button></div>
@@ -645,6 +720,7 @@ input.focus();
 <script src="/chat-memory.js?v=20261123"></script><script>window.joseMemory?.setup();</script>
 <script src="/chat-gmail.js?v=20261123-gmail"></script>
 <script src="/chat-sidebar.js?v=20261124-history"></script>
+<script src="/jose-tasks.js?v=20261126-mission"></script>
 <script type="module" src="/privi-voice.js?v=20261124-free"></script>
 </body>
 </html>
