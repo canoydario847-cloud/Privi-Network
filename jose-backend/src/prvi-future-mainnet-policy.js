@@ -2,6 +2,40 @@
 // This module never reads a mainnet RPC, never signs transactions, changes
 // token supply, quotes a PRVI price, guarantees a peg, or activates launch.
 // TEST (772626), BNB PRIV and the upstream EVM demo (262144) are separate.
+// Product selection: native PRVI is intended as a genuinely redeemable
+// USD payment stablecoin, NOT a floating utility token with a dollar-FX index.
+// None of the stablecoin's legal, banking, reserve, custody or chain gates
+// are satisfied by choosing a design.
+export const PROPOSED_PRVI_STABLECOIN=Object.freeze({
+  proposedAsset:'native PRVI',
+  designSelection:'USD_REDEEMABLE_PAYMENT_STABLECOIN',
+  redemptionTarget:'USD 1.00 per issued PRVI',
+  redemptionCurrency:'USD',
+  usdPerTokenTarget:1,
+  reserveCoveragePolicy:'at_least_one_USD_eligible_reserves_per_outstanding_PRVI',
+  reserveAssetsPolicy:'cash_insured_deposits_eligible_short_term_treasuries_and_other_regulator_permitted_assets',
+  issuancePolicy:'mint_only_against_verified_eligible_reserves_after_issuer_and_chain_approval',
+  redemptionPolicy:'redeem_and_retire_tokens_under_approved_issuer_procedures',
+  lifetimeWholeTokenCapProposed:'1000000000',
+  reserveBackingForHypotheticalFullCapUsd:'1000000000',
+  dollarFxIndexDeterminesRedemption:false,
+  heyJoseUsageDeterminesRedemption:false,
+  heyJoseUsageCanMintUnbackedTokens:false,
+  userActivityUsedAsCollateral:false,
+  userActivityPermittedForServiceMetricsOnly:true,
+  issuerApprovalVerified:false,
+  authorizedReserveCustodianVerified:false,
+  reservesVerified:false,
+  reserveAttestationVerified:false,
+  redemptionOperationsVerified:false,
+  mintingEnabled:false,
+  redemptionEnabled:false,
+  publicOfferingEnabled:false,
+  mainnetLive:false,
+  planIsNotApproval:true,
+  note:'Only a design selection. There are no verified reserves or issuer authorizations; no issued/redeemable stablecoins or enforceable $1 redemption are established by this software.'
+});
+
 export const FUTURE_PRVI_INTEGRATION=Object.freeze({
   product:'Hey Jose',
   proposedNetwork:'native PRVI financial mainnet',
@@ -13,10 +47,16 @@ export const FUTURE_PRVI_INTEGRATION=Object.freeze({
   mintingEnabled:false,bridgingEnabled:false,
   automaticMigrationEnabled:false,
   pricePegActive:false,usdRedemptionGuaranteed:false,
-  economicModel:'DRAFT_USAGE_AND_DOLLAR_REFERENCE_INDEX',
+  economicModel:'SELECTED_DESIGN_USD_REDEEMABLE_PAYMENT_STABLECOIN',
+  selectedStablecoinDesign:'USD_REDEEMABLE_PAYMENT_STABLECOIN',
+  proposedRedemptionUsdPerToken:1,
+  issuerApprovalVerified:false,reservesVerified:false,
+  reserveAttestationVerified:false,redemptionEnabled:false,
+  issuanceAgainstReservesVerified:false,
+  heyJoseUsageBacksToken:false,dollarFxIndexDeterminesTokenPrice:false,
   economicModelApproved:false,indexOracleConfigured:false,
   publicUserDataOnChain:false,
-  note:'Future architecture proposal only. Never use as evidence of financial mainnet or a PRVI dollar peg.'
+  note:'Target architecture selected: genuinely USD-redeemable PRVI stablecoin, $1/token with eligible 1:1 reserves and authorized issuer. None of those conditions are verified or active. Financial mainnet remains NO-GO.'
 });
 
 export class PolicyPreviewError extends Error {
@@ -76,6 +116,6 @@ export function previewUsageDollarReference(input){
     tokenPricePredicted:false,pegEnforced:false,
     reservesVerified:false,redemptionRightCreated:false,
     mintingEnabled:false,financialMainnetLive:false,
-    warning:'For scenario exploration only. Not a PRVI price, investment return, dollar peg, token mint/burn policy, or verified on-chain data.'
+    warning:'Legacy scenario research only. The USD FX index and Hey Jose usage are NOT inputs to PRVI dollar redemption, backing, or issuance. This is not a PRVI price, peg, mint/burn policy, or verified on-chain data.'
   };
 }
