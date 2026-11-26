@@ -314,6 +314,22 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   const html=await fetch(second.base+'/chat.html',{signal:AbortSignal.timeout(2000)});
   assert.equal(html.status,200);const markup=await html.text();
   assert.match(markup,/chat-gmail\.js/);assert.match(markup,/chat-memory\.js/);
+  // Professional sidebar: all existing tools and account history remain reachable.
+  assert.match(markup,/id="sidebarChatCount"/);
+  assert.match(markup,/id="sidebarTasks"/);
+  assert.match(markup,/sidebar-nav-item/);
+  assert.match(markup,/Recent conversations/);
+  assert.match(markup,/Build &amp; explore/);
+  assert.match(markup,/id="sidebarAccountSubtitle"/);
+  const sidebarAsset=await fetch(second.base+'/chat-sidebar.js',{signal:AbortSignal.timeout(3000)});
+  assert.equal(sidebarAsset.status,200);
+  assert.match(sidebarAsset.headers.get('content-type')||'',/application\/javascript/);
+  const sidebarCode=await sidebarAsset.text();
+  assert.match(sidebarCode,/function syncDrawer/);
+  assert.match(sidebarCode,/sidebarChatCount/);
+  assert.match(sidebarCode,/PREFERENCE_KEY/);
+  assert.match(sidebarCode,/\/login\.html\?next=%2Fchat\.html/);
+
   assert.match(markup,/id="taskPanel"/);
   assert.match(markup,/id="taskToggle"/);
   assert.match(markup,/data-action="tasks"/);
