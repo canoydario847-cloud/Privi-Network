@@ -52,6 +52,10 @@ def engineering_artifacts() -> dict:
             "production-network/ops/VALIDATOR_FAILURE_RECOVERY_TEST_PLAN.md"
         ),
         "path_to_launch": exists("production-network/ops/PATH_TO_LAUNCH.md"),
+        "candidate_binary_pin": exists("production-network/ops/candidate_binary_pin.py"),
+        "candidate_binary_pin_template": exists(
+            "production-network/ops/candidate_binary_pin.UNPINNED.json"
+        ),
     }
 
 
@@ -71,8 +75,15 @@ def research_markers_ok() -> list[str]:
 
 
 def gate_statuses(artifacts: dict) -> dict:
+    if artifacts.get("candidate_binary_pin"):
+        binary_note = (
+            "Testnet pin verifier present; artifact SHA-256 still UNPINNED; "
+            "not a production binary"
+        )
+    else:
+        binary_note = "No pinned Privi-custom production binary"
     notes = {
-        "1_chain_identity_binary": "No pinned Privi-custom production binary",
+        "1_chain_identity_binary": binary_note,
         "2_genesis_supply": (
             "Worksheet present but unfilled; offline cap model only"
             if artifacts.get("genesis_worksheet")
