@@ -14,6 +14,7 @@ It is **not** authorization to activate mainnet, issue PRVI, or operate producti
 - Four local/Docker validators ≠ four independent operators.
 - A candidate binary pin with `sha256: UNPINNED` is not a release.
 - Never commit mnemonics, validator private keys, or production secrets.
+- **Stablecoin-specific additional NO-GO:** The selected native PRVI design is a genuinely USD 1.00 redeemable payment stablecoin (design only). Chain GO alone never authorizes stablecoin issuance. A legally permitted issuer, fully eligible reserve funding for **all issued** PRVI (including locked/vested tokens), independent reserve attestations, lawful redemption rails, issuance controls and appropriate regulatory approvals must be verified separately. See [PRVI stablecoin design](../mainnet/PRVI_USD_STABLECOIN_DESIGN.md). Hey Jose usage and the nominal USD FX index are not collateral and cannot mint unbacked coins.
 
 ## Build ladder (order matters)
 
