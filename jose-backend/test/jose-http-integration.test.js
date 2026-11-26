@@ -69,6 +69,9 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   assert.equal(status.data.futurePrviMainnetIntegration,'NO_GO_DESIGN_ONLY');
   assert.equal(status.data.financialPrviConnected,false);
   assert.equal(status.data.prviPricePegActive,false);
+  assert.equal(status.data.selectedPrviDesign,'HEY_JOSE_VERIFIED_USERS_AND_USAGE_ONLY');
+  assert.equal(status.data.dollarIndexUsed,false);
+  assert.equal(status.data.usdStablecoinSelected,false);
   const future=await json(base,'/api/prvi/mainnet/plan');
   assert.equal(future.status,200);
   assert.equal(future.data.connected,false);
@@ -81,23 +84,36 @@ test('actual Jose HTTP: health, tools, safe Gmail guide, signup, session persist
   assert.equal(future.data.automaticMigrationEnabled,false);
   assert.equal(future.data.upstreamDemoEvmId,262144);
   assert.equal(future.data.priviTestDevnetId,772626);
+  assert.equal(future.data.economicModel,'SELECTED_DESIGN_HEY_JOSE_USERS_AND_USAGE_ONLY');
+  assert.equal(future.data.dollarIndexConfigured,false);
+  assert.equal(future.data.usdStablecoinSelected,false);
+  assert.equal(future.data.proposedUsageModel.usdDollarIndexUsed,false);
+  assert.equal(future.data.proposedUsageModel.stablecoinSelected,false);
+  assert.deepEqual(future.data.proposedUsageModel.allowedComponents,
+    ['verified_active_users','verified_successful_usage']);
   const indexScenario={
-    usageBaseline:1000,usageCurrent:1250,
-    dollarIndexBaseline:100,dollarIndexCurrent:102,
-    usageWeight:0.5,dollarWeight:0.5
+    usersBaseline:100,usersCurrent:120,
+    usageBaseline:1000,usageCurrent:1500,
+    usersWeight:0.5,usageWeight:0.5
   };
-  const index=await json(base,'/api/prvi/mainnet/index-preview','POST',indexScenario);
+  const oldRejected=await json(base,'/api/prvi/mainnet/index-preview','POST',{
+    usageBaseline:1000,usageCurrent:1200,dollarIndexBaseline:100,
+    dollarIndexCurrent:102,usageWeight:0.5,dollarWeight:0.5
+  });
+  assert.equal(oldRejected.status,410);
+  const index=await json(base,'/api/prvi/mainnet/usage-index-preview','POST',indexScenario);
   assert.equal(index.status,200,JSON.stringify(index.data));
-  assert.equal(index.data.kind,'HYPOTHETICAL_NON_FINANCIAL_REFERENCE_INDEX');
-  assert.equal(index.data.pegEnforced,false);
-  assert.equal(index.data.marketPriceUsd,null);
+  assert.equal(index.data.kind,'HYPOTHETICAL_HEY_JOSE_USER_USAGE_INDEX');
+  assert.equal(index.data.pricePegEnforced,false);
+  assert.equal(index.data.realMarketPrice,null);
   assert.equal(index.data.oracleVerified,false);
-  assert.ok(Math.abs(index.data.indexValue-112.915898)<0.001);
-  const wrongOrigin=await json(base,'/api/prvi/mainnet/index-preview','POST',
+  assert.equal(index.data.dollarIndexUsed,false);
+  assert.ok(Math.abs(index.data.indexValue-134.16407865)<0.001);
+  const wrongOrigin=await json(base,'/api/prvi/mainnet/usage-index-preview','POST',
     indexScenario,{Origin:'https://malicious.example'});
   assert.equal(wrongOrigin.status,403);
-  const badIndex=await json(base,'/api/prvi/mainnet/index-preview','POST',{
-    ...indexScenario,pegToUsd:1
+  const badIndex=await json(base,'/api/prvi/mainnet/usage-index-preview','POST',{
+    ...indexScenario,dollarIndexCurrent:102
   });
   assert.equal(badIndex.status,400);
 

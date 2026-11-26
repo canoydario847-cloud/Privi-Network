@@ -1,7 +1,34 @@
-// Hey Jose / financial PRVI: design-only, fail-closed future integration.
-// This module never reads a mainnet RPC, never signs transactions, changes
-// token supply, quotes a PRVI price, guarantees a peg, or activates launch.
-// TEST (772626), BNB PRIV and the upstream EVM demo (262144) are separate.
+// Privi financial-mainnet design. Intentionally fail-closed.
+// The ONLY proposed economic-reference inputs are verified Hey Jose unique
+// active users and verified Hey Jose completed usage. No USD price peg,
+// dollar-FX index, reserves, bank/redemption claim, or token price oracle.
+// An activity reference index cannot itself force a market token price.
+// TEST devnet 772626, upstream demo 262144 and BNB PRIV remain separate.
+export const PROPOSED_PRVI_USAGE_MODEL=Object.freeze({
+  designSelection:'HEY_JOSE_VERIFIED_USERS_AND_USAGE_ONLY',
+  economicReference:'NORMALIZED_COMPOSITE_ACTIVITY_INDEX',
+  allowedComponents:Object.freeze(['verified_active_users','verified_successful_usage']),
+  excludedComponents:Object.freeze(['usd_dollar_index','usd_market_price','usd_reserves',
+    'user_personal_data','unverified_signups','failed_requests','bot_calls']),
+  userMetric:'verified_unique_active_users_with_successful_use_per_reporting_period',
+  usageMetric:'verified_successfully_completed_billable_or_approved_service_units_per_period',
+  calculation:'100*(activeUsers/currentPeriodUsersBaseline)^usersWeight*(successfulUsage/currentPeriodUsageBaseline)^usageWeight',
+  weighting:'NOT_YET_APPROVED',
+  baselinePeriod:'NOT_YET_APPROVED',
+  reportingPeriod:'NOT_YET_APPROVED',
+  antiSybilMethod:'REQUIRED_NOT_VERIFIED',
+  independentUsageAudit:false,
+  metricsOracleConfigured:false,
+  priceStabilizationMechanismDesigned:false,
+  priceStabilizationMechanismFunded:false,
+  exchangeRateGuaranteed:false,
+  tokenMarketPriceUsd:null,
+  usdDollarIndexUsed:false,
+  stablecoinSelected:false,
+  usdRedemptionSelected:false,
+  noPersonallyIdentifyingMetricsOnChain:true,
+  note:'User- and usage-indexed token economics is the selected design direction, not a functioning financial peg, guaranteed trading price, or authorization to mint.'
+});
 export const FUTURE_PRVI_INTEGRATION=Object.freeze({
   product:'Hey Jose',
   proposedNetwork:'native PRVI financial mainnet',
@@ -10,72 +37,76 @@ export const FUTURE_PRVI_INTEGRATION=Object.freeze({
   chainId:null,cosmosChainId:null,rpcUrl:null,denom:null,
   upstreamDemoEvmId:262144,priviTestDevnetId:772626,
   walletSigningEnabled:false,paymentsEnabled:false,
-  mintingEnabled:false,bridgingEnabled:false,
-  automaticMigrationEnabled:false,
+  mintingEnabled:false,bridgingEnabled:false,automaticMigrationEnabled:false,
   pricePegActive:false,usdRedemptionGuaranteed:false,
-  economicModel:'DRAFT_USAGE_AND_DOLLAR_REFERENCE_INDEX',
-  economicModelApproved:false,indexOracleConfigured:false,
+  economicModel:'SELECTED_DESIGN_HEY_JOSE_USERS_AND_USAGE_ONLY',
+  userUsageReferenceConfigured:false,
+  userUsageOracleConfigured:false,
+  usageProofVerified:false,
+  independentMetricsAuditVerified:false,
+  stabilizationMechanismApproved:false,
+  economicModelApproved:false,
+  dollarIndexConfigured:false,
+  dollarFxIndexDeterminesTokenPrice:false,
+  usdStablecoinSelected:false,
   publicUserDataOnChain:false,
-  note:'Future architecture proposal only. Never use as evidence of financial mainnet or a PRVI dollar peg.'
+  note:'Only Hey Jose verified user counts and verified completed usage are proposed as token-economic references. No USD-index component or USD redemption. No market price is guaranteed; financial mainnet remains NO-GO.'
 });
-
 export class PolicyPreviewError extends Error {
   constructor(message){super(message);this.name='PolicyPreviewError';this.status=400;}
 }
-const error=message=>{throw new PolicyPreviewError(message);};
-const allowedFields=new Set(['usageBaseline','usageCurrent',
-  'dollarIndexBaseline','dollarIndexCurrent','usageWeight','dollarWeight']);
-function number(v,name,{min=0,max=1e12,allowZero=false}={}){
-  if(typeof v!=='number'||!Number.isFinite(v)||
-     v<min||v>max||(!allowZero&&v===0))
-    error(name+' must be a finite '+(allowZero?'non-negative':'positive')+
+const invalid=message=>{throw new PolicyPreviewError(message);};
+const FIELDS=Object.freeze(['usersBaseline','usersCurrent','usageBaseline',
+  'usageCurrent','usersWeight','usageWeight']);
+function validateNumber(value,field,positive){
+  const max=1e12;
+  if(typeof value!=='number'||!Number.isFinite(value)||value<0||
+    value>max||(positive&&value===0))
+    invalid(field+' must be a finite '+(positive?'positive':'non-negative')+
       ' number no greater than '+max+'.');
-  return v;
+  return value;
 }
-
 /**
- * Demonstration of a *dimensionless* reference index, not a token price,
- * market prediction, supply oracle, redemption rate or peg mechanism.
+ * NONFINANCIAL what-if index. All input numbers are caller-supplied,
+ * not authenticated or observed by Jose. The 0–1 weights are hypothetical
+ * and deliberately must be explicit; the user has not selected weights.
  *
- * For explicitly provided observations in matching units/periods:
- *      I = 100 * (U_t / U_0)^wU * (D_t / D_0)^wD
- * wU + wD = 1.0, with both weights provided.
- *
- * A positive market-price reference, collateral or legally enforceable
- * redemption mechanism cannot be inferred from this arithmetic.
+ * I(t)=100 * (U_t/U_0)^wU * (A_t/A_0)^wA
+ * where U=verified active unique user count, A=verified completed usage units.
+ * The resulting number is not a price, exchange rate or monetary peg.
  */
-export function previewUsageDollarReference(input){
+export function previewHeyJoseActivityIndex(input){
   if(!input||typeof input!=='object'||Array.isArray(input)||
-     Object.keys(input).some(k=>!allowedFields.has(k))||
-     Object.keys(input).length!==allowedFields.size)
-    error('Supply exactly six numeric fields: usageBaseline, usageCurrent, dollarIndexBaseline, dollarIndexCurrent, usageWeight and dollarWeight.');
-  const U0=number(input.usageBaseline,'usageBaseline');
-  const Ut=number(input.usageCurrent,'usageCurrent',{min:0,allowZero:true});
-  const D0=number(input.dollarIndexBaseline,'dollarIndexBaseline');
-  const Dt=number(input.dollarIndexCurrent,'dollarIndexCurrent');
-  const wu=number(input.usageWeight,'usageWeight',{min:0,max:1,allowZero:true});
-  const wd=number(input.dollarWeight,'dollarWeight',{min:0,max:1,allowZero:true});
-  if(Math.abs((wu+wd)-1)>1e-10)error('Usage and dollar index weights must total exactly 1.');
-  // 0^0 is formally undefined. A zero-use observation is permissible only
-  // with a positive usage weight, where the reference index becomes zero.
-  if(Ut===0&&wu===0)error('Zero usage with zero usage weight is undefined.');
-  const normalizedUsage=Ut/U0;
-  const normalizedDollar=Dt/D0;
-  const indexValue=100*Math.pow(normalizedUsage,wu)*Math.pow(normalizedDollar,wd);
-  if(!Number.isFinite(indexValue))error('Index calculation overflow.');
+    Object.keys(input).length!==FIELDS.length||
+    Object.keys(input).some(k=>!FIELDS.includes(k)))
+    invalid('Supply exactly usersBaseline, usersCurrent, usageBaseline, usageCurrent, usersWeight, and usageWeight.');
+  const u0=validateNumber(input.usersBaseline,'usersBaseline',true);
+  const ut=validateNumber(input.usersCurrent,'usersCurrent',false);
+  const a0=validateNumber(input.usageBaseline,'usageBaseline',true);
+  const at=validateNumber(input.usageCurrent,'usageCurrent',false);
+  const wu=validateNumber(input.usersWeight,'usersWeight',false);
+  const wa=validateNumber(input.usageWeight,'usageWeight',false);
+  if(wu>1||wa>1||Math.abs(wu+wa-1)>1e-10)
+    invalid('usersWeight and usageWeight must each be between 0 and 1 and total 1.');
+  // Prevent a misleading 0^0 when that component has zero weight.
+  if((ut===0&&wu===0)||(at===0&&wa===0))
+    invalid('Zero current metric with zero metric weight is undefined.');
+  const usersFactor=ut/u0,usageFactor=at/a0;
+  const computed=100*Math.pow(usersFactor,wu)*Math.pow(usageFactor,wa);
+  if(!Number.isFinite(computed))invalid('Index calculation overflow.');
   return {
-    kind:'HYPOTHETICAL_NON_FINANCIAL_REFERENCE_INDEX',
-    formula:'100 * (current_verified_usage / baseline_verified_usage)^usageWeight * (current_dollar_index / baseline_dollar_index)^dollarWeight',
-    baseValue:100,
-    indexValue:Number(indexValue.toPrecision(12)),
-    normalizedUsage:Number(normalizedUsage.toPrecision(12)),
-    normalizedDollar:Number(normalizedDollar.toPrecision(12)),
-    usageWeight:wu,dollarWeight:wd,
-    valuesProvidedByCaller:true,oracleVerified:false,
-    independentUsageAudit:false,marketPriceUsd:null,
-    tokenPricePredicted:false,pegEnforced:false,
-    reservesVerified:false,redemptionRightCreated:false,
-    mintingEnabled:false,financialMainnetLive:false,
-    warning:'For scenario exploration only. Not a PRVI price, investment return, dollar peg, token mint/burn policy, or verified on-chain data.'
+    kind:'HYPOTHETICAL_HEY_JOSE_USER_USAGE_INDEX',
+    formula:'100 * (usersCurrent / usersBaseline)^usersWeight * (usageCurrent / usageBaseline)^usageWeight',
+    indexValue:Number(computed.toPrecision(12)),baseValue:100,
+    normalizedUsers:Number(usersFactor.toPrecision(12)),
+    normalizedUsage:Number(usageFactor.toPrecision(12)),
+    usersWeight:wu,usageWeight:wa,
+    source:'CALLER_ENTERED_SCENARIO_NOT_VERIFIED',
+    oracleVerified:false,independentMetricsAudit:false,
+    syntheticScenario:true,realMarketPrice:null,
+    dollarIndexUsed:false,usdRedemptionGuaranteed:false,
+    pricePegEnforced:false,priceStabilizationFunded:false,
+    tokenMinted:false,financialMainnetLive:false,
+    warning:'Hey Jose user and usage index for research only. User activity is not financial collateral, a dollar peg, a token price, or authorization to mint. The market price cannot be guaranteed by this index alone.'
   };
 }
