@@ -344,7 +344,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/chat/status') {
       const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
-      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), mode: process.env.JOSE_AI_API_KEY ? 'provider' : 'unconfigured', model: process.env.JOSE_AI_API_KEY ? (process.env.JOSE_AI_MODEL || 'gpt-4o-mini') : null, chatModes: ['chat', 'build', 'web3'], priviDevnetExpectedChainId: DEVNET_EVM_ID, priviDevnetStatusUrl: '/api/devnet/status', attachments: ['image/png','image/jpeg','image/webp','text'], maxAttachments: 2, localPowerCount: JOSE_POWERS.length, agentReadOnlyToolCount: JOSE_READ_TOOLS.length, agentReadOnlyToolNames: JOSE_READ_TOOLS.map(t=>t.function.name), freePriviQuantumSimulator:true, quantumSimulatorMaxQubits:MAX_QUBITS, quantumSimulatorUrl:'/api/quantum/simulate', quantumOptimizationMaxVariables:MAX_QUBO_VARIABLES, quantumOptimizationUrl:'/api/quantum/optimize', quantumCloudBridgeConfigured:quantumCloudBridge.status().enabled, browserMemorySupported: true, memoryStorage: 'USER_BROWSER_ONLY',conversationHistory:true,conversationHistoryRequiresLogin:true,conversationHistoryStorage:'TEMPORARY_RENDER_FILE_STORAGE',gmailConfigured:getPlugin('google').isConfigured(),gmailConnectUrl:'/connect/google' });
+      return sendJson(res, 200, { available: Boolean(process.env.JOSE_AI_API_KEY), mode: process.env.JOSE_AI_API_KEY ? 'provider' : 'unconfigured', model: process.env.JOSE_AI_API_KEY ? (process.env.JOSE_AI_MODEL || 'gpt-4o-mini') : null, chatModes: ['chat', 'build', 'web3'], priviDevnetExpectedChainId: DEVNET_EVM_ID, priviDevnetStatusUrl: '/api/devnet/status', attachments: ['image/png','image/jpeg','image/webp','text'], maxAttachments: 2, localPowerCount: JOSE_POWERS.length, agentReadOnlyToolCount: JOSE_READ_TOOLS.length, agentReadOnlyToolNames: JOSE_READ_TOOLS.map(t=>t.function.name), freePriviQuantumSimulator:true, quantumSimulatorMaxQubits:MAX_QUBITS, quantumSimulatorUrl:'/api/quantum/simulate', quantumOptimizationMaxVariables:MAX_QUBO_VARIABLES, quantumOptimizationUrl:'/api/quantum/optimize', quantumCloudBridgeConfigured:quantumCloudBridge.status().enabled, browserMemorySupported: true, memoryStorage: 'USER_BROWSER_ONLY',conversationHistory:true,conversationHistoryRequiresLogin:true,conversationHistoryStorage:'TEMPORARY_RENDER_FILE_STORAGE', missionControl:true,missionControlManualOnly:true,missionControlRequiresLoginForSync:true,missionControlStorage:'TEMPORARY_RENDER_FILE_STORAGE',gmailConfigured:getPlugin('google').isConfigured(),gmailConnectUrl:'/connect/google' });
     }
     if (req.method === 'POST' && url.pathname === '/api/chat') {
       const user = getCurrentUser(req) || { id: 'guest:' + (req.socket.remoteAddress || 'unknown') };
@@ -623,6 +623,44 @@ const server = http.createServer(async (req, res) => {
       const user = getCurrentUser(req);
       if (!user) return sendJson(res, 401, { error: 'Not signed in.' });
       return sendJson(res, 200, { email: user.email, plugins: publicPluginList(user) });
+    }
+
+    // Mission Control: account-isolated, user-operated tasks. This endpoint
+    // never starts background jobs, executes apps, or claims AI completed work.
+    if(url.pathname==='/api/tasks' || url.pathname.startsWith('/api/tasks/')){
+      res.setHeader('Cache-Control','no-store');
+      const user=getCurrentUser(req);
+      if(!user)return sendJson(res,401,{error:'Sign in to synchronize Mission Control tasks. Guest tasks stay in this browser.'});
+      if(req.method!=='GET'&&!requireOrigin(req,res))return;
+      const idMatch=url.pathname.match(/^\/api\/tasks\/([0-9a-f-]{36})$/i);
+      if(!idMatch&&url.pathname!=='/api/tasks')return sendJson(res,404,{error:'Task not found.'});
+      const id=idMatch?.[1];
+      try{
+        if(req.method==='GET'&&!id)
+          return sendJson(res,200,{tasks:db.listTasks(user.id),maxTasks:30,
+            execution:'MANUAL_USER_CONTROLLED',storage:'TEMPORARY_RENDER_FILE_STORAGE'});
+        if(req.method==='POST'&&!id){
+          const body=await readLimitedJsonBody(req,8000);
+          return sendJson(res,201,db.createTask(user.id,body));
+        }
+        if(req.method==='GET'&&id){
+          const task=db.getTask(user.id,id);
+          return task?sendJson(res,200,task):sendJson(res,404,{error:'Task not found.'});
+        }
+        if(req.method==='PATCH'&&id){
+          const body=await readLimitedJsonBody(req,8000);
+          const task=db.updateTask(user.id,id,body);
+          return task?sendJson(res,200,task):sendJson(res,404,{error:'Task not found.'});
+        }
+        if(req.method==='DELETE'&&id)
+          return db.deleteTask(user.id,id)?
+            sendJson(res,200,{deleted:true}):sendJson(res,404,{error:'Task not found.'});
+        return sendJson(res,405,{error:'Method not supported.'});
+      }catch(error){
+        return sendJson(res,error instanceof RangeError?413:error instanceof SyntaxError?400:error.status||500,
+          {error:error.status?error.message:error instanceof RangeError?'Task request too large.':
+            error instanceof SyntaxError?'Invalid task JSON.':'Task could not be updated.'});
+      }
     }
 
     // ---- Authenticated conversation history for the Jose sidebar ----
