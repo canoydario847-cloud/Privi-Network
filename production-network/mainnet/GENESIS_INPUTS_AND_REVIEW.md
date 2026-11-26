@@ -2,6 +2,20 @@
 
 **Status:** Required inputs not yet supplied; financial mainnet is NOT activated. This document is NOT a genesis file, a signed artifact, token issuance authorization or an exchange listing.
 
+## Proposed PRVI economic reference: Hey Jose users + completed usage only
+
+The founder has selected **verified Hey Jose unique active users and verified
+successful service usage** as the ONLY proposed economic-reference components.
+This explicitly excludes the earlier dollar FX index and any USD-redeemable
+stablecoin model. The economic formula, weights, reporting periods and fraud
+controls remain unapproved. An activity index is not, by itself, a guaranteed
+PRVI market-price peg or a minting authorization.
+
+See [PRVI Hey Jose usage design](../../jose-backend/PRVI_MAINNET_HEY_JOSE_USAGE_DESIGN.md).
+Every financial issuance, supply schedule, wallet activation or mainnet
+launch still requires the existing independent reviews and explicit GO.
+Current chain/genesis proposals stay separate from the valueless TEST network.
+
 ## Immutable proposal parameters — subject to technical/legal confirmation
 
 - Proposed native asset symbol: **PRVI**, separate from existing BNB Chain PRIV and permanently valueless TEST.
