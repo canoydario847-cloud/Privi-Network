@@ -1,19 +1,32 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  FUTURE_PRVI_INTEGRATION,
-  PolicyPreviewError,
-  previewUsageDollarReference,
+  FUTURE_PRVI_INTEGRATION,PROPOSED_PRVI_USAGE_MODEL,
+  PolicyPreviewError,previewHeyJoseActivityIndex
 } from '../src/prvi-future-mainnet-policy.js';
 
-const sample={
-  usageBaseline:1000,usageCurrent:1250,
-  dollarIndexBaseline:100,dollarIndexCurrent:102,
-  usageWeight:0.5,dollarWeight:0.5,
-};
-test('Future PRVI launch status remains fail-closed with unassigned production identity',()=>{
+const example={usersBaseline:100,usersCurrent:120,
+  usageBaseline:1000,usageCurrent:1500,
+  usersWeight:0.5,usageWeight:0.5};
+
+test('Chosen PRVI design includes ONLY verified Hey Jose users and completed usage',()=>{
+  const p=PROPOSED_PRVI_USAGE_MODEL;
+  assert.equal(p.designSelection,'HEY_JOSE_VERIFIED_USERS_AND_USAGE_ONLY');
+  assert.deepEqual(p.allowedComponents,['verified_active_users','verified_successful_usage']);
+  assert.equal(p.usdDollarIndexUsed,false);
+  assert.equal(p.stablecoinSelected,false);
+  assert.equal(p.usdRedemptionSelected,false);
+  assert.equal(p.userActivityUsedAsCollateral,undefined);
+  assert.equal(p.independentUsageAudit,false);
+  assert.equal(p.metricsOracleConfigured,false);
+  assert.equal(p.priceStabilizationMechanismFunded,false);
+  assert.equal(p.exchangeRateGuaranteed,false);
+  assert.equal(p.tokenMarketPriceUsd,null);
+  assert.equal(Object.isFrozen(p),true);
+});
+test('Mainnet remains NO-GO, does not sign transactions or claim price stability',()=>{
   const f=FUTURE_PRVI_INTEGRATION;
-  assert.equal(Object.isFrozen(f),true);
+  assert.equal(f.economicModel,'SELECTED_DESIGN_HEY_JOSE_USERS_AND_USAGE_ONLY');
   assert.equal(f.readiness,'NO_GO_AWAITING_INDEPENDENT_RELEASE_EVIDENCE');
   assert.equal(f.connected,false);
   assert.equal(f.financialMainnetLive,false);
@@ -27,68 +40,63 @@ test('Future PRVI launch status remains fail-closed with unassigned production i
   assert.equal(f.automaticMigrationEnabled,false);
   assert.equal(f.pricePegActive,false);
   assert.equal(f.usdRedemptionGuaranteed,false);
-  assert.equal(f.economicModelApproved,false);
-  assert.equal(f.indexOracleConfigured,false);
+  assert.equal(f.stabilizationMechanismApproved,false);
+  assert.equal(f.usageProofVerified,false);
+  assert.equal(f.dollarIndexConfigured,false);
+  assert.equal(f.usdStablecoinSelected,false);
   assert.equal(f.publicUserDataOnChain,false);
   assert.equal(f.upstreamDemoEvmId,262144);
   assert.equal(f.priviTestDevnetId,772626);
 });
-test('The indicative reference computes normalized math but never a PRVI price',()=>{
-  const r=previewUsageDollarReference(sample);
-  assert.ok(Math.abs(r.indexValue-100*Math.sqrt(1.25*1.02))<1e-9);
+test('User and usage preview computes a dimensionless nonmonetary reference',()=>{
+  const r=previewHeyJoseActivityIndex(example);
+  assert.equal(r.kind,'HYPOTHETICAL_HEY_JOSE_USER_USAGE_INDEX');
+  assert.ok(Math.abs(r.indexValue-100*Math.sqrt(1.2*1.5))<1e-9);
   assert.equal(r.baseValue,100);
-  assert.equal(r.kind,'HYPOTHETICAL_NON_FINANCIAL_REFERENCE_INDEX');
-  assert.equal(r.marketPriceUsd,null);
-  assert.equal(r.tokenPricePredicted,false);
-  assert.equal(r.pegEnforced,false);
-  assert.equal(r.reservesVerified,false);
+  assert.equal(r.normalizedUsers,1.2);
+  assert.equal(r.normalizedUsage,1.5);
+  assert.equal(r.source,'CALLER_ENTERED_SCENARIO_NOT_VERIFIED');
+  assert.equal(r.syntheticScenario,true);
   assert.equal(r.oracleVerified,false);
-  assert.equal(r.independentUsageAudit,false);
-  assert.equal(r.mintingEnabled,false);
+  assert.equal(r.independentMetricsAudit,false);
+  assert.equal(r.realMarketPrice,null);
+  assert.equal(r.dollarIndexUsed,false);
+  assert.equal(r.pricePegEnforced,false);
+  assert.equal(r.priceStabilizationFunded,false);
+  assert.equal(r.tokenMinted,false);
   assert.equal(r.financialMainnetLive,false);
-  assert.equal(r.redemptionRightCreated,false);
 });
-test('Reference index stays 100 at baseline for arbitrary approved hypothetical weights',()=>{
+test('Equal baselines always return 100 for varying explicitly selected weights',()=>{
   for(const w of [0,0.25,0.5,0.75,1]){
-    const r=previewUsageDollarReference({...sample,
-      usageCurrent:sample.usageBaseline,
-      dollarIndexCurrent:sample.dollarIndexBaseline,
-      usageWeight:w,dollarWeight:1-w
-    });
+    const r=previewHeyJoseActivityIndex({...example,
+      usersCurrent:example.usersBaseline,usageCurrent:example.usageBaseline,
+      usersWeight:w,usageWeight:1-w});
     assert.equal(r.indexValue,100);
   }
 });
-test('Reference accepts zero observed usage only when usage actually contributes',()=>{
-  const r=previewUsageDollarReference({...sample,usageCurrent:0});
-  assert.equal(r.indexValue,0);
-  assert.throws(()=>previewUsageDollarReference({...sample,
-    usageCurrent:0,usageWeight:0,dollarWeight:1}),PolicyPreviewError);
+test('Zero observed use or users returns zero when its weight is positive',()=>{
+  assert.equal(previewHeyJoseActivityIndex({...example,usersCurrent:0}).indexValue,0);
+  assert.equal(previewHeyJoseActivityIndex({...example,usageCurrent:0}).indexValue,0);
+  assert.throws(()=>previewHeyJoseActivityIndex({...example,
+    usersCurrent:0,usersWeight:0,usageWeight:1}),PolicyPreviewError);
+  assert.throws(()=>previewHeyJoseActivityIndex({...example,
+    usageCurrent:0,usersWeight:1,usageWeight:0}),PolicyPreviewError);
 });
-test('Reference rejects guessed weights, tampered fields, nonnumeric input and invalid baselines',()=>{
-  for(const input of [
-    null,[],{},
-    {...sample,usageBaseline:0},
-    {...sample,usageBaseline:-1},
-    {...sample,dollarIndexBaseline:0},
-    {...sample,dollarIndexCurrent:-1},
-    {...sample,usageCurrent:NaN},
-    {...sample,usageCurrent:Infinity},
-    {...sample,usageWeight:0.7,dollarWeight:0.7},
-    {...sample,usageWeight:-0.2,dollarWeight:1.2},
-    {...sample,usageBaseline:'1000'},
-    {...sample,marketPriceUsd:1},
-    {...sample,walletAddress:'0xBAD'},
-    {...sample,dollarWeight:undefined},
-    {...sample,usageCurrent:1e13},
-  ])assert.throws(()=>previewUsageDollarReference(input),PolicyPreviewError);
-});
-test('No dollar value, chain state, minting or live oracle is inferred from this policy module',()=>{
-  const js=[
-    FUTURE_PRVI_INTEGRATION.pricePegActive,
-    FUTURE_PRVI_INTEGRATION.paymentsEnabled,
-    FUTURE_PRVI_INTEGRATION.walletSigningEnabled,
-    FUTURE_PRVI_INTEGRATION.indexOracleConfigured,
+test('USD dollar-index, redemption, prices and missing/invalid inputs are rejected',()=>{
+  const invalid=[
+    null,[],{}, { ...example,usersBaseline:0},
+    {...example,usageBaseline:0},
+    {...example,usersCurrent:NaN},
+    {...example,usageCurrent:Infinity},
+    {...example,usersWeight:0.8,usageWeight:0.4},
+    {...example,usersWeight:-0.2,usageWeight:1.2},
+    {...example,usersBaseline:'100'},
+    {...example,usageCurrent:1e13},
+    {...example,dollarIndexCurrent:102},
+    {...example,usdPrice:1},
+    {...example,redemptionTarget:1},
+    {...example,usageWeight:undefined},
   ];
-  assert.deepEqual(js,[false,false,false,false]);
-  assert.equal(FUTURE_PRVI_INTEGRATION.economicModel,'DRAFT_USAGE_AND_DOLLAR_REFERENCE_INDEX');
+  for(const input of invalid)
+    assert.throws(()=>previewHeyJoseActivityIndex(input),PolicyPreviewError);
 });
