@@ -5,10 +5,11 @@
 (() => {
   const $=id=>document.getElementById(id);
   const STORAGE_KEY='hey-jose-conversations-v1';
+  const PREFERENCE_KEY='hey-jose-sidebar-collapsed-v2';
   const MAX_LOCAL=30;
   const MAX_MESSAGES=80;
   const MAX_TOTAL=100000;
-  let chats=[],activeId=null,signedIn=false,ready=Promise.resolve();
+  let chats=[],activeId=null,signedIn=false,accountEmail='',ready=Promise.resolve();
   let saveQueue=Promise.resolve();
   const notice=text=>{$('sidebarStorage').textContent=text;};
   const flash=text=>{$('status').textContent=text;};
@@ -17,23 +18,35 @@
   const stamp=()=>Date.now();
   const uuid=()=>window.crypto?.randomUUID?.()||('local-'+Date.now()+'-'+Math.random().toString(36).slice(2));
   const desktop=()=>window.matchMedia('(min-width:861px)').matches;
-  function closeDrawer(){
+  function syncDrawer(){
+    const isDesktop=desktop();
+    const open=isDesktop?!$('sidebar').classList.contains('collapsed'):
+      $('sidebar').classList.contains('expanded');
+    $('sidebar').inert=!open;
+    $('sidebar').setAttribute('aria-hidden',String(!open));
+    $('toggleSidebar').setAttribute('aria-expanded',String(open));
+    $('sidebarShade').hidden=isDesktop||!open;
+    $('closeSidebar').setAttribute('aria-label',isDesktop?'Collapse navigation':'Close navigation drawer');
+  }
+  function closeDrawer(restoreFocus=false){
     $('sidebar').classList.remove('expanded');
-    $('sidebarShade').hidden=true;
-    $('toggleSidebar').setAttribute('aria-expanded',String(desktop()&&!$('sidebar').classList.contains('collapsed')));
+    syncDrawer();
+    if(restoreFocus)$('toggleSidebar').focus();
   }
   function toggleDrawer(){
     if(desktop()){
-      const hidden=$('sidebar').classList.toggle('collapsed');
-      $('toggleSidebar').setAttribute('aria-expanded',String(!hidden));
-      if(!hidden)$('sidebarSearch').focus();
+      const collapsed=$('sidebar').classList.toggle('collapsed');
+      try{localStorage.setItem(PREFERENCE_KEY,collapsed?'1':'0');}catch{}
+      syncDrawer();
+      if(!collapsed)$('sidebarSearch').focus();
+      else $('toggleSidebar').focus();
       return;
     }
-    const open=!$('sidebar').classList.contains('expanded');
-    $('sidebar').classList.toggle('expanded',open);
-    $('sidebarShade').hidden=!open;
-    $('toggleSidebar').setAttribute('aria-expanded',String(open));
-    if(open)$('sidebarSearch').focus();
+    const opening=!$('sidebar').classList.contains('expanded');
+    $('sidebar').classList.toggle('expanded',opening);
+    syncDrawer();
+    if(opening)$('sidebarSearch').focus();
+    else $('toggleSidebar').focus();
   }
   function readGuest(){
     try{
@@ -69,18 +82,36 @@
     const search=$('sidebarSearch').value.toLowerCase().trim();
     const matching=chats.filter(c=>(c.title+' '+(c.preview||c.messages?.[0]?.content||'')).toLowerCase().includes(search))
       .sort((a,b)=>b.updatedAt-a.updatedAt);
+    $('sidebarChatCount').textContent=String(chats.length);
     if(!matching.length){
       const empty=document.createElement('p');empty.className='sidebar-empty';
-      empty.textContent=search?'No matching chats.':'Start a chat and it will appear here.';
+      empty.textContent=search?'No conversations match your search.':'Your conversations will appear here once you start chatting.';
       list.append(empty);
     }
+    const dayStart=new Date();dayStart.setHours(0,0,0,0);
+    const today=dayStart.getTime(),yesterday=today-86400000;
+    let currentGroup='';
     for(const c of matching){
+      const at=Number(c.updatedAt)||Number(c.createdAt)||0;
+      const group=at>=today?'Today':at>=yesterday?'Yesterday':'Earlier';
+      if(group!==currentGroup){
+        const heading=document.createElement('div');
+        heading.className='sidebar-date-label';
+        heading.textContent=group;
+        list.append(heading);
+        currentGroup=group;
+      }
       const row=document.createElement('div');
       row.className='sidebar-chat'+(activeId===c.id?' selected':'');
+      const symbol=document.createElement('span');
+      symbol.className='sidebar-chat-symbol';
+      symbol.setAttribute('aria-hidden','true');
+      symbol.textContent='▤';
       const open=document.createElement('button');
       open.type='button';open.className='sidebar-chat-title';
       open.textContent=c.title;open.title=c.title;
       open.setAttribute('aria-label','Open '+c.title);
+      if(activeId===c.id)open.setAttribute('aria-current','page');
       open.onclick=()=>{void openChat(c.id);};
       const rename=document.createElement('button');
       rename.type='button';rename.className='sidebar-mini';rename.textContent='✎';
@@ -90,15 +121,22 @@
       del.type='button';del.className='sidebar-mini';del.textContent='×';
       del.title='Delete';del.setAttribute('aria-label','Delete '+c.title);
       del.onclick=()=>{void deleteChat(c);};
-      row.append(open,rename,del);list.append(row);
+      row.append(symbol,open,rename,del);list.append(row);
     }
-    $('sidebarAccount').textContent=signedIn?'Account connected':'Sign in / sync chats';
+    $('sidebarAccountTitle').textContent=signedIn?'Account connected':'Guest workspace';
+    $('sidebarAccountSubtitle').textContent=signedIn?
+      (accountEmail||'Signed in · temporary history'):'Sign in to sync conversations';
+    $('sidebarAccount').setAttribute('aria-label',signedIn?
+      'Account connected. Review history storage status.':'Sign in to your Hey Jose account');
   }
   async function load(){
     let account=false;
+    accountEmail='';
     try{
       const who=await fetch('/api/me',{credentials:'same-origin',cache:'no-store'});
       account=who.ok;
+      if(account){const info=await who.json().catch(()=>({}));
+        accountEmail=typeof info.email==='string'?info.email.slice(0,140):'';}
     }catch{}
     signedIn=account;
     activeId=null;
@@ -204,13 +242,20 @@
   }
   $('toggleSidebar').onclick=toggleDrawer;
   $('closeSidebar').onclick=()=>{
-    if(desktop()){$('sidebar').classList.add('collapsed');$('toggleSidebar').setAttribute('aria-expanded','false');}
-    else closeDrawer();
+    if(desktop()){
+      $('sidebar').classList.add('collapsed');
+      try{localStorage.setItem(PREFERENCE_KEY,'1');}catch{}
+      syncDrawer();$('toggleSidebar').focus();
+    }else closeDrawer(true);
   };
-  $('sidebarShade').onclick=closeDrawer;
+  $('sidebarShade').onclick=()=>closeDrawer(true);
   $('sidebarNewChat').onclick=newChat;
   $('sidebarSearch').oninput=render;
-  $('sidebarAccount').onclick=()=>{$('gmailBtn').click();closeDrawer();};
+  $('sidebarAccount').onclick=()=>{
+    if(!signedIn)window.location.assign('/login.html?next=%2Fchat.html');
+    else flash('Account connected. History is on temporary server storage. Export important conversations.');
+    closeDrawer();
+  };
   $('sidebarTasks').addEventListener('click',event=>{
     const button=event.target.closest('[data-action]');
     if(!button||busy())return;
@@ -238,7 +283,39 @@
       closeDrawer();
     }
   });
-  window.addEventListener('keydown',event=>{if(event.key==='Escape')closeDrawer();});
+  window.addEventListener('keydown',event=>{
+    const target=event.target;
+    const typing=target?.matches?.('input,textarea,select,[contenteditable="true"]');
+    if(event.key==='Escape'&&!desktop()&&$('sidebar').classList.contains('expanded')){
+      event.preventDefault();closeDrawer(true);return;
+    }
+    if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){
+      event.preventDefault();
+      if(desktop()){
+        $('sidebar').classList.remove('collapsed');
+        try{localStorage.setItem(PREFERENCE_KEY,'0');}catch{}
+      }else $('sidebar').classList.add('expanded');
+      syncDrawer();$('sidebarSearch').focus();$('sidebarSearch').select();
+      return;
+    }
+    if(!typing&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&!busy()&&
+       event.key.toLowerCase()==='n')newChat();
+    if(!desktop()&&$('sidebar').classList.contains('expanded')&&event.key==='Tab'){
+      const focusable=Array.from($('sidebar').querySelectorAll('button,input'))
+        .filter(el=>!el.disabled&&el.getClientRects().length);
+      if(!focusable.length)return;
+      const first=focusable[0],last=focusable.at(-1);
+      if(event.shiftKey&&document.activeElement===first){
+        event.preventDefault();last.focus();
+      }else if(!event.shiftKey&&document.activeElement===last){
+        event.preventDefault();first.focus();
+      }
+    }
+  });
+  window.addEventListener('resize',()=>{
+    if(desktop())$('sidebar').classList.remove('expanded');
+    syncDrawer();
+  });
   window.addEventListener('jose-auth-changed',()=>{
     if(busy())return;
     window.joseResetChat?.();
@@ -248,6 +325,9 @@
     const row=chats.find(c=>c.id===activeId);
     return Array.isArray(row?.messages)?row.messages.slice():window.joseChatHistory?.slice()||[];
   }};
-  $('toggleSidebar').setAttribute('aria-expanded',String(desktop()));
+  if(desktop()){
+    try{if(localStorage.getItem(PREFERENCE_KEY)==='1')$('sidebar').classList.add('collapsed');}catch{}
+  }
+  syncDrawer();
   ready=load();
 })();
