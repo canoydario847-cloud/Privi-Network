@@ -2,6 +2,24 @@
 
 **Status:** Required inputs not yet supplied; financial mainnet is NOT activated. This document is NOT a genesis file, a signed artifact, token issuance authorization or an exchange listing.
 
+## Newly selected target: redeemable PRVI USD payment stablecoin (NO-GO)
+
+The intended economic structure for native PRVI is now **genuine USD
+1.00 redemption per issued PRVI**, subject to independent issuer,
+reserve, legal, security and launch approval. Read
+[PRVI USD stablecoin design](PRVI_USD_STABLECOIN_DESIGN.md).
+
+**Important:** The existing maximum supply of one billion is a ceiling,
+not permission to pre-issue one billion stablecoins. Every issued and
+outstanding stablecoin, including locked, vested, founder, community
+and validator allocations, requires legally eligible reserve backing.
+Issuing the full one billion would require at least USD 1 billion of
+eligible reserves; the project has not established that funding or an
+approved issuer. Accordingly, all buckets in the genesis worksheet
+stay **TBD**; never populate them with historic unbacked 900M/100M
+proposals or count future tokens as pre-issued stablecoins.
+Hey Jose usage metrics and the FX-dollar index cannot serve as reserves.
+
 ## Immutable proposal parameters — subject to technical/legal confirmation
 
 - Proposed native asset symbol: **PRVI**, separate from existing BNB Chain PRIV and permanently valueless TEST.
