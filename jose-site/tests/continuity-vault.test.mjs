@@ -1,0 +1,16 @@
+import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+import {webcrypto} from 'node:crypto';
+const elements=new Map();let download, filename;const byId=id=>{if(!elements.has(id))elements.set(id,{value:'',files:[],disabled:false,textContent:''});return elements.get(id)};
+const ctx=vm.createContext({crypto:webcrypto,TextEncoder,TextDecoder,Uint8Array,DataView,Blob,URL:{createObjectURL:b=>{download=b;return 'blob:mock'},revokeObjectURL:()=>{}},setTimeout:()=>{},document:{getElementById:byId,createElement:()=>({click(){filename=this.download}})}});
+const html=readFileSync('jose-site/continuity.html','utf8');vm.runInContext(html.split('<script>')[1].split('</script>')[0],ctx);
+const click=id=>byId(id).onclick();const result=()=>byId('result').textContent;
+await click('sample');assert.match(result(),/Snapshot captured/);
+await click('simulate');assert.match(result(),/CHANGE DETECTED/);
+byId('vault-pass').value='test-passphrase-2026';await click('vault-export');assert.equal(filename,'continuity-backup.pcvault');const backup=new Uint8Array(await download.arrayBuffer());assert.equal(new TextDecoder().decode(backup.slice(0,8)),'PCVAULT1');assert.ok(!new TextDecoder().decode(backup).includes('verified original'));
+await click('clear');assert.equal(byId('restore').disabled,true);
+byId('vault-file').files=[new Blob([backup])];byId('vault-pass').value='incorrect-password';await click('vault-import');assert.match(result(),/Wrong passphrase/);assert.equal(byId('restore').disabled,true);
+const corrupt=backup.slice();corrupt[corrupt.length-1]^=1;byId('vault-file').files=[new Blob([corrupt])];byId('vault-pass').value='test-passphrase-2026';await click('vault-import');assert.match(result(),/corrupted vault/);
+byId('vault-file').files=[new Blob([backup])];byId('vault-pass').value='test-passphrase-2026';await click('vault-import');assert.match(result(),/Original SHA-256 verified/);await click('restore');assert.equal(await download.text(),'Privi Continuity: verified original\n');assert.equal(filename,'recovered-continuity-sample.txt');
+console.log('PASS: change detection, encrypted export, incorrect password rejection, tamper rejection, import and byte-exact recovery');
