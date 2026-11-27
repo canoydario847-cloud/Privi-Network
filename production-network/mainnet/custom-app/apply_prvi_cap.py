@@ -324,11 +324,13 @@ def main():
     ap.add_argument("--source-repo", required=True, type=Path)
     args = ap.parse_args()
     import json
-    patch = Path(__file__).resolve().with_name("cli_encoding.patch")
+    directory = Path(__file__).resolve().parent
+    patches = [str(directory / name) for name in ("cli_encoding.patch", "vote_extension.patch")]
     command = ["git", "-C", str(args.upstream), "apply"]
-    subprocess.run([*command, "--check", str(patch)], check=True)
+    subprocess.run([*command, "--check", *patches], check=True)
     result = apply_patch(args.upstream, args.source_repo)
-    subprocess.run([*command, str(patch)], check=True)
+    subprocess.run([*command, *patches], check=True)
+    result["app_sha256"] = hashlib.sha256((args.upstream / "evmd/app.go").read_bytes()).hexdigest()
     print(json.dumps(result, indent=2))
 
 if __name__ == "__main__":
