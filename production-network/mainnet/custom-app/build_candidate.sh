@@ -26,6 +26,7 @@ sdk="$work/privi-patched-sdk-app-only"
 python3 "$patches/patch_sdk_bank_source.py" --sdk-root "$(go env GOMODCACHE)/github.com/cosmos/cosmos-sdk@v0.54.3" --output-dir "$sdk"
 go mod edit -replace="github.com/cosmos/cosmos-sdk=$sdk"
 mkdir "$work/result"
+go test -mod=mod -p 2 -count=1 -run "^TestPrviVoteExtension$" .
 go build -p 2 -mod=mod -trimpath -o "$work/result/privi-evmd" ./cmd/evmd
 go list -m -json github.com/cosmos/cosmos-sdk > "$work/result/sdk-module.json"
 go version -m "$work/result/privi-evmd" > "$work/result/build-info.txt"
