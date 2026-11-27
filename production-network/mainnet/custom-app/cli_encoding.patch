@@ -1,0 +1,14 @@
+diff --git a/evmd/cmd/evmd/cmd/root.go b/evmd/cmd/evmd/cmd/root.go
+index 4da3349..a433c83 100644
+--- a/evmd/cmd/evmd/cmd/root.go
++++ b/evmd/cmd/evmd/cmd/root.go
+@@ -59,7 +59,8 @@ func NewRootCmd() *cobra.Command {
+ 		log.NewNopLogger(),
+ 		dbm.NewMemDB(),
+ 		true,
+-		simtestutil.EmptyAppOptions{},
++		// Encoding-only application backed by NewMemDB; network startups read their own options.
++		simtestutil.AppOptionsMap{srvflags.EVMChainID: uint64(772626)},
+ 	)
+ 
+ 	encodingConfig := sdktestutil.TestEncodingConfig{
