@@ -324,7 +324,12 @@ def main():
     ap.add_argument("--source-repo", required=True, type=Path)
     args = ap.parse_args()
     import json
-    print(json.dumps(apply_patch(args.upstream, args.source_repo), indent=2))
+    patch = Path(__file__).resolve().with_name("cli_encoding.patch")
+    command = ["git", "-C", str(args.upstream), "apply"]
+    subprocess.run([*command, "--check", str(patch)], check=True)
+    result = apply_patch(args.upstream, args.source_repo)
+    subprocess.run([*command, str(patch)], check=True)
+    print(json.dumps(result, indent=2))
 
 if __name__ == "__main__":
     main()
