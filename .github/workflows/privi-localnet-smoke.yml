@@ -68,10 +68,14 @@ jobs:
           # Prove the built CUSTOM binary itself rejects the upstream developer
           # EVM chain identity. Isolate home/logs in the disposable CI runner.
           # A timeout or any unrelated startup error is a FAILURE, not proof.
+          binary="$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY"
+          candidate_home="$RUNNER_TEMP/privi-invalid-chainid-home"
+          "$binary" init candidate --chain-id prvi-build-check-1 --home "$candidate_home" >/dev/null
+          sed -i '/^\[mempool\]/,/^\[/{s/^type = "flood"/type = "app"/;}' "$candidate_home/config/config.toml"
           set +e
           timeout 30s "$RUNNER_TEMP/privi-evmd-BUILD-ONLY-NOT-FOR-DEPLOY" start \
             --home "$RUNNER_TEMP/privi-invalid-chainid-home" \
-            --evm-chain-id 262144 \
+            --evm.evm-chain-id 262144 \
             > "$RUNNER_TEMP/privi-rejected-chain.log" 2>&1
           reject_status=$?
           set -e
@@ -80,7 +84,7 @@ jobs:
             cat "$RUNNER_TEMP/privi-rejected-chain.log"
             exit 1
           fi
-          if ! grep -q 'PRVI EVM chain identity rejected' "$RUNNER_TEMP/privi-rejected-chain.log"; then
+          if ! grep -Fq 'PRVI EVM chain identity rejected: Privi EVM chain ID 262144 ' "$RUNNER_TEMP/privi-rejected-chain.log"; then
             echo "Custom PRVI chain-ID guard did not trigger (unrelated error?)" >&2
             cat "$RUNNER_TEMP/privi-rejected-chain.log"
             exit 1
