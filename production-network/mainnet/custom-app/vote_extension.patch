@@ -1,0 +1,109 @@
+diff --git a/evmd/prvi_vote.go b/evmd/prvi_vote.go
+new file mode 100644
+index 0000000..40f5f9e
+--- /dev/null
++++ b/evmd/prvi_vote.go
+@@ -0,0 +1,44 @@
++package evmd
++
++import (
++	"bytes"
++	"crypto/sha256"
++	"encoding/binary"
++	"fmt"
++
++	abci "github.com/cometbft/cometbft/abci/types"
++	sdk "github.com/cosmos/cosmos-sdk/types"
++)
++
++// This commitment is carried inside the validator's signed CometBFT extension.
++// It binds the proposed block to the chain and height. Admission, quorum and
++// previous-height proposal validation are separate consensus checks.
++func prviVoteCommitment(chain string, height int64, block []byte) ([]byte, error) {
++	if chain == "" || height < 1 || len(block) != sha256.Size {
++		return nil, fmt.Errorf("invalid PRVI vote context")
++	}
++	data := []byte("PRVI/vote-extension/v1\x00")
++	data = binary.BigEndian.AppendUint64(data, uint64(len(chain)))
++	data = append(data, chain...)
++	data = binary.BigEndian.AppendUint64(data, uint64(height))
++	data = append(data, block...)
++	digest := sha256.Sum256(data)
++	return digest[:], nil
++}
++
++func extendPrviVote(ctx sdk.Context, req *abci.RequestExtendVote) (*abci.ResponseExtendVote, error) {
++	digest, err := prviVoteCommitment(ctx.ChainID(), req.Height, req.Hash)
++	if err != nil {
++		return nil, err
++	}
++	return &abci.ResponseExtendVote{VoteExtension: digest}, nil
++}
++
++func verifyPrviVote(ctx sdk.Context, req *abci.RequestVerifyVoteExtension) (*abci.ResponseVerifyVoteExtension, error) {
++	status := abci.ResponseVerifyVoteExtension_REJECT
++	digest, err := prviVoteCommitment(ctx.ChainID(), req.Height, req.Hash)
++	if err == nil && bytes.Equal(req.VoteExtension, digest) {
++		status = abci.ResponseVerifyVoteExtension_ACCEPT
++	}
++	return &abci.ResponseVerifyVoteExtension{Status: status}, nil
++}
+diff --git a/evmd/prvi_vote_test.go b/evmd/prvi_vote_test.go
+new file mode 100644
+index 0000000..30b9eb8
+--- /dev/null
++++ b/evmd/prvi_vote_test.go
+@@ -0,0 +1,42 @@
++package evmd
++
++import (
++	"bytes"
++	"encoding/hex"
++	"testing"
++
++	abci "github.com/cometbft/cometbft/abci/types"
++	sdk "github.com/cosmos/cosmos-sdk/types"
++)
++
++func TestPrviVoteExtension(t *testing.T) {
++	ctx := sdk.Context{}.WithChainID("prvi-test")
++	block := bytes.Repeat([]byte{1}, 32)
++	ext, err := extendPrviVote(ctx, &abci.RequestExtendVote{Height: 9, Hash: block})
++	if err != nil {
++		t.Fatal(err)
++	}
++	if hex.EncodeToString(ext.VoteExtension) != "5f18ada5276e4e4386eb5b49f10b9d516fb770f836db6b4f3b0cfcfc2dc7a314" {
++		t.Fatal("unexpected wire digest")
++	}
++	for _, tc := range []struct {
++		name, chain string
++		height      int64
++		hash, ext   []byte
++		accept      bool
++	}{
++		{"valid", "prvi-test", 9, block, ext.VoteExtension, true},
++		{"other chain", "other", 9, block, ext.VoteExtension, false},
++		{"other height", "prvi-test", 10, block, ext.VoteExtension, false},
++		{"other block", "prvi-test", 9, make([]byte, 32), ext.VoteExtension, false},
++		{"missing extension", "prvi-test", 9, block, nil, false},
++		{"invalid context", "", 0, nil, nil, false},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			res, err := verifyPrviVote(ctx.WithChainID(tc.chain), &abci.RequestVerifyVoteExtension{Height: tc.height, Hash: tc.hash, VoteExtension: tc.ext})
++			if err != nil || (res.Status == abci.ResponseVerifyVoteExtension_ACCEPT) != tc.accept {
++				t.Fatalf("unexpected result %v %v", res, err)
++			}
++		})
++	}
++}
+--- a/evmd/app.go
++++ b/evmd/app.go
+@@ -719,6 +719,8 @@
+ 
+ 	// initialize BaseApp
+ 	app.SetInitChainer(app.InitChainer)
++	app.SetExtendVoteHandler(extendPrviVote)
++	app.SetVerifyVoteExtensionHandler(verifyPrviVote)
+ 	app.SetPreBlocker(app.PreBlocker)
+ 	app.SetBeginBlocker(app.BeginBlocker)
+ 	app.SetEndBlocker(app.EndBlocker)
