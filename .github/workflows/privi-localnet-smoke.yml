@@ -59,7 +59,7 @@ jobs:
           GOTOOLCHAIN=local go mod edit -replace="github.com/cosmos/cosmos-sdk=$sdk_copy_dir"
           # Preserve the Go module graph that this isolated binary will use.
           GOTOOLCHAIN=local go list -m -json github.com/cosmos/cosmos-sdk > "$RUNNER_TEMP/privi-sdk-module.json"
-          GOTOOLCHAIN=local go test -mod=mod -p 2 -run 'a^' -timeout 20m . ./prvicap
+          GOTOOLCHAIN=local go test -mod=mod -p 2 -run '^TestPrviVoteExtension$' -timeout 20m . ./prvicap
           # Compile an isolated pre-production command binary, never uploaded,
           # executed as mainnet, issued, or distributed to operator hosts.
           GOTOOLCHAIN=local go build -mod=mod -p 2 -trimpath \
