@@ -109,6 +109,7 @@ class ResearchRoundMachine {
     this.height = height;
     this.round = 0;
     this.phase = "propose";
+    this.activeProposal = null;
     this.lockedBlockHash = null;
     this.lockedRound = null;
     this.decision = null;
@@ -156,6 +157,7 @@ class ResearchRoundMachine {
       must(proposal.blockHash === this.lockedBlockHash,
         "Proposal conflicts with locked block");
     }
+    this.activeProposal = Object.freeze({ ...proposal });
     this.phase = "prevote";
     this._record("proposal_accepted", { blockHash: proposal.blockHash });
     return this.snapshot();
@@ -169,6 +171,9 @@ class ResearchRoundMachine {
     must(this.phase === "prevote", "Not in prevote phase");
     must(proposal.height === this.height && proposal.round === this.round,
       "Prevote proposal context mismatch");
+    must(this.activeProposal && proposal.blockHash === this.activeProposal.blockHash &&
+      proposal.previousBlockHash === this.activeProposal.previousBlockHash,
+      "Prevote quorum conflicts with accepted proposal");
     const proof = tallyPhase(this.committee, proposal, votes, "prevote");
     if (this.lockedBlockHash !== null) {
       must(proposal.blockHash === this.lockedBlockHash,
@@ -187,6 +192,9 @@ class ResearchRoundMachine {
     must(this.phase === "precommit", "Not in precommit phase");
     must(proposal.height === this.height && proposal.round === this.round,
       "Precommit proposal context mismatch");
+    must(this.activeProposal && proposal.blockHash === this.activeProposal.blockHash &&
+      proposal.previousBlockHash === this.activeProposal.previousBlockHash,
+      "Precommit quorum conflicts with accepted proposal");
     const proof = tallyPhase(this.committee, proposal, votes, "precommit");
     // Research lock: no conflicting block at this height for any local voter model.
     for (const vote of votes) {
@@ -222,6 +230,7 @@ class ResearchRoundMachine {
     const from = { phase: this.phase, round: this.round };
     this.round += 1;
     this.phase = "propose";
+    this.activeProposal = null;
     this._record("timeout_view_change", from);
     return this.snapshot();
   }
@@ -234,6 +243,7 @@ class ResearchRoundMachine {
     this.height += 1;
     this.round = 0;
     this.phase = "propose";
+    this.activeProposal = null;
     this.lockedBlockHash = null;
     this.lockedRound = null;
     this.decision = null;
