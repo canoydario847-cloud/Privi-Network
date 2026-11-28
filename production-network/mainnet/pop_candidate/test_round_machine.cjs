@@ -154,3 +154,28 @@ test("snapshot always reports productionConsensus false", () => {
   const m = new ResearchRoundMachine(f.committee);
   assert.equal(m.snapshot().productionConsensus, false);
 });
+
+
+test("prevote quorum cannot substitute an accepted proposal", () => {
+  const f = fixture();
+  const m = new ResearchRoundMachine(f.committee);
+  const a = f.makeProposal();
+  const b = f.makeProposal(1, 0, a.previousBlockHash, "0x" + "d".repeat(64));
+  m.onProposal(a);
+  assert.throws(() => m.onPrevoteQuorum(b, f.votes(b, "prevote")), /conflicts with accepted proposal/);
+  assert.equal(m.phase, "prevote");
+  m.onPrevoteQuorum(a, f.votes(a, "prevote"));
+});
+
+test("precommit quorum cannot substitute a different parent", () => {
+  const f = fixture();
+  const m = new ResearchRoundMachine(f.committee);
+  const a = f.makeProposal();
+  const b = f.makeProposal(1, 0, "0x" + "e".repeat(64), a.blockHash);
+  m.onProposal(a);
+  m.onPrevoteQuorum(a, f.votes(a, "prevote"));
+  assert.throws(() => m.onPrecommitQuorum(b, f.votes(b, "precommit")), /conflicts with accepted proposal/);
+  assert.equal(m.decision, null);
+  m.onPrecommitQuorum(a, f.votes(a, "precommit"));
+  assert.equal(m.decision.blockHash, a.blockHash);
+});
